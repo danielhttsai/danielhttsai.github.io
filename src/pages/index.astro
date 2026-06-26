@@ -21,6 +21,15 @@ const tools = [
     tag: "On this site",
   },
   {
+    name: "ACB Calculator",
+    blurb:
+      "Scores a patient's total anticholinergic burden across 6 international scales and quantifies 30-day risk of cardiovascular events, pneumonia, and out-of-hospital cardiac arrest — with OCR drug-history capture and printable reports. Built on three Taiwan NHI studies (BMJ, Clin Epidemiol, Eur Heart J).",
+    href: "https://phd-center.github.io/acb-calculator/",
+    cta: "Open ACB calculator",
+    external: true,
+    tag: "External",
+  },
+  {
     name: "PHDc RWE Tool",
     blurb:
       "A real-world-evidence utility from the Population Health Data Center for exploring and operationalising claims-based study designs.",
@@ -51,7 +60,7 @@ const tools = [
       Daniel Hsiang-Te Tsai
     </h1>
     <p class="mt-5 text-lg md:text-xl text-slate-600 max-w-3xl leading-relaxed">
-      Doctoral research fellow at the <strong class="text-slate-800">Population Health Data Center, NCKU</strong>.
+      Doctoral research fellow at the <a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener" class="text-brand-700 font-semibold hover:underline">Population Health Data Center (PHDc), NCKU</a>.
       I specialise in comparative effectiveness and policy research — triangulating claims databases,
       electronic health records, and biomedical data to inform causal inference. Educational co-lead of
       <strong class="text-slate-800">AsPEN</strong> and active member of <strong class="text-slate-800">NeuroGEN</strong>.
@@ -110,7 +119,7 @@ const tools = [
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
     <h2 class="text-2xl font-bold text-slate-900">RWE tools</h2>
     <p class="mt-2 text-slate-600 max-w-2xl">Open-access utilities I build and maintain for real-world-evidence research.</p>
-    <div class="mt-6 grid gap-6 md:grid-cols-3">
+    <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
       {tools.map((t) => (
         <a
           href={t.href}
