@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import Networks from "../components/Networks.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -24,28 +25,19 @@ const tools = [
     name: "ACB Calculator",
     blurb:
       "Scores a patient's total anticholinergic burden across 6 international scales and quantifies 30-day risk of cardiovascular events, pneumonia, and out-of-hospital cardiac arrest — with OCR drug-history capture and printable reports. Built on three Taiwan NHI studies (BMJ, Clin Epidemiol, Eur Heart J).",
-    href: "https://phd-center.github.io/acb-calculator/",
+    href: `${base}/tools/acb-calculator`,
     cta: "Open ACB calculator",
-    external: true,
-    tag: "External",
+    external: false,
+    tag: "Clinical tool",
   },
   {
     name: "PHDc RWE Tool",
     blurb:
       "A real-world-evidence utility from the Population Health Data Center for exploring and operationalising claims-based study designs.",
-    href: "https://danielhttsai.github.io/phdc-rwe-tool/",
+    href: `${base}/tools/phdc-rwe-tool`,
     cta: "Launch PHDc tool",
-    external: true,
-    tag: "External",
-  },
-  {
-    name: "AsPEN",
-    blurb:
-      "The Asian Pharmacoepidemiology Network — a Special Interest Group of ISPE advancing multi-national database research across the Asia/Pacific region, where I serve as educational co-lead.",
-    href: "https://www.aspensig.asia/",
-    cta: "Visit AsPEN",
-    external: true,
-    tag: "External",
+    external: false,
+    tag: "RWE utility",
   },
 ];
 ---
@@ -78,6 +70,9 @@ const tools = [
       <a href="https://orcid.org/0000-0003-2841-0338" target="_blank" rel="noopener" class="hover:text-brand-700">ORCID 0000-0003-2841-0338 ↗</a>
     </div>
   </section>
+
+  <!-- Networks & collaborations -->
+  <Networks />
 
   <!-- Quick stats -->
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pb-12">
@@ -118,8 +113,8 @@ const tools = [
   <!-- RWE Tools -->
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
     <h2 class="text-2xl font-bold text-slate-900">RWE tools</h2>
-    <p class="mt-2 text-slate-600 max-w-2xl">Open-access utilities I build and maintain for real-world-evidence research.</p>
-    <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <p class="mt-2 text-slate-600 max-w-2xl">Open-access utilities I build and maintain for real-world-evidence research — each runs right here on this site.</p>
+    <div class="mt-6 grid gap-6 md:grid-cols-3">
       {tools.map((t) => (
         <a
           href={t.href}
