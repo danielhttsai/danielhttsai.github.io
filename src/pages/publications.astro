@@ -8,35 +8,35 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 type Pub = {
   year: string;
   doi: string;
-  title: string;
-  journal: string;
   citation: string;
-  citationOk: boolean;
   isOA: boolean;
   oaUrl: string;
 };
 
-const all = (pubs as Pub[]).slice().sort(
-  (a, b) => (b.year || "").localeCompare(a.year || "") || a.title.localeCompare(b.title)
-);
+// Order follows the CV: newest first, preserving the CV's within-year order.
+const all = pubs as Pub[];
 
 // Group by year (newest first)
 const years = [...new Set(all.map((p) => p.year))].sort((a, b) => b.localeCompare(a));
 const byYear = years.map((y) => ({ year: y, items: all.filter((p) => p.year === y) }));
 
 const oaCount = all.filter((p) => p.isOA && p.oaUrl).length;
+const hasEqual = all.some((p) => p.citation.includes("*"));
 
 // Bold the author's own name in a citation string, escaping the surrounding text.
+// "Tsai DHT" covers most papers; the 2019 paper credits him as "Tsai HT".
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const highlight = (citation: string) =>
-  esc(citation).replace(/Tsai DHT/g, "<strong class='text-slate-900'>Tsai DHT</strong>");
+  esc(citation)
+    .replace(/Tsai DHT/g, "<strong class='text-slate-900'>Tsai DHT</strong>")
+    .replace(/Tsai HT(?!<)/g, "<strong class='text-slate-900'>Tsai HT</strong>");
 
 const mailto = (p: Pub) =>
   `mailto:danielhttsai@gmail.com?subject=${encodeURIComponent(
-    "Full-text request: " + p.title
+    "Full-text request"
   )}&body=${encodeURIComponent(
-    `Hi Daniel,\n\nCould you share a full-text copy of:\n"${p.title}" (${p.journal} ${p.year}; doi:${p.doi})\n\nThank you!`
+    `Hi Daniel,\n\nCould you share a full-text copy of:\n${p.citation} (doi:${p.doi})\n\nThank you!`
   )}`;
 ---
 
@@ -62,6 +62,7 @@ const mailto = (p: Pub) =>
       <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-accent-500"></span> Full text available</span>
       <span class="mx-3">·</span>
       <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-slate-300"></span> Email to request a copy</span>
+      {hasEqual && <><span class="mx-3">·</span><span>* equal contribution</span></>}
     </p>
 
     {byYear.map((grp) => (
