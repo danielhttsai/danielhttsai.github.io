@@ -1,0 +1,71 @@
+---
+import "../styles/globals.css";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+
+interface Props {
+  title?: string;
+  description?: string;
+  /** Add a subtle teal-green tint to the body (used by the home page). */
+  tint?: boolean;
+}
+
+const {
+  title = "Daniel Hsiang-Te Tsai — Pharmacoepidemiology & Real-World Evidence",
+  description = "Daniel Hsiang-Te Tsai is a doctoral research fellow at the Population Health Data Center, NCKU, specializing in comparative effectiveness research, causal inference, and real-world evidence tooling.",
+  tint = false,
+} = Astro.props;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const SITE_ORIGIN = "https://danielhttsai.github.io";
+const canonical = `${SITE_ORIGIN}${Astro.url.pathname}`;
+
+// JSON-LD Person markup helps search engines recognise Daniel as an entity
+// and link his ORCID / professional profiles.
+const personSchema = {
+  "@context": "https://schema.org",
+  "@type": "Person",
+  name: "Daniel Hsiang-Te Tsai",
+  url: SITE_ORIGIN,
+  email: "mailto:danielhttsai@gmail.com",
+  jobTitle: "Doctoral Research Fellow, Pharmacoepidemiology",
+  affiliation: {
+    "@type": "Organization",
+    name: "Population Health Data Center, National Cheng Kung University",
+  },
+  sameAs: [
+    "https://orcid.org/0000-0003-2841-0338",
+    "https://www.aspensig.asia/",
+  ],
+};
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+    <title>{title}</title>
+    <link rel="canonical" href={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content="Daniel Hsiang-Te Tsai" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <script type="application/ld+json" set:html={JSON.stringify(personSchema)} is:inline />
+    <link rel="sitemap" type="application/xml" href="/sitemap-index.xml" />
+  </head>
+  <body class:list={["text-slate-800 antialiased", tint ? "home-tint" : "bg-white"]}>
+    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-brand-600 text-white px-3 py-2 rounded">Skip to content</a>
+    <Header />
+    <main id="main" class="min-h-[60vh]">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

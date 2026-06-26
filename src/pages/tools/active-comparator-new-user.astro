@@ -1,0 +1,2264 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PageHeader from "../../components/PageHeader.astro";
+import databasesRaw from "../../data/databases.json";
+
+// Feature taxonomy; same 8 dimensions as the /databases/ compare drawer.
+const FEATURES = [
+  { id: "rx",        short: "Rx",   label: "Prescriptions" },
+  { id: "dx",        short: "Dx",   label: "Diagnoses" },
+  { id: "labs",      short: "Lab",  label: "Lab results" },
+  { id: "imaging",   short: "Img",  label: "Imaging" },
+  { id: "mortality", short: "Mor",  label: "Mortality linkage" },
+  { id: "cancer",    short: "Can",  label: "Cancer-registry linkage" },
+  { id: "pregnancy", short: "Preg", label: "Pregnancy / birth linkage" },
+  { id: "genomics",  short: "Gen",  label: "Genomics / biobank linkage" },
+];
+
+// Pull the active databases (hidden flag respected). Extract a short label
+// from the parenthesised acronym in the canonical name. Build per-database
+// entries that the form can pick individually.
+const shortDbName = (full: string): string => {
+  const m = full.match(/\(([^)]+)\)$/);
+  return m ? m[1] : full;
+};
+const COUNTRY_ORDER = ["TW", "KR", "JP", "HK", "AU", "FI", "GB", "NL", "US"];
+type DbRow = typeof databasesRaw[number] & { hidden?: boolean; features?: string[] };
+const SITES_DB = (databasesRaw as DbRow[])
+  .filter((d) => !d.hidden && COUNTRY_ORDER.includes(d.code))
+  .map((d) => ({
+    id:       `${d.code}-${shortDbName(d.name).replace(/[^A-Za-z0-9]/g, "")}`,
+    country:  d.country,
+    code:     d.code,
+    short:    shortDbName(d.name),
+    features: (d.features ?? []) as string[],
+  }))
+  .sort((a, b) => {
+    const ai = COUNTRY_ORDER.indexOf(a.code);
+    const bi = COUNTRY_ORDER.indexOf(b.code);
+    if (ai !== bi) return ai - bi;
+    return a.short.localeCompare(b.short);
+  });
+const SITES_DETAIL_MAP: Record<string, { country: string; code: string; short: string; features: string[] }> =
+  Object.fromEntries(SITES_DB.map((d) => [d.id, d]));
+const SITES_BY_COUNTRY: Record<string, typeof SITES_DB> = SITES_DB.reduce((acc, d) => {
+  (acc[d.country] ??= []).push(d);
+  return acc;
+}, {} as Record<string, typeof SITES_DB>);
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Sites mirroring the active set on /databases/ (countries that have an
+// AsPEN-tracked database in databases.json). Anything beyond this list
+// goes in the "Others" free-text field below the grid.
+const SITES = [
+  { code: "TW", name: "Taiwan (NHIRD / CGRD / TWB)" },
+  { code: "KR", name: "South Korea (HIRA / NHIS-NHID)" },
+  { code: "JP", name: "Japan (NDB / JMDC)" },
+  { code: "HK", name: "Hong Kong (CDARS)" },
+  { code: "GB", name: "United Kingdom (CPRD / THIN / UKB / ISD)" },
+  { code: "NL", name: "Netherlands (PHARMO)" },
+  { code: "FI", name: "Finland (FinReg)" },
+  { code: "AU", name: "Australia (PBS / VLHD)" },
+  { code: "US", name: "United States (Medicare / Medicaid)" },
+];
+
+// Curated checkbox lists; keeps the form selectable; user can add custom
+// lines below each list.
+const CENSORING = [
+  "Discontinuation of index drug (gap > grace period)",
+  "Switch to the comparator drug class",
+  "Disenrolment from the source health-insurance database",
+  "Death from a non-outcome cause",
+  "End of database availability / study period",
+  "Pregnancy",
+  "Cancer diagnosis (if not an outcome)",
+  "Hospice or palliative-care enrolment",
+];
+
+const COVARIATES = [
+  { group: "Demographics", items: [
+    "Age (continuous)",
+    "Sex",
+    "Year of index",
+    "Insurance type",
+    "Region / urbanicity",
+  ]},
+  { group: "Comorbidities (binary, ever in look-back)", items: [
+    "Hypertension",
+    "Dyslipidaemia",
+    "Chronic kidney disease",
+    "Prior myocardial infarction",
+    "Prior stroke / TIA",
+    "Heart failure",
+    "Atrial fibrillation",
+    "COPD",
+    "Depression",
+    "Active cancer",
+    "Liver disease",
+    "Peripheral artery disease",
+    "Charlson Comorbidity Index (CCI)",
+  ]},
+  { group: "Medications (binary, dispensed in look-back)", items: [
+    "ACEi / ARB",
+    "Beta-blockers",
+    "Calcium channel blockers",
+    "Diuretics",
+    "Statins",
+    "Antiplatelets",
+    "Anticoagulants",
+    "NSAIDs",
+    "Glucocorticoids",
+    "Metformin",
+    "Sulfonylureas",
+    "TZDs",
+    "Insulin",
+    "GLP-1 receptor agonists",
+  ]},
+  { group: "Healthcare utilisation", items: [
+    "Outpatient visit count",
+    "Inpatient admission count",
+    "ED visit count",
+    "Polypharmacy (≥5 drug classes)",
+  ]},
+  { group: "Clinical / lab (where available)", items: [
+    "HbA1c",
+    "BMI",
+    "eGFR",
+    "Smoking status",
+    "Blood pressure",
+  ]},
+];
+
+const SUBGROUPS = [
+  "Age (≥65 vs <65 years)",
+  "Sex (male vs female)",
+  "Baseline CKD (eGFR <60 vs ≥60)",
+  "Prior CV disease (yes vs no)",
+  "Country / site",
+  "Index year (e.g., before vs after 2018)",
+  "Insulin use at baseline",
+  "Baseline HbA1c (≥8% vs <8%)",
+];
+
+// Common inclusion / exclusion criteria; surfaced as checkboxes so a
+// typical AsPEN ACNU protocol can be assembled almost entirely by ticking.
+const INCLUSION = [
+  "Adult (≥18 years) at index date",
+  "Continuous enrolment in the source database for ≥365 d before index",
+  "≥1 outpatient visit in the 365 d before index (engagement with care)",
+  "≥1 prior dispensing of indication-defining drug class in look-back",
+  "Available primary-care record (CPRD / linked EHR studies only)",
+];
+
+const EXCLUSION = [
+  "Prior dispensing of EITHER exposure or comparator within the washout window",
+  "Type 1 diabetes (ICD-10 E10.x) ever before index",
+  "Pregnancy at or in the 90 d before index",
+  "eGFR <30 ml/min/1.73m² at index (where available)",
+  "End-stage renal disease / chronic dialysis ever",
+  "Active cancer in the 365 d before index (solid or haematologic)",
+  "Hospice or palliative-care enrolment in the 90 d before index",
+  "Severe liver disease ever (cirrhosis, decompensated)",
+  "Type 2 MI / unstable angina in the 30 d before index (if CV outcome)",
+  "In-hospital at index date",
+];
+
+// Thirteen confounding-control approaches with operational definitions
+// and method citations. Picking from the library fills both the dropdown
+// and an editable 'Method operational details' textarea; the citation
+// auto-appends to the References section at export time.
+const PS_METHODS: { value: string; label: string; definition: string; validation: string }[] = [
+  {
+    value: "iptw",
+    label: "Stabilised IPTW with PS trimming",
+    definition: "Estimate the propensity score (PS) for treatment via multivariable logistic regression on all baseline covariates (Section 7). Compute stabilised inverse-probability-of-treatment weights and trim the weight distribution at the 1st and 99th percentile. Estimate the marginal hazard ratio in a weighted Cox proportional-hazards model.",
+    validation: "Robins JM, Hernán MA, Brumback B. Marginal structural models and causal inference in epidemiology. Epidemiology 2000;11(5):550-60. Cole SR, Hernán MA. Constructing inverse probability weights for marginal structural models. Am J Epidemiol 2008;168:656-64.",
+  },
+  {
+    value: "iptw-overlap",
+    label: "Overlap weights",
+    definition: "Estimate the PS; compute overlap weights as PS × (1 − PS), which down-weight units with extreme PS values. Apply weights in a marginal Cox model. Overlap weights guarantee exact mean balance on all measured covariates in the weighted population and are robust to extreme PS values.",
+    validation: "Li F, Morgan KL, Zaslavsky AM. Balancing covariates via propensity score weighting. J Am Stat Assoc 2018;113:390-400. Li F, Thomas LE, Li F. Addressing extreme propensity scores via the overlap weights. Am J Epidemiol 2019;188:250-7.",
+  },
+  {
+    value: "match-1to1",
+    label: "1:1 PS matching",
+    definition: "Estimate the PS via multivariable logistic regression. Match exposed and comparator users 1:1 using nearest-neighbour matching on the logit of the PS, with a caliper of 0.2 × SD of the logit PS, without replacement. Estimate the matched hazard ratio in a Cox model stratified on matched pair.",
+    validation: "Austin PC. Some methods of propensity-score matching had superior performance to others. Biom J 2009;51:171-84.",
+  },
+  {
+    value: "match-1ton",
+    label: "1:N variable-ratio PS matching",
+    definition: "Estimate the PS. Match each exposed user to up to N (typically 4) nearest-neighbour comparators on the logit PS with a 0.2 × SD logit-PS caliper, without replacement, allowing variable ratios. Analyse via a Cox model with cluster-robust variance.",
+    validation: "Ming K, Rosenbaum PR. Substantial gains in bias reduction from matching with a variable number of controls. Biometrics 2000;56:118-24.",
+  },
+  {
+    value: "match-greedy",
+    label: "Greedy PS matching with replacement",
+    definition: "Estimate the PS. Match each exposed user to the nearest-neighbour comparator on the PS within a 0.2 × SD logit-PS caliper, allowing comparators to be re-used. Analyse via Cox regression with cluster-robust variance to account for re-use.",
+    validation: "Rosenbaum PR, Rubin DB. The bias due to incomplete matching. Biometrics 1985;41:103-16.",
+  },
+  {
+    value: "strat",
+    label: "PS stratification (deciles)",
+    definition: "Estimate the PS and stratify the cohort into deciles. Estimate within-stratum hazard ratios using a Cox model stratified on PS decile; pool across strata via a stratified analysis.",
+    validation: "Rosenbaum PR, Rubin DB. Reducing bias in observational studies using subclassification on the propensity score. J Am Stat Assoc 1984;79:516-24.",
+  },
+  {
+    value: "hdps",
+    label: "High-dimensional propensity score (HDPS)",
+    definition: "Generate empirical covariates from claims (diagnoses, procedures, dispensings, healthcare utilisation in the look-back window). Prioritise covariates by their potential to confound using the Bross formula. Include top 200-500 empirical covariates plus pre-specified covariates in the PS model. Apply via IPTW or matching.",
+    validation: "Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensional propensity score adjustment in studies of treatment effects using health care claims data. Epidemiology 2009;20:512-22.",
+  },
+  {
+    value: "drs",
+    label: "Disease risk score (DRS) adjustment",
+    definition: "Model the outcome on baseline covariates in the unexposed (or full cohort) to derive each patient's predicted absolute risk (DRS). Match or stratify exposed vs unexposed users on DRS quantiles, or include DRS as a regression adjustment.",
+    validation: "Arbogast PG, Ray WA. Use of disease risk scores in pharmacoepidemiologic studies. Stat Methods Med Res 2009;18:67-80. Hansen BB. The prognostic analogue of the propensity score. Biometrika 2008;95:481-8.",
+  },
+  {
+    value: "tmle",
+    label: "Targeted maximum likelihood estimation (TMLE)",
+    definition: "Estimate the PS and the outcome regression flexibly (e.g., Super Learner with multiple algorithms). Apply a targeted update step to the outcome regression using the score equation derived from the PS. TMLE is doubly robust: consistent if either the PS or the outcome model is correct.",
+    validation: "van der Laan MJ, Rose S. Targeted Learning. Springer 2011. Schuler MS, Rose S. Targeted maximum likelihood estimation for causal inference in observational studies. Am J Epidemiol 2017;185:65-73.",
+  },
+  {
+    value: "gformula",
+    label: "G-formula / parametric standardisation",
+    definition: "Fit an outcome regression model on covariates and exposure. Predict counterfactual outcomes under exposure and non-exposure for each individual, holding covariates at their observed values, and average across the population to obtain the marginal hazard ratio or risk difference.",
+    validation: "Robins JM. A new approach to causal inference in mortality studies with sustained exposure periods. Math Modelling 1986;7:1393-512. Snowden JM, Rose S, Mortimer KM. Am J Epidemiol 2011;173:731-8.",
+  },
+  {
+    value: "msm",
+    label: "Marginal structural model (stabilised IPTW + Cox)",
+    definition: "Compute stabilised inverse-probability weights via PS modelling. Fit a marginal structural Cox model on the weighted population. Allows time-varying confounders affected by previous exposure; for ACNU with fixed treatment assignment typically reduces to standard IPTW Cox.",
+    validation: "Robins JM, Hernán MA, Brumback B. Marginal structural models and causal inference in epidemiology. Epidemiology 2000;11:550-60.",
+  },
+  {
+    value: "outcome-reg",
+    label: "Multivariable outcome regression",
+    definition: "Fit a multivariable Cox proportional-hazards regression directly, including the exposure indicator and all pre-specified baseline covariates (Section 7). No PS used. Best when the outcome model is correctly specified and covariate balance between groups is acceptable.",
+    validation: "Hernán MA, Robins JM. Causal Inference: What If. Chapman & Hall/CRC 2020.",
+  },
+  {
+    value: "iv",
+    label: "Instrumental variable (IV) analysis",
+    definition: "Use an instrument (e.g., physician's preference for exposure or geographic variation) that affects exposure but is independent of unmeasured confounders. Estimate the local average treatment effect via two-stage least squares (continuous outcome) or two-stage residual inclusion (time-to-event).",
+    validation: "Brookhart MA, Wang PS, Solomon DH, Schneeweiss S. Evaluating short-term drug effects using a physician-specific prescribing preference as an instrumental variable. Epidemiology 2006;17:268-75.",
+  },
+];
+
+const PS_METHOD_DESCRIPTIONS: Record<string, string> = Object.fromEntries(PS_METHODS.map((m) => [m.value, m.label]));
+
+const INDEX_DATE_OPTIONS: { value: string; label: string }[] = [
+  { value: "after-washout",      label: "First dispensing of exposure or comparator after the washout period" },
+  { value: "after-indication",   label: "First dispensing of exposure or comparator after first diagnosis of the indication" },
+  { value: "calendar-incident",  label: "First dispensing in the study period (incident new-user)" },
+  { value: "after-treatment",    label: "First dispensing after failure of a first-line treatment (treatment-pathway start)" },
+];
+
+const MAX_FOLLOWUP_OPTIONS = [
+  "1 year per patient",
+  "2 years per patient",
+  "3 years per patient",
+  "5 years per patient, or until censoring (whichever first)",
+  "10 years per patient, or until censoring",
+  "Until end of database availability (no cap)",
+];
+
+// ─── Validated phenotype library ─────────────────────────────────────
+// Curated, published code sets for the things AsPEN protocols repeat most.
+// Clicking a row in the library modal one-shot-fills the relevant input(s).
+// All references are real but kept brief; full citations are added to the
+// References section of the generated protocol.
+const PHENOTYPES = {
+  indications: [
+    { name: "Type 2 diabetes (T2DM)", codes: "ICD-10 E11.* (or ICD-9 250.*0 / 250.*2); confirm by ≥1 antidiabetic dispensing", notes: "Exclude T1DM (E10.*) separately in the exclusion section." },
+    { name: "Hypertension", codes: "ICD-10 I10-I15; or ≥2 dispensings of antihypertensive (ATC C02-C09) within 365 d", notes: "" },
+    { name: "Atrial fibrillation", codes: "ICD-10 I48.*; PPV ~90% in claims when from inpatient primary diagnosis", notes: "" },
+    { name: "Heart failure", codes: "ICD-10 I50.*; or I11.0 / I13.0 / I13.2 (hypertensive HF)", notes: "" },
+    { name: "Chronic kidney disease (CKD)", codes: "ICD-10 N18.*; or eGFR <60 ml/min/1.73m² on ≥2 occasions ≥90 d apart", notes: "" },
+    { name: "COPD", codes: "ICD-10 J44.*; ≥1 inpatient or ≥2 outpatient", notes: "" },
+    { name: "Schizophrenia", codes: "ICD-10 F20.* (or F25.* schizoaffective); ≥1 inpatient or ≥2 outpatient", notes: "" },
+    { name: "Major depressive disorder", codes: "ICD-10 F32.*, F33.*", notes: "" },
+    { name: "ADHD", codes: "ICD-10 F90.*; consider linkage to stimulant dispensing for confirmation", notes: "" },
+    { name: "Dementia", codes: "ICD-10 F00-F03, G30.*, G31.0, G31.83", notes: "" },
+    { name: "Osteoporosis", codes: "ICD-10 M80.*, M81.*", notes: "" },
+    { name: "Pregnancy", codes: "ICD-10 O*, Z3*; supplemented by pregnancy-specific dispensings", notes: "Consider trimester-specific look-back." },
+    {
+      name: "Lennox-Gastaut Syndrome (LGS)",
+      codes: "Confirmed LGS: ICD-10 G40.812 OR ≥1 rufinamide dispensing. Probable LGS: age ≤10 y at index with ≥3 antiseizure medications co-prescribed, plus ICD-9/10 developmental-delay codes.",
+      notes: "NHIRD-CGRD two-stage validation: NHIRD identification adjusted by CGRD EMR-confirmed PPV. 2018 PPV-adjusted prevalence ~2.4 / 100,000 overall (0.6 adult, 10.2 paediatric).",
+      validation: "Yang ASH, Tsai DHT (co-first), Chen LW, Cheng WM, Wang CC, Shao SC, Song WW, Kouhkamari MH, Huang WC, Bowditch S, Lai ECC. Epidemiology and Burden of Illness of Lennox-Gastaut Syndrome in Taiwan: A Retrospective Cohort Study. Risk Manag Healthc Policy 2025;18:3153-3166. PMID: 41000540.",
+    },
+  ],
+  exposures: [
+    { name: "Metformin", codes: "ATC A10BA02", notes: "" },
+    { name: "Sulfonylureas", codes: "ATC A10BB* (glibenclamide A10BB01, gliclazide A10BB09, glimepiride A10BB12, glipizide A10BB07)", notes: "" },
+    { name: "DPP-4 inhibitors", codes: "ATC A10BH* (sitagliptin A10BH01, vildagliptin A10BH02, saxagliptin A10BH03, linagliptin A10BH05, alogliptin A10BH04)", notes: "" },
+    { name: "SGLT2 inhibitors", codes: "ATC A10BK* (canagliflozin A10BK02, dapagliflozin A10BK01, empagliflozin A10BK03, ertugliflozin A10BK04)", notes: "Available in most AsPEN sites from ~2014 onward." },
+    { name: "GLP-1 receptor agonists", codes: "ATC A10BJ* (exenatide A10BJ01, liraglutide A10BJ02, dulaglutide A10BJ05, semaglutide A10BJ06, tirzepatide A10BX16)", notes: "" },
+    { name: "Thiazolidinediones (TZDs)", codes: "ATC A10BG* (pioglitazone A10BG03)", notes: "" },
+    { name: "Insulin (any)", codes: "ATC A10A*", notes: "" },
+    { name: "Statins", codes: "ATC C10AA*", notes: "" },
+    { name: "ACE inhibitors", codes: "ATC C09A* / C09B*", notes: "" },
+    { name: "ARBs", codes: "ATC C09C* / C09D*", notes: "" },
+    { name: "Beta-blockers", codes: "ATC C07A*", notes: "" },
+    { name: "Antipsychotics (any)", codes: "ATC N05A*", notes: "Atypicals N05AH/N05AL/N05AX; typicals N05AA-N05AG." },
+    { name: "ADHD stimulants", codes: "ATC N06BA (methylphenidate N06BA04, amphetamine N06BA01, lisdexamfetamine N06BA12)", notes: "" },
+    { name: "Opioid analgesics", codes: "ATC N02A* (excluding diamorphine where required)", notes: "Consider OMEDD calculation for dose comparison across sites." },
+    { name: "NSAIDs", codes: "ATC M01A* (excluding M01AX, the topical / non-systemic)", notes: "" },
+    { name: "Bisphosphonates", codes: "ATC M05BA* / M05BB*", notes: "" },
+    { name: "Anticoagulants; DOACs", codes: "ATC B01AE07 (dabigatran), B01AF01 (rivaroxaban), B01AF02 (apixaban), B01AF03 (edoxaban)", notes: "" },
+    { name: "Anticoagulants; warfarin", codes: "ATC B01AA03", notes: "" },
+  ],
+  outcomes: [
+    {
+      name: "Myocardial infarction (MI)",
+      codes: "ICD-10 I21.*, I22.* (primary discharge diagnosis)",
+      definition: "First hospitalisation with a primary discharge diagnosis of acute MI.",
+      validation: "PPV ~88% in NHIRD when restricted to inpatient primary diagnosis; Cheng CL, Lee CH, Chen PS, Li YH, Lin SJ, Yang YH. Validation of acute myocardial infarction cases in the National Health Insurance Research Database in Taiwan. J Epidemiol 2014;24(6):500-7.",
+    },
+    {
+      name: "Ischemic stroke",
+      codes: "ICD-10 I63.*, I64.* (primary discharge diagnosis)",
+      definition: "First hospitalisation with a primary discharge diagnosis of ischemic stroke.",
+      validation: "Multiple AsPEN-network validations in Taiwan claims: Cheng CL et al. Validation of the NHIRD with ischemic stroke cases in Taiwan. Pharmacoepidemiol Drug Saf 2011;20(3):236-42. Hsieh CY et al. Validating the diagnosis of acute ischemic stroke in a National Health Insurance claims database. J Formos Med Assoc 2015;114(3):254-9.",
+    },
+    {
+      name: "Heart failure hospitalisation",
+      codes: "ICD-10 I50.*, I11.0, I13.0, I13.2 (primary discharge diagnosis)",
+      definition: "First hospitalisation with a primary discharge diagnosis of heart failure.",
+      validation: "Validated in NHIRD- and CGRD-linked studies; see Shao SC et al, Clinical Epidemiology series, and the broader CGRD foundational paper: Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database; a multi-institutional electronic medical records database for real-world epidemiological research in Taiwan. Pharmacoepidemiol Drug Saf 2019;28(5):593-600.",
+    },
+    {
+      name: "3-point MACE",
+      codes: "Composite: ICD-10 I21.*, I22.* (MI); I63.*, I64.* (stroke); cause-of-death I00-I99 (CV death)",
+      definition: "Time to first of: non-fatal MI, non-fatal ischemic stroke, or cardiovascular death; whichever occurs first.",
+      validation: "Standard composite endpoint in CV outcome trials; component validation as per individual outcomes above (Cheng CL 2014 J Epidemiol; Cheng CL 2011 PDS).",
+    },
+    {
+      name: "4-point MACE",
+      codes: "3-point MACE + ICD-10 I50.* heart-failure hospitalisation",
+      definition: "Time to first of: non-fatal MI, non-fatal stroke, CV death, or heart-failure hospitalisation.",
+      validation: "Composite of validated components; Cheng CL 2014 (MI), Cheng CL 2011 (stroke), Shao SC et al CGRD HF studies.",
+    },
+    {
+      name: "All-cause mortality",
+      codes: "National death-registry linkage (NHIRD ↔ Cause-of-Death; HIRA ↔ KOSIS; etc.); site-specific",
+      definition: "Date of death from any cause.",
+      validation: "Near-complete in NHIRD via Cause-of-Death registry; see Lu TH et al, Hsieh CY et al for NHIRD mortality linkage validation. Sites without linkage use disenrolment + ≥30-day gap as proxy.",
+    },
+    {
+      name: "Cardiovascular death",
+      codes: "Cause-of-death ICD-10 I00-I99 (primary cause); requires death-registry linkage",
+      definition: "Death with a cardiovascular primary cause on the death certificate.",
+      validation: "NHIRD-linked Cause-of-Death studies (Hsieh CY et al Clinical Epidemiology 2019); cause-of-death accuracy is moderate, so sensitivity analysis with broader CV cause definition is recommended.",
+    },
+    {
+      name: "Acute kidney injury (AKI)",
+      codes: "ICD-10 N17.* (primary discharge diagnosis); KDIGO criteria where serum creatinine available",
+      definition: "First hospitalisation with primary discharge AKI diagnosis OR serum-creatinine-based KDIGO definition where lab linkage exists.",
+      validation: "Code-only AKI ascertainment has moderate PPV; Shao SC et al have used both code-based and lab-confirmed AKI in CGRD; pair with eGFR / serum-creatinine trajectories where available.",
+    },
+    {
+      name: "Diabetic ketoacidosis (DKA)",
+      codes: "ICD-10 E10.1, E11.1, E13.1, E14.1 (primary discharge diagnosis)",
+      definition: "First hospitalisation with primary discharge diagnosis of DKA.",
+      validation: "High specificity when restricted to inpatient primary diagnosis; used in NHIRD-based SGLT2i safety studies (e.g., Shao SC et al Clinical Epidemiology). Confirm with site-specific PPV where possible.",
+    },
+    {
+      name: "Hip fracture",
+      codes: "ICD-10 S72.0, S72.1, S72.2 (primary discharge diagnosis); paired with surgical procedure code for highest PPV",
+      definition: "First hospitalisation with primary discharge diagnosis of hip fracture (typically also requiring surgical-fixation code).",
+      validation: "High PPV reported across multiple AsPEN-network sites; see also AsPEN multi-country hip-fracture study (Lai EC et al, BMJ Open 2021/2023; protocol & epidemiology papers).",
+    },
+    {
+      name: "Any fracture",
+      codes: "ICD-10 S02 (skull), S12 (neck), S22 (rib), S32 (lumbar/pelvis), S42 (shoulder), S52 (forearm), S62 (hand), S72 (femur), S82 (leg), S92 (foot)",
+      definition: "First hospitalisation or specialist outpatient visit with a fracture diagnosis.",
+      validation: "Site-dependent. AsPEN antipsychotic-falls/fractures SCCS (Wang GH, Man KKC, Chang WH, Liao TC, Lai ECC. BMJ 2021;PMID 34503972) used inpatient primary-diagnosis restriction for specificity.",
+    },
+    {
+      name: "Falls",
+      codes: "ICD-10 W00-W19 (external cause); R29.6 (history of falling); injury-by-fall codes",
+      definition: "First ED or hospital encounter with a fall code (often combined with fall-related injury for higher capture).",
+      validation: "Used as a primary outcome in the AsPEN antipsychotic-cholinesterase falls/fractures BMJ study (Wang GH et al, BMJ 2021;PMID 34503972); defined as fall + injury composite for specificity.",
+    },
+    {
+      name: "Pneumonia hospitalisation",
+      codes: "ICD-10 J12-J18 (primary discharge diagnosis)",
+      definition: "First hospitalisation with primary discharge pneumonia diagnosis.",
+      validation: "Used as outcome in multiple AsPEN-network pharmacoepi studies (e.g., antipsychotic safety in older adults). Specificity is high when restricted to inpatient primary diagnosis.",
+    },
+    {
+      name: "GI bleeding",
+      codes: "ICD-10 K25.0, K25.2, K25.4, K25.6, K26.0, K26.2, K26.4, K26.6, K27.*, K28.*, K29.0, K92.0, K92.1, K92.2 (primary discharge diagnosis)",
+      definition: "First hospitalisation with primary discharge diagnosis of GI bleeding.",
+      validation: "Used in AsPEN PSSA studies on NSAID and PPI safety; see Andersen M, Pratt N, Sanfélix-Gimeno G et al. Pharmacoepidemiol Drug Saf 2013 (founding AsPEN methods paper).",
+    },
+    {
+      name: "Intracranial haemorrhage",
+      codes: "ICD-10 I60.*, I61.*, I62.* (primary discharge diagnosis)",
+      definition: "First hospitalisation with primary discharge intracranial-haemorrhage diagnosis.",
+      validation: "High specificity when restricted to inpatient primary diagnosis (NHIRD-validated; CGRD-confirmed in Shao SC et al Cardiovascular Diabetology 2019 DOAC studies).",
+    },
+    {
+      name: "Suicide / self-harm",
+      codes: "ICD-10 X60-X84 (suicide attempts), Y87.0 (sequelae); T-codes for intentional poisoning; combined with mortality-record cause of death",
+      definition: "First ED or hospital encounter with suicide / intentional self-harm code, or mortality with intentional-injury cause.",
+      validation: "Used in AsPEN psychotropic-COVID work (e.g., Man KKC et al Lancet Psychiatry 2024;PMID 39241791). Codes have low sensitivity; mortality linkage substantially improves capture.",
+    },
+    {
+      name: "Dementia (incident)",
+      codes: "ICD-10 F00-F03, G30.*, G31.0, G31.83; OR ≥1 dispensing of donepezil / galantamine / rivastigmine / memantine",
+      definition: "First diagnosis of dementia OR first dispensing of a dementia medication, whichever earlier.",
+      validation: "AsPEN dementia work uses this combined definition; see Tsai DHT et al CNS Drugs 2025 (PMID 40437158, NHIRD dementia survival) and the AsPEN 2023 NeuroGEN infrastructure paper (Tsai DHT et al Clinical Epidemiology 2023;PMID 38146486).",
+    },
+    {
+      name: "Thyroid cancer",
+      codes: "ICD-10 C73; cancer-registry linkage (NHIRD ↔ TCR; HIRA ↔ KNCI); strongly recommended",
+      definition: "First diagnosis of thyroid cancer from cancer-registry linkage (preferred) or claims (with lower PPV).",
+      validation: "AsPEN GLP-1 RA thyroid-cancer studies (Shao SC et al / Lai EC et al, 2025) used NHIRD ↔ Cancer Registry linkage; see PMIDs 39772758 and 40465422 in the AsPEN publication list.",
+    },
+  ],
+};
+
+const CDM_OPTIONS = [
+  "Not applicable (no CDM)",
+  "OMOP CDM v5.4",
+  "OMOP CDM v6.0",
+  "Sentinel CDM v8.x",
+  "PCORnet CDM v6.x",
+  "Mini-Sentinel CDM",
+  "AsPEN harmonised local CDM",
+];
+
+const AGE_RANGES = [
+  "≥18, no upper limit",
+  "≥40, no upper limit",
+  "≥50, no upper limit",
+  "≥65, no upper limit",
+  "18-64 (working-age)",
+  "≥18, ≤80",
+  "≥40, ≤80",
+];
+
+const SECONDARY_OUTCOMES_COMMON = [
+  "All-cause mortality",
+  "Cardiovascular death",
+  "Heart failure hospitalisation",
+  "Non-fatal myocardial infarction",
+  "Non-fatal ischemic stroke",
+  "Acute kidney injury",
+  "DKA",
+  "Hip fracture",
+  "Any fracture",
+  "Pneumonia hospitalisation",
+  "Intracranial haemorrhage",
+  "GI bleeding",
+];
+
+const SENSITIVITY = [
+  "PS trimming to area of common support",
+  "Alternative washout period (180 d, 730 d)",
+  "Alternative grace period (0, 60, 90 d)",
+  "ITT vs on-treatment (whichever is not the primary)",
+  "Active-comparator restriction to a single agent",
+  "Negative-control outcome (e.g., fracture or skin infection)",
+  "Exclude first 30 days of follow-up (latency analysis)",
+  "High-dimensional propensity score (HDPS)",
+  "Restrict to incident users only (≥1 year look-back required)",
+  "Exclude pregnant patients",
+  "E-value for unmeasured confounding",
+];
+
+const TIMELINE_PRESETS: Record<string, string> = {
+  "12-month": [
+    "Month 0: Protocol finalised, site IRB submissions begin",
+    "Month 3: All site IRB approvals received",
+    "Month 4-6: Local data extraction and cohort assembly",
+    "Month 7-9: PS modelling and analytic execution at each site",
+    "Month 10-11: Site estimates returned to coordinating centre; meta-analysis",
+    "Month 12: First draft manuscript circulated; conference abstract",
+  ].join("\n"),
+  "18-month": [
+    "Month 0: Protocol finalised, site IRB submissions begin",
+    "Month 4: All site IRB approvals received",
+    "Month 5-8: Local data extraction and cohort assembly",
+    "Month 9-12: PS modelling and analytic execution at each site",
+    "Month 13-15: Sensitivity analyses; meta-analysis",
+    "Month 16-17: Manuscript drafting and internal review",
+    "Month 18: Manuscript submission",
+  ].join("\n"),
+  "24-month": [
+    "Month 0-3: Protocol finalisation, code-set harmonisation, IRB submissions",
+    "Month 4-6: IRB approvals; pilot data extraction at each site",
+    "Month 7-12: Full cohort assembly, PS modelling, primary analysis",
+    "Month 13-18: Sensitivity analyses; subgroup analyses; meta-analysis",
+    "Month 19-21: Manuscript drafting; conference presentations",
+    "Month 22-24: Peer review, revisions, publication",
+  ].join("\n"),
+};
+---
+
+<BaseLayout
+  title="Protocol template · ACNU · AsPEN members"
+  description="Guided form that drafts a multi-national active-comparator new-user (ACNU) study protocol for AsPEN sites."
+>
+  <PageHeader
+    eyebrow="Members → Templates"
+    title="Multi-national ACNU protocol builder"
+    description="Active-comparator new-user design under a target trial emulation framework. The active comparator behaves as an 'emulated placebo' from the same therapeutic context; minimising confounding by indication and addressing immortal-time / prevalent-user bias. Tick the boxes for the operational pieces; export as Word (.docx) or Markdown."
+  />
+
+  <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/`}>← Members area</a>
+      <button type="button" data-action="reset-top" class="text-xs font-semibold text-rose-700 border border-rose-300 hover:bg-rose-50 px-3 py-1.5 rounded transition">
+        ⟲ Clear &amp; start over
+      </button>
+    </div>
+
+    <div data-state="ready" class="grid gap-8 lg:grid-cols-[1fr,1fr] items-start">
+
+      <!-- ── Wizard form (left) ─────────────────────────────── -->
+      <form data-builder class="space-y-6">
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            1 · Study identification
+          </summary>
+          <div class="px-5 pb-5 grid sm:grid-cols-2 gap-3">
+            <label class="flex flex-col gap-1 sm:col-span-2">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Study title</span>
+              <input type="text" name="title" placeholder="e.g. SGLT2 inhibitors vs DPP-4 inhibitors and risk of MACE"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Short ID</span>
+              <input type="text" name="shortId" placeholder="AsPEN-SGLT2-MACE-2026"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Version · Date</span>
+              <input type="text" name="version" placeholder="v0.1 draft · 2026-05-28"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1 sm:col-span-2">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Lead investigator(s)</span>
+              <input type="text" name="leadInvestigator" placeholder="Name, affiliation; co-leads if any"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            2 · Research question (one-line summary)
+          </summary>
+          <div class="px-5 pb-5 grid sm:grid-cols-2 gap-3">
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population</span>
+              <input type="text" name="picoP" placeholder="Adults ≥40y initiating second-line T2DM therapy"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure</span>
+              <input type="text" name="picoI" placeholder="SGLT2 inhibitors (any agent)"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Comparator</span>
+              <input type="text" name="picoC" placeholder="DPP-4 inhibitors (any agent)"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Primary outcome</span>
+              <input type="text" name="picoO" placeholder="3-point MACE (CV death, MI, stroke)"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1 sm:col-span-2">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Emulated target trial (optional)</span>
+              <input type="text" name="emulatedTrial" placeholder="e.g., adapted from CREDENCE / DAPA-CKD / EMPA-KIDNEY"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <span class="text-[11px] text-slate-500">If this ACNU study emulates a specific RCT, name it here. The methods section then opens with the target-trial framing.</span>
+            </label>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            3 · Sites
+          </summary>
+          <div class="px-5 pb-5 space-y-4">
+            <p class="text-xs text-slate-500">
+              Tick every <strong>database</strong> (not just country) you want to include. The feature chips next to each show what each database can support; only tick a site whose features cover what your outcome / exposure / covariates need (e.g., a lab-defined outcome needs <span class="font-mono">Lab</span>; an all-cause mortality endpoint needs <span class="font-mono">Mor</span>).
+            </p>
+            <div class="flex flex-wrap items-center gap-2 text-[10px] text-slate-500 border-y border-slate-100 py-2">
+              <span class="uppercase tracking-widest font-bold text-slate-600">Legend</span>
+              {FEATURES.map((f) => (
+                <span class="inline-flex items-center gap-1">
+                  <span class="text-[10px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-mono font-semibold">{f.short}</span>
+                  <span>{f.label}</span>
+                </span>
+              ))}
+            </div>
+            <div class="space-y-3">
+              {Object.entries(SITES_BY_COUNTRY).map(([country, dbs]) => (
+                <div>
+                  <p class="text-[11px] font-semibold text-slate-700">{country}</p>
+                  <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {dbs.map((d) => (
+                      <label class="flex items-center gap-2 text-xs border border-slate-200 rounded px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                        <input type="checkbox" name="sites" value={d.id} class="rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                        <span class="font-semibold text-slate-800 shrink-0">{d.short}</span>
+                        <span class="flex flex-wrap gap-1 ml-auto">
+                          {FEATURES.filter((f) => d.features.includes(f.id)).map((f) => (
+                            <span class="text-[10px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-mono font-semibold" title={f.label}>{f.short}</span>
+                          ))}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Others (one per line)</span>
+              <textarea name="sitesOther" rows="2" placeholder="e.g.&#10;Vietnam; local single-site EHR&#10;Singapore; National Healthcare Group"
+                        class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+            </label>
+            <!-- Feasibility heads-up; populated by JS based on form keywords vs site features -->
+            <div data-feasibility class="hidden bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs leading-relaxed">
+              <p class="font-bold text-amber-800 uppercase tracking-[0.2em] text-[10px]">⚠ Feasibility heads-up; not a blocker</p>
+              <p class="mt-1 text-amber-900">
+                Your study question implies data features that some selected sites don't carry. Multi-country protocols often accommodate this (other sites cover what some miss); just be explicit in the per-site analytic plan.
+              </p>
+              <ul data-feasibility-list class="mt-2 space-y-1 text-amber-900 list-disc list-inside"></ul>
+            </div>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            4 · Cohort definition
+          </summary>
+          <div class="px-5 pb-5 grid sm:grid-cols-2 gap-3">
+            <div class="sm:col-span-2 flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold flex items-center gap-2">
+                Indication / cohort entry condition
+                <button type="button" data-open-library data-category="indications" data-target-name="indication"
+                        class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-0.5 rounded transition">
+                  📚 Pick from library
+                </button>
+              </span>
+              <input type="text" name="indication" placeholder="T2DM (ICD-10 E11.x) ever before index"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </div>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Age range</span>
+              <select name="ageRangeChoice" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                {AGE_RANGES.map((a, i) => (
+                  <option value={a} selected={i === 0}>{a}</option>
+                ))}
+                <option value="custom">Custom; specify below</option>
+              </select>
+              <input type="text" name="ageRangeCustom" placeholder="Used only if 'Custom' selected (e.g., ≥30, ≤75)"
+                     class="border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sex</span>
+              <select name="sex" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                <option value="both">Both</option>
+                <option value="female">Female only</option>
+                <option value="male">Male only</option>
+              </select>
+            </label>
+            <div class="sm:col-span-2">
+              <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Inclusion criteria; tick those to apply</p>
+              <div class="mt-2 grid sm:grid-cols-2 gap-1.5">
+                {INCLUSION.map((c, i) => (
+                  <label class="flex items-start gap-2 text-xs border border-slate-200 rounded px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" name="inclusionPick" value={c} checked={i < 2} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                    <span>{c}</span>
+                  </label>
+                ))}
+              </div>
+              <label class="flex flex-col gap-1 mt-3">
+                <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Custom inclusion criteria (one per line)</span>
+                <textarea name="inclusionCustom" rows="2" placeholder="Study-specific criteria"
+                          class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              </label>
+            </div>
+            <div class="sm:col-span-2">
+              <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exclusion criteria; tick those to apply</p>
+              <div class="mt-2 grid sm:grid-cols-2 gap-1.5">
+                {EXCLUSION.map((c, i) => (
+                  <label class="flex items-start gap-2 text-xs border border-slate-200 rounded px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" name="exclusionPick" value={c} checked={i < 5} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                    <span>{c}</span>
+                  </label>
+                ))}
+              </div>
+              <label class="flex flex-col gap-1 mt-3">
+                <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Custom exclusion criteria (one per line)</span>
+                <textarea name="exclusionCustom" rows="2" placeholder="Study-specific criteria"
+                          class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            5 · Exposure &amp; comparator
+          </summary>
+          <div class="px-5 pb-5 grid sm:grid-cols-2 gap-3">
+            <div class="sm:col-span-2 flex items-center gap-2 flex-wrap">
+              <button type="button" data-open-library data-category="exposures" data-target-name="exposureName" data-target-codes="exposureCodes" data-also-fill="picoI"
+                      class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">
+                📚 Pick exposure from library
+              </button>
+              <button type="button" data-open-library data-category="exposures" data-target-name="comparatorName" data-target-codes="comparatorCodes" data-also-fill="picoC"
+                      class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">
+                📚 Pick comparator from library
+              </button>
+            </div>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure; name</span>
+              <input type="text" name="exposureName" placeholder="SGLT2 inhibitors"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure; code set</span>
+              <input type="text" name="exposureCodes" placeholder="ATC A10BK*"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Comparator; name</span>
+              <input type="text" name="comparatorName" placeholder="DPP-4 inhibitors"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Comparator; code set</span>
+              <input type="text" name="comparatorCodes" placeholder="ATC A10BH*"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Washout (days)</span>
+              <input type="number" name="washout" value="365" min="0" step="1"
+                     class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <div class="flex gap-1 mt-1 flex-wrap">
+                {[90, 180, 365, 730].map((d) => (
+                  <button type="button" data-set-input="washout" data-value={d}
+                          class="text-[10px] border border-slate-300 hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700 text-slate-600 px-2 py-0.5 rounded transition">{d}</button>
+                ))}
+              </div>
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Index date definition</span>
+              <select name="indexDateChoice" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                {INDEX_DATE_OPTIONS.map((o, i) => (
+                  <option value={o.value} selected={i === 0}>{o.label}</option>
+                ))}
+                <option value="custom">Custom; specify below</option>
+              </select>
+              <input type="text" name="indexDateCustom" placeholder="Used only if 'Custom' selected"
+                     class="border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            6 · Outcome ascertainment
+          </summary>
+          <div class="px-5 pb-5 space-y-3">
+            <div>
+              <button type="button" data-open-library data-category="outcomes" data-target-def="outcomeDef" data-target-codes="outcomeCodes" data-also-fill="picoO"
+                      class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">
+                📚 Pick outcome from validated library
+              </button>
+              <span class="ml-2 text-[11px] text-slate-500">Fills definition + codes; the validation citation is added to the References section automatically on export.</span>
+            </div>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Operational definition</span>
+              <textarea name="outcomeDef" rows="3" placeholder="First hospitalisation with primary discharge diagnosis I21.x (MI), I63.x (ischemic stroke), or CV death; composite, time-to-first-event."
+                        class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Code set</span>
+              <input type="text" name="outcomeCodes" placeholder="ICD-10 I21.*, I63.*; cause-of-death I00-I99"
+                     class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            </label>
+            <div>
+              <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Secondary outcomes; tick those to include</p>
+              <div class="mt-2 grid sm:grid-cols-2 gap-1.5">
+                {SECONDARY_OUTCOMES_COMMON.map((o, i) => (
+                  <label class="flex items-start gap-2 text-xs border border-slate-200 rounded px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" name="secondaryOutcomesPick" value={o} checked={i < 3} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                    <span>{o}</span>
+                  </label>
+                ))}
+              </div>
+              <label class="flex flex-col gap-1 mt-3">
+                <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Custom secondary outcomes (one per line)</span>
+                <textarea name="secondaryOutcomesCustom" rows="2" placeholder="Study-specific secondary outcomes not listed above"
+                          class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            7 · Follow-up &amp; censoring
+          </summary>
+          <div class="px-5 pb-5 space-y-4">
+            <div class="grid sm:grid-cols-2 gap-3">
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Primary analysis</span>
+                <select name="primaryAnalysisType" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  <option value="OT" selected>On-treatment (per-protocol)</option>
+                  <option value="ITT">Intention-to-treat (ITT)</option>
+                  <option value="both">Both ITT and on-treatment</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Grace period (days)</span>
+                <input type="number" name="grace" value="30" min="0" step="1"
+                       class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                <div class="flex gap-1 mt-1 flex-wrap">
+                  {[0, 30, 60, 90, 180].map((d) => (
+                    <button type="button" data-set-input="grace" data-value={d}
+                            class="text-[10px] border border-slate-300 hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700 text-slate-600 px-2 py-0.5 rounded transition">{d}</button>
+                  ))}
+                </div>
+              </label>
+              <label class="flex flex-col gap-1 sm:col-span-2">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Maximum follow-up</span>
+                <select name="maxFollowupChoice" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  {MAX_FOLLOWUP_OPTIONS.map((o, i) => (
+                    <option value={o} selected={i === 3}>{o}</option>
+                  ))}
+                  <option value="custom">Custom; specify below</option>
+                </select>
+                <input type="text" name="maxFollowupCustom" placeholder="Used only if 'Custom' selected"
+                       class="border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              </label>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Censoring rules; tick those that apply</p>
+              <div class="mt-2 grid sm:grid-cols-2 gap-1.5">
+                {CENSORING.map((c, i) => (
+                  <label class="flex items-start gap-2 text-xs border border-slate-200 rounded px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" name="censoringPick" value={c} checked={i < 5} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                    <span>{c}</span>
+                  </label>
+                ))}
+              </div>
+              <label class="flex flex-col gap-1 mt-3">
+                <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Custom censoring rules (one per line)</span>
+                <textarea name="censoringCustom" rows="2" placeholder="Additional rules specific to this study"
+                          class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            8 · Confounding control
+          </summary>
+          <div class="px-5 pb-5 space-y-4">
+            <div>
+              <button type="button" data-open-library data-category="confounding" data-target-value="psMethod" data-target-def="psMethodDetails"
+                      class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">
+                📚 Pick confounding method from library
+              </button>
+              <span class="ml-2 text-[11px] text-slate-500">Auto-fills the method, its operational details, and adds the method citation to References on export.</span>
+            </div>
+            <div class="grid sm:grid-cols-2 gap-3">
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Primary confounding-control method</span>
+                <select name="psMethod" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  {PS_METHODS.map((m, i) => (
+                    <option value={m.value} selected={i === 0}>{m.label}</option>
+                  ))}
+                </select>
+                <span class="text-[11px] text-slate-500">Secondary / alternative methods can be ticked under Sensitivity analyses.</span>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariate look-back (days)</span>
+                <input type="number" name="lookback" value="365" min="0" step="1"
+                       class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                <div class="flex gap-1 mt-1 flex-wrap">
+                  {[90, 180, 365, 730].map((d) => (
+                    <button type="button" data-set-input="lookback" data-value={d}
+                            class="text-[10px] border border-slate-300 hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700 text-slate-600 px-2 py-0.5 rounded transition">{d}</button>
+                  ))}
+                </div>
+              </label>
+            </div>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Method operational details</span>
+              <textarea name="psMethodDetails" rows="4" placeholder="Will be auto-filled when you pick from the library. Edit freely."
+                        class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+            </label>
+            <div>
+              <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Baseline covariates; tick those to adjust for</p>
+              <div class="mt-2 space-y-3">
+                {COVARIATES.map((g) => (
+                  <div>
+                    <p class="text-[11px] font-semibold text-slate-700">{g.group}</p>
+                    <div class="mt-1 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {g.items.map((it) => (
+                        <label class="flex items-start gap-1.5 text-xs border border-slate-200 rounded px-2 py-1.5 hover:bg-slate-50 cursor-pointer">
+                          <input type="checkbox" name="covariatesPick" value={it} checked={true} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                          <span>{it}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <label class="flex flex-col gap-1 mt-3">
+                <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Custom covariates (one per line)</span>
+                <textarea name="covariatesCustom" rows="2" placeholder="Study-specific covariates not listed above"
+                          class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            9 · Statistical analysis
+          </summary>
+          <div class="px-5 pb-5 space-y-4">
+            <div class="grid sm:grid-cols-2 gap-3">
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Effect estimate</span>
+                <select name="effectMeasure" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  <option value="HR" selected>Hazard ratio (Cox PH)</option>
+                  <option value="RR">Risk ratio (Poisson)</option>
+                  <option value="RD">Risk difference</option>
+                  <option value="IRR">Incidence rate ratio</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Meta-analysis</span>
+                <select name="metaMethod" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  <option value="re" selected>Random-effects (DerSimonian-Laird)</option>
+                  <option value="re-reml">Random-effects (REML)</option>
+                  <option value="fe">Fixed-effects (inverse-variance)</option>
+                </select>
+              </label>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Subgroup analyses; tick those to perform</p>
+              <div class="mt-2 grid sm:grid-cols-2 gap-1.5">
+                {SUBGROUPS.map((s, i) => (
+                  <label class="flex items-start gap-2 text-xs border border-slate-200 rounded px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" name="subgroupsPick" value={s} checked={i < 5} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                    <span>{s}</span>
+                  </label>
+                ))}
+              </div>
+              <label class="flex flex-col gap-1 mt-3">
+                <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Custom subgroups (one per line)</span>
+                <textarea name="subgroupsCustom" rows="2" class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              </label>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sensitivity analyses; tick those to include</p>
+              <div class="mt-2 grid sm:grid-cols-2 gap-1.5">
+                {SENSITIVITY.map((s, i) => (
+                  <label class="flex items-start gap-2 text-xs border border-slate-200 rounded px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" name="sensitivityPick" value={s} checked={i < 6} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                    <span>{s}</span>
+                  </label>
+                ))}
+              </div>
+              <label class="flex flex-col gap-1 mt-3">
+                <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Custom sensitivity analyses (one per line)</span>
+                <textarea name="sensitivityCustom" rows="2" class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            10 · Execution &amp; timeline
+          </summary>
+          <div class="px-5 pb-5 space-y-3">
+            <div class="grid sm:grid-cols-2 gap-3">
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Architecture</span>
+                <select name="arch" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  <option value="federated" selected>Federated (local analysis, share aggregates)</option>
+                  <option value="cdm">Common Data Model (OMOP / Sentinel)</option>
+                  <option value="centralised">Centralised (pooled individual data, where DUA permits)</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">CDM</span>
+                <select name="cdm" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  {CDM_OPTIONS.map((o, i) => (
+                    <option value={o} selected={i === 0}>{o}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Timeline preset</p>
+              <div class="mt-2 flex gap-2 flex-wrap">
+                <button type="button" data-timeline-preset="12-month" class="text-xs border border-brand-300 text-brand-700 hover:bg-brand-50 font-semibold px-3 py-1.5 rounded transition">Use 12-month plan</button>
+                <button type="button" data-timeline-preset="18-month" class="text-xs border border-brand-300 text-brand-700 hover:bg-brand-50 font-semibold px-3 py-1.5 rounded transition">Use 18-month plan</button>
+                <button type="button" data-timeline-preset="24-month" class="text-xs border border-brand-300 text-brand-700 hover:bg-brand-50 font-semibold px-3 py-1.5 rounded transition">Use 24-month plan</button>
+              </div>
+              <label class="flex flex-col gap-1 mt-3">
+                <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Milestones (one per line)</span>
+                <textarea name="timeline" rows="6" class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            11 · Ethics, dissemination, references (optional)
+          </summary>
+          <div class="px-5 pb-5 space-y-3">
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Ethics</span>
+              <textarea name="ethics" rows="2" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Each participating site obtains local IRB / ethics approval before data extraction. Under a federated design, only aggregate site-level estimates are shared with the coordinating centre.</textarea>
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Dissemination</span>
+              <textarea name="dissemination" rows="2" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Primary manuscript to a peer-reviewed pharmacoepidemiology journal; presentation at ICPE / ISPE Asian conference; registration on ENCePP EU PAS Register and/or ClinicalTrials.gov where applicable.</textarea>
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Key references (one per line)</span>
+              <textarea name="references" rows="11" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Cashin AG, Hansford HJ, Hernán MA, Swanson SA, Lee H, Jones MD, et al. Transparent Reporting of Observational Studies Emulating a Target Trial: The TARGET Statement. JAMA 2025. PMID: 40899949. (Reporting framework anchoring this protocol; see also https://target-guideline.org/)
+Tsai DHT, Chuang ATM, Liu KH, Shao SC, Lai ECC. SGLT2 inhibitors and risk of CKD-mineral and bone disorders in patients with type 2 diabetes mellitus and stage 1-3 CKD. CMAJ 2025;197(7):E178-E189. PMID: 39993818. (AsPEN ACNU + target trial emulation exemplar.)
+Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183(8):758-64.
+Lund JL, Richardson DB, Stürmer T. The active comparator, new user study design in pharmacoepidemiology: historical foundations and contemporary application. Curr Epidemiol Rep 2015;2:221-8.
+Andersen M, Pratt N, Sanfélix-Gimeno G et al. Pharmacoepidemiol Drug Saf 2013 (AsPEN founding methods paper).
+Lai EC, Man KK, Chaiyakunapruk N et al. Epidemiology 2015 (AsPEN database survey).
+Pratt NL, Mack CD, Meyer AM et al. Pharmacoepidemiol Drug Saf 2018 (AsPEN common data model framework).
+Hsieh CY, Su CC, Shao SC, Sung SF, Lin SJ, Kao Yang YH, Lai EC. Taiwan's NHIRD: past and future. Clin Epidemiol 2019;11:349-358.
+Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database (CGRD). Pharmacoepidemiol Drug Saf 2019;28(5):593-600.
+Tsai DHT, Wong ICK, Pratt N et al. Clin Epidemiol 2023 (NeuroGEN multi-database infrastructure).
+Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</textarea>
+            </label>
+          </div>
+        </details>
+
+        <div class="flex flex-wrap gap-3 pt-2 items-center">
+          <button type="button" data-action="download-docx" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-5 py-2.5 rounded-lg transition text-sm">
+            ⬇ Download Word (.docx)
+          </button>
+          <button type="button" data-action="download-target" class="text-brand-700 hover:underline font-semibold text-sm" title="Generate the TARGET checklist Word document (Cashin et al, JAMA 2025; target-guideline.org) mapped to the protocol fields.">
+            ⬇ TARGET checklist
+          </button>
+          <button type="button" data-action="download-md" class="text-brand-700 hover:underline font-semibold text-sm">
+            ⬇ Markdown
+          </button>
+          <button type="button" data-action="copy" class="text-brand-700 hover:underline font-semibold text-sm">
+            📋 Copy
+          </button>
+          <button type="button" data-action="reset" class="ml-auto text-slate-500 hover:text-rose-600 hover:underline text-sm font-semibold">
+            Clear all
+          </button>
+          <p data-action-msg class="basis-full text-xs"></p>
+        </div>
+      </form>
+
+      <!-- ── Live Markdown preview (right) ──────────────────── -->
+      <aside class="lg:sticky lg:top-20">
+        <div class="border border-slate-200 rounded-2xl bg-slate-50 shadow-sm overflow-hidden">
+          <header class="flex items-center justify-between px-4 py-2 bg-white border-b border-slate-200">
+            <p class="text-xs uppercase tracking-widest text-brand-700 font-bold">Live preview</p>
+            <p class="text-[10px] text-slate-500">Auto-saved to this browser · server save coming soon</p>
+          </header>
+          <pre data-preview class="text-xs leading-relaxed text-slate-800 p-4 overflow-auto max-h-[calc(100vh-12rem)] whitespace-pre-wrap font-mono"></pre>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- ── Phenotype-library modal ───────────────────────── -->
+    <div data-library-modal class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-start justify-center p-4 sm:p-8 overflow-y-auto">
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-3xl my-8">
+        <header class="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+          <div>
+            <p class="text-xs uppercase tracking-widest text-brand-700 font-bold">Validated phenotype library</p>
+            <h3 class="text-lg font-bold text-slate-900 mt-0.5" data-library-title>Pick a phenotype</h3>
+          </div>
+          <button type="button" data-library-close class="text-slate-400 hover:text-slate-700 text-2xl leading-none">×</button>
+        </header>
+        <div class="px-5 py-3 border-b border-slate-100">
+          <input type="text" data-library-search placeholder="Filter… (e.g., 'MI', 'SGLT2', 'cancer')"
+                 class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+        </div>
+        <div data-library-list class="px-2 py-2 max-h-[60vh] overflow-y-auto"></div>
+        <footer class="px-5 py-3 border-t border-slate-100 text-[11px] text-slate-500 leading-relaxed">
+          Code sets are starting points based on published literature; always confirm against your site's coding system version and indication-specific guidance before locking the protocol.
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- docx library (UMD bundle); used to generate Word files client-side -->
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
+
+  <script is:inline define:vars={{ BASE: base, SITES_DETAIL_MAP, FEATURES, TIMELINE_PRESETS, PS_METHODS, PS_METHOD_DESCRIPTIONS, INDEX_DATE_OPTIONS, PHENOTYPES }}>
+    (() => {
+      const setState = (name) => {
+        document.querySelectorAll("[data-state]").forEach((el) => {
+          el.classList.toggle("hidden", el.dataset.state !== name);
+        });
+      };
+
+      const STORAGE_KEY = "aspen.protocol-builder.acnu";
+      const STORAGE_CITATIONS_KEY = "aspen.protocol-builder.acnu.citations";
+      const form = document.querySelector("[data-builder]");
+      const preview = document.querySelector("[data-preview]");
+      const actionMsg = document.querySelector("[data-action-msg]");
+
+      // ── Picked citations (from library picks); appended to References on export.
+      // Stored as { phenotypeName: citationString } so we dedup and can clear.
+      let pickedCitations = {};
+      try { pickedCitations = JSON.parse(localStorage.getItem(STORAGE_CITATIONS_KEY) || "{}") || {}; } catch {}
+      const savePickedCitations = () => {
+        try { localStorage.setItem(STORAGE_CITATIONS_KEY, JSON.stringify(pickedCitations)); } catch {}
+      };
+
+      const setMsg = (msg, isError = false) => {
+        if (!actionMsg) return;
+        actionMsg.textContent = msg;
+        actionMsg.classList.toggle("text-rose-700", isError);
+        actionMsg.classList.toggle("text-brand-700", !isError);
+      };
+
+      // Format a site id into "Country · Short [Rx Dx ...]".
+      const formatSiteFull = (id) => {
+        const d = SITES_DETAIL_MAP[id];
+        if (!d) return id;
+        const feats = (d.features || []).map((f) => (FEATURES.find((x) => x.id === f) || {}).short || f).join(" ");
+        return d.country + " · " + d.short + (feats ? " [" + feats + "]" : "");
+      };
+
+      // ── Feasibility detection ───────────────────────────────
+      // Map the chair's typed text → which data features are needed.
+      // These regexes lean on common English / shorthand terms; they're
+      // intentionally permissive so a heads-up appears even on a quick
+      // first draft. Always-required features (Rx + Dx) are added at the
+      // top because this is an active-comparator pharmacoepi study.
+      const FEATURE_TRIGGERS = {
+        labs:      /\b(hba1c|egfr|creatinine|bmi|blood\s*pressure|systolic|diastolic|ldl|hdl|cholesterol|glucose|albumin|hemoglobin|haemoglobin|inr|tsh|lipid|biochemical|biochemist|labora?tor[yi]|lab[s]?\b)/i,
+        mortality: /\b(mortality|all-?cause death|cv death|cardiovascular death|cause of death|died|fatal|death|survival)\b/i,
+        cancer:    /\b(cancer|carcinom|malignan|neoplasm|tumou?r|sarcoma|leuk[ae]mia|lymphoma|registr[yi].*cancer|cancer.*registr[yi])\b/i,
+        pregnancy: /\b(pregnan|birth|neonatal|gestation|trimester|maternal|fetal|foetal|infant)\b/i,
+        imaging:   /\b(imaging|mri|ct\s*scan|x-?ray|ultrasound|echocardio|angio|radiolog)\b/i,
+        genomics:  /\b(genomic|snp|gwas|biobank|genotype|exome|gene(?:tic)?\b)\b/i,
+      };
+      const FEATURE_TEXT_FIELDS = [
+        "outcomeDef","outcomeCodes",
+        "covariatesCustom","inclusionCustom","exclusionCustom",
+        "picoP","picoI","picoO","secondaryOutcomesCustom",
+        "indication","exposureName","comparatorName","emulatedTrial",
+        "psMethodDetails","subgroupsCustom","sensitivityCustom",
+      ];
+      const FEATURE_MULTI_FIELDS = [
+        "covariatesPick","secondaryOutcomesPick","inclusionPick","exclusionPick",
+        "subgroupsPick","sensitivityPick","censoringPick",
+      ];
+
+      const computeRequiredFeatures = (state) => {
+        let blob = "";
+        for (const f of FEATURE_TEXT_FIELDS) blob += " " + (state[f] || "");
+        for (const f of FEATURE_MULTI_FIELDS) blob += " " + ((state[f] || []).join(" "));
+        const req = new Set(["rx","dx"]);    // ACNU always needs prescriptions + diagnoses
+        for (const [feat, rx] of Object.entries(FEATURE_TRIGGERS)) {
+          if (rx.test(blob)) req.add(feat);
+        }
+        return req;
+      };
+
+      const renderFeasibility = (state) => {
+        const panel  = document.querySelector("[data-feasibility]");
+        const list   = document.querySelector("[data-feasibility-list]");
+        if (!panel || !list) return;
+        const required = computeRequiredFeatures(state);
+        const selected = state.sites || [];
+        if (selected.length === 0) { panel.classList.add("hidden"); return; }
+
+        const gaps = [];
+        for (const featId of required) {
+          if (featId === "rx" || featId === "dx") continue; // these are universal in claims/EHR
+          const featLabel = (FEATURES.find((f) => f.id === featId) || {}).label || featId;
+          const missing = [];
+          const have    = [];
+          for (const sid of selected) {
+            const d = SITES_DETAIL_MAP[sid];
+            if (!d) continue;
+            (d.features.includes(featId) ? have : missing).push(d.short);
+          }
+          if (missing.length > 0) {
+            gaps.push({ feature: featLabel, missing, have });
+          }
+        }
+
+        if (gaps.length === 0) { panel.classList.add("hidden"); return; }
+        list.innerHTML = gaps.map((g) =>
+          `<li><strong>${g.feature}</strong>; implied by your study text. Missing at: <strong>${g.missing.join(", ")}</strong>` +
+          (g.have.length > 0 ? `. Available at: ${g.have.join(", ")}.` : `.`) + `</li>`
+        ).join("");
+        panel.classList.remove("hidden");
+      };
+
+      // ── Form state read / write ─────────────────────
+      const readForm = () => {
+        const data = new FormData(form);
+        const out = {};
+        // Multi-value keys → arrays
+        const multi = new Set(["sites", "censoringPick", "covariatesPick", "subgroupsPick", "sensitivityPick", "inclusionPick", "exclusionPick", "secondaryOutcomesPick"]);
+        for (const k of multi) out[k] = [];
+        for (const [k, v] of data.entries()) {
+          if (multi.has(k)) out[k].push(String(v));
+          else out[k] = String(v);
+        }
+        return out;
+      };
+
+      const writeForm = (state) => {
+        const multi = new Set(["sites", "censoringPick", "covariatesPick", "subgroupsPick", "sensitivityPick", "inclusionPick", "exclusionPick", "secondaryOutcomesPick"]);
+        for (const el of form.querySelectorAll("input, textarea, select")) {
+          const name = el.name;
+          if (!name) continue;
+          if (el.type === "checkbox" && multi.has(name)) {
+            el.checked = (state[name] || []).includes(el.value);
+          } else if (state[name] !== undefined) {
+            el.value = state[name];
+          }
+        }
+      };
+
+      // ── Merge built-in checkboxes + custom textarea ───
+      const mergeList = (picks, customText) => {
+        const lines = (customText || "")
+          .split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        return [...(picks || []), ...lines];
+      };
+
+      const bullets = (arr) =>
+        arr.length === 0 ? "_(none specified)_" : arr.map((l) => "- " + l).join("\n");
+      const numbered = (arr) =>
+        arr.length === 0 ? "_(none)_" : arr.map((l, i) => (i + 1) + ". " + l).join("\n");
+
+      const orFb = (s, fb) => (s && s.trim()) ? s : fb;
+      const sitesLine = (ids, otherText) => {
+        const parts = (ids || []).map((c) => "- " + formatSiteFull(c));
+        const others = (otherText || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (parts.length === 0 && others.length === 0) return "_(no sites selected)_";
+        let out = parts.join("\n");
+        if (others.length > 0) {
+          out += (out ? "\n\n**Other sites:**\n" : "**Other sites:**\n");
+          out += others.map((o) => "- " + o).join("\n");
+        }
+        return out;
+      };
+
+      // ── Markdown template ───────────────────────────
+      const buildMarkdown = (s) => {
+        const today    = new Date().toISOString().slice(0, 10);
+        const title    = orFb(s.title,    "(Untitled multi-national ACNU study)");
+        const shortId  = orFb(s.shortId,  "(short id)");
+        const lead     = orFb(s.leadInvestigator, "(lead investigator)");
+        const version  = orFb(s.version,  "v0.1 draft · " + today);
+
+        // Resolve dropdown choices to free-text used in the protocol body
+        const indexDateLabel = (val) => (INDEX_DATE_OPTIONS.find((o) => o.value === val) || {}).label || "";
+        const resolvedIndexDate = s.indexDateChoice === "custom"
+          ? (s.indexDateCustom || "Custom; see study-specific protocol")
+          : indexDateLabel(s.indexDateChoice) || indexDateLabel("after-washout");
+        const resolvedMaxFu = s.maxFollowupChoice === "custom"
+          ? (s.maxFollowupCustom || "Custom; see study-specific protocol")
+          : (s.maxFollowupChoice || "5 years per patient, or until censoring (whichever first)");
+
+        const sex      = ({ both: "both sexes", female: "female only", male: "male only" })[s.sex] || "both sexes";
+        const primAn   = ({ ITT: "Intention-to-treat (ITT)", OT: "On-treatment (per-protocol)", both: "Both ITT and on-treatment" })[s.primaryAnalysisType] || "On-treatment";
+        const psM      = PS_METHOD_DESCRIPTIONS[s.psMethod] || "PS-based adjustment";
+        const eff      = ({
+          HR: "Hazard ratio (95% CI) from Cox proportional-hazards models",
+          RR: "Risk ratio (95% CI) from Poisson regression",
+          RD: "Risk difference (95% CI)",
+          IRR: "Incidence rate ratio (95% CI)",
+        })[s.effectMeasure] || "Hazard ratio";
+        const meta     = ({
+          re: "Random-effects (DerSimonian-Laird) meta-analysis pooling site-specific estimates; report I² and τ². Forest plot per outcome.",
+          "re-reml": "Random-effects (REML) meta-analysis pooling site-specific estimates; report I² and τ². Forest plot per outcome.",
+          fe: "Fixed-effects (inverse-variance) meta-analysis pooling site-specific estimates. Forest plot per outcome.",
+        })[s.metaMethod] || "Random-effects meta-analysis.";
+        const arch     = ({
+          federated:   "Federated; each AsPEN site executes a common analytic package locally and shares only aggregate site-level estimates with the coordinating centre.",
+          cdm:         "Common Data Model; each site first transforms its source database into the agreed CDM (e.g. OMOP), then runs the shared SQL/R/Python package.",
+          centralised: "Centralised; site-level individual data are pooled at the coordinating centre under appropriate data-sharing agreements.",
+        })[s.arch] || "Federated";
+
+        const refsUser   = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        // Merge user-typed references with citations harvested from library
+        // picks (dedup by exact string).
+        const refsAll    = (() => {
+          const set = new Set(refsUser);
+          for (const cite of Object.values(pickedCitations)) {
+            if (cite && cite.trim()) set.add(cite.trim());
+          }
+          return Array.from(set);
+        })();
+        const refs       = refsAll;
+        const milestones = (s.timeline   || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const inclusion  = mergeList(s.inclusionPick,    s.inclusionCustom);
+        const exclusion  = mergeList(s.exclusionPick,    s.exclusionCustom);
+        const censoring  = mergeList(s.censoringPick,    s.censoringCustom);
+        const covariates = mergeList(s.covariatesPick,   s.covariatesCustom);
+        const subgroups  = mergeList(s.subgroupsPick,    s.subgroupsCustom);
+        const sensitivity = mergeList(s.sensitivityPick, s.sensitivityCustom);
+        const secondary   = mergeList(s.secondaryOutcomesPick, s.secondaryOutcomesCustom);
+        const resolvedAge = s.ageRangeChoice === "custom"
+          ? (s.ageRangeCustom || "(specify)")
+          : (s.ageRangeChoice || "≥18, no upper limit");
+
+        return `# ${title}
+
+**Study ID:** ${shortId}
+**Lead investigator(s):** ${lead}
+**Version:** ${version}
+**Design:** Multi-national active-comparator new-user (ACNU) cohort study under a target trial emulation framework${s.emulatedTrial ? ` (emulating ${s.emulatedTrial})` : ""}.
+
+The active comparator is used as an emulated placebo arm; a drug class with similar indication, similar temporal trends in use, and no known a priori association with the outcome of interest. This minimises confounding by indication and addresses immortal-time / prevalent-user bias by anchoring follow-up at the moment of treatment commencement, similar to randomisation in a target RCT (Hernán & Robins 2016).
+
+---
+
+## 1. Research question
+
+| | |
+|---|---|
+| **Population** | ${orFb(s.picoP, "_(population)_")} |
+| **Exposure** | ${orFb(s.picoI, "_(exposure)_")} |
+| **Comparator** | ${orFb(s.picoC, "_(comparator)_")} |
+| **Primary outcome** | ${orFb(s.picoO, "_(outcome)_")} |
+
+## 2. Sites
+
+${sitesLine(s.sites, s.sitesOther)}
+
+## 3. Cohort definition
+
+- **Indication / cohort entry:** ${orFb(s.indication, "_(condition)_")}
+- **Age:** ${resolvedAge}
+- **Sex:** ${sex}
+
+**Inclusion criteria**
+
+${bullets(inclusion)}
+
+**Exclusion criteria**
+
+${bullets(exclusion)}
+
+## 4. Exposure and comparator
+
+| | Name | Code set |
+|---|---|---|
+| **Exposure** | ${orFb(s.exposureName, "_(exposure)_")} | ${orFb(s.exposureCodes, "_(codes)_")} |
+| **Comparator** | ${orFb(s.comparatorName, "_(comparator)_")} | ${orFb(s.comparatorCodes, "_(codes)_")} |
+
+- **Washout period:** ${s.washout || "365"} days; no prior dispensing of EITHER exposure or comparator in this window before index.
+- **Index date:** ${resolvedIndexDate}
+
+## 5. Outcome ascertainment
+
+**Operational definition.** ${orFb(s.outcomeDef, "_(operational outcome definition)_")}
+
+**Code set.** ${orFb(s.outcomeCodes, "_(code set)_")}
+
+**Secondary outcomes**
+
+${bullets(secondary)}
+
+## 6. Follow-up and censoring
+
+- **Primary analysis:** ${primAn}
+- **Grace period:** ${s.grace || "30"} days
+- **Maximum follow-up:** ${resolvedMaxFu}
+
+**Censoring rules**
+
+${bullets(censoring)}
+
+## 7. Confounding control
+
+- **Method:** ${psM}
+- **Covariate look-back window:** ${s.lookback || "365"} days prior to index date
+
+${s.psMethodDetails ? `**Method operational details.** ${s.psMethodDetails}\n` : ""}
+**Baseline covariates**
+
+${bullets(covariates)}
+
+PS model performance is assessed via standardised mean differences (SMDs) before/after weighting/matching (target < 0.1 across all covariates) and the c-statistic of the PS model.
+
+## 8. Statistical analysis
+
+- **Effect estimate:** ${eff}
+- **Meta-analysis across sites:** ${meta}
+
+**Subgroup analyses**
+
+${bullets(subgroups)}
+
+**Sensitivity analyses**
+
+${bullets(sensitivity)}
+
+## 9. Sample size and power
+
+To be calculated per site using observed event rates among comparator users in pilot extractions; aim for ≥80% power to detect the smallest clinically meaningful effect for the primary outcome at α = 0.05, two-sided, after pooling. Pilot estimates are circulated before final analytic execution.
+
+## 10. Execution and timeline
+
+**Architecture.** ${arch}
+
+**CDM:** ${orFb(s.cdm, "_(specify CDM if applicable)_")}
+
+**Timeline milestones**
+
+${numbered(milestones)}
+
+## 11. Ethics, data sharing, dissemination
+
+**Ethics.** ${orFb(s.ethics, "Each participating site obtains local IRB / ethics approval before data extraction.")}
+
+**Dissemination.** ${orFb(s.dissemination, "Primary manuscript to a peer-reviewed pharmacoepidemiology journal; conference presentation at ICPE / ISPE Asian conference.")}
+
+## 12. Key references
+
+${numbered(refs)}
+
+---
+
+_Drafted with the AsPEN protocol builder (${today})._
+`;
+      };
+
+      // ── Render preview from current form state ──────
+      const render = () => {
+        const state = readForm();
+        preview.textContent = buildMarkdown(state);
+        renderFeasibility(state);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+      };
+
+      // ── Restore saved state, then render ────────────
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) writeForm(JSON.parse(saved));
+      } catch {}
+      // Always pre-fill a default timeline so the section isn't empty
+      const timelineTa = form.querySelector('[name="timeline"]');
+      if (timelineTa && !timelineTa.value) timelineTa.value = TIMELINE_PRESETS["12-month"];
+      render();
+
+      form.addEventListener("input", render);
+      form.addEventListener("change", render);
+
+      // Timeline preset buttons + numeric chip presets
+      form.addEventListener("click", (e) => {
+        const tl = e.target?.closest?.("[data-timeline-preset]");
+        if (tl) {
+          const ta = form.querySelector('[name="timeline"]');
+          if (ta) { ta.value = TIMELINE_PRESETS[tl.dataset.timelinePreset] || ta.value; render(); }
+          return;
+        }
+        const chip = e.target?.closest?.("[data-set-input]");
+        if (chip) {
+          const target = form.querySelector(`[name="${chip.dataset.setInput}"]`);
+          if (target) { target.value = chip.dataset.value; render(); }
+          return;
+        }
+      });
+
+      // ── Filename ─────────────────────────────────────
+      const buildFilename = (ext) => {
+        const state = readForm();
+        const slug = (state.shortId || "aspen-protocol-acnu")
+          .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "aspen-protocol-acnu";
+        const today = new Date().toISOString().slice(0, 10);
+        return slug + "-" + today + "." + ext;
+      };
+
+      // ── Markdown download / copy ─────────────────────
+      document.querySelector("[data-action='download-md']")?.addEventListener("click", () => {
+        const blob = new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = buildFilename("md");
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        setMsg("Downloaded " + a.download);
+      });
+
+      document.querySelector("[data-action='copy']")?.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(preview.textContent || "");
+          setMsg("Copied to clipboard.");
+        } catch {
+          setMsg("Couldn't copy; your browser may block clipboard access.", true);
+        }
+      });
+
+      const doReset = () => {
+        if (!confirm("Clear every field and forget the saved draft?")) return;
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(STORAGE_CITATIONS_KEY);
+        pickedCitations = {};
+        // True blank slate; form.reset() only restores HTML defaults, which
+        // leaves all the pre-checked checkboxes ticked. Walk every form
+        // control and zero it out so "Clear" actually means clear.
+        form.querySelectorAll("input, textarea, select").forEach((el) => {
+          if (el.type === "checkbox" || el.type === "radio") {
+            el.checked = false;
+          } else if (el.tagName === "SELECT") {
+            el.selectedIndex = 0;
+          } else {
+            el.value = "";
+          }
+        });
+        render();
+        setMsg("Cleared.");
+      };
+      document.querySelector("[data-action='reset']")?.addEventListener("click", doReset);
+      document.querySelector("[data-action='reset-top']")?.addEventListener("click", doReset);
+
+      // ── Word .docx download (Times New Roman, with tables) ─
+      document.querySelector("[data-action='download-docx']")?.addEventListener("click", async () => {
+        if (typeof docx === "undefined") {
+          setMsg("Word library failed to load; check your network and try again.", true);
+          return;
+        }
+        setMsg("Building Word document…");
+        try {
+          const blob = await buildDocx(readForm());
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = buildFilename("docx");
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(url);
+          setMsg("Downloaded " + a.download);
+        } catch (e) {
+          console.error(e);
+          setMsg("Couldn't build the Word file: " + String(e), true);
+        }
+      });
+
+      // ── TARGET checklist download ─────────────────────
+      document.querySelector("[data-action='download-target']")?.addEventListener("click", async () => {
+        if (typeof docx === "undefined") {
+          setMsg("Word library failed to load; check your network and try again.", true);
+          return;
+        }
+        setMsg("Building TARGET checklist…");
+        try {
+          const blob = await buildTargetDocx(readForm());
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const state = readForm();
+          const slug = (state.shortId || "aspen-protocol-acnu").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "aspen-protocol-acnu";
+          const today = new Date().toISOString().slice(0, 10);
+          a.href = url; a.download = slug + "-TARGET-checklist-" + today + ".docx";
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(url);
+          setMsg("Downloaded " + a.download);
+        } catch (e) {
+          console.error(e);
+          setMsg("Couldn't build the TARGET checklist: " + String(e), true);
+        }
+      });
+
+      const buildDocx = async (s) => {
+        const D = docx;
+        const today = new Date().toISOString().slice(0, 10);
+
+        // ── Style helpers (Times New Roman everywhere) ────
+        const FONT = "Times New Roman";
+        const text = (str, opts = {}) => new D.TextRun({ text: String(str ?? ""), font: FONT, size: 22, ...opts });
+        const p = (children, opts = {}) => new D.Paragraph({
+          children: Array.isArray(children) ? children : [children],
+          spacing: { before: 60, after: 60, ...(opts.spacing || {}) },
+          ...opts,
+        });
+        const h1 = (str) => new D.Paragraph({
+          children: [text(str, { bold: true, size: 28 })],
+          spacing: { before: 200, after: 80 },
+          heading: D.HeadingLevel.HEADING_1,
+        });
+        const h2 = (str) => new D.Paragraph({
+          children: [text(str, { bold: true, size: 24 })],
+          spacing: { before: 160, after: 60 },
+          heading: D.HeadingLevel.HEADING_2,
+        });
+        const para = (str) => p([text(str)]);
+        const bullet = (str) => new D.Paragraph({
+          children: [text(str)],
+          bullet: { level: 0 },
+          spacing: { before: 0, after: 0 },
+        });
+        const numItem = (str) => new D.Paragraph({
+          children: [text(str)],
+          numbering: { reference: "ordered", level: 0 },
+          spacing: { before: 0, after: 0 },
+        });
+
+        const border = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
+        const cellBorders = { top: border, bottom: border, left: border, right: border };
+
+        // Build a 2-col labelled table (label · value rows).
+        // Total width 9026 DXA (A4 minus 1" margins).
+        const labelTable = (rows) => new D.Table({
+          width: { size: 9026, type: D.WidthType.DXA },
+          columnWidths: [3000, 6026],
+          rows: rows.map(([label, value]) => new D.TableRow({
+            children: [
+              new D.TableCell({
+                borders: cellBorders,
+                width: { size: 3000, type: D.WidthType.DXA },
+                margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                shading: { fill: "F5F5F5", type: D.ShadingType.CLEAR },
+                children: [p([text(label, { bold: true })])],
+              }),
+              new D.TableCell({
+                borders: cellBorders,
+                width: { size: 6026, type: D.WidthType.DXA },
+                margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                children: [p([text(value || "-")])],
+              }),
+            ],
+          })),
+        });
+
+        // 3-col table for exposure/comparator
+        const threeColTable = (header, rows) => new D.Table({
+          width: { size: 9026, type: D.WidthType.DXA },
+          columnWidths: [2200, 3000, 3826],
+          rows: [
+            new D.TableRow({
+              tableHeader: true,
+              children: header.map((h, i) => new D.TableCell({
+                borders: cellBorders,
+                width: { size: [2200, 3000, 3826][i], type: D.WidthType.DXA },
+                margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                shading: { fill: "21443E", type: D.ShadingType.CLEAR },
+                children: [p([text(h, { bold: true, color: "FFFFFF" })])],
+              })),
+            }),
+            ...rows.map((cells) => new D.TableRow({
+              children: cells.map((c, i) => new D.TableCell({
+                borders: cellBorders,
+                width: { size: [2200, 3000, 3826][i], type: D.WidthType.DXA },
+                margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                children: [p([text(c || "-")])],
+              })),
+            })),
+          ],
+        });
+
+        const inclusion  = mergeList(s.inclusionPick,    s.inclusionCustom);
+        const exclusion  = mergeList(s.exclusionPick,    s.exclusionCustom);
+        const refsUser   = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const refs       = (() => {
+          const set = new Set(refsUser);
+          for (const cite of Object.values(pickedCitations)) {
+            if (cite && cite.trim()) set.add(cite.trim());
+          }
+          return Array.from(set);
+        })();
+        const milestones = (s.timeline   || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const censoring  = mergeList(s.censoringPick,    s.censoringCustom);
+        const covariates = mergeList(s.covariatesPick,   s.covariatesCustom);
+        const subgroups  = mergeList(s.subgroupsPick,    s.subgroupsCustom);
+        const sensitivity = mergeList(s.sensitivityPick, s.sensitivityCustom);
+        const secondary   = mergeList(s.secondaryOutcomesPick, s.secondaryOutcomesCustom);
+        const resolvedAge = s.ageRangeChoice === "custom"
+          ? (s.ageRangeCustom || "(specify)")
+          : (s.ageRangeChoice || "≥18, no upper limit");
+
+        const indexDateLabel = (val) => (INDEX_DATE_OPTIONS.find((o) => o.value === val) || {}).label || "";
+        const resolvedIndexDate = s.indexDateChoice === "custom"
+          ? (s.indexDateCustom || "Custom; see study-specific protocol")
+          : indexDateLabel(s.indexDateChoice) || indexDateLabel("after-washout");
+        const resolvedMaxFu = s.maxFollowupChoice === "custom"
+          ? (s.maxFollowupCustom || "Custom; see study-specific protocol")
+          : (s.maxFollowupChoice || "5 years per patient, or until censoring (whichever first)");
+
+        const sex      = ({ both: "both sexes", female: "female only", male: "male only" })[s.sex] || "both sexes";
+        const primAn   = ({ ITT: "Intention-to-treat (ITT)", OT: "On-treatment (per-protocol)", both: "Both ITT and on-treatment" })[s.primaryAnalysisType] || "On-treatment";
+        const psM      = PS_METHOD_DESCRIPTIONS[s.psMethod] || "PS-based adjustment";
+        const eff      = ({ HR: "Hazard ratio (95% CI) from Cox proportional-hazards models", RR: "Risk ratio (95% CI) from Poisson regression", RD: "Risk difference (95% CI)", IRR: "Incidence rate ratio (95% CI)" })[s.effectMeasure] || "Hazard ratio";
+        const meta     = ({
+          re: "Random-effects (DerSimonian-Laird) meta-analysis pooling site-specific estimates; report I² and τ². Forest plot per outcome.",
+          "re-reml": "Random-effects (REML) meta-analysis pooling site-specific estimates; report I² and τ². Forest plot per outcome.",
+          fe: "Fixed-effects (inverse-variance) meta-analysis pooling site-specific estimates. Forest plot per outcome.",
+        })[s.metaMethod] || "Random-effects meta-analysis.";
+        const arch     = ({
+          federated:   "Federated; each AsPEN site executes a common analytic package locally and shares only aggregate site-level estimates with the coordinating centre.",
+          cdm:         "Common Data Model; each site first transforms its source database into the agreed CDM (e.g. OMOP), then runs the shared SQL/R/Python package.",
+          centralised: "Centralised; site-level individual data are pooled at the coordinating centre under appropriate data-sharing agreements.",
+        })[s.arch] || "Federated";
+
+        const sitesPart = (s.sites && s.sites.length > 0)
+          ? s.sites.map((c) => formatSiteFull(c)).join("; ")
+          : "";
+        const sitesOthersList = (s.sitesOther || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const sitesText = !sitesPart && sitesOthersList.length === 0
+          ? "(no sites selected)"
+          : [sitesPart, sitesOthersList.length > 0 ? ("Others: " + sitesOthersList.join("; ")) : ""].filter(Boolean).join(" | ");
+
+        const children = [];
+
+        // Title block
+        children.push(new D.Paragraph({
+          children: [text(s.title || "(Untitled multi-national ACNU study)", { bold: true, size: 32 })],
+          spacing: { before: 0, after: 120 },
+        }));
+        children.push(labelTable([
+          ["Study ID", s.shortId || ""],
+          ["Lead investigator(s)", s.leadInvestigator || ""],
+          ["Version", s.version || ("v0.1 draft · " + today)],
+          ["Design", "Multi-national ACNU cohort study under a target trial emulation framework"
+                       + (s.emulatedTrial ? " (emulating " + s.emulatedTrial + ")" : "")],
+        ]));
+        children.push(p([text(
+          "The active comparator is used as an emulated placebo arm; a drug class with similar indication, similar temporal trends in use, and no known a priori association with the outcome of interest. This minimises confounding by indication and addresses immortal-time / prevalent-user bias by anchoring follow-up at the moment of treatment commencement, similar to randomisation in a target RCT (Hernán & Robins 2016)."
+        )]));
+
+        children.push(h1("1. Research question"));
+        children.push(labelTable([
+          ["Population", s.picoP || ""],
+          ["Exposure", s.picoI || ""],
+          ["Comparator", s.picoC || ""],
+          ["Primary outcome", s.picoO || ""],
+        ]));
+
+        children.push(h1("2. Sites"));
+        children.push(para(sitesText));
+
+        children.push(h1("3. Cohort definition"));
+        children.push(labelTable([
+          ["Indication / cohort entry", s.indication || ""],
+          ["Age range", resolvedAge],
+          ["Sex", sex],
+        ]));
+        children.push(h2("Inclusion criteria"));
+        inclusion.length ? inclusion.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
+        children.push(h2("Exclusion criteria"));
+        exclusion.length ? exclusion.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
+
+        children.push(h1("4. Exposure and comparator"));
+        children.push(threeColTable(
+          ["", "Name", "Code set"],
+          [
+            ["Exposure",   s.exposureName,   s.exposureCodes],
+            ["Comparator", s.comparatorName, s.comparatorCodes],
+          ],
+        ));
+        children.push(para("Washout period: " + (s.washout || "365") + " days; no prior dispensing of EITHER exposure or comparator in this window before index."));
+        children.push(para("Index date: " + resolvedIndexDate));
+
+        children.push(h1("5. Outcome ascertainment"));
+        children.push(p([text("Operational definition. ", { bold: true }), text(s.outcomeDef || "-")]));
+        children.push(p([text("Code set. ", { bold: true }), text(s.outcomeCodes || "-")]));
+        children.push(h2("Secondary outcomes"));
+        secondary.length ? secondary.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
+
+        children.push(h1("6. Follow-up and censoring"));
+        children.push(labelTable([
+          ["Primary analysis", primAn],
+          ["Grace period", (s.grace || "30") + " days"],
+          ["Maximum follow-up", resolvedMaxFu],
+        ]));
+        children.push(h2("Censoring rules"));
+        censoring.length ? censoring.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
+
+        children.push(h1("7. Confounding control"));
+        children.push(labelTable([
+          ["Method", psM],
+          ["Covariate look-back", (s.lookback || "365") + " days prior to index date"],
+        ]));
+        if (s.psMethodDetails && s.psMethodDetails.trim()) {
+          children.push(p([text("Method operational details. ", { bold: true }), text(s.psMethodDetails)]));
+        }
+        children.push(h2("Baseline covariates"));
+        covariates.length ? covariates.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
+        children.push(para("PS model performance is assessed via standardised mean differences (SMDs) before/after weighting/matching (target < 0.1 across all covariates) and the c-statistic of the PS model."));
+
+        children.push(h1("8. Statistical analysis"));
+        children.push(labelTable([
+          ["Effect estimate", eff],
+          ["Meta-analysis", meta],
+        ]));
+        children.push(h2("Subgroup analyses"));
+        subgroups.length ? subgroups.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
+        children.push(h2("Sensitivity analyses"));
+        sensitivity.length ? sensitivity.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
+
+        children.push(h1("9. Sample size and power"));
+        children.push(para("To be calculated per site using observed event rates among comparator users in pilot extractions; aim for ≥80% power to detect the smallest clinically meaningful effect for the primary outcome at α = 0.05, two-sided, after pooling. Pilot estimates are circulated before final analytic execution."));
+
+        children.push(h1("10. Execution and timeline"));
+        children.push(labelTable([
+          ["Architecture", arch],
+          ["CDM", s.cdm || "-"],
+        ]));
+        children.push(h2("Timeline milestones"));
+        milestones.length ? milestones.forEach((l) => children.push(numItem(l))) : children.push(para("(none)"));
+
+        children.push(h1("11. Ethics, data sharing, dissemination"));
+        children.push(p([text("Ethics. ", { bold: true }), text(s.ethics || "Each participating site obtains local IRB / ethics approval before data extraction.")]));
+        children.push(p([text("Dissemination. ", { bold: true }), text(s.dissemination || "Primary manuscript to a peer-reviewed pharmacoepidemiology journal; conference presentation at ICPE / ISPE Asian conference.")]));
+
+        children.push(h1("12. Key references"));
+        refs.length ? refs.forEach((l) => children.push(numItem(l))) : children.push(para("(none)"));
+
+        // Footer-style line
+        children.push(p([new D.TextRun({ text: "Drafted with the AsPEN protocol builder (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
+
+        const doc = new D.Document({
+          creator: "AsPEN protocol builder",
+          title: s.title || "AsPEN ACNU protocol",
+          styles: {
+            default: { document: { run: { font: FONT, size: 22 } } },   // 11pt body
+            paragraphStyles: [
+              { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
+                run: { size: 28, bold: true, font: FONT },
+                paragraph: { spacing: { before: 200, after: 80 }, outlineLevel: 0 } },
+              { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
+                run: { size: 24, bold: true, font: FONT },
+                paragraph: { spacing: { before: 160, after: 60 }, outlineLevel: 1 } },
+            ],
+          },
+          numbering: {
+            config: [{
+              reference: "ordered",
+              levels: [{
+                level: 0, format: D.LevelFormat.DECIMAL, text: "%1.",
+                alignment: D.AlignmentType.LEFT,
+                style: { paragraph: { indent: { left: 720, hanging: 360 } } },
+              }],
+            }],
+          },
+          sections: [{
+            properties: {
+              page: {
+                size: { width: 11906, height: 16838 },  // A4
+                margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+              },
+            },
+            children,
+          }],
+        });
+
+        return await D.Packer.toBlob(doc);
+      };
+
+      // ── TARGET checklist document ────────────────────
+      // Produces a Word file mapping the protocol to the TARGET checklist
+      // (Cashin AG, Hansford HJ, Hernán MA, Swanson SA et al. JAMA 2025;
+      // PMID 40899949). Item 7 (target trial emulation) is the centrepiece -
+      // a 3-column table with rows a-h showing 'Target trial specification'
+      // vs 'Emulation in this study'. Items in Results / Discussion / Other
+      // are stubbed as placeholders to be completed at reporting time.
+      const buildTargetDocx = async (s) => {
+        const D = docx;
+        const FONT = "Times New Roman";
+        const today = new Date().toISOString().slice(0, 10);
+        const text = (str, opts = {}) => new D.TextRun({ text: String(str ?? ""), font: FONT, size: 22, ...opts });
+        const p = (children, opts = {}) => new D.Paragraph({
+          children: Array.isArray(children) ? children : [children],
+          spacing: { before: 60, after: 60, ...(opts.spacing || {}) },
+          ...opts,
+        });
+        const h1 = (str) => new D.Paragraph({
+          children: [text(str, { bold: true, size: 28 })],
+          spacing: { before: 240, after: 100 },
+          heading: D.HeadingLevel.HEADING_1,
+        });
+        const h2 = (str) => new D.Paragraph({
+          children: [text(str, { bold: true, size: 24 })],
+          spacing: { before: 180, after: 60 },
+          heading: D.HeadingLevel.HEADING_2,
+        });
+        const para = (str) => p([text(str)]);
+        const border = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
+        const cellBorders = { top: border, bottom: border, left: border, right: border };
+        const tcell = (str, opts = {}) => new D.TableCell({
+          borders: cellBorders,
+          margins: { top: 80, bottom: 80, left: 120, right: 120 },
+          ...(opts.shading ? { shading: opts.shading } : {}),
+          width: opts.width,
+          children: (Array.isArray(str) ? str : [str]).map((x) =>
+            typeof x === "string" ? p([text(x, opts.runOpts || {})]) : x),
+        });
+        const HEADER_FILL = { fill: "21443E", type: D.ShadingType.CLEAR };
+
+        // Resolve fields the same way the main Word/MD generators do
+        const indexDateLabel = (val) => (INDEX_DATE_OPTIONS.find((o) => o.value === val) || {}).label || "";
+        const resolvedIndexDate = s.indexDateChoice === "custom"
+          ? (s.indexDateCustom || "Custom; see study-specific protocol")
+          : indexDateLabel(s.indexDateChoice) || indexDateLabel("after-washout");
+        const resolvedMaxFu = s.maxFollowupChoice === "custom"
+          ? (s.maxFollowupCustom || "Custom; see study-specific protocol")
+          : (s.maxFollowupChoice || "5 years per patient, or until censoring (whichever first)");
+        const resolvedAge = s.ageRangeChoice === "custom"
+          ? (s.ageRangeCustom || "(specify)")
+          : (s.ageRangeChoice || "≥18, no upper limit");
+        const inclusion  = mergeList(s.inclusionPick,  s.inclusionCustom);
+        const exclusion  = mergeList(s.exclusionPick,  s.exclusionCustom);
+        const censoring  = mergeList(s.censoringPick,  s.censoringCustom);
+        const covariates = mergeList(s.covariatesPick, s.covariatesCustom);
+        const sensitivity = mergeList(s.sensitivityPick, s.sensitivityCustom);
+        const psM   = PS_METHOD_DESCRIPTIONS[s.psMethod] || "PS-based adjustment";
+        const eff   = ({ HR: "Hazard ratio (95% CI) from Cox PH models", RR: "Risk ratio (95% CI) from Poisson regression", RD: "Risk difference (95% CI)", IRR: "Incidence rate ratio (95% CI)" })[s.effectMeasure] || "Hazard ratio";
+        const primAn= ({ ITT: "Intention-to-treat (ITT)", OT: "On-treatment (per-protocol)", both: "Both ITT and on-treatment" })[s.primaryAnalysisType] || "On-treatment";
+        const sitesPlain = (s.sites && s.sites.length > 0)
+          ? s.sites.map((c) => formatSiteFull(c)).join("; ")
+          : "(no sites selected)";
+        const sitesOthersList = (s.sitesOther || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const sitesAll = sitesOthersList.length > 0
+          ? sitesPlain + " | Others: " + sitesOthersList.join("; ")
+          : sitesPlain;
+        const bulletText = (arr) => arr.length === 0 ? "(none specified)" : arr.map((l) => "• " + l).join("\n");
+
+        const COL_W = [1700, 3563, 3763];   // sum ≈ 9026 (A4 minus 1" margins)
+        const headerCell = (str) => new D.TableCell({
+          borders: cellBorders,
+          shading: HEADER_FILL,
+          margins: { top: 80, bottom: 80, left: 120, right: 120 },
+          children: [p([text(str, { bold: true, color: "FFFFFF" })])],
+        });
+
+        const row7 = (label, spec, emul) => new D.TableRow({
+          children: [
+            new D.TableCell({ borders: cellBorders, margins: { top: 80, bottom: 80, left: 120, right: 120 },
+              shading: { fill: "F5F5F5", type: D.ShadingType.CLEAR },
+              width: { size: COL_W[0], type: D.WidthType.DXA },
+              children: [p([text(label, { bold: true })])] }),
+            new D.TableCell({ borders: cellBorders, margins: { top: 80, bottom: 80, left: 120, right: 120 },
+              width: { size: COL_W[1], type: D.WidthType.DXA },
+              children: [p([text(spec)])] }),
+            new D.TableCell({ borders: cellBorders, margins: { top: 80, bottom: 80, left: 120, right: 120 },
+              width: { size: COL_W[2], type: D.WidthType.DXA },
+              children: emul.split("\n").map((line) => p([text(line)])) }),
+          ],
+        });
+
+        const item7Table = new D.Table({
+          width: { size: 9026, type: D.WidthType.DXA },
+          columnWidths: COL_W,
+          rows: [
+            new D.TableRow({
+              tableHeader: true,
+              children: [
+                headerCell("Item 7 element"),
+                headerCell("Target trial specification"),
+                headerCell("Emulation with the observational data"),
+              ],
+            }),
+            row7("a. Eligibility criteria",
+              "Adults of the relevant indication; new users (no prior dispensing of exposure or comparator in the washout window).",
+              "Indication: " + (s.indication || "(specify)") + ". Age: " + resolvedAge + ". Sex: " +
+              (({ both: "both sexes", female: "female only", male: "male only" })[s.sex] || "both sexes") + ".\n" +
+              "Inclusion criteria:\n" + bulletText(inclusion) + "\n" +
+              "Exclusion criteria:\n" + bulletText(exclusion)),
+            row7("b. Treatment strategies",
+              "Initiate " + (s.picoI || s.exposureName || "(exposure)") + " vs initiate " + (s.picoC || s.comparatorName || "(active comparator)") + "; drugs of the same indication that compete for use.",
+              "Exposure: " + (s.exposureName || "(name)") + " (" + (s.exposureCodes || "codes TBD") + ").\n" +
+              "Active comparator: " + (s.comparatorName || "(name)") + " (" + (s.comparatorCodes || "codes TBD") + ").\n" +
+              "Washout for new-user status: " + (s.washout || "365") + " days."),
+            row7("c. Assignment procedures",
+              "Random assignment at the start of treatment.",
+              "Treatment assignment is determined by the first dispensing of either drug after the washout window. Baseline confounding addressed via " + psM + "."),
+            row7("d. Follow-up",
+              "Follow-up begins at the time of assignment to treatment strategies and ends at outcome, death, or end of study period.",
+              "Index date: " + resolvedIndexDate + ".\n" +
+              "Follow-up window: " + resolvedMaxFu + ".\n" +
+              "Censoring rules:\n" + bulletText(censoring) + ".\n" +
+              "Primary analysis: " + primAn + " (grace period " + (s.grace || "30") + " days)."),
+            row7("e. Outcomes",
+              "Primary outcome: " + (s.picoO || "(specify)") + ".",
+              "Operational definition: " + (s.outcomeDef || "(specify)") + "\n" +
+              "Code set: " + (s.outcomeCodes || "(specify)")),
+            row7("f. Causal contrasts",
+              "Effect of starting and following the assigned treatment strategy (per-protocol effect) and effect of being assigned the strategy (intention-to-treat-equivalent effect).",
+              "Effect estimate: " + eff + ".\n" +
+              "Site-specific estimates pooled via " +
+              ({ re: "random-effects (DerSimonian-Laird) meta-analysis with I² and τ²",
+                 "re-reml": "random-effects (REML) meta-analysis with I² and τ²",
+                 fe: "fixed-effects (inverse-variance) meta-analysis" })[s.metaMethod] || "random-effects meta-analysis" + "."),
+            row7("g. Identifying assumptions",
+              "Conditional exchangeability would hold by randomisation. No interference; consistency.",
+              "Conditional exchangeability assumed given baseline covariates listed below, addressed via " + psM + ". Covariate look-back: " + (s.lookback || "365") + " days. Sensitivity analyses for unmeasured confounding:\n" + bulletText(sensitivity.filter((l) => /negative control|trim|e-value|hdps|sensitivity/i.test(l))) + "\nBaseline covariates:\n" + bulletText(covariates.slice(0, 12)) + (covariates.length > 12 ? "\n…and " + (covariates.length - 12) + " more (see Section 7 of the protocol)." : "")),
+            row7("h. Data analysis plan",
+              "Statistical analysis estimates the causal contrasts under the identifying assumptions.",
+              "Primary: " + psM + ".\n" +
+              (s.psMethodDetails ? "Operational details: " + s.psMethodDetails + ".\n" : "") +
+              "Subgroup analyses:\n" + bulletText((s.subgroups || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) + "\nSensitivity analyses:\n" + bulletText(sensitivity)),
+          ],
+        });
+
+        const fullChecklist = [
+          ["Abstract", [
+            ["1a", "Identify that the study attempts to emulate a target trial using observational data; state objectives and briefly summarise the specified target trial.",
+              "This study emulates a target trial of " + (s.picoI || "(exposure)") + " vs " + (s.picoC || "(comparator)") + " among " + (s.picoP || "(population)") +
+              (s.emulatedTrial ? ", adapted from " + s.emulatedTrial + "" : "") + "."],
+            ["1b", "Report the data source(s) used for emulation.",
+              "Multi-national federated analysis using AsPEN sites: " + sitesAll + "."],
+            ["1c", "Summarise key assumptions, statistical methods, findings and conclusions.",
+              "[To be completed at the time of reporting.]"],
+          ]],
+          ["Introduction", [
+            ["2", "Background; scientific context and gap in knowledge.", "[Background paragraph from your protocol.]"],
+            ["3", "Causal question.",
+              "Among " + (s.picoP || "(population)") + ", does new use of " + (s.picoI || "(exposure)") + " versus " + (s.picoC || "(comparator)") + " change the incidence of " + (s.picoO || "(outcome)") + "?"],
+            ["4", "Rationale for emulating a target trial with the available data; cite informing RCTs.",
+              s.emulatedTrial ? "Target trial design adapted from: " + s.emulatedTrial + "." : "Target trial design specified de novo given absence / infeasibility of an RCT."],
+          ]],
+          ["Methods", [
+            ["5", "Data source(s): original purpose, type, geographic location(s), setting, time-period; data linkage if relevant.",
+              sitesAll + "."],
+            ["6", "Target trial specification.", "See Item 7 specification column below."],
+            ["7", "Target trial emulation (a-h).", "See the comparison table above."],
+          ]],
+          ["Results", [
+            ["8",  "Participant selection (flow diagram strongly recommended).", "[To be completed at the time of reporting.]"],
+            ["9",  "Baseline data by treatment strategy.", "[Table 1 of the manuscript.]"],
+            ["10", "Follow-up length and reasons for end of follow-up.", "[To be completed at the time of reporting.]"],
+            ["11", "Missing data, by treatment strategy.", "[To be completed at the time of reporting.]"],
+            ["12", "Outcome frequency / distribution, by treatment strategy.", "[To be completed at the time of reporting.]"],
+            ["13", "Effect estimates with measures of precision; absolute and relative.", "[To be completed at the time of reporting.]"],
+            ["14", "Sensitivity / additional analyses.", "[See sensitivity analyses pre-specified in the protocol Section 9.]"],
+          ]],
+          ["Discussion", [
+            ["15", "Interpretation of key findings.", "[To be completed at the time of reporting.]"],
+            ["16", "Limitations; differences between target trial and emulation; plausibility of assumptions.",
+              "Residual / unmeasured confounding cannot be excluded. Treatment switching during follow-up is censored per the on-treatment analysis. Misclassification of outcome possible."],
+          ]],
+          ["Other information", [
+            ["17", "Ethics approval and approval number(s).", s.ethics || "Each participating site obtains local IRB / ethics approval before data extraction."],
+            ["18", "Study protocol registration (where).", "[Register on ENCePP EU PAS Register and/or ClinicalTrials.gov where applicable.]"],
+            ["19", "Sharing of data, analytic code, materials.", "[To be specified.]"],
+            ["20", "Funding source(s).", "[To be specified.]"],
+            ["21", "Conflicts of interest.", "[To be specified for each author.]"],
+          ]],
+        ];
+
+        const checklistRows = [
+          new D.TableRow({ tableHeader: true, children: [
+            headerCell("#"), headerCell("Item"), headerCell("Where reported in this protocol"),
+          ]}),
+        ];
+        for (const [section, items] of fullChecklist) {
+          checklistRows.push(new D.TableRow({ children: [
+            new D.TableCell({ borders: cellBorders, columnSpan: 3,
+              shading: { fill: "E8F0EE", type: D.ShadingType.CLEAR },
+              margins: { top: 60, bottom: 60, left: 120, right: 120 },
+              children: [p([text(section, { bold: true, color: "21443E" })])] }),
+          ]}));
+          for (const [n, label, mapped] of items) {
+            checklistRows.push(new D.TableRow({ children: [
+              new D.TableCell({ borders: cellBorders, margins: { top: 60, bottom: 60, left: 120, right: 120 },
+                width: { size: 800, type: D.WidthType.DXA },
+                shading: { fill: "F5F5F5", type: D.ShadingType.CLEAR },
+                children: [p([text(n, { bold: true })])] }),
+              new D.TableCell({ borders: cellBorders, margins: { top: 60, bottom: 60, left: 120, right: 120 },
+                width: { size: 4113, type: D.WidthType.DXA },
+                children: [p([text(label)])] }),
+              new D.TableCell({ borders: cellBorders, margins: { top: 60, bottom: 60, left: 120, right: 120 },
+                width: { size: 4113, type: D.WidthType.DXA },
+                children: mapped.split("\n").map((l) => p([text(l)])) }),
+            ]}));
+          }
+        }
+        const fullChecklistTable = new D.Table({
+          width: { size: 9026, type: D.WidthType.DXA },
+          columnWidths: [800, 4113, 4113],
+          rows: checklistRows,
+        });
+
+        const children = [];
+        children.push(new D.Paragraph({
+          children: [text("TARGET checklist; " + (s.title || "(Untitled multi-national ACNU study)"), { bold: true, size: 32 })],
+          spacing: { before: 0, after: 120 },
+        }));
+        children.push(p([new D.TextRun({
+          text: "This document maps the protocol fields to the TARGET (TrAnsparent ReportinG of studies Emulating a Target trial) checklist as published in Cashin AG, Hansford HJ, Hernán MA, Swanson SA, Lee H, Jones MD, et al. JAMA 2025; PMID 40899949. The full checklist with elaboration is at target-guideline.org.",
+          font: FONT, size: 20, italics: true, color: "555555",
+        })]));
+        children.push(p([new D.TextRun({
+          text: "Generated " + today + " from the AsPEN ACNU protocol builder. Methods items 5-7 are pre-filled from your protocol; Results / Discussion / Other-information items are placeholders to be completed at the time of reporting.",
+          font: FONT, size: 18, italics: true, color: "777777",
+        })], { spacing: { after: 240 } }));
+
+        children.push(h1("Item 7; Target trial specification vs emulation"));
+        children.push(p([text("Item 7 is the heart of TARGET. Rows a-h show what the target trial would specify and how this study emulates each piece in observational data.")]));
+        children.push(item7Table);
+
+        children.push(h1("Full TARGET checklist"));
+        children.push(p([text("All 21 reporting items with the protocol's current mapping. Replace bracketed placeholders at the manuscript stage.")]));
+        children.push(fullChecklistTable);
+
+        children.push(p([new D.TextRun({
+          text: "Citation for the framework: Cashin AG, Hansford HJ, Hernán MA, Swanson SA, et al. Transparent Reporting of Observational Studies Emulating a Target Trial: The TARGET Statement. JAMA 2025. PMID 40899949. License: CC BY-ND 4.0.",
+          font: FONT, size: 18, italics: true, color: "777777",
+        })], { spacing: { before: 400 } }));
+
+        const doc = new D.Document({
+          creator: "AsPEN protocol builder; TARGET checklist generator",
+          title: "TARGET checklist; " + (s.title || "ACNU protocol"),
+          styles: {
+            default: { document: { run: { font: FONT, size: 22 } } },
+            paragraphStyles: [
+              { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
+                run: { size: 28, bold: true, font: FONT },
+                paragraph: { spacing: { before: 240, after: 100 }, outlineLevel: 0 } },
+              { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
+                run: { size: 24, bold: true, font: FONT },
+                paragraph: { spacing: { before: 180, after: 60 }, outlineLevel: 1 } },
+            ],
+          },
+          sections: [{
+            properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+            children,
+          }],
+        });
+        return await D.Packer.toBlob(doc);
+      };
+
+      // ── Phenotype library modal ─────────────────────
+      const modal      = document.querySelector("[data-library-modal]");
+      const modalTitle = document.querySelector("[data-library-title]");
+      const modalList  = document.querySelector("[data-library-list]");
+      const modalSearch= document.querySelector("[data-library-search]");
+      let currentCategory = "indications";
+      let currentTargets  = {}; // { name?, codes?, def?, validation? }
+
+      const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+
+      const renderLibrary = (filter = "") => {
+        // Confounding library uses the PS_METHODS array (each has value + label
+        // + definition + validation). Phenotype categories use PHENOTYPES.
+        const items = currentCategory === "confounding"
+          ? PS_METHODS.map((m) => ({ name: m.label, value: m.value, definition: m.definition, validation: m.validation }))
+          : (PHENOTYPES[currentCategory] || []);
+        const f = filter.trim().toLowerCase();
+        const filtered = f
+          ? items.filter((it) =>
+              (it.name || "").toLowerCase().includes(f) ||
+              (it.codes || "").toLowerCase().includes(f) ||
+              (it.notes || "").toLowerCase().includes(f) ||
+              (it.definition || "").toLowerCase().includes(f))
+          : items;
+        if (filtered.length === 0) {
+          modalList.innerHTML = '<p class="px-3 py-6 text-sm text-slate-500 italic text-center">No matches.</p>';
+          return;
+        }
+        // NOTE: validation citation is NOT shown in the modal; it accumulates
+        // silently on pick and lands in the Word/MD References section at the
+        // end of export. Modal stays focused on operational definitions.
+        modalList.innerHTML = filtered.map((it, idx) => `
+          <button type="button" data-phenotype-idx="${idx}"
+                  class="block w-full text-left px-4 py-3 rounded-lg border border-transparent hover:border-brand-300 hover:bg-brand-50/40 transition">
+            <p class="font-semibold text-slate-900 text-sm">${esc(it.name)}</p>
+            ${it.codes ? `<p class="mt-1 text-xs text-slate-700 font-mono leading-relaxed">${esc(it.codes)}</p>` : ""}
+            ${it.definition ? `<p class="mt-1 text-xs text-slate-600 leading-relaxed">${esc(it.definition)}</p>` : ""}
+            ${it.notes ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed">${esc(it.notes)}</p>` : ""}
+          </button>
+        `).join("");
+        // Click handler; fill targets + close
+        modalList.querySelectorAll("[data-phenotype-idx]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const it = filtered[parseInt(btn.dataset.phenotypeIdx, 10)];
+            if (!it) return;
+            const fill = (key, val) => {
+              const fieldName = currentTargets[key];
+              if (!fieldName || val === undefined) return;
+              const el = form.querySelector(`[name="${fieldName}"]`);
+              if (el) el.value = val;
+            };
+            fill("name",  it.name);
+            fill("codes", it.codes);
+            fill("def",   it.definition);
+            // For confounding picks: drop the value into the <select> (psMethod)
+            if (currentTargets.value && it.value !== undefined) {
+              const el = form.querySelector(`[name="${currentTargets.value}"]`);
+              if (el) el.value = it.value;
+            }
+            if (currentTargets.alsoFill) {
+              const el = form.querySelector(`[name="${currentTargets.alsoFill}"]`);
+              if (el && it.name) el.value = it.name;
+            }
+            // Record citation for the References section
+            if (it.validation) {
+              pickedCitations[it.name] = it.validation;
+              savePickedCitations();
+            }
+            closeLibrary();
+            render();
+          });
+        });
+      };
+
+      const openLibrary = (category, targets) => {
+        currentCategory = category;
+        currentTargets  = targets;
+        modalTitle.textContent = ({
+          indications: "Pick an indication (cohort definition)",
+          exposures:   "Pick a drug class (exposure or comparator)",
+          outcomes:    "Pick an outcome; fills definition + codes",
+          confounding: "Pick a confounding-control method; fills the method + operational details",
+        })[category] || "Pick from library";
+        modalSearch.value = "";
+        renderLibrary("");
+        modal.classList.remove("hidden");
+        setTimeout(() => modalSearch.focus(), 50);
+      };
+      const closeLibrary = () => modal.classList.add("hidden");
+
+      // Bind library triggers (from form section headers)
+      document.querySelectorAll("[data-open-library]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          openLibrary(btn.dataset.category, {
+            name:     btn.dataset.targetName,
+            codes:    btn.dataset.targetCodes,
+            def:      btn.dataset.targetDef,
+            value:    btn.dataset.targetValue,
+            alsoFill: btn.dataset.alsoFill,
+          });
+        });
+      });
+      document.querySelector("[data-library-close]")?.addEventListener("click", closeLibrary);
+      modal.addEventListener("click", (e) => { if (e.target === modal) closeLibrary(); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLibrary(); });
+      modalSearch.addEventListener("input", () => renderLibrary(modalSearch.value));
+
+      setState("ready");
+    })();
+  </script>
+</BaseLayout>

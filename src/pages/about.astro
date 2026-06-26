@@ -1,0 +1,176 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHeader from "../components/PageHeader.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const education = [
+  { degree: "PhD candidate, Pharmacoepidemiology", org: "National Cheng Kung University", when: "Aug 2021 – present" },
+  { degree: "MClinPharm, Clinical Pharmacy", org: "National Cheng Kung University", when: "Aug 2019 – Jul 2021" },
+  { degree: "BS, Pharmacy", org: "China Medical University", when: "Sep 2014 – Jun 2019" },
+];
+
+const experience = [
+  {
+    role: "Research Fellow & Operations/Technology Lead",
+    org: "Population Health Data Center, NCKU, Taiwan",
+    when: "May 2024 – present",
+  },
+  {
+    role: "Research Data Analyst",
+    org: "Centre for Neonatal and Paediatric Infection, St George's, University of London, UK",
+    when: "Aug 2021 – Jul 2024",
+  },
+  {
+    role: "Clinical Pharmacist",
+    org: "National Cheng Kung University Hospital, Taiwan",
+    when: "Sep 2019 – Jul 2021",
+  },
+];
+
+const publications = [
+  {
+    cite: "Tsai DHT, Yang ASH, Wong ZX, Chuang ATM, Cheng MCY, Shen CY, Shao SC, Lai ECC. Antipsychotic therapy and suicide risk in patients with treatment-resistant depression: target trial emulation framework study. British Journal of Psychiatry. 2026 Jan;228(1):37-45.",
+    meta: "IF 8.5 · Psychiatry 12/293",
+    doi: "https://doi.org/10.1192/bjp.2024.283",
+  },
+  {
+    cite: "Tsai DHT, Chuang ATM, Liu KH, Shao SC, Lai ECC. SGLT2 inhibitors and risk of chronic kidney disease-mineral and bone disorders in patients with type 2 diabetes mellitus and stage 1–3 chronic kidney disease. CMAJ. 2025 Feb 23;197(7):E178-E189.",
+    meta: "IF 8.6 · General & Internal Medicine 23/336",
+    doi: "https://doi.org/10.1503/cmaj.240922",
+  },
+  {
+    cite: "Tsai DHT, Wu ICY, Chang LF, Lu MJH, Debnath B, Govender NP, Sharland M, Warris A, Hsia Y, Ferreras-Antolin L. The burden of Neonatal Invasive Candidiasis in Low- and Middle-Income Countries: a systematic review and meta-analysis. Open Forum Infectious Diseases. 2025 Jul;12(7):ofaf329.",
+    meta: "IF 3.8 · Infectious Diseases 41/141",
+    doi: "https://doi.org/10.1093/ofid/ofaf329",
+  },
+  {
+    cite: "Tsai DHT, Bell JS, Abtahi S, et al. Cross-Regional Data Initiative for the Assessment and Development of Treatment for Neurological and Mental Disorders. Clinical Epidemiology. 2023 Dec 21;15:1241-1252.",
+    meta: "IF 4.3 · Public, Environmental & Occupational Health 66/443",
+    doi: "https://doi.org/10.2147/CLEP.S426485",
+  },
+  {
+    cite: "Huang WC, Yang ASH, Tsai DHT, Shao SC, Lin SJ, Lai ECC. Association between recently elevated anticholinergic burden and risk of acute cardiovascular events: a nationwide case-case-time-control study. The BMJ. 2023 Sep 27;382:e076045.",
+    meta: "IF 55.1 · General & Internal Medicine 5/336",
+    doi: "https://doi.org/10.1136/bmj-2023-076045",
+  },
+];
+---
+
+<BaseLayout title="About — Daniel Hsiang-Te Tsai">
+  <PageHeader
+    eyebrow="About"
+    title="Daniel Hsiang-Te Tsai"
+    description="Doctoral research fellow in pharmacoepidemiology at the Population Health Data Center, NCKU."
+  />
+
+  <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-14 space-y-14">
+    <!-- Bio -->
+    <section>
+      <h2 class="text-2xl font-bold text-slate-900">Bio</h2>
+      <p class="mt-4 text-slate-600 leading-relaxed">
+        Daniel Tsai is a doctoral research fellow at the Population Health Data Center, NCKU. He specialises in
+        comparative effectiveness research and policy research. His expertise includes triangulating claims databases,
+        electronic health records, and biomedical databases to inform causal inference. He is also actively involved in
+        the intersection of artificial intelligence and geriatric medicine. Daniel serves as an educational co-lead of
+        the Asian Pharmacoepidemiology Network (AsPEN) and is an active member of the Neurological and Mental Health
+        Global Epidemiology Network (NeuroGEN), where he contributes to fostering international research collaboration
+        and advancing pharmacoepidemiology.
+      </p>
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a href={`${base}/Daniel-Tsai-CV.pdf`} target="_blank" rel="noopener" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2.5 rounded-lg transition text-sm">
+          ⬇ Download CV (PDF)
+        </a>
+        <a href="https://orcid.org/0000-0003-2841-0338" target="_blank" rel="noopener" class="border border-slate-300 hover:border-brand-600 text-slate-700 hover:text-brand-700 font-semibold px-5 py-2.5 rounded-lg transition text-sm">
+          ORCID ↗
+        </a>
+      </div>
+    </section>
+
+    <!-- Education -->
+    <section>
+      <h2 class="text-2xl font-bold text-slate-900">Education</h2>
+      <ul class="mt-5 space-y-4">
+        {education.map((e) => (
+          <li class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 border-b border-slate-100 pb-4">
+            <div>
+              <p class="font-semibold text-slate-900">{e.degree}</p>
+              <p class="text-sm text-slate-600">{e.org}</p>
+            </div>
+            <span class="text-sm text-slate-500 shrink-0">{e.when}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <!-- Experience -->
+    <section>
+      <h2 class="text-2xl font-bold text-slate-900">Experience</h2>
+      <ul class="mt-5 space-y-4">
+        {experience.map((e) => (
+          <li class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 border-b border-slate-100 pb-4">
+            <div>
+              <p class="font-semibold text-slate-900">{e.role}</p>
+              <p class="text-sm text-slate-600">{e.org}</p>
+            </div>
+            <span class="text-sm text-slate-500 shrink-0">{e.when}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <!-- Skills -->
+    <section>
+      <h2 class="text-2xl font-bold text-slate-900">Training &amp; skills</h2>
+      <div class="mt-4 space-y-4 text-slate-600 leading-relaxed">
+        <p>
+          <strong class="text-slate-800">Computing:</strong> Proficient in SAS, Stata, SPSS, and R, with extensive
+          experience across the entire data pipeline — extraction, cleaning, analysis, and visualization. I conduct
+          large-scale pharmacoepidemiologic studies and triangulate study designs using the Taiwan National Health
+          Insurance Database (20M+ individuals). This work has supported complex designs and advanced statistical
+          analyses published in journals including BMJ, Nature Communications, CMAJ, JAMA Network Open, PLOS Medicine,
+          and BMC Medicine.
+        </p>
+        <p>
+          <strong class="text-slate-800">Clinical Pharmacist</strong> (Licensed in Taiwan; MoHW No. 045275):
+          nephrology-ward service covering antibiotic stewardship, medication reconciliation, renal pharmacotherapy
+          optimization, therapeutic drug monitoring, adverse drug reaction prevention, and patient education within a
+          multidisciplinary team.
+        </p>
+      </div>
+    </section>
+
+    <!-- Grants & awards -->
+    <section>
+      <h2 class="text-2xl font-bold text-slate-900">Grants &amp; awards</h2>
+      <div class="mt-4 space-y-3 text-slate-600 leading-relaxed">
+        <p>
+          Contributor to projects funded by industry (Amgen, Clarivate, Prospection) and government (Taiwan's National
+          Science and Technology Council, National Institutes of Health, Ministry of Education), focused on real-world
+          evidence, pharmacoepidemiology, and causal inference. Recognised by multiple ISPE travel/registration
+          scholarships for ICPE (2021–2023), ISPE (2024–2025), and ACPE (2021–2025).
+        </p>
+        <p><strong class="text-slate-800">Award:</strong> ISPE-Asian Conference on Pharmacoepidemiology 15 — Rising Star.</p>
+      </div>
+    </section>
+
+    <!-- Selected publications -->
+    <section>
+      <div class="flex items-baseline justify-between gap-4 flex-wrap">
+        <h2 class="text-2xl font-bold text-slate-900">Selected publications</h2>
+        <p class="text-sm text-slate-500">30 publications · 286 citations · h-index 7</p>
+      </div>
+      <ol class="mt-5 space-y-5">
+        {publications.map((p) => (
+          <li class="border-l-2 border-brand-200 pl-4">
+            <p class="text-sm text-slate-700 leading-relaxed">{p.cite}</p>
+            <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <span class="text-slate-500">{p.meta}</span>
+              <a href={p.doi} target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">DOI ↗</a>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  </div>
+</BaseLayout>

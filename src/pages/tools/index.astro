@@ -1,0 +1,83 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const designs = [
+  {
+    slug: "active-comparator-new-user",
+    short: "ACNU",
+    title: "Active-Comparator New-User Design",
+    when: "When you have two drugs from the same indication and want to compare a clinical outcome between them as users start therapy.",
+    example: "SGLT2 inhibitors vs DPP-4 inhibitors and risk of MACE",
+    strengths: "Minimises confounding by indication and addresses immortal-time / prevalent-user bias.",
+  },
+  {
+    slug: "self-controlled-case-series",
+    short: "SCCS",
+    title: "Self-Controlled Case Series",
+    when: "When you have transient exposures and acute outcomes, and want each case to act as their own control (eliminating time-invariant confounding).",
+    example: "Antipsychotic dispensing and risk of falls in older adults",
+    strengths: "Removes between-person confounding (genetics, lifelong habits). Efficient when cases are easier to identify than the source population.",
+  },
+  {
+    slug: "case-crossover",
+    short: "CCO",
+    title: "Case-crossover",
+    when: "Outcome-anchored: enrol patients on the acute event itself, then look back to compare exposure prevalence in a short hazard window vs matched control windows. Best when the outcome is abrupt-onset and the exposure is transient.",
+    example: "Triggers of acute MI in the 24 hours before onset",
+    strengths: "Each case is their own control across time; matched analysis automatically removes time-invariant within-person confounding (genetics, lifelong habits, persistent comorbidities).",
+  },
+  {
+    slug: "descriptive-analysis",
+    short: "DA",
+    title: "Descriptive analysis",
+    when: "When you want to characterise a population; how common a disease is, how a drug is used, who dies; rather than test a causal hypothesis. The standard output for multi-country comparisons.",
+    example: "DDD/1000/day for anticonvulsants across Asian sites, 2010–2023, with joinpoint break detection",
+    strengths: "Provides the denominator causal studies depend on. Covers incidence / prevalence / mortality / drug-utilisation / switching with age-standardisation + joinpoint trend analysis built in.",
+  },
+];
+---
+
+<BaseLayout
+  title="Protocol Generator — Daniel Hsiang-Te Tsai"
+  description="A free, in-browser protocol generator for multi-national pharmacoepidemiology study designs, with a validated phenotype library and one-click Word / Markdown export."
+>
+  <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
+    <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-14">
+      <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">RWE Tools</p>
+      <h1 class="text-4xl md:text-5xl font-bold text-slate-900">Protocol Generator</h1>
+      <p class="mt-4 text-lg text-slate-600 max-w-3xl">
+        Pick a study design to draft a multi-country pharmacoepidemiology protocol with a library of validated
+        phenotypes, feasibility checks across Asian databases, and one-click Word / Markdown export. Everything runs
+        in your browser — nothing is uploaded.
+      </p>
+      <p class="mt-3 text-sm text-slate-500 max-w-3xl">
+        Templates curated from <a href="https://ocean-dev.phdcenter.org.tw" target="_blank" rel="noopener" class="text-brand-700 font-semibold hover:underline">OCEAN</a>,
+        the Open Casual Effect Analysis Network operated by the
+        <a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener" class="text-brand-700 hover:underline">PHDc</a>, NCKU.
+        Maintained by Daniel Tsai.
+      </p>
+    </div>
+  </header>
+
+  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 space-y-6">
+    <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/`}>← Back to home</a>
+
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {designs.map((d) => (
+        <a href={`${base}/tools/${d.slug}`}
+           class="group flex flex-col border border-slate-200 rounded-2xl p-6 bg-white hover:shadow-md hover:border-brand-400 transition">
+          <p class="text-[10px] uppercase tracking-[0.2em] text-brand-700 font-bold">{d.short}</p>
+          <h2 class="mt-2 text-lg font-bold text-slate-900 group-hover:text-brand-700 transition leading-snug">{d.title}</h2>
+          <p class="mt-3 text-xs text-slate-600 leading-relaxed">{d.when}</p>
+          <p class="mt-3 text-[11px] font-semibold text-brand-700">Typical example</p>
+          <p class="text-xs text-slate-700 italic leading-relaxed">{d.example}</p>
+          <p class="mt-3 text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Strengths</p>
+          <p class="text-xs text-slate-600 leading-relaxed">{d.strengths}</p>
+          <p class="mt-4 text-xs text-brand-700 font-semibold group-hover:underline">Open this template →</p>
+        </a>
+      ))}
+    </div>
+  </section>
+</BaseLayout>
