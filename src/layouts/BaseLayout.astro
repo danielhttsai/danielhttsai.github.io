@@ -20,6 +20,12 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const SITE_ORIGIN = "https://danielhttsai.github.io";
 const canonical = `${SITE_ORIGIN}${Astro.url.pathname}`;
 
+// Privacy-friendly analytics (GoatCounter — free, cookieless, no consent
+// banner). After signing up at https://www.goatcounter.com/ you pick a code,
+// e.g. "danieltsai" → your dashboard is https://danieltsai.goatcounter.com.
+// Put that code here and analytics turns on (production builds only).
+const GOATCOUNTER = ""; // e.g. "danieltsai"
+
 // JSON-LD Person markup helps search engines recognise Daniel as an entity
 // and link his ORCID / professional profiles.
 const personSchema = {
@@ -68,6 +74,14 @@ const personSchema = {
     <meta name="twitter:image" content={`${SITE_ORIGIN}/og.png`} />
     <script type="application/ld+json" set:html={JSON.stringify(personSchema)} is:inline />
     <link rel="sitemap" type="application/xml" href="/sitemap-index.xml" />
+    {GOATCOUNTER && import.meta.env.PROD && (
+      <script
+        is:inline
+        data-goatcounter={`https://${GOATCOUNTER}.goatcounter.com/count`}
+        async
+        src="//gc.zgo.at/count.js"
+      />
+    )}
   </head>
   <body class:list={["text-slate-800 antialiased", tint ? "home-tint" : "bg-white"]}>
     <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-brand-600 text-white px-3 py-2 rounded">Skip to content</a>
