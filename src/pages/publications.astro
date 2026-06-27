@@ -15,7 +15,6 @@ const all = (pubs as (Pub & { date?: number; pmcid?: string })[]).slice().sort((
 const years = [...new Set(all.map((p) => p.year))].sort((a, b) => b.localeCompare(a));
 const byYear = years.map((y) => ({ year: y, items: all.filter((p) => p.year === y) }));
 
-const fullTextCount = all.filter((p) => p.pmcid).length;
 const hasEqual = all.some((p) => p.citation.includes("*"));
 ---
 
@@ -32,7 +31,6 @@ const hasEqual = all.some((p) => p.citation.includes("*"));
   <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
     <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600 border-b border-slate-200 pb-6 mb-8">
       <span><strong class="text-brand-700 text-base">{all.length}</strong> publications</span>
-      <span><strong class="text-brand-700 text-base">{fullTextCount}</strong> with free full text</span>
       <a href="https://orcid.org/0000-0003-2841-0338" target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">ORCID 0000-0003-2841-0338 ↗</a>
       <a href={`${base}/about`} class="font-semibold text-brand-700 hover:underline">About &amp; CV →</a>
     </div>

@@ -44,5 +44,6 @@ const pt = pub.pmcid
     {pub.ris && (
       <button type="button" data-ris={pub.ris} data-filename={risName(pub)} title="Download RIS for EndNote / Zotero / Mendeley" class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ Cite</button>
     )}
+    {pub.pmcid && <span class="text-accent-500 font-medium">Open access</span>}
   </div>
 </li>
