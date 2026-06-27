@@ -27,10 +27,13 @@ const talks = [
   { title: "The Suicide Risk of Augmentation Therapy in Patients with Treatment-Resistant Depression", venue: "ISPE's 14th Asian Conference on Pharmacoepidemiology", place: "College of Medicine, NCKU", year: "2022" },
 ];
 
-// In the news — mentions across the PHDc / AsPEN ecosystem.
+// News — mentions across the PHDc / AsPEN ecosystem.
 const media = [
-  { title: "AsPEN Showcase at ACPE 2025, Hong Kong — presented AsPEN's multinational achievements", source: "AsPEN", href: "https://www.aspensig.asia/activities/spotlight/aspen-showcase-acpe-2025", year: "2025" },
-  { title: "Research Team — Population Health Data Center (PHDc), NCKU", source: "PHDc", href: "https://www.phdcenter.org.tw/team-research/", year: "" },
+  { title: "AsPEN showcase at ACPE 2025, Hong Kong — presented AsPEN's multinational achievements", source: "AsPEN", href: "https://www.aspensig.asia/activities/spotlight/aspen-showcase-acpe-2025", year: "2025" },
+  { title: "NCKU Research Day — 1st place, Big Data category", source: "PHDc", href: "https://www.phdcenter.org.tw/ncku-research-day/", year: "" },
+  { title: "Publication highlight: SGLT2 inhibitors and CKD-MBD (CMAJ)", source: "PHDc", href: "https://www.phdcenter.org.tw/publication-sglt2-inhibitors-and-ckd-mbd-mineral-bone-disease/", year: "2025" },
+  { title: "PHDc presentations at the 2025 ISPE Annual Meeting", source: "PHDc", href: "https://www.phdcenter.org.tw/phdc-presentations-at-2025-ispe-annual-meeting/", year: "2025" },
+  { title: "Real-World Data × Open Science × Cross-national — causal-inference workshop", source: "PHDc", href: "https://www.phdcenter.org.tw/share_data_x_open_science_x_crossnational/", year: "" },
 ];
 
 const talksByYear = [...new Set(talks.map((t) => t.year))].sort((a, b) => b.localeCompare(a))
@@ -83,9 +86,9 @@ const talksByYear = [...new Set(talks.map((t) => t.year))].sort((a, b) => b.loca
       ))}
     </section>
 
-    <!-- In the news -->
+    <!-- News -->
     <section>
-      <h2 class="text-2xl font-bold text-slate-900">In the news</h2>
+      <h2 class="text-2xl font-bold text-slate-900">News</h2>
       <ol class="mt-5 space-y-4">
         {media.map((m) => (
           <li class="border-l-2 border-slate-200 pl-4">

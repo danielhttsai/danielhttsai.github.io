@@ -47,7 +47,12 @@ const SELECTED_DOIS = [
 // The two database-infrastructure papers Daniel flags as landmark work.
 const LANDMARK_DOIS = new Set(["10.2147/clep.s553894", "10.2147/clep.s426485"]);
 const byDoi = new Map((pubs as Pub[]).map((p) => [p.doi.toLowerCase(), p]));
-const selected = SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[];
+const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[])
+  .slice()
+  .sort((a, b) =>
+    ((b as any).year || "").localeCompare((a as any).year || "") ||
+    (((b as any).date || 0) - ((a as any).date || 0))
+  );
 ---
 
 <BaseLayout title="About — Daniel Hsiang-Te Tsai">
