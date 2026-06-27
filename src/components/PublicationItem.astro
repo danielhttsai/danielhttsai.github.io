@@ -1,0 +1,45 @@
+---
+// One publication row: citation (author bolded) + Full text/PubMed · DOI · Cite.
+// Shared by the Publications page and the About page's Selected list so both
+// stay identical and update together.
+export interface Pub {
+  year: string;
+  doi: string;
+  citation: string;
+  pmid?: string;
+  pmcid?: string;
+  ris?: string;
+}
+interface Props { pub: Pub }
+const { pub } = Astro.props;
+
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const highlight = (citation: string) =>
+  esc(citation)
+    .replace(/Tsai DHT/g, "<strong class='text-slate-900'>Tsai DHT</strong>")
+    .replace(/Tsai HT(?!<)/g, "<strong class='text-slate-900'>Tsai HT</strong>");
+
+const risName = (p: Pub) =>
+  `${(p.citation.split(/[\s,]/)[0] || "ref").replace(/[^A-Za-z]/g, "")}-${p.year}.ris`;
+
+// Full-text link: PubMed Central when the paper is there, else the PubMed
+// abstract page (never a direct publisher PDF).
+const pt = pub.pmcid
+  ? { href: `https://pmc.ncbi.nlm.nih.gov/articles/${pub.pmcid}/`, label: "Full text", title: "Full text on PubMed Central" }
+  : pub.pmid
+  ? { href: `https://pubmed.ncbi.nlm.nih.gov/${pub.pmid}/`, label: "PubMed", title: "Abstract on PubMed" }
+  : null;
+---
+
+<li class="border-l-2 pl-4" class:list={[pub.pmcid ? "border-accent-500" : "border-slate-200"]}>
+  <p class="text-sm text-slate-700 leading-relaxed" set:html={highlight(pub.citation)} />
+  <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+    {pt && (
+      <a href={pt.href} target="_blank" rel="noopener" title={pt.title} class="font-semibold text-brand-700 hover:underline">{pt.label} ↗</a>
+    )}
+    <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" class="text-slate-500 hover:text-brand-700 hover:underline">DOI ↗</a>
+    {pub.ris && (
+      <button type="button" data-ris={pub.ris} data-filename={risName(pub)} title="Download RIS for EndNote / Zotero / Mendeley" class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ Cite</button>
+    )}
+  </div>
+</li>

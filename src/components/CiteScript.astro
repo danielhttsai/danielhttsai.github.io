@@ -1,0 +1,22 @@
+---
+// Shared "Cite" handler: downloads a RIS file (EndNote / Zotero / Mendeley).
+// Include once on any page that renders <PublicationItem>.
+---
+<script is:inline>
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-ris]");
+    if (!btn) return;
+    // HTML attribute parsing collapses CRLF to LF; restore CRLF for EndNote.
+    const ris = (btn.getAttribute("data-ris") || "").replace(/\r?\n/g, "\r\n");
+    const name = btn.getAttribute("data-filename") || "citation.ris";
+    const blob = new Blob([ris], { type: "application/x-research-info-systems" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const original = btn.textContent;
+    btn.textContent = "✓ Downloaded";
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  });
+</script>
