@@ -1,0 +1,107 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHeader from "../components/PageHeader.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Invited / educational / methods talks — the thought-leadership tier.
+const invited = [
+  { title: "The Clone-Censor-Weight Approach: From Basic Principles to Its Transformation in Diverse Exposure and Outcome Scenarios", venue: "2025 ISPE Annual Meeting", place: "Walter E. Washington Convention Center", year: "2025", kind: "Invited methods talk" },
+  { title: "Clone-Censor-Weight (ACPE Educational Session)", venue: "ISPE's 17th Asian Conference on Pharmacoepidemiology", place: "University of Hong Kong", year: "2025", kind: "Educational session" },
+  { title: "Clone-Censor-Weight (ACPE Educational Session)", venue: "ISPE's 16th Asian Conference on Pharmacoepidemiology", place: "University of Tokyo", year: "2024", kind: "Educational session" },
+  { title: "Investigating the presence of time-related bias", venue: "2024 Global Regulatory Science Academic Symposium", place: "Sungkyunkwan University", year: "2024", kind: "Invited talk" },
+  { title: "Clone-Censor-Weight (ACPE Educational Session)", venue: "ISPE's 15th Asian Conference on Pharmacoepidemiology", place: "Sheraton Grand Bangalore", year: "2023", kind: "Educational session" },
+];
+
+// Conference research presentations.
+const talks = [
+  { title: "Short-term risk of urinary retention following recent elevations in anticholinergic burden", venue: "ISPE's 17th Asian Conference on Pharmacoepidemiology", place: "University of Hong Kong", year: "2025" },
+  { title: "Evaluation of Different Washout Periods for Identifying New Users", venue: "2025 ISPE Annual Meeting", place: "Walter E. Washington Convention Center", year: "2025" },
+  { title: "Association between Recently Elevated Anticholinergic Burden and Urinary Retention: A Case-case-time-control Study", venue: "ISPE's 16th Asian Conference on Pharmacoepidemiology", place: "University of Tokyo", year: "2024" },
+  { title: "Irrational Consumption of Ivermectin During the COVID-19 Pandemic: Data from 67 Countries", venue: "ISPE's 16th Asian Conference on Pharmacoepidemiology", place: "University of Tokyo", year: "2024" },
+  { title: "Association between Metformin Use and Psychiatric Disorders in Patients with Diabetes", venue: "2024 ISPE Annual Meeting", place: "Estrel Congress Center, Berlin", year: "2024" },
+  { title: "The Augmentation Therapy and Suicide Risk in Patients with Treatment-Resistant Depression Using Target Trial Emulation Framework", venue: "39th International Conference on Pharmacoepidemiology (ICPE)", place: "Halifax Convention Centre", year: "2023" },
+  { title: "Neonatal Invasive Candidiasis in Low- and Middle-Income Countries: Burden of Disease and Case Fatality", venue: "European Society for Paediatric Infectious Diseases (ESPID) 2023", place: "Lisbon Congress Centre", year: "2023" },
+  { title: "Changes in Antibiotic Prescribing Patterns in Taiwan during the COVID-19 Pandemic", venue: "ISPE's 15th Asian Conference on Pharmacoepidemiology", place: "Sheraton Grand Bangalore", year: "2023" },
+  { title: "The 13-valent Pneumococcal Conjugate Vaccine in Reducing Childhood Hospitalised Invasive Pneumococcal Diseases", venue: "ISPE's 15th Asian Conference on Pharmacoepidemiology", place: "Sheraton Grand Bangalore", year: "2023" },
+  { title: "The Suicide Risk of Augmentation Therapy in Patients with Treatment-Resistant Depression", venue: "ISPE's 14th Asian Conference on Pharmacoepidemiology", place: "College of Medicine, NCKU", year: "2022" },
+];
+
+// In the news — mentions across the PHDc / AsPEN ecosystem.
+const media = [
+  { title: "AsPEN Showcase at ACPE 2025, Hong Kong — presented AsPEN's multinational achievements", source: "AsPEN", href: "https://www.aspensig.asia/activities/spotlight/aspen-showcase-acpe-2025", year: "2025" },
+  { title: "Research Team — Population Health Data Center (PHDc), NCKU", source: "PHDc", href: "https://www.phdcenter.org.tw/team-research/", year: "" },
+];
+
+const talksByYear = [...new Set(talks.map((t) => t.year))].sort((a, b) => b.localeCompare(a))
+  .map((y) => ({ year: y, items: talks.filter((t) => t.year === y) }));
+---
+
+<BaseLayout
+  title="Talks & teaching — Daniel Hsiang-Te Tsai"
+  description="Invited talks, educational sessions, and conference presentations by Daniel Hsiang-Te Tsai on real-world evidence and pharmacoepidemiology methods."
+>
+  <PageHeader
+    eyebrow="Speaking & teaching"
+    title="Talks"
+    description="Invited talks, educational sessions, and conference presentations — with a recurring focus on causal-inference methods (clone-censor-weight, target trial emulation) for real-world data."
+  />
+
+  <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12 space-y-12">
+    <!-- Invited & educational -->
+    <section>
+      <h2 class="text-2xl font-bold text-slate-900">Invited &amp; educational talks</h2>
+      <ol class="mt-5 space-y-4">
+        {invited.map((t) => (
+          <li class="border-l-2 border-accent-500 pl-4">
+            <p class="text-sm font-semibold text-slate-900">{t.title}</p>
+            <p class="text-sm text-slate-600">{t.venue}{t.place ? ` · ${t.place}` : ""}</p>
+            <div class="mt-1 flex items-center gap-2 text-xs">
+              <span class="rounded-full bg-brand-50 text-brand-700 font-semibold px-2 py-0.5">{t.kind}</span>
+              <span class="text-slate-500">{t.year}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <!-- Conference presentations -->
+    <section>
+      <h2 class="text-2xl font-bold text-slate-900">Conference presentations</h2>
+      {talksByYear.map((grp) => (
+        <div class="mt-5">
+          <h3 class="text-sm font-extrabold text-brand-700 mb-3">{grp.year}</h3>
+          <ol class="space-y-4">
+            {grp.items.map((t) => (
+              <li class="border-l-2 border-slate-200 pl-4">
+                <p class="text-sm font-semibold text-slate-900">{t.title}</p>
+                <p class="text-sm text-slate-600">{t.venue}{t.place ? ` · ${t.place}` : ""}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
+    </section>
+
+    <!-- In the news -->
+    <section>
+      <h2 class="text-2xl font-bold text-slate-900">In the news</h2>
+      <ol class="mt-5 space-y-4">
+        {media.map((m) => (
+          <li class="border-l-2 border-slate-200 pl-4">
+            <a href={m.href} target="_blank" rel="noopener" class="text-sm font-semibold text-slate-900 hover:text-brand-700 hover:underline">{m.title} ↗</a>
+            <p class="mt-0.5 text-xs text-slate-500">{m.source}{m.year ? ` · ${m.year}` : ""}</p>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <!-- Follow-up CTA (seed for the future QR/notify idea) -->
+    <section class="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+      <p class="text-sm text-slate-700">
+        <strong class="text-slate-900">Saw one of these talks?</strong> If you'd like the follow-up paper or slides from a session,
+        <a href="mailto:danielhttsai@gmail.com?subject=Talk%20follow-up" class="font-semibold text-brand-700 hover:underline">drop me a line</a> and I'll send it your way.
+      </p>
+    </section>
+  </div>
+</BaseLayout>

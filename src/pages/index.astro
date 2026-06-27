@@ -1,7 +1,16 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import PublicationItem from "../components/PublicationItem.astro";
+import type { Pub } from "../components/PublicationItem.astro";
+import CiteScript from "../components/CiteScript.astro";
+import pubs from "../data/publications.json";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Featured paper for the home "Latest" band — the flagship first-author study.
+// Pulled live from publications.json so its links/format stay in sync.
+const FEATURED_DOI = "10.1192/bjp.2024.283";
+const featured = (pubs as Pub[]).find((p) => p.doi.toLowerCase() === FEATURED_DOI);
 
 const skills = [
   { group: "Statistical computing", items: ["SAS", "Stata", "SPSS", "R"] },
@@ -44,37 +53,63 @@ const tools = [
 <BaseLayout tint={true}>
   <!-- Hero -->
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-20 pb-16">
-    <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-3">
-      Pharmacoepidemiology · Real-World Evidence
-    </p>
-    <h1 class="text-4xl md:text-6xl font-extrabold text-slate-900 leading-tight">
-      Daniel Hsiang-Te Tsai
-    </h1>
-    <p class="mt-5 text-lg md:text-xl text-slate-600 max-w-3xl leading-relaxed">
-      Postdoctoral research fellow at the <a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener" class="text-brand-700 font-semibold hover:underline">Population Health Data Center (PHDc), NCKU</a>.
-      I specialise in comparative effectiveness and policy research — triangulating claims databases,
-      electronic health records, and biomedical data to inform causal inference. Educational co-lead of
-      <strong class="text-slate-800">AsPEN</strong> and active member of <strong class="text-slate-800">NeuroGEN</strong>.
-    </p>
-    <div class="mt-8 flex flex-wrap gap-3">
-      <a href={`${base}/tools`} class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-6 py-3 rounded-xl transition shadow-sm">
-        Try the Protocol Generator →
-      </a>
-      <a href={`${base}/about`} class="bg-white border border-slate-300 text-slate-700 hover:border-brand-600 hover:text-brand-700 font-semibold px-6 py-3 rounded-xl transition">
-        About me &amp; publications
-      </a>
-    </div>
-    <div class="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-500">
-      <a href="mailto:danielhttsai@gmail.com" class="hover:text-brand-700">danielhttsai@gmail.com</a>
-      <a href="https://orcid.org/0000-0003-2841-0338" target="_blank" rel="noopener" class="hover:text-brand-700">ORCID 0000-0003-2841-0338 ↗</a>
+    <div class="grid md:grid-cols-[1fr_auto] gap-8 md:gap-12 items-center">
+      <img
+        src={`${base}/images/daniel.jpeg`}
+        alt="Daniel Hsiang-Te Tsai"
+        width="240" height="240"
+        class="order-1 md:order-2 w-36 h-36 md:w-56 md:h-56 lg:w-64 lg:h-64 rounded-2xl object-cover shadow-md ring-1 ring-slate-200 justify-self-start md:justify-self-end"
+      />
+      <div class="order-2 md:order-1">
+        <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-3">
+          Pharmacoepidemiology · Real-World Evidence
+        </p>
+        <h1 class="text-4xl md:text-6xl font-extrabold text-slate-900 leading-tight">
+          Daniel Hsiang-Te Tsai
+        </h1>
+        <p class="mt-5 text-lg md:text-xl text-slate-700 max-w-2xl leading-relaxed font-medium">
+          Building the <strong class="text-brand-700">infrastructure for real-world evidence</strong> — the tools, methods, and multi-country data networks that turn routine health data into causal answers.
+        </p>
+        <p class="mt-4 text-base text-slate-600 max-w-2xl leading-relaxed">
+          Postdoctoral research fellow at the <a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener" class="text-brand-700 font-semibold hover:underline">Population Health Data Center (PHDc), NCKU</a>, specialising in comparative effectiveness and policy research. Educational co-lead of <strong class="text-slate-800">AsPEN</strong> and active member of <strong class="text-slate-800">NeuroGEN</strong>.
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href={`${base}/tools`} class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-6 py-3 rounded-xl transition shadow-sm">
+            Try the Protocol Generator →
+          </a>
+          <a href={`${base}/about`} class="bg-white border border-slate-300 text-slate-700 hover:border-brand-600 hover:text-brand-700 font-semibold px-6 py-3 rounded-xl transition">
+            About me &amp; publications
+          </a>
+        </div>
+        <div class="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
+          <a href="mailto:danielhttsai@gmail.com" class="hover:text-brand-700">Email</a>
+          <a href="https://scholar.google.com/citations?user=3IxiZOoAAAAJ" target="_blank" rel="noopener" class="hover:text-brand-700">Google Scholar ↗</a>
+          <a href="https://orcid.org/0000-0003-2841-0338" target="_blank" rel="noopener" class="hover:text-brand-700">ORCID ↗</a>
+          <a href="https://www.linkedin.com/in/daniel-hsiang-te-tsai/" target="_blank" rel="noopener" class="hover:text-brand-700">LinkedIn ↗</a>
+          <a href="https://github.com/danielhttsai" target="_blank" rel="noopener" class="hover:text-brand-700">GitHub ↗</a>
+        </div>
+      </div>
     </div>
   </section>
 
+  <!-- Latest / featured paper -->
+  {featured && (
+    <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pb-4">
+      <div class="rounded-2xl border border-brand-200 bg-brand-50/50 p-6 sm:p-8">
+        <div class="flex items-center justify-between gap-4 flex-wrap mb-3">
+          <p class="uppercase tracking-widest text-xs text-brand-700 font-bold">Latest first-author paper</p>
+          <a href={`${base}/publications`} class="text-sm font-semibold text-brand-700 hover:underline">All publications →</a>
+        </div>
+        <ol><PublicationItem pub={featured} /></ol>
+      </div>
+    </section>
+  )}
+
   <!-- Quick stats -->
-  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pb-12">
+  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
       {[
-        { n: "30", l: "Publications" },
+        { n: String(pubs.length), l: "Publications" },
         { n: "286", l: "Citations" },
         { n: "7", l: "h-index" },
         { n: "ACPE 15", l: "Rising Star" },
@@ -126,4 +161,22 @@ const tools = [
       ))}
     </div>
   </section>
+
+  <!-- Contact / collaborate -->
+  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
+    <div class="rounded-2xl bg-brand-700 text-white p-8 sm:p-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+      <div>
+        <h2 class="text-2xl font-bold">Open to collaborations</h2>
+        <p class="mt-2 text-brand-100 max-w-2xl leading-relaxed">
+          Multi-country RWE studies, methods work (target trial emulation, clone-censor-weight), or building research infrastructure — let's talk.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3 shrink-0">
+        <a href="mailto:danielhttsai@gmail.com" class="bg-white text-brand-700 hover:bg-brand-50 font-semibold px-6 py-3 rounded-xl transition">Email me</a>
+        <a href="https://www.linkedin.com/in/daniel-hsiang-te-tsai/" target="_blank" rel="noopener" class="border border-white/40 hover:bg-white/10 text-white font-semibold px-6 py-3 rounded-xl transition">LinkedIn ↗</a>
+      </div>
+    </div>
+  </section>
+
+  <CiteScript />
 </BaseLayout>
