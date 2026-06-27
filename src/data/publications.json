@@ -8,7 +8,8 @@
     "pmid": "42343883",
     "pmcid": "",
     "ris": "TY  - JOUR\r\nTI  - Methodological considerations of suicide risk following antipsychotic therapy in treatment-resistant depression\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Yang, Avery Shuei-He\r\nAU  - Wong, Zi-Xuan\r\nAU  - Chuang, Albert Tzu-Ming\r\nAU  - Cheng, Michael Chun-Yuan\r\nAU  - Shen, Chin-Yao\r\nAU  - Shao, Shih-Chieh\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - The British Journal of Psychiatry\r\nT2  - The British Journal of Psychiatry\r\nPY  - 2026\r\nSP  - 1\r\nEP  - 1\r\nDO  - 10.1192/bjp.2026.10700\r\nUR  - https://doi.org/10.1192/bjp.2026.10700\r\nAN  - 42343883\r\nER  - \r\n",
-    "date": 20260625
+    "date": 20260625,
+    "cover": "papers/trd-ap-commentary.jpg"
   },
   {
     "year": "2026",
@@ -19,7 +20,8 @@
     "pmid": "42020540",
     "pmcid": "",
     "ris": "TY  - JOUR\r\nTI  - Comparison of adverse renal events between ranibizumab and aflibercept in patients with diabetic macular oedema: A global network study\r\nAU  - Lee, Wan-Ju Annabelle\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Cheng, Michael Chun-Yuan\r\nAU  - Lin, Yu-Shiuan\r\nAU  - Lee, Chia-Yi\r\nAU  - Shao, Shih-Chieh\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - Eye\r\nT2  - Eye\r\nPY  - 2026\r\nDO  - 10.1038/s41433-026-04459-4\r\nUR  - https://doi.org/10.1038/s41433-026-04459-4\r\nAN  - 42020540\r\nER  - \r\n",
-    "date": 20260422
+    "date": 20260422,
+    "cover": "papers/anti-vegf-aki.jpg"
   },
   {
     "year": "2026",
@@ -30,7 +32,8 @@
     "pmid": "41922723",
     "pmcid": "PMC13243465",
     "ris": "TY  - JOUR\r\nTI  - Hyperuricemia risk in bempedoic acid-treated hyperlipidemic patients\r\nAU  - Su, Po-Hsueh\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Hsieh, Miyuki Hsing-Chun\r\nAU  - Vairaperumal, Tharmaraj\r\nAU  - Lai, Edward Chia-Cheng\r\nAU  - Liu, Ping-Yen\r\nJO  - Communications Medicine\r\nT2  - Communications Medicine\r\nPY  - 2026\r\nVL  - 6\r\nIS  - 1\r\nDO  - 10.1038/s43856-026-01545-2\r\nUR  - https://doi.org/10.1038/s43856-026-01545-2\r\nAN  - 41922723\r\nER  - \r\n",
-    "date": 20260401
+    "date": 20260401,
+    "cover": "papers/ba-ua.jpg"
   },
   {
     "year": "2026",
@@ -41,7 +44,8 @@
     "pmid": "42088160",
     "pmcid": "PMC13138278",
     "ris": "TY  - JOUR\r\nTI  - Association Between Pneumonia Risk and Anticholinergic Burden Among Patients with Different Frailty Levels [Response to Letter]\r\nAU  - Yang, Avery Shuei-He\r\nAU  - Fan Chiang, Hsin-Yu\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Chuang, Albert Tzu-Ming\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - Clinical Epidemiology\r\nT2  - Clinical Epidemiology\r\nPY  - 2026\r\nVL  - Volume 18\r\nSP  - 1\r\nEP  - 2\r\nDO  - 10.2147/clep.s609824\r\nUR  - https://doi.org/10.2147/clep.s609824\r\nAN  - 42088160\r\nER  - \r\n",
-    "date": 20260400
+    "date": 20260400,
+    "cover": "papers/acb-pn-response.jpg"
   },
   {
     "year": "2026",
@@ -52,7 +56,8 @@
     "pmid": "41790761",
     "pmcid": "PMC12987583",
     "ris": "TY  - JOUR\r\nTI  - SGLT2 inhibitors, GLP-1 RAs, and DPP4 inhibitors and the risk of hypomagnesemia in type 2 diabetes: A target trial emulation\r\nAU  - Shao, Shih-Chieh\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Chuang, Albert Tzu-Ming\r\nAU  - Liu, Kuan-Hung\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - PLOS Medicine\r\nT2  - PLOS Medicine\r\nPY  - 2026\r\nVL  - 23\r\nIS  - 3\r\nSP  - e1004968\r\nDO  - 10.1371/journal.pmed.1004968\r\nUR  - https://doi.org/10.1371/journal.pmed.1004968\r\nAN  - 41790761\r\nER  - \r\n",
-    "date": 20260306
+    "date": 20260306,
+    "cover": "papers/sdg-mg.jpg"
   },
   {
     "year": "2026",
@@ -63,7 +68,8 @@
     "pmid": "41772603",
     "pmcid": "PMC13059312",
     "ris": "TY  - JOUR\r\nTI  - Association between venlafaxine use and the risk of withdrawal from nonopioid substances: a nationwide, population-based study\r\nAU  - Wei, Shyh-Yuh\r\nAU  - Li, Brian Meng-Hsun\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Hu, Hsuan-Yun\r\nAU  - Lin, Szu-Yu\r\nAU  - Lin, Swu-Jane\r\nAU  - Su, Chien-Chou\r\nAU  - Pan, Chih-Hsin\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - Harm Reduction Journal\r\nT2  - Harm Reduction Journal\r\nPY  - 2026\r\nVL  - 23\r\nIS  - 1\r\nDO  - 10.1186/s12954-026-01427-9\r\nUR  - https://doi.org/10.1186/s12954-026-01427-9\r\nAN  - 41772603\r\nER  - \r\n",
-    "date": 20260302
+    "date": 20260302,
+    "cover": "papers/venlafaxine.jpg"
   },
   {
     "year": "2026",
@@ -146,7 +152,8 @@
     "pmid": "41117521",
     "pmcid": "PMC13065125",
     "ris": "TY  - JOUR\r\nTI  - Sodium-Glucose Cotransporter 2 Inhibitors Prevent Nephrolithiasis in Patients with Diabetes\r\nAU  - Liu, Chia-Min\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Tung, Hsiu-Ting\r\nAU  - Lu, Ze-Hong\r\nAU  - Lai, Edward Chia-Cheng\r\nAU  - Liu, Chan-Jung\r\nJO  - Kidney360\r\nT2  - Kidney360\r\nPY  - 2025\r\nVL  - 7\r\nIS  - 3\r\nSP  - 633\r\nEP  - 641\r\nDO  - 10.34067/kid.0000000981\r\nUR  - https://doi.org/10.34067/kid.0000000981\r\nAN  - 41117521\r\nER  - \r\n",
-    "date": 20251020
+    "date": 20251020,
+    "cover": "papers/sglt2-nephrolithiasis.jpg"
   },
   {
     "year": "2025",
@@ -181,7 +188,8 @@
     "pmid": "40820495",
     "pmcid": "PMC13083378",
     "ris": "TY  - JOUR\r\nTI  - Emulating Six Cardiovascular Outcome Trials of Antidiabetic Drugs in Individuals with Type 2 Diabetes: Analyses Based on Real‐World Databases from Korea and Taiwan\r\nAU  - Ko, Hwa Yeon\r\nAU  - Au, Philip C. M.\r\nAU  - Cheng, Michael Chun‐Yuan\r\nAU  - Cheung, Ching‐Lung\r\nAU  - Choi, Ahhyung\r\nAU  - Hsieh, Miyuki Hsing‐Chun\r\nAU  - Jeong, Han Eol\r\nAU  - Lai, Edward Chia‐Cheng\r\nAU  - Li, Brian Meng‐Hsun\r\nAU  - Man, Kenneth K. C.\r\nAU  - Rassen, Jeremy A.\r\nAU  - Tsai, Daniel Hsiang‐Te\r\nAU  - Wang, Shirley V.\r\nAU  - Wong, Ian C. K.\r\nAU  - Shin, Ju‐Young\r\nAU  - Park, Sohee\r\nJO  - Clinical Pharmacology &amp; Therapeutics\r\nT2  - Clinical Pharmacology &amp; Therapeutics\r\nPY  - 2025\r\nVL  - 119\r\nIS  - 5\r\nSP  - 1265\r\nEP  - 1274\r\nDO  - 10.1002/cpt.70027\r\nUR  - https://doi.org/10.1002/cpt.70027\r\nAN  - 40820495\r\nER  - \r\n",
-    "date": 20250817
+    "date": 20250817,
+    "cover": "papers/asian-duplicate.jpg"
   },
   {
     "year": "2025",
