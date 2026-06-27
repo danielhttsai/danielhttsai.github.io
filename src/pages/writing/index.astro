@@ -1,0 +1,50 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PageHeader from "../../components/PageHeader.astro";
+import { getCollection } from "astro:content";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const posts = (await getCollection("posts", ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.date.getTime() - a.data.date.getTime()
+);
+
+const readingMin = (body: string) =>
+  Math.max(1, Math.round((body || "").split(/\s+/).filter(Boolean).length / 200));
+const fmtDate = (d: Date) =>
+  d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+---
+
+<BaseLayout
+  title="Writing — Daniel Hsiang-Te Tsai"
+  description="Short methods notes on causal inference, target trial emulation, and real-world evidence by Daniel Hsiang-Te Tsai."
+>
+  <PageHeader
+    eyebrow="Methods notes"
+    title="Writing"
+    description="Short explainers on the methods I use day to day — causal inference, target trial emulation, and real-world evidence."
+  />
+
+  <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12">
+    {posts.length === 0 && <p class="text-slate-500">Posts coming soon.</p>}
+    <ol class="space-y-8">
+      {posts.map((p) => (
+        <li class="border-b border-slate-100 pb-8 last:border-0">
+          <a href={`${base}/writing/${p.id}`} class="group block">
+            <h2 class="text-xl font-bold text-slate-900 group-hover:text-brand-700 transition">{p.data.title}</h2>
+            <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+              <span>{fmtDate(p.data.date)}</span>
+              <span>·</span>
+              <span>{readingMin(p.body)} min read</span>
+              {p.data.tags.map((t) => (
+                <span class="rounded-full bg-brand-50 text-brand-700 font-semibold px-2 py-0.5">{t}</span>
+              ))}
+            </div>
+            <p class="mt-3 text-slate-600 leading-relaxed">{p.data.excerpt}</p>
+            <span class="mt-3 inline-block text-sm font-semibold text-brand-700 group-hover:underline">Read →</span>
+          </a>
+        </li>
+      ))}
+    </ol>
+  </div>
+</BaseLayout>
