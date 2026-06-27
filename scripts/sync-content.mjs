@@ -90,6 +90,13 @@ function formatCitation(m) {
   return { citation, year };
 }
 
+// Numeric YYYYMMDD sort key from CrossRef issued/published date.
+function issuedSortKey(m, year) {
+  const dp = m.issued?.["date-parts"]?.[0] || m.published?.["date-parts"]?.[0] || [];
+  const y = dp[0] || Number(year) || 0;
+  return y * 10000 + (dp[1] || 0) * 100 + (dp[2] || 0);
+}
+
 // Build an EndNote/Zotero-importable RIS record from CrossRef metadata.
 function buildRis(m, doi, pmid) {
   const L = ["TY  - JOUR"];
@@ -179,7 +186,7 @@ async function syncPublications() {
       if (!citation || !year) { console.warn(`  skip new ${doi}: no citation/year`); continue; }
       const oa = await unpaywall(doi);
       const pmid = await pubmedId(doi);
-      const entry = { year, doi, citation, isOA: oa.isOA, oaUrl: oa.oaUrl, pmid, pmcid: "", ris: buildRis(m, doi, pmid) };
+      const entry = { year, doi, citation, isOA: oa.isOA, oaUrl: oa.oaUrl, pmid, pmcid: "", ris: buildRis(m, doi, pmid), date: issuedSortKey(m, year) };
       existing.push(entry);
       byDoi.set(doi, entry);
       added++;
@@ -193,14 +200,18 @@ async function syncPublications() {
   const map = await pmcidMap(existing.map((e) => e.pmid).filter(Boolean));
   for (const e of existing) {
     e.pmcid = e.pmid ? (map.get(String(e.pmid)) || "") : "";
-    if (!e.ris) {
-      try { e.ris = buildRis(await crossrefMessage(e.doi), e.doi, e.pmid); await sleep(150); }
-      catch (err) { console.warn(`  RIS backfill failed ${e.doi}: ${err.message}`); }
+    if (!e.ris || !e.date) {
+      try {
+        const m = await crossrefMessage(e.doi);
+        if (!e.ris) e.ris = buildRis(m, e.doi, e.pmid);
+        if (!e.date) e.date = issuedSortKey(m, e.year);
+        await sleep(150);
+      } catch (err) { console.warn(`  RIS/date backfill failed ${e.doi}: ${err.message}`); }
     }
   }
 
-  // Newest year first; preserve insertion order within a year (CV order).
-  existing.sort((a, b) => (b.year || "").localeCompare(a.year || ""));
+  // Strict newest → oldest by publication date.
+  existing.sort((a, b) => (b.date || 0) - (a.date || 0));
   writeFileSync(p("src/data/publications.json"), JSON.stringify(existing, null, 2) + "\n", "utf8");
   console.log(`Publications: ${existing.length} total, ${added} new, ${existing.filter((e) => e.pmcid).length} with PMC full text.`);
 }

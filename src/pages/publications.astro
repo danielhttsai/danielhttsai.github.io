@@ -14,10 +14,11 @@ type Pub = {
   pmid?: string;
   pmcid?: string; // present when full text is in PubMed Central
   ris?: string;   // EndNote/Zotero-importable RIS record
+  date?: number;  // YYYYMMDD sort key (CrossRef issued date)
 };
 
-// Order follows the CV: newest first, preserving the CV's within-year order.
-const all = pubs as Pub[];
+// Strict newest → oldest by publication date.
+const all = (pubs as Pub[]).slice().sort((a, b) => (b.date || 0) - (a.date || 0));
 
 // Group by year (newest first)
 const years = [...new Set(all.map((p) => p.year))].sort((a, b) => b.localeCompare(a));
