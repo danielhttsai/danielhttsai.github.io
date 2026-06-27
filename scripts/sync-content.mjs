@@ -95,6 +95,20 @@ async function unpaywall(doi) {
   } catch { return { isOA: false, oaUrl: "" }; }
 }
 
+// PubMed ID via NCBI E-utilities (DOI → PMID). Empty string if not indexed yet.
+async function pubmedId(doi) {
+  const base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
+  for (const term of [`${doi}[AID]`, `"${doi}"`]) {
+    try {
+      const j = await fetchJson(`${base}?db=pubmed&retmode=json&tool=danieltsai-site&email=${EMAIL}&term=${encodeURIComponent(term)}`);
+      const id = j?.esearchresult?.idlist?.[0];
+      if (id) return id;
+    } catch {}
+    await sleep(250);
+  }
+  return "";
+}
+
 async function syncPublications() {
   const existing = JSON.parse(readFileSync(p("src/data/publications.json"), "utf8"));
   const exclude = new Set(JSON.parse(readFileSync(p("src/data/publications-exclude.json"), "utf8")).map((d) => d.toLowerCase()));
@@ -108,10 +122,12 @@ async function syncPublications() {
     for (const x of ids) if ((x["external-id-type"] || "").toLowerCase() === "doi") orcidDois.push((x["external-id-value"] || "").trim().toLowerCase());
   }
 
-  // Refresh OA on existing entries (citation is preserved verbatim).
+  // Refresh OA on existing entries (citation is preserved verbatim) and
+  // backfill any missing PMID.
   for (const e of existing) {
     const oa = await unpaywall(e.doi);
     e.isOA = oa.isOA; e.oaUrl = oa.oaUrl;
+    if (!e.pmid) { e.pmid = await pubmedId(e.doi); }
     await sleep(150);
   }
 
@@ -123,7 +139,8 @@ async function syncPublications() {
       const { citation, year } = await crossrefCitation(doi);
       if (!citation || !year) { console.warn(`  skip new ${doi}: no citation/year`); continue; }
       const oa = await unpaywall(doi);
-      const entry = { year, doi, citation, isOA: oa.isOA, oaUrl: oa.oaUrl };
+      const pmid = await pubmedId(doi);
+      const entry = { year, doi, citation, isOA: oa.isOA, oaUrl: oa.oaUrl, pmid };
       existing.push(entry);
       byDoi.set(doi, entry);
       added++;

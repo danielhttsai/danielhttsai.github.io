@@ -11,6 +11,7 @@ type Pub = {
   citation: string;
   isOA: boolean;
   oaUrl: string;
+  pmid?: string;
 };
 
 // Order follows the CV: newest first, preserving the CV's within-year order.
@@ -32,12 +33,9 @@ const highlight = (citation: string) =>
     .replace(/Tsai DHT/g, "<strong class='text-slate-900'>Tsai DHT</strong>")
     .replace(/Tsai HT(?!<)/g, "<strong class='text-slate-900'>Tsai HT</strong>");
 
-const mailto = (p: Pub) =>
-  `mailto:danielhttsai@gmail.com?subject=${encodeURIComponent(
-    "Full-text request"
-  )}&body=${encodeURIComponent(
-    `Hi Daniel,\n\nCould you share a full-text copy of:\n${p.citation} (doi:${p.doi})\n\nThank you!`
-  )}`;
+// Full plain-text reference for the "Cite" copy button.
+const citeText = (p: Pub) =>
+  `${p.citation} doi:${p.doi}.${p.pmid ? " PMID: " + p.pmid + "." : ""}`;
 ---
 
 <BaseLayout
@@ -47,21 +45,21 @@ const mailto = (p: Pub) =>
   <PageHeader
     eyebrow="Research"
     title="Publications"
-    description={`${all.length} peer-reviewed publications. Open-access articles link to the full text; for the rest, you can request a copy by email.`}
+    description={`${all.length} peer-reviewed publications. Each links to its PubMed page for full text; open-access articles are marked.`}
   />
 
   <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
     <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600 border-b border-slate-200 pb-6 mb-8">
       <span><strong class="text-brand-700 text-base">{all.length}</strong> publications</span>
-      <span><strong class="text-brand-700 text-base">{oaCount}</strong> with free full text</span>
+      <span><strong class="text-brand-700 text-base">{oaCount}</strong> open access</span>
       <a href="https://orcid.org/0000-0003-2841-0338" target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">ORCID 0000-0003-2841-0338 ↗</a>
       <a href={`${base}/about`} class="font-semibold text-brand-700 hover:underline">About &amp; CV →</a>
     </div>
 
     <p class="text-xs text-slate-500 mb-8">
-      <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-accent-500"></span> Full text available</span>
+      <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-accent-500"></span> Open access</span>
       <span class="mx-3">·</span>
-      <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-slate-300"></span> Email to request a copy</span>
+      <span>Full text via the official links on each article's PubMed page</span>
       {hasEqual && <><span class="mx-3">·</span><span>* equal contribution</span></>}
     </p>
 
@@ -70,15 +68,15 @@ const mailto = (p: Pub) =>
         <h2 class="text-xl font-extrabold text-brand-700 mb-4 sticky top-16 bg-white/90 backdrop-blur py-1">{grp.year}</h2>
         <ol class="space-y-5">
           {grp.items.map((p) => (
-            <li class="border-l-2 pl-4" class:list={[p.isOA && p.oaUrl ? "border-accent-500" : "border-slate-200"]}>
+            <li class="border-l-2 pl-4" class:list={[p.isOA ? "border-accent-500" : "border-slate-200"]}>
               <p class="text-sm text-slate-700 leading-relaxed" set:html={highlight(p.citation)} />
               <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                {p.isOA && p.oaUrl ? (
-                  <a href={p.oaUrl} target="_blank" rel="noopener" class="font-semibold text-accent-500 hover:underline">Full text ↗</a>
-                ) : (
-                  <a href={mailto(p)} class="font-semibold text-brand-700 hover:underline">✉ Request full text</a>
+                {p.pmid && (
+                  <a href={`https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`} target="_blank" rel="noopener" title="Full-text links on PubMed" class="font-semibold text-brand-700 hover:underline">PubMed ↗</a>
                 )}
+                <button type="button" data-cite={citeText(p)} class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ Cite</button>
                 <a href={`https://doi.org/${p.doi}`} target="_blank" rel="noopener" class="text-slate-500 hover:text-brand-700 hover:underline">DOI ↗</a>
+                {p.isOA && <span class="text-accent-500 font-medium">Open access</span>}
               </div>
             </li>
           ))}
@@ -86,4 +84,28 @@ const mailto = (p: Pub) =>
       </section>
     ))}
   </div>
+
+  <script is:inline>
+    // "Cite" buttons copy the full reference (citation + doi + PMID) to the clipboard.
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-cite]");
+      if (!btn) return;
+      const text = btn.getAttribute("data-cite") || "";
+      const flash = () => {
+        const original = btn.textContent;
+        btn.textContent = "✓ Copied";
+        setTimeout(() => { btn.textContent = original; }, 1500);
+      };
+      const fallback = () => {
+        const ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); } catch (err) {}
+        ta.remove(); flash();
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(flash).catch(fallback);
+      } else { fallback(); }
+    });
+  </script>
 </BaseLayout>
