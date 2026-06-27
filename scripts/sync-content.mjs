@@ -78,8 +78,12 @@ async function crossrefCitation(doi) {
   if (vol) date += ";" + vol;
   if (iss) date += "(" + iss + ")";
   if (page) date += ":" + page;
-  const citation = [authors ? authors + "." : "", title ? title + "." : "", journal ? journal + "." : "", date ? date + "." : ""]
+  let citation = [authors ? authors + "." : "", title ? title + "." : "", journal ? journal + "." : "", date ? date + "." : ""]
     .filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  // Tidy known CrossRef quirks to match the CV's house style.
+  citation = citation
+    .replace(/;Volume\s+/g, ";")                            // Dove Press: "Volume 18" → "18"
+    .replace(/\bThe British Journal of Psychiatry\b/g, "British Journal of Psychiatry");
   return { citation, year };
 }
 
