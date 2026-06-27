@@ -59,8 +59,11 @@ function fmtAuthors(authors) {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-async function crossrefCitation(doi) {
-  const m = (await fetchJson(`https://api.crossref.org/works/${encodeURIComponent(doi)}?mailto=${EMAIL}`)).message || {};
+async function crossrefMessage(doi) {
+  return (await fetchJson(`https://api.crossref.org/works/${encodeURIComponent(doi)}?mailto=${EMAIL}`)).message || {};
+}
+
+function formatCitation(m) {
   const authors = fmtAuthors(m.author);
   const title = m.title?.[0] ? m.title[0].replace(/\s+/g, " ").trim() : "";
   // Full journal name (NOT the abbreviated short-container-title) to match the CV.
@@ -85,6 +88,41 @@ async function crossrefCitation(doi) {
     .replace(/;Volume\s+/g, ";")                            // Dove Press: "Volume 18" → "18"
     .replace(/\bThe British Journal of Psychiatry\b/g, "British Journal of Psychiatry");
   return { citation, year };
+}
+
+// Build an EndNote/Zotero-importable RIS record from CrossRef metadata.
+function buildRis(m, doi, pmid) {
+  const L = ["TY  - JOUR"];
+  const title = m.title?.[0] ? m.title[0].replace(/\s+/g, " ").trim() : "";
+  if (title) L.push("TI  - " + title);
+  for (const a of m.author || []) {
+    const fam = (a.family || "").trim();
+    const giv = (a.given || "").trim();
+    if (fam || giv) L.push("AU  - " + [fam, giv].filter(Boolean).join(", "));
+  }
+  const journal = m["container-title"]?.[0] || m["short-container-title"]?.[0] || "";
+  if (journal) { L.push("JO  - " + journal); L.push("T2  - " + journal); }
+  const dp = m.issued?.["date-parts"]?.[0] || m.published?.["date-parts"]?.[0] || [];
+  if (dp[0]) L.push("PY  - " + dp[0]);
+  if (m.volume) L.push("VL  - " + m.volume);
+  if (m.issue) L.push("IS  - " + m.issue);
+  const page = m.page || "";
+  if (page) { const [sp, ep] = page.split(/[-–]/); if (sp) L.push("SP  - " + sp.trim()); if (ep) L.push("EP  - " + ep.trim()); }
+  if (doi) { L.push("DO  - " + doi); L.push("UR  - https://doi.org/" + doi); }
+  if (pmid) L.push("AN  - " + pmid);
+  L.push("ER  - ");
+  return L.join("\r\n") + "\r\n";
+}
+
+// DOI/PMID → PMCID (full-text availability) via NCBI ID Converter, batched.
+async function pmcidMap(pmids) {
+  const map = new Map();
+  if (!pmids.length) return map;
+  try {
+    const j = await fetchJson(`https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=danieltsai-site&email=${EMAIL}&format=json&ids=${pmids.join(",")}`);
+    for (const rec of j.records || []) if (rec.pmcid) map.set(String(rec.pmid), rec.pmcid);
+  } catch (e) { console.warn("  pmcid lookup failed:", e.message); }
+  return map;
 }
 
 async function unpaywall(doi) {
@@ -136,11 +174,12 @@ async function syncPublications() {
   for (const doi of orcidDois) {
     if (byDoi.has(doi) || exclude.has(doi) || /figshare|\/m9\./.test(doi)) continue;
     try {
-      const { citation, year } = await crossrefCitation(doi);
+      const m = await crossrefMessage(doi);
+      const { citation, year } = formatCitation(m);
       if (!citation || !year) { console.warn(`  skip new ${doi}: no citation/year`); continue; }
       const oa = await unpaywall(doi);
       const pmid = await pubmedId(doi);
-      const entry = { year, doi, citation, isOA: oa.isOA, oaUrl: oa.oaUrl, pmid };
+      const entry = { year, doi, citation, isOA: oa.isOA, oaUrl: oa.oaUrl, pmid, pmcid: "", ris: buildRis(m, doi, pmid) };
       existing.push(entry);
       byDoi.set(doi, entry);
       added++;
@@ -149,10 +188,21 @@ async function syncPublications() {
     } catch (e) { console.warn(`  skip new ${doi}: ${e.message}`); }
   }
 
+  // Refresh full-text availability (PMCID) for everything in one batched call,
+  // and backfill RIS for any entry still missing it.
+  const map = await pmcidMap(existing.map((e) => e.pmid).filter(Boolean));
+  for (const e of existing) {
+    e.pmcid = e.pmid ? (map.get(String(e.pmid)) || "") : "";
+    if (!e.ris) {
+      try { e.ris = buildRis(await crossrefMessage(e.doi), e.doi, e.pmid); await sleep(150); }
+      catch (err) { console.warn(`  RIS backfill failed ${e.doi}: ${err.message}`); }
+    }
+  }
+
   // Newest year first; preserve insertion order within a year (CV order).
   existing.sort((a, b) => (b.year || "").localeCompare(a.year || ""));
   writeFileSync(p("src/data/publications.json"), JSON.stringify(existing, null, 2) + "\n", "utf8");
-  console.log(`Publications: ${existing.length} total, ${added} new.`);
+  console.log(`Publications: ${existing.length} total, ${added} new, ${existing.filter((e) => e.pmcid).length} with PMC full text.`);
 }
 
 // ───────────────────── B. Protocol tool templates ─────────────────────

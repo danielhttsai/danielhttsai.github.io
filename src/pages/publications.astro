@@ -12,6 +12,8 @@ type Pub = {
   isOA: boolean;
   oaUrl: string;
   pmid?: string;
+  pmcid?: string; // present when full text is in PubMed Central
+  ris?: string;   // EndNote/Zotero-importable RIS record
 };
 
 // Order follows the CV: newest first, preserving the CV's within-year order.
@@ -21,7 +23,7 @@ const all = pubs as Pub[];
 const years = [...new Set(all.map((p) => p.year))].sort((a, b) => b.localeCompare(a));
 const byYear = years.map((y) => ({ year: y, items: all.filter((p) => p.year === y) }));
 
-const oaCount = all.filter((p) => p.isOA && p.oaUrl).length;
+const fullTextCount = all.filter((p) => p.pmcid).length;
 const hasEqual = all.some((p) => p.citation.includes("*"));
 
 // Bold the author's own name in a citation string, escaping the surrounding text.
@@ -33,9 +35,17 @@ const highlight = (citation: string) =>
     .replace(/Tsai DHT/g, "<strong class='text-slate-900'>Tsai DHT</strong>")
     .replace(/Tsai HT(?!<)/g, "<strong class='text-slate-900'>Tsai HT</strong>");
 
-// Full plain-text reference for the "Cite" copy button.
-const citeText = (p: Pub) =>
-  `${p.citation} doi:${p.doi}.${p.pmid ? " PMID: " + p.pmid + "." : ""}`;
+// Filename for the downloaded RIS, e.g. "Tsai-2026.ris".
+const risName = (p: Pub) =>
+  `${(p.citation.split(/[\s,]/)[0] || "ref").replace(/[^A-Za-z]/g, "")}-${p.year}.ris`;
+// Full-text link: PubMed Central when the paper is there, else the PubMed
+// abstract page. (Per copyright preference, never a direct publisher PDF.)
+const ptLink = (p: Pub) =>
+  p.pmcid
+    ? { href: `https://pmc.ncbi.nlm.nih.gov/articles/${p.pmcid}/`, label: "Full text", title: "Full text on PubMed Central" }
+    : p.pmid
+    ? { href: `https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`, label: "PubMed", title: "Abstract on PubMed" }
+    : null;
 ---
 
 <BaseLayout
@@ -45,21 +55,23 @@ const citeText = (p: Pub) =>
   <PageHeader
     eyebrow="Research"
     title="Publications"
-    description={`${all.length} peer-reviewed publications. Each links to its PubMed page for full text; open-access articles are marked.`}
+    description={`${all.length} peer-reviewed publications. Free full text links to PubMed Central where available, otherwise to the PubMed abstract. Click Cite to download a RIS file.`}
   />
 
   <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
     <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600 border-b border-slate-200 pb-6 mb-8">
       <span><strong class="text-brand-700 text-base">{all.length}</strong> publications</span>
-      <span><strong class="text-brand-700 text-base">{oaCount}</strong> open access</span>
+      <span><strong class="text-brand-700 text-base">{fullTextCount}</strong> with free full text</span>
       <a href="https://orcid.org/0000-0003-2841-0338" target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">ORCID 0000-0003-2841-0338 ↗</a>
       <a href={`${base}/about`} class="font-semibold text-brand-700 hover:underline">About &amp; CV →</a>
     </div>
 
     <p class="text-xs text-slate-500 mb-8">
-      <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-accent-500"></span> Open access</span>
+      <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-accent-500"></span> Free full text on PubMed Central</span>
       <span class="mx-3">·</span>
-      <span>Full text via the official links on each article's PubMed page</span>
+      <span>others link to the PubMed abstract</span>
+      <span class="mx-3">·</span>
+      <span>Cite downloads a RIS file (EndNote / Zotero / Mendeley)</span>
       {hasEqual && <><span class="mx-3">·</span><span>* equal contribution</span></>}
     </p>
 
@@ -68,15 +80,16 @@ const citeText = (p: Pub) =>
         <h2 class="text-xl font-extrabold text-brand-700 mb-4 sticky top-16 bg-white/90 backdrop-blur py-1">{grp.year}</h2>
         <ol class="space-y-5">
           {grp.items.map((p) => (
-            <li class="border-l-2 pl-4" class:list={[p.isOA ? "border-accent-500" : "border-slate-200"]}>
+            <li class="border-l-2 pl-4" class:list={[p.pmcid ? "border-accent-500" : "border-slate-200"]}>
               <p class="text-sm text-slate-700 leading-relaxed" set:html={highlight(p.citation)} />
               <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                {p.pmid && (
-                  <a href={`https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`} target="_blank" rel="noopener" title="Full-text links on PubMed" class="font-semibold text-brand-700 hover:underline">PubMed ↗</a>
+                {ptLink(p) && (
+                  <a href={ptLink(p)!.href} target="_blank" rel="noopener" title={ptLink(p)!.title} class="font-semibold text-brand-700 hover:underline">{ptLink(p)!.label} ↗</a>
                 )}
-                <button type="button" data-cite={citeText(p)} class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ Cite</button>
                 <a href={`https://doi.org/${p.doi}`} target="_blank" rel="noopener" class="text-slate-500 hover:text-brand-700 hover:underline">DOI ↗</a>
-                {p.isOA && <span class="text-accent-500 font-medium">Open access</span>}
+                {p.ris && (
+                  <button type="button" data-ris={p.ris} data-filename={risName(p)} title="Download RIS for EndNote / Zotero / Mendeley" class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ Cite</button>
+                )}
               </div>
             </li>
           ))}
@@ -86,26 +99,23 @@ const citeText = (p: Pub) =>
   </div>
 
   <script is:inline>
-    // "Cite" buttons copy the full reference (citation + doi + PMID) to the clipboard.
+    // "Cite" buttons download a RIS file that imports straight into EndNote
+    // (also Zotero, Mendeley, RefWorks).
     document.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-cite]");
+      const btn = e.target.closest("[data-ris]");
       if (!btn) return;
-      const text = btn.getAttribute("data-cite") || "";
-      const flash = () => {
-        const original = btn.textContent;
-        btn.textContent = "✓ Copied";
-        setTimeout(() => { btn.textContent = original; }, 1500);
-      };
-      const fallback = () => {
-        const ta = document.createElement("textarea");
-        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
-        document.body.appendChild(ta); ta.select();
-        try { document.execCommand("copy"); } catch (err) {}
-        ta.remove(); flash();
-      };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(flash).catch(fallback);
-      } else { fallback(); }
+      // HTML attribute parsing collapses CRLF to LF; restore CRLF for EndNote.
+      const ris = (btn.getAttribute("data-ris") || "").replace(/\r?\n/g, "\r\n");
+      const name = btn.getAttribute("data-filename") || "citation.ris";
+      const blob = new Blob([ris], { type: "application/x-research-info-systems" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const original = btn.textContent;
+      btn.textContent = "✓ Downloaded";
+      setTimeout(() => { btn.textContent = original; }, 1500);
     });
   </script>
 </BaseLayout>
