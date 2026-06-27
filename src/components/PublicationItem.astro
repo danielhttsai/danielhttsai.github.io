@@ -9,9 +9,11 @@ export interface Pub {
   pmid?: string;
   pmcid?: string;
   ris?: string;
+  cover?: string; // e.g. "papers/nhird.jpg" under public/images/
 }
 interface Props { pub: Pub; badge?: string }
 const { pub, badge } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const highlight = (citation: string) =>
@@ -32,18 +34,27 @@ const pt = pub.pmcid
 ---
 
 <li class="border-l-2 pl-4" class:list={[badge ? "border-brand-600" : pub.pmcid ? "border-accent-500" : "border-slate-200"]}>
-  {badge && (
-    <span class="inline-flex items-center gap-1 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 rounded-full px-2.5 py-0.5">★ {badge}</span>
-  )}
-  <p class="text-sm text-slate-700 leading-relaxed" set:html={highlight(pub.citation)} />
-  <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-    {pt && (
-      <a href={pt.href} target="_blank" rel="noopener" title={pt.title} class="font-semibold text-brand-700 hover:underline">{pt.label} ↗</a>
+  <div class="flex gap-4">
+    {pub.cover && (
+      <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" class="shrink-0">
+        <img src={`${base}/images/${pub.cover}`} alt="" width="56" height="79" loading="lazy" class="w-14 rounded ring-1 ring-slate-200 shadow-sm hover:shadow-md transition" />
+      </a>
     )}
-    <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" class="text-slate-500 hover:text-brand-700 hover:underline">DOI ↗</a>
-    {pub.ris && (
-      <button type="button" data-ris={pub.ris} data-filename={risName(pub)} title="Download RIS for EndNote / Zotero / Mendeley" class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ Cite</button>
-    )}
-    {pub.pmcid && <span class="text-accent-500 font-medium">Open access</span>}
+    <div class="min-w-0 flex-1">
+      {badge && (
+        <span class="inline-flex items-center gap-1 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 rounded-full px-2.5 py-0.5">★ {badge}</span>
+      )}
+      <p class="text-sm text-slate-700 leading-relaxed" set:html={highlight(pub.citation)} />
+      <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        {pt && (
+          <a href={pt.href} target="_blank" rel="noopener" title={pt.title} class="font-semibold text-brand-700 hover:underline">{pt.label} ↗</a>
+        )}
+        <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" class="text-slate-500 hover:text-brand-700 hover:underline">DOI ↗</a>
+        {pub.ris && (
+          <button type="button" data-ris={pub.ris} data-filename={risName(pub)} title="Download RIS for EndNote / Zotero / Mendeley" class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ Cite</button>
+        )}
+        {pub.pmcid && <span class="text-accent-500 font-medium">Open access</span>}
+      </div>
+    </div>
   </div>
 </li>
