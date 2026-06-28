@@ -256,6 +256,12 @@ async function syncTemplates() {
     writeFileSync(p("src/data/databases.json"), db, "utf8");
     console.log("  synced databases.json");
   } catch (e) { console.warn(`  databases.json failed: ${e.message}`); }
+  // Shared data files the templates import (e.g. the STROBE checklist).
+  try {
+    const strobe = await fetchText(`${ASPEN_RAW}/src/data/strobe.ts`);
+    writeFileSync(p("src/data/strobe.ts"), strobe, "utf8");
+    console.log("  synced strobe.ts");
+  } catch (e) { console.warn(`  strobe.ts failed: ${e.message}`); }
 }
 
 // ───────────────────────── C. Network logos ─────────────────────────
