@@ -10,9 +10,10 @@ export interface Pub {
   pmcid?: string;
   ris?: string;
   cover?: string; // e.g. "papers/nhird.jpg" under public/images/
+  tag?: string;   // category label, e.g. "Data Infrastructure" / "Methodology"
 }
-interface Props { pub: Pub; badge?: string }
-const { pub, badge } = Astro.props;
+interface Props { pub: Pub }
+const { pub } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -33,7 +34,7 @@ const pt = pub.pmcid
   : null;
 ---
 
-<li class="border-l-2 pl-4" class:list={[badge ? "border-brand-600" : pub.pmcid ? "border-accent-500" : "border-slate-200"]}>
+<li class="border-l-2 pl-4" class:list={[pub.tag ? "border-brand-600" : pub.pmcid ? "border-accent-500" : "border-slate-200"]}>
   <div class="flex gap-4">
     {pub.cover && (
       <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" class="shrink-0">
@@ -41,8 +42,8 @@ const pt = pub.pmcid
       </a>
     )}
     <div class="min-w-0 flex-1">
-      {badge && (
-        <span class="inline-flex items-center gap-1 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 rounded-full px-2.5 py-0.5">★ {badge}</span>
+      {pub.tag && (
+        <span class="inline-flex items-center mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 rounded-full px-2.5 py-0.5">{pub.tag}</span>
       )}
       <p class="text-sm text-slate-700 leading-relaxed" set:html={highlight(pub.citation)} />
       <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">

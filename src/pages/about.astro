@@ -44,8 +44,6 @@ const SELECTED_DOIS = [
   "10.1093/ofid/ofaf329",      // OFID — neonatal invasive candidiasis
   "10.1136/bmj-2023-076045",   // The BMJ — anticholinergic burden & CV events
 ];
-// The two database-infrastructure papers Daniel flags as landmark work.
-const LANDMARK_DOIS = new Set(["10.2147/clep.s553894", "10.2147/clep.s426485"]);
 const byDoi = new Map((pubs as Pub[]).map((p) => [p.doi.toLowerCase(), p]));
 const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[])
   .slice()
@@ -160,9 +158,7 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
       </div>
       <p class="mt-1 text-sm text-slate-500">{pubs.length} publications · {metrics.citations} citations · h-index {metrics.hIndex} <span class="text-slate-400">(Google Scholar)</span></p>
       <ol class="mt-5 space-y-5">
-        {selected.map((p) => (
-          <PublicationItem pub={p} badge={LANDMARK_DOIS.has(p.doi.toLowerCase()) ? "Landmark paper" : undefined} />
-        ))}
+        {selected.map((p) => <PublicationItem pub={p} />)}
       </ol>
     </section>
   </div>

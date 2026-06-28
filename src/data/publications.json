@@ -141,7 +141,8 @@
     "pmcid": "PMC12664420",
     "ris": "TY  - JOUR\r\nTI  - Taiwan’s National Health Insurance Research Database (NHIRD): in the Era of Artificial Intelligence, Causal Inference, and Data Security\r\nAU  - Hsieh, Cheng-Yang\r\nAU  - Shao, Shih-Chieh\r\nAU  - Sung, Sheng-Feng\r\nAU  - Hsieh, Miyuki Hsing-Chun\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Lin, Swu-Jane\r\nAU  - Lai, Edward\r\nJO  - Clinical Epidemiology\r\nT2  - Clinical Epidemiology\r\nPY  - 2025\r\nVL  - Volume 17\r\nSP  - 967\r\nEP  - 981\r\nDO  - 10.2147/clep.s553894\r\nUR  - https://doi.org/10.2147/clep.s553894\r\nAN  - 41321359\r\nER  - \r\n",
     "date": 20251100,
-    "cover": "papers/nhird.jpg"
+    "cover": "papers/nhird.jpg",
+    "tag": "Data Infrastructure"
   },
   {
     "year": "2026",
@@ -249,7 +250,8 @@
     "pmcid": "",
     "ris": "TY  - JOUR\r\nTI  - Antipsychotic therapy and suicide risk in patients with treatment-resistant depression: target trial emulation framework study\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Yang, Avery Shuei-He\r\nAU  - Wong, Zi-Xuan\r\nAU  - Chuang, Albert Tzu-Ming\r\nAU  - Cheng, Michael Chun-Yuan\r\nAU  - Shen, Chin-Yao\r\nAU  - Shao, Shih-Chieh\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - The British Journal of Psychiatry\r\nT2  - The British Journal of Psychiatry\r\nPY  - 2025\r\nVL  - 228\r\nIS  - 1\r\nSP  - 37\r\nEP  - 45\r\nDO  - 10.1192/bjp.2024.283\r\nUR  - https://doi.org/10.1192/bjp.2024.283\r\nAN  - 40197402\r\nER  - \r\n",
     "date": 20250408,
-    "cover": "papers/trd-ap.jpg"
+    "cover": "papers/trd-ap.jpg",
+    "tag": "Methodology"
   },
   {
     "year": "2025",
@@ -309,7 +311,8 @@
     "pmcid": "PMC10749544",
     "ris": "TY  - JOUR\r\nTI  - Cross-Regional Data Initiative for the Assessment and Development of Treatment for Neurological and Mental Disorders\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Bell, J Simon\r\nAU  - Abtahi, Shahab\r\nAU  - Baak, Brenda\r\nAU  - Bazelier, Marloes\r\nAU  - Brauer, Ruth\r\nAU  - Chan, Adrienne\r\nAU  - Chan, Esther\r\nAU  - Chen, Haoqian\r\nAU  - Chui, Celine\r\nAU  - Cook, Sharon\r\nAU  - Crystal, Stephen\r\nAU  - Gandhi, Poonam\r\nAU  - Hartikainen, Sirpa\r\nAU  - Ho, Frederick\r\nAU  - Hsu, Shao-Ti\r\nAU  - Ilomäki, Jenni\r\nAU  - Kim, Ju Hwan\r\nAU  - Klungel, Olaf\r\nAU  - Koponen, Marjaana\r\nAU  - Lau, Wallis\r\nAU  - Lau, Kui\r\nAU  - Lum, Terry\r\nAU  - Luo, Hao\r\nAU  - Man, Kenneth\r\nAU  - Pell, Jill\r\nAU  - Setoguchi, Soko\r\nAU  - Shao, Shih-Chieh\r\nAU  - Shen, Chin-Yao\r\nAU  - Shin, Ju-Young\r\nAU  - Souverein, Patrick\r\nAU  - Tolppanen, Anna-Maija\r\nAU  - Wei, Li\r\nAU  - Wong, Ian\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - Clinical Epidemiology\r\nT2  - Clinical Epidemiology\r\nPY  - 2023\r\nVL  - Volume 15\r\nSP  - 1241\r\nEP  - 1252\r\nDO  - 10.2147/clep.s426485\r\nUR  - https://doi.org/10.2147/clep.s426485\r\nAN  - 38146486\r\nER  - \r\n",
     "date": 20231200,
-    "cover": "papers/neurogen.jpg"
+    "cover": "papers/neurogen.jpg",
+    "tag": "Data Infrastructure"
   },
   {
     "year": "2023",
