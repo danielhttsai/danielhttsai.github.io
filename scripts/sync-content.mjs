@@ -223,8 +223,8 @@ function openize(src) {
   let s = src;
   s = s.replaceAll('from "../../../', 'from "../../');
   s = s.replace(/^\s*import \{ WORKER_URL \} from "\.\.\/\.\.\/data\/site-config";\s*\n/m, "");
-  s = s.replaceAll("${base}/members/templates/", "${base}/tools/");
-  s = s.replaceAll("${base}/members/", "${base}/tools/");
+  s = s.replaceAll("${base}/members/templates/", "${base}/tools/protocol-generator/");
+  s = s.replaceAll("${base}/members/", "${base}/tools/protocol-generator/");
   s = s.replace(/<div data-state="loading"[\s\S]*?<div data-state="ready" class="hidden (grid[^"]*)">/, '<div data-state="ready" class="$1">');
   s = s.replace(/\s*<button type="button" data-action="send-aspen"[\s\S]*?<\/button>/, "");
   s = s.replace(/\s*<!-- Send-to-AsPEN modal[\s\S]*?<\/div>\s*\n(\s*<\/section>)/, "\n$1");
