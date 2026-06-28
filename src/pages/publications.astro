@@ -15,7 +15,6 @@ const all = (pubs as (Pub & { date?: number; pmcid?: string })[]).slice().sort((
 const years = [...new Set(all.map((p) => p.year))].sort((a, b) => b.localeCompare(a));
 const byYear = years.map((y) => ({ year: y, items: all.filter((p) => p.year === y) }));
 
-const hasEqual = all.some((p) => p.citation.includes("*"));
 ---
 
 <BaseLayout
@@ -39,7 +38,6 @@ const hasEqual = all.some((p) => p.citation.includes("*"));
       <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-accent-500"></span> Free full text on PubMed Central</span>
       <span class="mx-3">·</span>
       <span>Cite downloads a RIS file</span>
-      {hasEqual && <><span class="mx-3">·</span><span>* equal contribution</span></>}
     </p>
 
     {byYear.map((grp) => (
