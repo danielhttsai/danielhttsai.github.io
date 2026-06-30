@@ -34,6 +34,15 @@ const tools = [
     tag: "Design Infrastructure",
   },
   {
+    name: "TARGET Checker",
+    blurb:
+      "The flip side of the generator: paste or upload an existing protocol and get an AI-assisted, item-by-item read on whether it conforms to the TARGET reporting guideline for target-trial emulations — with evidence and fixes for anything missing.",
+    href: `${base}/tools/target-checker`,
+    cta: "Open the checker",
+    external: false,
+    tag: "Design Infrastructure",
+  },
+  {
     name: "ACB Calculator",
     blurb:
       "Scores a patient's total anticholinergic burden across 6 international scales and quantifies 30-day risk of cardiovascular events, pneumonia, and out-of-hospital cardiac arrest — with OCR drug-history capture and printable reports. Built on three Taiwan NHI studies (BMJ, Clin Epidemiol, Eur Heart J).",
@@ -182,7 +191,7 @@ const tools = [
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
     <h2 class="text-2xl font-bold text-slate-900">RWE tools</h2>
     <p class="mt-2 text-slate-600 max-w-2xl">Open-access utilities I build and maintain for real-world-evidence research — each runs right here on this site.</p>
-    <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {tools.map((t) => (
         <a
           href={t.href}

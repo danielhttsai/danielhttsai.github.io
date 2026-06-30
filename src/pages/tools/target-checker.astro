@@ -1,0 +1,288 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { TARGET_CHECKLIST, TARGET_CITATION, TARGET_URL } from "../../data/target";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// ── AI backend ────────────────────────────────────────────────
+// Paste the deployed Cloudflare Worker URL here (see
+// workers/target-checker/README.md). Until it is set, the page shows a
+// "being configured" notice instead of the checker.
+const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← paste your Worker URL here
+---
+
+<BaseLayout
+  title="TARGET Checker — Daniel Hsiang-Te Tsai"
+  description="Paste a protocol and check, item by item, whether it conforms to the TARGET reporting guideline for observational studies emulating a target trial. Free, AI-assisted."
+>
+  <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
+    <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-14">
+      <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">RWE Tools</p>
+      <h1 class="text-4xl md:text-5xl font-bold text-slate-900">TARGET Checker</h1>
+      <p class="mt-4 text-lg text-slate-600 max-w-3xl">
+        Paste or upload a protocol and check it, item by item, against the
+        <strong>TARGET</strong> reporting guideline for observational studies that emulate a target trial.
+        The flip side of the Protocol Generator: instead of drafting a TARGET-shaped protocol, audit one you already have.
+      </p>
+      <p class="mt-3 text-sm text-slate-500 max-w-3xl">
+        TARGET = {TARGET_CITATION} Full checklist at
+        <a href={TARGET_URL} target="_blank" rel="noopener" class="text-brand-700 font-semibold hover:underline">target-guideline.org</a>.
+      </p>
+    </div>
+  </header>
+
+  <section class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+    <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+      <a class="text-brand-700 hover:underline font-semibold" href={`${base}/tools`}>← All RWE tools</a>
+      <a class="text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>Protocol Generator →</a>
+    </div>
+
+    {WORKER_URL === "" ? (
+      <div class="rounded-2xl border border-amber-300 bg-amber-50 p-6">
+        <h2 class="text-lg font-bold text-amber-900">AI checker is being set up</h2>
+        <p class="mt-2 text-sm text-amber-800 leading-relaxed">
+          The TARGET checker is almost ready — the AI backend just needs to be connected. In the meantime, the
+          <a href={`${base}/tools/protocol-generator`} class="font-semibold underline">Protocol Generator</a> can draft a
+          TARGET-shaped protocol (and export the matching TARGET checklist) for you.
+        </p>
+      </div>
+    ) : (
+      <>
+        <!-- Input -->
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-lg font-bold text-slate-900">Your protocol</h2>
+            <label class="inline-flex items-center gap-2 text-sm font-semibold text-brand-700 cursor-pointer hover:underline">
+              <span>⬆ Upload Word / PDF</span>
+              <input id="file" type="file" accept=".docx,.pdf" class="hidden" />
+            </label>
+          </div>
+          <p id="filemsg" class="text-xs text-slate-500 hidden"></p>
+          <textarea id="text" rows="12"
+            class="w-full rounded-xl border border-slate-300 p-4 text-sm leading-relaxed focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+            placeholder="Paste your protocol or manuscript text here (or upload a .docx / .pdf above)…"></textarea>
+          <div class="flex flex-wrap items-center gap-3">
+            <button id="check"
+              class="rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 disabled:cursor-not-allowed transition">
+              Check against TARGET
+            </button>
+            <button id="clear" class="text-sm text-slate-500 hover:text-slate-800">Clear</button>
+            <span id="status" class="text-sm text-slate-500"></span>
+          </div>
+          <p class="text-xs text-slate-500 leading-relaxed border-t border-slate-100 pt-3">
+            ⓘ Checked by a free AI model (Google Gemini). Text is sent to Google for analysis and is not stored by this
+            site, but <strong>please don't paste confidential or unpublished-sensitive material</strong>. Results are
+            AI-generated guidance to help self-audit reporting completeness — not a substitute for the official TARGET
+            statement or peer review.
+          </p>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="hidden space-y-6">
+          <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 class="text-lg font-bold text-slate-900">TARGET conformance</h2>
+                <p id="summary" class="mt-1 text-sm text-slate-600 leading-relaxed"></p>
+              </div>
+              <button id="download" class="shrink-0 rounded-xl border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50">⬇ Download report (.md)</button>
+            </div>
+            <div id="tally" class="mt-4 flex flex-wrap gap-2 text-xs font-semibold"></div>
+            <p id="trunc" class="mt-3 text-xs text-amber-700 hidden">⚠ The document was long and was truncated before analysis; later sections may be under-assessed.</p>
+          </div>
+          <div id="items" class="space-y-6"></div>
+        </div>
+      </>
+    )}
+  </section>
+
+  {WORKER_URL !== "" && (
+    <script is:inline define:vars={{ WORKER_URL, CHECKLIST: TARGET_CHECKLIST, CITATION: TARGET_CITATION }}>
+      const MAMMOTH = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.9.0/mammoth.browser.min.js";
+      const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+      // id -> { section, label }
+      const FLAT = {};
+      for (const sec of CHECKLIST) for (const it of sec.items) FLAT[it.id] = { section: sec.section, label: it.label };
+
+      const $ = (id) => document.getElementById(id);
+      const textEl = $("text"), fileEl = $("file"), checkBtn = $("check"), clearBtn = $("clear");
+      const statusEl = $("status"), fileMsg = $("filemsg");
+      const resultsEl = $("results"), summaryEl = $("summary"), tallyEl = $("tally"), itemsEl = $("items"), truncEl = $("trunc");
+      let lastReport = null;
+
+      const setStatus = (msg, isErr) => { statusEl.textContent = msg || ""; statusEl.className = "text-sm " + (isErr ? "text-red-600" : "text-slate-500"); };
+
+      function loadScript(src) {
+        return new Promise((res, rej) => {
+          if (document.querySelector(`script[src="${src}"]`)) return res();
+          const s = document.createElement("script");
+          s.src = src; s.onload = () => res(); s.onerror = () => rej(new Error("Could not load " + src));
+          document.head.appendChild(s);
+        });
+      }
+
+      async function extractDocx(file) {
+        await loadScript(MAMMOTH);
+        const arrayBuffer = await file.arrayBuffer();
+        const r = await window.mammoth.extractRawText({ arrayBuffer });
+        return r.value || "";
+      }
+
+      async function extractPdf(file) {
+        await loadScript(PDFJS);
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+        const data = await file.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data }).promise;
+        let out = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const tc = await page.getTextContent();
+          out += tc.items.map((t) => t.str).join(" ") + "\n";
+        }
+        return out;
+      }
+
+      fileEl.addEventListener("change", async () => {
+        const file = fileEl.files && fileEl.files[0];
+        if (!file) return;
+        fileMsg.classList.remove("hidden");
+        fileMsg.textContent = "Reading " + file.name + "…";
+        try {
+          const name = file.name.toLowerCase();
+          let txt = "";
+          if (name.endsWith(".docx")) txt = await extractDocx(file);
+          else if (name.endsWith(".pdf")) txt = await extractPdf(file);
+          else throw new Error("Please choose a .docx or .pdf file.");
+          textEl.value = txt.trim();
+          fileMsg.textContent = "Loaded " + file.name + " (" + textEl.value.length.toLocaleString() + " characters). Review below, then check.";
+        } catch (e) {
+          fileMsg.textContent = "Couldn't read that file: " + (e && e.message ? e.message : e);
+        } finally {
+          fileEl.value = "";
+        }
+      });
+
+      const STATUS_META = {
+        met:     { label: "Met",     dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+        partial: { label: "Partial", dot: "bg-amber-500",   chip: "bg-amber-50 text-amber-700 border-amber-200" },
+        missing: { label: "Missing", dot: "bg-red-500",     chip: "bg-red-50 text-red-700 border-red-200" },
+        na:      { label: "N/A",     dot: "bg-slate-400",   chip: "bg-slate-50 text-slate-600 border-slate-200" },
+      };
+
+      function render(data) {
+        const verdicts = {};
+        for (const v of (data.items || [])) verdicts[v.id] = v;
+        const counts = { met: 0, partial: 0, missing: 0, na: 0 };
+
+        itemsEl.innerHTML = "";
+        for (const sec of CHECKLIST) {
+          const block = document.createElement("section");
+          block.className = "rounded-2xl border border-slate-200 bg-white p-6 shadow-sm";
+          const h = document.createElement("h3");
+          h.className = "text-sm font-extrabold uppercase tracking-widest text-brand-700 mb-4";
+          h.textContent = sec.section;
+          block.appendChild(h);
+
+          const ol = document.createElement("ol");
+          ol.className = "space-y-4";
+          for (const it of sec.items) {
+            const v = verdicts[it.id] || { status: "missing", evidence: "Not assessed.", suggestion: "" };
+            const st = STATUS_META[v.status] || STATUS_META.missing;
+            counts[v.status] = (counts[v.status] || 0) + 1;
+
+            const li = document.createElement("li");
+            li.className = "border-l-2 pl-4 " + (v.status === "met" ? "border-emerald-300" : v.status === "partial" ? "border-amber-300" : v.status === "na" ? "border-slate-200" : "border-red-300");
+            li.innerHTML =
+              '<div class="flex items-start justify-between gap-3">' +
+                '<p class="text-sm font-semibold text-slate-900"><span class="text-brand-700">' + it.id + '.</span> ' + escapeHtml(it.label) + '</p>' +
+                '<span class="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ' + st.chip + '"><span class="inline-block w-1.5 h-1.5 rounded-full ' + st.dot + '"></span>' + st.label + '</span>' +
+              '</div>' +
+              (v.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(v.evidence) + '</p>' : '') +
+              (v.suggestion && v.status !== "met" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(v.suggestion) + '</p>' : '');
+            ol.appendChild(li);
+          }
+          block.appendChild(ol);
+          itemsEl.appendChild(block);
+        }
+
+        const total = counts.met + counts.partial + counts.missing + counts.na;
+        const assessable = total - counts.na;
+        summaryEl.textContent = (data.summary || "") +
+          (data.summary ? " " : "") +
+          counts.met + " of " + (assessable || total) + " applicable items met.";
+        tallyEl.innerHTML =
+          chip("met", counts.met) + chip("partial", counts.partial) + chip("missing", counts.missing) + (counts.na ? chip("na", counts.na) : "");
+        truncEl.classList.toggle("hidden", !data.truncated);
+
+        lastReport = { data, counts };
+        resultsEl.classList.remove("hidden");
+        resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      function chip(status, n) {
+        const st = STATUS_META[status];
+        return '<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ' + st.chip + '"><span class="inline-block w-2 h-2 rounded-full ' + st.dot + '"></span>' + n + ' ' + st.label + '</span>';
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      async function check() {
+        const text = (textEl.value || "").trim();
+        if (text.length < 200) { setStatus("Please paste at least a few paragraphs (200+ characters).", true); return; }
+        checkBtn.disabled = true; setStatus("Checking against TARGET — this can take 10–20 seconds…");
+        try {
+          const r = await fetch(WORKER_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(data.error || ("Request failed (" + r.status + ")."));
+          setStatus("");
+          render(data);
+        } catch (e) {
+          setStatus(e && e.message ? e.message : "Something went wrong.", true);
+        } finally {
+          checkBtn.disabled = false;
+        }
+      }
+
+      function downloadReport() {
+        if (!lastReport) return;
+        const { data, counts } = lastReport;
+        const date = new Date().toISOString().slice(0, 10);
+        let md = "# TARGET conformance report\n\n";
+        md += "_Generated " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
+        if (data.summary) md += data.summary + "\n\n";
+        md += "**Tally:** " + counts.met + " met · " + counts.partial + " partial · " + counts.missing + " missing" + (counts.na ? " · " + counts.na + " N/A" : "") + "\n\n";
+        const verdicts = {};
+        for (const v of (data.items || [])) verdicts[v.id] = v;
+        for (const sec of CHECKLIST) {
+          md += "## " + sec.section + "\n\n";
+          for (const it of sec.items) {
+            const v = verdicts[it.id] || { status: "missing", evidence: "Not assessed.", suggestion: "" };
+            md += "- **" + it.id + ". " + it.label + "** — _" + (STATUS_META[v.status] || STATUS_META.missing).label + "_\n";
+            if (v.evidence) md += "  - Evidence: " + v.evidence + "\n";
+            if (v.suggestion && v.status !== "met") md += "  - Suggestion: " + v.suggestion + "\n";
+          }
+          md += "\n";
+        }
+        md += "---\n\nTARGET: " + CITATION + " https://target-guideline.org\n";
+        const blob = new Blob([md], { type: "text/markdown" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "TARGET-report-" + date + ".md";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      checkBtn.addEventListener("click", check);
+      clearBtn.addEventListener("click", () => { textEl.value = ""; fileMsg.classList.add("hidden"); resultsEl.classList.add("hidden"); setStatus(""); });
+      $("download").addEventListener("click", downloadReport);
+    </script>
+  )}
+</BaseLayout>

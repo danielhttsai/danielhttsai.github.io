@@ -79,5 +79,19 @@ const designs = [
         </a>
       ))}
     </div>
+
+    <a href={`${base}/tools/target-checker`}
+       class="group flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50/60 p-6 hover:shadow-md hover:border-brand-400 transition">
+      <div class="flex-1">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-brand-700 font-bold">Already have a protocol?</p>
+        <h2 class="mt-1 text-lg font-bold text-slate-900 group-hover:text-brand-700 transition">Check it against TARGET</h2>
+        <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+          The flip side of the generator. Paste or upload an existing protocol and get an AI-assisted, item-by-item
+          read on whether it conforms to the TARGET reporting guideline for target-trial emulations — with evidence and
+          fixes for anything missing.
+        </p>
+      </div>
+      <span class="shrink-0 text-sm font-semibold text-brand-700 group-hover:underline">Open the checker →</span>
+    </a>
   </section>
 </BaseLayout>

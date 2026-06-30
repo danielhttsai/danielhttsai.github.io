@@ -1,0 +1,8 @@
+name = "target-checker"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Optional variables. The API key is a SECRET — never put it here (see README).
+[vars]
+GEMINI_MODEL = "gemini-flash-latest"
+ALLOWED_ORIGIN = "https://danielhttsai.github.io"
