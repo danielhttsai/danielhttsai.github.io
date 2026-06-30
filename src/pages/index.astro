@@ -51,6 +51,15 @@ const tools = [
     external: false,
     tag: "RWE utility",
   },
+  {
+    name: "NHIRD Data Dictionary",
+    blurb:
+      "A searchable codebook for Taiwan's NHIRD and Health & Welfare Data Center datasets — variables, formats, and cross-dataset linkages, structured on the DIVERSE data-source framework.",
+    href: `${base}/tools/nhird-data-dictionary`,
+    cta: "Open the dictionary",
+    external: false,
+    tag: "Data Infrastructure",
+  },
 ];
 ---
 
@@ -173,7 +182,7 @@ const tools = [
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
     <h2 class="text-2xl font-bold text-slate-900">RWE tools</h2>
     <p class="mt-2 text-slate-600 max-w-2xl">Open-access utilities I build and maintain for real-world-evidence research — each runs right here on this site.</p>
-    <div class="mt-6 grid gap-6 md:grid-cols-3">
+    <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
       {tools.map((t) => (
         <a
           href={t.href}
