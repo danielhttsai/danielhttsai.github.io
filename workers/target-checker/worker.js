@@ -346,9 +346,16 @@ export default {
 
     if (!gemRes.ok) {
       const detail = await gemRes.text().catch(() => "");
-      // 429 from the free tier = daily/per-minute quota exhausted.
+      // 429 from the free tier — distinguish the per-DAY quota (wait for the
+      // reset) from a per-MINUTE rate limit (retry in a moment). Gemini's error
+      // body names the quota that was hit.
       if (gemRes.status === 429) {
-        return json({ error: "The free daily AI quota is used up. Please try again tomorrow (resets 00:00 UTC)." }, 429, origin);
+        const perDay = /per\s*day|PerDay|RequestsPerDay|GenerateContentPerDay/i.test(detail);
+        return json({
+          error: perDay
+            ? "The free daily Gemini quota is used up. It resets at midnight US Pacific Time (about 3 pm Taiwan time) — please try again then."
+            : "The AI is rate-limited right now (too many requests in a short window). Please wait a minute and try again.",
+        }, 429, origin);
       }
       if (RETRYABLE.has(gemRes.status)) {
         return json({ error: "The AI model is busy right now (overloaded). Please try again in a moment." }, 503, origin);
