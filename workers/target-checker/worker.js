@@ -61,6 +61,35 @@ const TARGET_ITEMS = [
   ["21", "Other information", "Conflicts of interest."],
 ];
 
+// HARPER protocol template (Wang SV et al, ISPE/ISPOR; PMID 36215113).
+// Kept in lock-step with src/data/harper.ts. HARPER pairs each methods element
+// with an operational-definition table (Tables 1-13) + a study design diagram.
+const HARPER_ITEMS = [
+  ["1", "Front matter", "Title page and study identifiers (title, version/date, registration, personnel/sponsor)."],
+  ["2", "Front matter", "Structured abstract / synopsis."],
+  ["3", "Front matter", "Amendments and updates log."],
+  ["4", "Front matter", "Milestones and timeline (Table 1)."],
+  ["5", "Rationale & objectives", "Rationale and background; scientific context and gap."],
+  ["6", "Rationale & objectives", "Research question and objectives framed as estimands (Table 2)."],
+  ["7.1", "Research methods", "Study design, named and justified."],
+  ["7.2", "Research methods", "Study design diagram (REQUIRED) showing time 0, time anchors, and assessment windows."],
+  ["7.3.1", "Research methods", "Time 0 and primary time anchors — operational definition (Table 3); eligibility-assignment-follow-up alignment."],
+  ["7.3.2", "Research methods", "Inclusion criteria — operational definitions with code lists/windows (Table 4)."],
+  ["7.3.3", "Research methods", "Exclusion criteria — operational definitions (Table 5)."],
+  ["7.4.1", "Research methods", "Exposure(s) — operational definitions: code lists, exposure windows, grace period (Table 6)."],
+  ["7.4.2", "Research methods", "Outcome(s) — operational definitions: code lists, validation, ascertainment window (Table 7)."],
+  ["7.4.3", "Research methods", "Follow-up — operational definition: start, end, censoring (Table 8)."],
+  ["7.4.4", "Research methods", "Covariates — operational definitions: confounders & effect modifiers with windows (Table 9)."],
+  ["7.5", "Research methods", "Data analysis plan incl. pre-specified sensitivity analyses (Tables 10-11)."],
+  ["7.6", "Research methods", "Data sources — metadata: provenance, setting, period, linkage, software (Table 12)."],
+  ["7.7", "Research methods", "Data management: extraction, transformation, derived variables."],
+  ["7.8", "Research methods", "Quality control: checks on data, code, and reproducibility."],
+  ["7.9", "Research methods", "Study size and feasibility — power/sample size or feasibility count (Table 13)."],
+  ["8", "Other information", "Limitations of the methods (confounding, misclassification, missing data, generalisability)."],
+  ["9", "Other information", "Protection of human subjects (ethics/IRB, data governance)."],
+  ["10", "Other information", "Reporting of adverse events (or why not applicable to secondary data)."],
+];
+
 // Planned analytical outputs a rigorous RWE protocol should mock up in advance
 // (shell tables + figure plans). The checker tests whether each is pre-specified.
 const DELIVERABLES = [
@@ -73,25 +102,22 @@ const DELIVERABLES = [
   ["Sensitivity-analysis outputs", "negative-control outcomes, E-value, or quantitative bias analysis"],
 ];
 
-const SYSTEM_PROMPT = `You are a methodological reviewer assessing whether a research protocol or manuscript conforms to the TARGET reporting guideline (Cashin AG, Hansford HJ, Hernán MA, Swanson SA, et al. "Transparent Reporting of Observational Studies Emulating a Target Trial: The TARGET Statement." JAMA 2025; PMID 40899949).
+const FRAMEWORKS = {
+  harper: {
+    name: "HARPER",
+    intro: 'the HARPER protocol template (HARmonized Protocol Template to Enhance Reproducibility; Wang SV et al., a joint ISPE/ISPOR task force good-practices report; Pharmacoepidemiol Drug Saf 2023, PMID 36215113). HARPER is a PROTOCOL template applied BEFORE a study runs — judge whether each element is PRESENT and adequately PRE-SPECIFIED with its operational-definition table, not whether results are reported',
+    emphasis: 'HARPER\'s distinctive requirements are a STUDY DESIGN DIAGRAM (7.2) and an OPERATIONAL-DEFINITION TABLE for time 0 (7.3.1), inclusion (7.3.2), exclusion (7.3.3), exposure (7.4.1), outcome (7.4.2), follow-up (7.4.3), and covariates (7.4.4) — typically code lists with measurement windows. Mark an item "partial" if the topic is discussed but the operational definition / code list / table is missing. Weigh these structured artifacts heavily.',
+    items: HARPER_ITEMS,
+  },
+  target: {
+    name: "TARGET",
+    intro: 'the TARGET reporting guideline (Cashin AG, Hansford HJ, Hernán MA, Swanson SA, et al. "Transparent Reporting of Observational Studies Emulating a Target Trial: The TARGET Statement." JAMA 2025; PMID 40899949)',
+    emphasis: 'Pay special attention to the target-trial-specific items (3, 6, 7a-7h, 16): explicit causal question, a specified target trial, the one-to-one emulation mapping, time-zero alignment / immortal-time bias, identifying assumptions, and an honest target-vs-emulation limitations appraisal. These are where target-trial emulations most often fall short.',
+    items: TARGET_ITEMS,
+  },
+};
 
-You will be given the full text of a study document. Judge EACH TARGET item below against the text and return a verdict.
-
-For every item, assign one status:
-- "met": the text clearly and substantively addresses the item.
-- "partial": the item is touched on but is vague, incomplete, or missing a key element.
-- "missing": the item is not addressed at all.
-- "na": genuinely not applicable to THIS document type (e.g. Results/Discussion items in a pre-study protocol that has not been run). Prefer "missing" over "na" unless the item truly cannot apply.
-
-Rules:
-- Judge SUBSTANCE, not keywords. A protocol that says "we adjust for confounders" without naming the identifying assumptions does NOT meet item 7g.
-- Be a strict but fair reviewer. Do not give credit for things that are merely implied.
-- "evidence": one short sentence — quote or closely paraphrase the part of the text that addresses the item, OR state plainly what is missing. Max ~30 words.
-- "suggestion": one concrete, actionable sentence on how to satisfy the item (only meaningful for partial/missing; for "met" you may give a brief refinement or leave a short confirmation). Max ~30 words.
-- Return a verdict for ALL items, in the order given, using the exact item ids.
-- Pay special attention to the target-trial-specific items (3, 6, 7a-7h, 16): explicit causal question, a specified target trial, the one-to-one emulation mapping, time-zero alignment / immortal-time bias, identifying assumptions, and an honest target-vs-emulation limitations appraisal. These are where target-trial emulations most often fall short.
-
-ALSO extract the study design so it can be drawn as a study-design diagram, in the "design" object:
+const SHARED_EXTRACTION = `ALSO extract the study design so it can be drawn as a study-design diagram, in the "design" object:
 - designType: the design in a few words (e.g. "Active-comparator new-user cohort", "Self-controlled case series", "Case-crossover", "Descriptive cohort").
 - population, exposure, comparator, outcome: short phrases. Use "—" where genuinely absent (e.g. no comparator in a descriptive or self-controlled design).
 - indexDate: how time zero (cohort entry / index date) is defined in one short phrase.
@@ -105,13 +131,46 @@ SEPARATELY, assess whether the protocol PRE-SPECIFIES the planned analytical out
 The deliverables (name | what it is):
 ${DELIVERABLES.map(([n, d]) => `${n} | ${d}`).join("\n")}
 
-The TARGET items (id | section | what it asks):
-${TARGET_ITEMS.map(([id, sec, label]) => `${id} | ${sec} | ${label}`).join("\n")}`;
+ALSO judge whether this study is a target-trial emulation — an observational study explicitly designed to emulate a specified hypothetical randomized trial (explicit "target trial" framing, an emulation table, or a deliberate one-to-one design-to-data mapping). Return targetTrialEmulation.likely (boolean) and a one-sentence reason. Judge this independently of which guideline is being checked.`;
+
+function buildSystemPrompt(fwKey) {
+  const fw = FRAMEWORKS[fwKey] || FRAMEWORKS.harper;
+  return `You are a methodological reviewer assessing whether a research protocol or manuscript conforms to ${fw.intro}.
+
+You will be given the full text of a study document. Judge EACH ${fw.name} item below against the text and return a verdict.
+
+For every item, assign one status:
+- "met": the text clearly and substantively addresses the item.
+- "partial": the item is touched on but is vague, incomplete, or missing a key element.
+- "missing": the item is not addressed at all.
+- "na": genuinely not applicable to THIS document type (e.g. results items in a pre-study protocol that has not been run). Prefer "missing" over "na" unless the item truly cannot apply.
+
+Rules:
+- Judge SUBSTANCE, not keywords. A document that says "we adjust for confounders" without specifying them does NOT fully satisfy a covariates item.
+- Be a strict but fair reviewer. Do not give credit for things that are merely implied.
+- "evidence": one short sentence — quote or closely paraphrase the part of the text that addresses the item, OR state plainly what is missing. Max ~30 words.
+- "suggestion": one concrete, actionable sentence on how to satisfy the item (for "met" you may give a brief refinement or confirmation). Max ~30 words.
+- Return a verdict for ALL items, in the order given, using the exact item ids.
+- ${fw.emphasis}
+
+${SHARED_EXTRACTION}
+
+The ${fw.name} items (id | section | what it asks):
+${fw.items.map(([id, sec, label]) => `${id} | ${sec} | ${label}`).join("\n")}`;
+}
 
 const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
     summary: { type: "string" },
+    targetTrialEmulation: {
+      type: "object",
+      properties: {
+        likely: { type: "boolean" },
+        reason: { type: "string" },
+      },
+      required: ["likely", "reason"],
+    },
     design: {
       type: "object",
       properties: {
@@ -168,7 +227,7 @@ const RESPONSE_SCHEMA = {
       },
     },
   },
-  required: ["summary", "design", "deliverables", "items"],
+  required: ["summary", "targetTrialEmulation", "design", "deliverables", "items"],
 };
 
 function corsHeaders(origin) {
@@ -244,11 +303,13 @@ export default {
       if (!ok) return json({ error: "Bot check failed. Please reload and try again." }, 403, origin);
     }
 
+    const framework = FRAMEWORKS[payload && payload.framework] ? payload.framework : "harper";
+
     const model = env.GEMINI_MODEL || DEFAULT_MODEL;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
 
     const geminiBody = {
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      system_instruction: { parts: [{ text: buildSystemPrompt(framework) }] },
       contents: [{ role: "user", parts: [{ text: "STUDY DOCUMENT TO ASSESS:\n\n" + text }] }],
       generationConfig: {
         temperature: 0.2,
@@ -308,6 +369,6 @@ export default {
       return json({ error: "The AI returned an unreadable result. Please try again." }, 502, origin);
     }
 
-    return json({ ...parsed, truncated }, 200, origin);
+    return json({ ...parsed, framework, truncated }, 200, origin);
   },
 };
