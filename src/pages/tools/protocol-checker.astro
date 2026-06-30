@@ -8,8 +8,11 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 // Deployed Cloudflare Worker URL (see workers/target-checker/README.md).
 const WORKER_URL = "https://target-checker.danielhttsai.workers.dev";
 
-// PHDc logo, stamped onto the downloadable Word report.
+// PHDc logo, stamped onto the downloadable reports. LOGO_URL is same-origin
+// (for the Word export's binary fetch); LOGO_ABS is absolute so the Markdown
+// report's image renders wherever the .md is opened.
 const LOGO_URL = `${base}/images/networks/phdc.png`;
+const LOGO_ABS = new URL(LOGO_URL, Astro.site ?? "https://danielhttsai.github.io/").href;
 
 const fwList = Object.values(FRAMEWORKS);
 ---
@@ -161,7 +164,7 @@ const fwList = Object.values(FRAMEWORKS);
   </section>
 
   {WORKER_URL !== "" && (
-    <script is:inline define:vars={{ WORKER_URL, FRAMEWORKS, DEFAULT_FRAMEWORK, LOGO_URL }}>
+    <script is:inline define:vars={{ WORKER_URL, FRAMEWORKS, DEFAULT_FRAMEWORK, LOGO_URL, LOGO_ABS }}>
       const MAMMOTH = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.9.0/mammoth.browser.min.js";
       const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
       const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -450,7 +453,7 @@ const fwList = Object.values(FRAMEWORKS);
         if (!lastReport) return;
         const { data, counts, fw } = lastReport;
         const date = new Date().toISOString().slice(0, 10);
-        let md = "# " + fw.name + " conformance report\n\n_Generated " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
+        let md = "![Population Health Data Center](" + LOGO_ABS + ")\n\n# " + fw.name + " conformance report\n\n_Population Health Data Center · generated " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
         if (data.summary) md += data.summary + "\n\n";
         md += "**Tally:** " + counts.met + " met · " + counts.partial + " partial · " + counts.missing + " missing" + (counts.na ? " · " + counts.na + " N/A" : "") + "\n\n";
         const d = data.design;
