@@ -426,8 +426,10 @@ const fwList = Object.values(FRAMEWORKS);
       // ── Network (with retry on transient overload) ──
       async function postCheck(text, framework) {
         let lastErr = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          if (attempt > 0) { setStatus("The AI model was busy — retrying (" + attempt + ")…"); await new Promise((s) => setTimeout(s, 1500)); }
+        // One retry only — every attempt costs a request against the free daily
+        // quota (the worker also retries transient errors server-side).
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (attempt > 0) { setStatus("The AI model was busy — retrying…"); await new Promise((s) => setTimeout(s, 1500)); }
           let r;
           try { r = await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, framework }) }); }
           catch (e) { lastErr = new Error("Network error — check your connection and try again."); continue; }

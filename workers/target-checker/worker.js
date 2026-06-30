@@ -321,11 +321,15 @@ export default {
     // Gemini's free tier sometimes returns 503 (model overloaded) or 500/502
     // under load. These are transient — retry a few times with backoff before
     // giving up. 429 (quota) is NOT retried; it won't clear in seconds.
+    // Keep retries LOW: every retry is another real request against the free
+    // daily quota. One retry (2 attempts total) is enough for a transient blip;
+    // the browser adds at most one more. (Was 4 — that, times the client's
+    // retries, could burn ~12 requests per click when Gemini was flaky.)
     const RETRYABLE = new Set([500, 502, 503]);
     let gemRes = null;
     let netError = false;
-    for (let attempt = 0; attempt < 4; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 1200));
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 1200));
       try {
         gemRes = await fetch(url, {
           method: "POST",
