@@ -79,6 +79,12 @@ Rules:
 - Return a verdict for ALL items, in the order given, using the exact item ids.
 - Pay special attention to the target-trial-specific items (3, 6, 7a-7h, 16): explicit causal question, a specified target trial, the one-to-one emulation mapping, time-zero alignment / immortal-time bias, identifying assumptions, and an honest target-vs-emulation limitations appraisal. These are where target-trial emulations most often fall short.
 
+ALSO extract the study design so it can be drawn as a study-design diagram, in the "design" object:
+- designType: the design in a few words (e.g. "Active-comparator new-user cohort", "Self-controlled case series", "Case-crossover", "Descriptive cohort").
+- population, exposure, comparator, outcome: short phrases. Use "—" where genuinely absent (e.g. no comparator in a descriptive or self-controlled design).
+- indexDate: how time zero (cohort entry / index date) is defined in one short phrase.
+- timeline: the key analysis windows on a DAY axis where day 0 = the index date. Use NEGATIVE days for time before index and POSITIVE for time after. For each window give label, kind (one of: washout, covariate, exposure, followup, grace, outcome), startDay, endDay, and an optional short note. Infer durations from the text — e.g. "365-day washout" → start -365, end 0; "180-day covariate look-back" → -180 to 0; "5-year follow-up" → 0 to 1825; "30-day grace period" → 0 to 30. If a duration is not stated, choose a reasonable default and set note to "assumed". Always include an eligibility/washout window before index and a follow-up window after index where the design has them. Order windows chronologically by startDay.
+
 The TARGET items (id | section | what it asks):
 ${TARGET_ITEMS.map(([id, sec, label]) => `${id} | ${sec} | ${label}`).join("\n")}`;
 
@@ -86,6 +92,32 @@ const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
     summary: { type: "string" },
+    design: {
+      type: "object",
+      properties: {
+        designType: { type: "string" },
+        population: { type: "string" },
+        exposure: { type: "string" },
+        comparator: { type: "string" },
+        outcome: { type: "string" },
+        indexDate: { type: "string" },
+        timeline: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              kind: { type: "string", enum: ["washout", "covariate", "exposure", "followup", "grace", "outcome"] },
+              startDay: { type: "number" },
+              endDay: { type: "number" },
+              note: { type: "string" },
+            },
+            required: ["label", "kind", "startDay", "endDay"],
+          },
+        },
+      },
+      required: ["designType", "population", "exposure", "comparator", "outcome", "indexDate", "timeline"],
+    },
     items: {
       type: "array",
       items: {
@@ -100,7 +132,7 @@ const RESPONSE_SCHEMA = {
       },
     },
   },
-  required: ["summary", "items"],
+  required: ["summary", "design", "items"],
 };
 
 function corsHeaders(origin) {
@@ -189,15 +221,30 @@ export default {
       },
     };
 
-    let gemRes;
-    try {
-      gemRes = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(geminiBody),
-      });
-    } catch (e) {
-      return json({ error: "Could not reach the AI service. Try again shortly." }, 502, origin);
+    // Gemini's free tier sometimes returns 503 (model overloaded) or 500/502
+    // under load. These are transient — retry a few times with backoff before
+    // giving up. 429 (quota) is NOT retried; it won't clear in seconds.
+    const RETRYABLE = new Set([500, 502, 503]);
+    let gemRes = null;
+    let netError = false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 1200));
+      try {
+        gemRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(geminiBody),
+        });
+      } catch (e) {
+        netError = true;
+        continue; // transient network hiccup — retry
+      }
+      netError = false;
+      if (gemRes.ok || !RETRYABLE.has(gemRes.status)) break; // done or non-retryable
+    }
+
+    if (netError || !gemRes) {
+      return json({ error: "Could not reach the AI service. Please try again shortly." }, 502, origin);
     }
 
     if (!gemRes.ok) {
@@ -206,7 +253,10 @@ export default {
       if (gemRes.status === 429) {
         return json({ error: "The free daily AI quota is used up. Please try again tomorrow (resets 00:00 UTC)." }, 429, origin);
       }
-      return json({ error: "The AI service returned an error (" + gemRes.status + ")." , detail: detail.slice(0, 300) }, 502, origin);
+      if (RETRYABLE.has(gemRes.status)) {
+        return json({ error: "The AI model is busy right now (overloaded). Please try again in a moment." }, 503, origin);
+      }
+      return json({ error: "The AI service returned an error (" + gemRes.status + ").", detail: detail.slice(0, 300) }, 502, origin);
     }
 
     const data = await gemRes.json().catch(() => null);

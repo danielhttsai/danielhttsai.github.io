@@ -13,16 +13,16 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
 
 <BaseLayout
   title="TARGET Checker — Daniel Hsiang-Te Tsai"
-  description="Paste a protocol and check, item by item, whether it conforms to the TARGET reporting guideline for observational studies emulating a target trial. Free, AI-assisted."
+  description="Upload a protocol and check, item by item, whether it conforms to the TARGET reporting guideline for observational studies emulating a target trial — with an auto-drawn study-design scheme. Free, AI-assisted."
 >
   <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
     <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-14">
       <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">RWE Tools</p>
       <h1 class="text-4xl md:text-5xl font-bold text-slate-900">TARGET Checker</h1>
       <p class="mt-4 text-lg text-slate-600 max-w-3xl">
-        Paste or upload a protocol and check it, item by item, against the
-        <strong>TARGET</strong> reporting guideline for observational studies that emulate a target trial.
-        The flip side of the Protocol Generator: instead of drafting a TARGET-shaped protocol, audit one you already have.
+        Upload a protocol and check it, item by item, against the
+        <strong>TARGET</strong> reporting guideline for observational studies that emulate a target trial — and see an
+        auto-drawn study-design scheme. The flip side of the Protocol Generator: audit a protocol you already have.
       </p>
       <p class="mt-3 text-sm text-slate-500 max-w-3xl">
         TARGET = {TARGET_CITATION} Full checklist at
@@ -50,18 +50,33 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
       <>
         <!-- Input -->
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <h2 class="text-lg font-bold text-slate-900">Your protocol</h2>
-            <label class="inline-flex items-center gap-2 text-sm font-semibold text-brand-700 cursor-pointer hover:underline">
-              <span>⬆ Upload Word / PDF</span>
-              <input id="file" type="file" accept=".docx,.pdf" class="hidden" />
-            </label>
+          <h2 class="text-lg font-bold text-slate-900">Your protocol</h2>
+
+          <label id="drop" for="file"
+            class="flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 transition">
+            <span class="text-3xl">📄</span>
+            <span class="text-sm font-semibold text-slate-700">Upload your protocol</span>
+            <span class="text-xs text-slate-500">Word (.docx), Excel (.xlsx), or PDF — click to choose a file</span>
+            <input id="file" type="file" accept=".docx,.xlsx,.pdf" class="hidden" />
+          </label>
+
+          <div id="filechip" class="hidden items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
+            <div class="min-w-0">
+              <p id="filename" class="text-sm font-semibold text-slate-800 truncate"></p>
+              <p id="filemeta" class="text-xs text-slate-500"></p>
+            </div>
+            <button id="removefile" class="shrink-0 text-sm font-semibold text-slate-500 hover:text-red-600">Remove ✕</button>
           </div>
-          <p id="filemsg" class="text-xs text-slate-500 hidden"></p>
-          <textarea id="text" rows="12"
-            class="w-full rounded-xl border border-slate-300 p-4 text-sm leading-relaxed focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
-            placeholder="Paste your protocol or manuscript text here (or upload a .docx / .pdf above)…"></textarea>
-          <div class="flex flex-wrap items-center gap-3">
+          <p id="fileerr" class="text-xs text-red-600 hidden"></p>
+
+          <details id="pastewrap">
+            <summary class="text-xs font-semibold text-brand-700 cursor-pointer hover:underline">or paste the text instead</summary>
+            <textarea id="text" rows="10"
+              class="mt-3 w-full rounded-xl border border-slate-300 p-4 text-sm leading-relaxed focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+              placeholder="Paste your protocol or manuscript text here…"></textarea>
+          </details>
+
+          <div class="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
             <button id="check"
               class="rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 disabled:cursor-not-allowed transition">
               Check against TARGET
@@ -69,9 +84,9 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
             <button id="clear" class="text-sm text-slate-500 hover:text-slate-800">Clear</button>
             <span id="status" class="text-sm text-slate-500"></span>
           </div>
-          <p class="text-xs text-slate-500 leading-relaxed border-t border-slate-100 pt-3">
+          <p class="text-xs text-slate-500 leading-relaxed">
             ⓘ Checked by a free AI model (Google Gemini). Text is sent to Google for analysis and is not stored by this
-            site, but <strong>please don't paste confidential or unpublished-sensitive material</strong>. Results are
+            site, but <strong>please don't upload confidential or unpublished-sensitive material</strong>. Results are
             AI-generated guidance to help self-audit reporting completeness — not a substitute for the official TARGET
             statement or peer review.
           </p>
@@ -87,9 +102,23 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
               </div>
               <button id="download" class="shrink-0 rounded-xl border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50">⬇ Download report (.md)</button>
             </div>
-            <div id="tally" class="mt-4 flex flex-wrap gap-2 text-xs font-semibold"></div>
+            <div id="bar" class="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100"></div>
+            <div id="tally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
             <p id="trunc" class="mt-3 text-xs text-amber-700 hidden">⚠ The document was long and was truncated before analysis; later sections may be under-assessed.</p>
           </div>
+
+          <!-- Study design scheme -->
+          <div id="scheme" class="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-bold text-slate-900">Study design scheme</h2>
+            <p class="mt-1 text-xs text-slate-500">Reconstructed by the AI from the text — verify against your protocol; assumed durations are the AI's best guess.</p>
+            <dl id="designgrid" class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3"></dl>
+            <div class="mt-5 overflow-x-auto">
+              <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Timeline (days relative to index date)</p>
+              <div id="timeline"></div>
+              <div id="legend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
+            </div>
+          </div>
+
           <div id="items" class="space-y-6"></div>
         </div>
       </>
@@ -101,18 +130,17 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
       const MAMMOTH = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.9.0/mammoth.browser.min.js";
       const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
       const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
-      // id -> { section, label }
-      const FLAT = {};
-      for (const sec of CHECKLIST) for (const it of sec.items) FLAT[it.id] = { section: sec.section, label: it.label };
+      const SHEETJS = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
 
       const $ = (id) => document.getElementById(id);
-      const textEl = $("text"), fileEl = $("file"), checkBtn = $("check"), clearBtn = $("clear");
-      const statusEl = $("status"), fileMsg = $("filemsg");
-      const resultsEl = $("results"), summaryEl = $("summary"), tallyEl = $("tally"), itemsEl = $("items"), truncEl = $("trunc");
-      let lastReport = null;
+      const drop = $("drop"), fileEl = $("file"), fileChip = $("filechip"), fileNameEl = $("filename"), fileMetaEl = $("filemeta"), removeFile = $("removefile"), fileErr = $("fileerr");
+      const textEl = $("text"), checkBtn = $("check"), clearBtn = $("clear"), statusEl = $("status");
+      const resultsEl = $("results"), summaryEl = $("summary"), tallyEl = $("tally"), barEl = $("bar"), itemsEl = $("items"), truncEl = $("trunc");
+      const schemeEl = $("scheme"), designGrid = $("designgrid"), timelineEl = $("timeline"), legendEl = $("legend");
+      let loadedText = "", loadedName = "", lastReport = null;
 
       const setStatus = (msg, isErr) => { statusEl.textContent = msg || ""; statusEl.className = "text-sm " + (isErr ? "text-red-600" : "text-slate-500"); };
+      const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
       function loadScript(src) {
         return new Promise((res, rej) => {
@@ -123,53 +151,128 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
         });
       }
 
+      // ── File extraction (kept off-screen; we never dump raw text back) ──
       async function extractDocx(file) {
         await loadScript(MAMMOTH);
-        const arrayBuffer = await file.arrayBuffer();
-        const r = await window.mammoth.extractRawText({ arrayBuffer });
+        const r = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
         return r.value || "";
       }
-
+      async function extractXlsx(file) {
+        await loadScript(SHEETJS);
+        const wb = window.XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
+        return wb.SheetNames.map((n) => n + "\n" + window.XLSX.utils.sheet_to_csv(wb.Sheets[n])).join("\n\n");
+      }
       async function extractPdf(file) {
         await loadScript(PDFJS);
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-        const data = await file.arrayBuffer();
-        const pdf = await window.pdfjsLib.getDocument({ data }).promise;
+        const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
         let out = "";
         for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const tc = await page.getTextContent();
+          const tc = await (await pdf.getPage(i)).getTextContent();
           out += tc.items.map((t) => t.str).join(" ") + "\n";
         }
         return out;
       }
 
       fileEl.addEventListener("change", async () => {
-        const file = fileEl.files && fileEl.files[0];
-        if (!file) return;
-        fileMsg.classList.remove("hidden");
-        fileMsg.textContent = "Reading " + file.name + "…";
+        const f = fileEl.files && fileEl.files[0];
+        if (!f) return;
+        fileErr.classList.add("hidden"); setStatus("");
+        const name = f.name.toLowerCase();
+        drop.classList.add("opacity-50", "pointer-events-none");
+        fileMetaEl.textContent = "Reading " + f.name + "…";
+        fileNameEl.textContent = "📄 " + f.name;
+        fileChip.classList.remove("hidden"); fileChip.classList.add("flex");
+        drop.classList.add("hidden");
         try {
-          const name = file.name.toLowerCase();
           let txt = "";
-          if (name.endsWith(".docx")) txt = await extractDocx(file);
-          else if (name.endsWith(".pdf")) txt = await extractPdf(file);
-          else throw new Error("Please choose a .docx or .pdf file.");
-          textEl.value = txt.trim();
-          fileMsg.textContent = "Loaded " + file.name + " (" + textEl.value.length.toLocaleString() + " characters). Review below, then check.";
+          if (name.endsWith(".docx")) txt = await extractDocx(f);
+          else if (name.endsWith(".xlsx")) txt = await extractXlsx(f);
+          else if (name.endsWith(".pdf")) txt = await extractPdf(f);
+          else throw new Error("Please choose a .docx, .xlsx, or .pdf file.");
+          txt = (txt || "").trim();
+          if (txt.length < 200) throw new Error("Only " + txt.length + " characters of text could be read. If this is a scanned PDF, paste the text instead.");
+          loadedText = txt; loadedName = f.name;
+          fileMetaEl.textContent = txt.length.toLocaleString() + " characters extracted · ready to check";
         } catch (e) {
-          fileMsg.textContent = "Couldn't read that file: " + (e && e.message ? e.message : e);
+          loadedText = ""; loadedName = "";
+          fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
+          drop.classList.remove("hidden");
+          fileErr.textContent = (e && e.message) ? e.message : String(e); fileErr.classList.remove("hidden");
         } finally {
+          drop.classList.remove("opacity-50", "pointer-events-none");
           fileEl.value = "";
         }
       });
 
+      removeFile.addEventListener("click", () => {
+        loadedText = ""; loadedName = "";
+        fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
+        drop.classList.remove("hidden");
+      });
+
+      const getInputText = () => (loadedText ? loadedText : (textEl.value || "").trim());
+
+      // ── Rendering ──
       const STATUS_META = {
-        met:     { label: "Met",     dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-        partial: { label: "Partial", dot: "bg-amber-500",   chip: "bg-amber-50 text-amber-700 border-amber-200" },
-        missing: { label: "Missing", dot: "bg-red-500",     chip: "bg-red-50 text-red-700 border-red-200" },
-        na:      { label: "N/A",     dot: "bg-slate-400",   chip: "bg-slate-50 text-slate-600 border-slate-200" },
+        met:     { label: "Met",     dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200", bar: "bg-emerald-500" },
+        partial: { label: "Partial", dot: "bg-amber-500",   chip: "bg-amber-50 text-amber-700 border-amber-200",       bar: "bg-amber-500" },
+        missing: { label: "Missing", dot: "bg-red-500",     chip: "bg-red-50 text-red-700 border-red-200",             bar: "bg-red-500" },
+        na:      { label: "N/A",     dot: "bg-slate-400",   chip: "bg-slate-50 text-slate-600 border-slate-200",       bar: "bg-slate-300" },
       };
+      const KIND_COLOR = { washout: "#6366f1", covariate: "#f59e0b", exposure: "#14b8a6", followup: "#10b981", grace: "#8b5cf6", outcome: "#ef4444" };
+      const KIND_LABEL = { washout: "Washout / eligibility", covariate: "Covariate look-back", exposure: "Exposure", followup: "Follow-up", grace: "Grace period", outcome: "Outcome window" };
+
+      function fmtDay(d) {
+        if (!d) return "0";
+        const a = Math.abs(d), s = d < 0 ? "−" : "+";
+        if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; }
+        if (a >= 60) { return s + Math.round(a / 30) + "mo"; }
+        return s + a + "d";
+      }
+
+      function renderTimeline(tl) {
+        if (!Array.isArray(tl) || !tl.length) return "";
+        const rows = tl.slice().sort((a, b) => a.startDay - b.startDay);
+        let lo = 0, hi = 0;
+        for (const w of rows) { lo = Math.min(lo, w.startDay, w.endDay); hi = Math.max(hi, w.startDay, w.endDay); }
+        if (lo === hi) hi = lo + 1;
+        const pad = (hi - lo) * 0.04 || 1; lo -= pad; hi += pad;
+        const W = 820, plotL = 195, plotR = W - 20, plotW = plotR - plotL;
+        const rowH = 30, top = 44, H = top + rows.length * rowH + 28;
+        const x = (d) => plotL + ((d - lo) / (hi - lo)) * plotW;
+        const x0 = x(0);
+        let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:560px" xmlns="http://www.w3.org/2000/svg">';
+        svg += '<line x1="' + x0 + '" y1="26" x2="' + x0 + '" y2="' + (H - 16) + '" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4 3"/>';
+        svg += '<text x="' + x0 + '" y="18" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">Index (day 0)</text>';
+        svg += '<line x1="' + plotL + '" y1="' + (H - 16) + '" x2="' + plotR + '" y2="' + (H - 16) + '" stroke="#cbd5e1"/>';
+        for (const d of [Math.ceil(lo), 0, Math.floor(hi)]) {
+          svg += '<text x="' + x(d) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="10" fill="#94a3b8">' + fmtDay(d) + '</text>';
+        }
+        rows.forEach((w, i) => {
+          const y = top + i * rowH;
+          const xa = x(Math.min(w.startDay, w.endDay)), xb = x(Math.max(w.startDay, w.endDay));
+          const ww = Math.max(3, xb - xa), col = KIND_COLOR[w.kind] || "#64748b";
+          svg += '<text x="' + (plotL - 10) + '" y="' + (y + 15) + '" text-anchor="end" font-size="11" fill="#334155">' + escapeHtml(w.label || KIND_LABEL[w.kind] || w.kind) + '</text>';
+          svg += '<rect x="' + xa + '" y="' + (y + 3) + '" width="' + ww + '" height="18" rx="4" fill="' + col + '" fill-opacity="0.88"/>';
+          const dur = fmtDay(w.startDay) + " → " + fmtDay(w.endDay);
+          if (ww > 78) svg += '<text x="' + (xa + ww / 2) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="600">' + escapeHtml(dur) + '</text>';
+          else svg += '<text x="' + (xb + 5) + '" y="' + (y + 16) + '" font-size="9.5" fill="#64748b">' + escapeHtml(dur) + '</text>';
+        });
+        return svg + "</svg>";
+      }
+
+      function renderScheme(d) {
+        if (!d || (!d.timeline && !d.designType)) { schemeEl.classList.add("hidden"); return; }
+        const fields = [["Design", d.designType], ["Population", d.population], ["Exposure", d.exposure], ["Comparator", d.comparator], ["Outcome", d.outcome], ["Index date (time zero)", d.indexDate]];
+        designGrid.innerHTML = fields.map(([k, v]) =>
+          '<div><dt class="text-[11px] uppercase tracking-wider font-semibold text-slate-500">' + escapeHtml(k) + '</dt><dd class="text-sm text-slate-800 leading-snug">' + escapeHtml(v || "—") + '</dd></div>').join("");
+        timelineEl.innerHTML = renderTimeline(d.timeline || []);
+        const kinds = [...new Set((d.timeline || []).map((w) => w.kind))];
+        legendEl.innerHTML = kinds.map((k) =>
+          '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + (KIND_COLOR[k] || "#64748b") + '"></span>' + escapeHtml(KIND_LABEL[k] || k) + '</span>').join("");
+        schemeEl.classList.remove("hidden");
+      }
 
       function render(data) {
         const verdicts = {};
@@ -180,23 +283,18 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
         for (const sec of CHECKLIST) {
           const block = document.createElement("section");
           block.className = "rounded-2xl border border-slate-200 bg-white p-6 shadow-sm";
-          const h = document.createElement("h3");
-          h.className = "text-sm font-extrabold uppercase tracking-widest text-brand-700 mb-4";
-          h.textContent = sec.section;
-          block.appendChild(h);
-
+          block.innerHTML = '<h3 class="text-sm font-extrabold uppercase tracking-widest text-brand-700 mb-4">' + escapeHtml(sec.section) + '</h3>';
           const ol = document.createElement("ol");
           ol.className = "space-y-4";
           for (const it of sec.items) {
             const v = verdicts[it.id] || { status: "missing", evidence: "Not assessed.", suggestion: "" };
             const st = STATUS_META[v.status] || STATUS_META.missing;
             counts[v.status] = (counts[v.status] || 0) + 1;
-
             const li = document.createElement("li");
             li.className = "border-l-2 pl-4 " + (v.status === "met" ? "border-emerald-300" : v.status === "partial" ? "border-amber-300" : v.status === "na" ? "border-slate-200" : "border-red-300");
             li.innerHTML =
               '<div class="flex items-start justify-between gap-3">' +
-                '<p class="text-sm font-semibold text-slate-900"><span class="text-brand-700">' + it.id + '.</span> ' + escapeHtml(it.label) + '</p>' +
+                '<p class="text-sm font-semibold text-slate-900"><span class="text-brand-700">' + escapeHtml(it.id) + '.</span> ' + escapeHtml(it.label) + '</p>' +
                 '<span class="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ' + st.chip + '"><span class="inline-block w-1.5 h-1.5 rounded-full ' + st.dot + '"></span>' + st.label + '</span>' +
               '</div>' +
               (v.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(v.evidence) + '</p>' : '') +
@@ -209,12 +307,13 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
 
         const total = counts.met + counts.partial + counts.missing + counts.na;
         const assessable = total - counts.na;
-        summaryEl.textContent = (data.summary || "") +
-          (data.summary ? " " : "") +
-          counts.met + " of " + (assessable || total) + " applicable items met.";
-        tallyEl.innerHTML =
-          chip("met", counts.met) + chip("partial", counts.partial) + chip("missing", counts.missing) + (counts.na ? chip("na", counts.na) : "");
+        summaryEl.textContent = (data.summary ? data.summary + " " : "") + counts.met + " of " + (assessable || total) + " applicable items met.";
+        barEl.innerHTML = ["met", "partial", "missing", "na"].map((k) =>
+          counts[k] ? '<div class="' + STATUS_META[k].bar + '" style="width:' + (counts[k] / (total || 1) * 100).toFixed(2) + '%"></div>' : "").join("");
+        tallyEl.innerHTML = ["met", "partial", "missing", "na"].map((k) => k === "na" && !counts.na ? "" : chip(k, counts[k])).join("");
         truncEl.classList.toggle("hidden", !data.truncated);
+
+        renderScheme(data.design);
 
         lastReport = { data, counts };
         resultsEl.classList.remove("hidden");
@@ -226,39 +325,49 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
         return '<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ' + st.chip + '"><span class="inline-block w-2 h-2 rounded-full ' + st.dot + '"></span>' + n + ' ' + st.label + '</span>';
       }
 
-      function escapeHtml(s) {
-        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      // ── Network (with retry on transient overload) ──
+      async function postCheck(text) {
+        let lastErr = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) { setStatus("The AI model was busy — retrying (" + attempt + ")…"); await new Promise((s) => setTimeout(s, 1500)); }
+          let r;
+          try { r = await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }); }
+          catch (e) { lastErr = new Error("Network error — check your connection and try again."); continue; }
+          const data = await r.json().catch(() => ({}));
+          if (r.ok) return data;
+          lastErr = new Error(data.error || ("Request failed (" + r.status + ")."));
+          if (r.status === 503 || r.status === 502) continue; // transient — retry
+          throw lastErr; // 400 / 429 etc. — don't retry
+        }
+        throw lastErr;
       }
 
       async function check() {
-        const text = (textEl.value || "").trim();
-        if (text.length < 200) { setStatus("Please paste at least a few paragraphs (200+ characters).", true); return; }
+        const text = getInputText();
+        if (text.length < 200) { setStatus("Please upload a protocol, or paste at least a few paragraphs (200+ characters).", true); return; }
         checkBtn.disabled = true; setStatus("Checking against TARGET — this can take 10–20 seconds…");
-        try {
-          const r = await fetch(WORKER_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-          });
-          const data = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(data.error || ("Request failed (" + r.status + ")."));
-          setStatus("");
-          render(data);
-        } catch (e) {
-          setStatus(e && e.message ? e.message : "Something went wrong.", true);
-        } finally {
-          checkBtn.disabled = false;
-        }
+        try { const data = await postCheck(text); setStatus(""); render(data); }
+        catch (e) { setStatus(e && e.message ? e.message : "Something went wrong.", true); }
+        finally { checkBtn.disabled = false; }
       }
 
       function downloadReport() {
         if (!lastReport) return;
         const { data, counts } = lastReport;
         const date = new Date().toISOString().slice(0, 10);
-        let md = "# TARGET conformance report\n\n";
-        md += "_Generated " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
+        let md = "# TARGET conformance report\n\n_Generated " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
         if (data.summary) md += data.summary + "\n\n";
         md += "**Tally:** " + counts.met + " met · " + counts.partial + " partial · " + counts.missing + " missing" + (counts.na ? " · " + counts.na + " N/A" : "") + "\n\n";
+        const d = data.design;
+        if (d) {
+          md += "## Study design scheme\n\n";
+          md += "- **Design:** " + (d.designType || "—") + "\n- **Population:** " + (d.population || "—") + "\n- **Exposure:** " + (d.exposure || "—") + "\n- **Comparator:** " + (d.comparator || "—") + "\n- **Outcome:** " + (d.outcome || "—") + "\n- **Index date:** " + (d.indexDate || "—") + "\n\n";
+          if (Array.isArray(d.timeline) && d.timeline.length) {
+            md += "Timeline (days relative to index):\n\n";
+            for (const w of d.timeline) md += "- " + (w.label || w.kind) + ": day " + w.startDay + " → " + w.endDay + (w.note ? " (" + w.note + ")" : "") + "\n";
+            md += "\n";
+          }
+        }
         const verdicts = {};
         for (const v of (data.items || [])) verdicts[v.id] = v;
         for (const sec of CHECKLIST) {
@@ -272,8 +381,7 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
           md += "\n";
         }
         md += "---\n\nTARGET: " + CITATION + " https://target-guideline.org\n";
-        const blob = new Blob([md], { type: "text/markdown" });
-        const url = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
         const a = document.createElement("a");
         a.href = url; a.download = "TARGET-report-" + date + ".md";
         document.body.appendChild(a); a.click(); a.remove();
@@ -281,7 +389,12 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
       }
 
       checkBtn.addEventListener("click", check);
-      clearBtn.addEventListener("click", () => { textEl.value = ""; fileMsg.classList.add("hidden"); resultsEl.classList.add("hidden"); setStatus(""); });
+      clearBtn.addEventListener("click", () => {
+        textEl.value = ""; loadedText = ""; loadedName = "";
+        fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
+        drop.classList.remove("hidden"); fileErr.classList.add("hidden");
+        resultsEl.classList.add("hidden"); setStatus("");
+      });
       $("download").addEventListener("click", downloadReport);
     </script>
   )}
