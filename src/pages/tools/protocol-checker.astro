@@ -8,6 +8,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 // Deployed Cloudflare Worker URL (see workers/target-checker/README.md).
 const WORKER_URL = "https://target-checker.danielhttsai.workers.dev";
 
+// PHDc logo, stamped onto the downloadable Word report.
+const LOGO_URL = `${base}/images/networks/phdc.png`;
+
 const fwList = Object.values(FRAMEWORKS);
 ---
 
@@ -119,7 +122,10 @@ const fwList = Object.values(FRAMEWORKS);
                 <h2 id="confhead" class="text-lg font-bold text-slate-900">Conformance</h2>
                 <p id="summary" class="mt-1 text-sm text-slate-600 leading-relaxed"></p>
               </div>
-              <button id="download" class="shrink-0 rounded-xl border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50">⬇ Download report (.md)</button>
+              <div class="shrink-0 flex items-center gap-2">
+                <button id="downloadword" class="rounded-xl bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800">⬇ Word (.docx)</button>
+                <button id="download" class="rounded-xl border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50">⬇ Markdown</button>
+              </div>
             </div>
             <div id="bar" class="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100"></div>
             <div id="tally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
@@ -155,11 +161,12 @@ const fwList = Object.values(FRAMEWORKS);
   </section>
 
   {WORKER_URL !== "" && (
-    <script is:inline define:vars={{ WORKER_URL, FRAMEWORKS, DEFAULT_FRAMEWORK }}>
+    <script is:inline define:vars={{ WORKER_URL, FRAMEWORKS, DEFAULT_FRAMEWORK, LOGO_URL }}>
       const MAMMOTH = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.9.0/mammoth.browser.min.js";
       const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
       const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
       const SHEETJS = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      const DOCX = "https://unpkg.com/docx@8.5.0/build/index.umd.js";
 
       const $ = (id) => document.getElementById(id);
       const drop = $("drop"), fileEl = $("file"), fileChip = $("filechip"), fileNameEl = $("filename"), fileMetaEl = $("filemeta"), removeFile = $("removefile"), fileErr = $("fileerr");
@@ -489,7 +496,110 @@ const fwList = Object.values(FRAMEWORKS);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
 
+      // ── Word (.docx) report, stamped with the PHDc logo ──
+      async function loadLogo() {
+        try { const r = await fetch(LOGO_URL); if (!r.ok) return null; return new Uint8Array(await r.arrayBuffer()); }
+        catch { return null; }
+      }
+
+      async function downloadWord() {
+        if (!lastReport) return;
+        setStatus("Building Word document…");
+        try {
+          await loadScript(DOCX);
+          const D = window.docx;
+          const { data, counts, fw } = lastReport;
+          const date = new Date().toISOString().slice(0, 10);
+          const FONT = "Calibri";
+          const logo = await loadLogo();
+          const text = (t, o = {}) => new D.TextRun({ text: String(t == null ? "" : t), font: FONT, size: 20, ...o });
+          const para = (runs, o = {}) => new D.Paragraph({ children: Array.isArray(runs) ? runs : [runs], spacing: { before: 40, after: 40, ...(o.spacing || {}) }, ...o });
+          const h1 = (t) => new D.Paragraph({ heading: D.HeadingLevel.HEADING_1, spacing: { before: 220, after: 80 }, children: [text(t, { bold: true, size: 26, color: "21443E" })] });
+          const h2 = (t) => new D.Paragraph({ spacing: { before: 140, after: 40 }, children: [text(t, { bold: true, size: 21 })] });
+          const STCOL = { met: "16A34A", partial: "D97706", missing: "DC2626", na: "64748B", present: "16A34A", absent: "DC2626" };
+
+          const children = [];
+          if (logo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: logo, transformation: { width: 210, height: 51 } })] }));
+          children.push(para([text(fw.name + " conformance report", { bold: true, size: 32 })], { spacing: { after: 40 } }));
+          children.push(para([text("Population Health Data Center · generated " + date + " · AI-assisted self-check (Google Gemini) — not a substitute for peer review.", { italics: true, color: "777777", size: 16 })], { spacing: { after: 160 } }));
+
+          if (data.summary) children.push(para([text(data.summary)]));
+          children.push(para([
+            text("Tally: ", { bold: true }),
+            text(counts.met + " met", { color: STCOL.met, bold: true }), text(" · "),
+            text(counts.partial + " partial", { color: STCOL.partial, bold: true }), text(" · "),
+            text(counts.missing + " missing", { color: STCOL.missing, bold: true }),
+            ...(counts.na ? [text(" · " + counts.na + " N/A", { color: STCOL.na })] : []),
+          ], { spacing: { after: 80 } }));
+
+          const d = data.design;
+          if (d) {
+            children.push(h1("Study design scheme"));
+            const field = (k, v) => para([text(k + ": ", { bold: true }), text(v || "—")]);
+            children.push(field("Design", d.designType));
+            children.push(field("Population", d.population));
+            children.push(field("Exposure", d.exposure));
+            children.push(field("Comparator", d.comparator));
+            children.push(field("Outcome", d.outcome));
+            children.push(field("Index date (time zero)", d.indexDate));
+            if (Array.isArray(d.timeline) && d.timeline.length) {
+              children.push(h2("Timeline (days relative to index)"));
+              for (const w of d.timeline) children.push(para([text("•  " + (w.label || w.kind) + ": day " + w.startDay + " → " + w.endDay + (w.note ? " (" + w.note + ")" : ""))]));
+            }
+            const critBlock = (title, arr) => {
+              children.push(h2(title));
+              if (Array.isArray(arr) && arr.length) for (const x of arr) children.push(para([text("•  " + x)]));
+              else children.push(para([text("none stated", { italics: true, color: "999999" })]));
+            };
+            critBlock("Inclusion criteria", d.inclusion);
+            critBlock("Exclusion criteria", d.exclusion);
+            critBlock("Covariates", d.covariates);
+          }
+
+          if (Array.isArray(data.deliverables) && data.deliverables.length) {
+            children.push(h1("Planned outputs & figures"));
+            for (const x of data.deliverables) {
+              const lab = (DELIV_META[x.status] || DELIV_META.absent).label;
+              children.push(para([text(x.name + " — ", { bold: true }), text(lab, { color: STCOL[x.status] || STCOL.absent, bold: true })]));
+              if (x.evidence) children.push(para([text("Evidence: " + x.evidence, { size: 18, color: "555555" })]));
+              if (x.suggestion && x.status !== "present") children.push(para([text("Suggestion: " + x.suggestion, { size: 18, color: "555555" })]));
+            }
+          }
+
+          const verdicts = {};
+          for (const v of (data.items || [])) verdicts[v.id] = v;
+          for (const sec of fw.checklist) {
+            children.push(h1(sec.section));
+            for (const it of sec.items) {
+              const v = verdicts[it.id] || { status: "missing", evidence: "Not assessed.", suggestion: "" };
+              const lab = (STATUS_META[v.status] || STATUS_META.missing).label;
+              children.push(para([text(it.id + ". " + it.label + "  ", { bold: true }), text("[" + lab + "]", { color: STCOL[v.status] || STCOL.missing, bold: true })]));
+              if (v.evidence) children.push(para([text("Evidence: " + v.evidence, { size: 18, color: "555555" })]));
+              if (v.suggestion && v.status !== "met") children.push(para([text("Suggestion: " + v.suggestion, { size: 18, color: "555555" })]));
+            }
+          }
+          children.push(para([text(fw.name + ": " + fw.citation + " " + fw.url, { italics: true, size: 16, color: "777777" })], { spacing: { before: 300 } }));
+
+          const doc = new D.Document({
+            creator: "PHDc Protocol Checker",
+            title: fw.name + " conformance report",
+            styles: { default: { document: { run: { font: FONT, size: 20 } } } },
+            sections: [{ properties: {}, children }],
+          });
+          const blob = await D.Packer.toBlob(doc);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = fw.name + "-report-" + date + ".docx";
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          setStatus("");
+        } catch (e) {
+          setStatus("Couldn't build the Word file: " + (e && e.message ? e.message : e), true);
+        }
+      }
+
       checkBtn.addEventListener("click", () => runCheck(getFramework()));
+      $("downloadword").addEventListener("click", downloadWord);
       alsoTargetBtn.addEventListener("click", () => {
         const r = document.querySelector('input[name="framework"][value="target"]');
         if (r) r.checked = true;
