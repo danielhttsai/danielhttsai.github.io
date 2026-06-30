@@ -61,6 +61,18 @@ const TARGET_ITEMS = [
   ["21", "Other information", "Conflicts of interest."],
 ];
 
+// Planned analytical outputs a rigorous RWE protocol should mock up in advance
+// (shell tables + figure plans). The checker tests whether each is pre-specified.
+const DELIVERABLES = [
+  ["Participant flow diagram", "attrition from the source population to the analytic cohort (CONSORT-style)"],
+  ["Baseline characteristics table (Table 1)", "baseline covariates by treatment group, ideally with standardized mean differences"],
+  ["Love plot / covariate balance", "standardized mean differences before vs after PS matching/weighting"],
+  ["Primary results table (shell)", "effect estimates (HR/RR/RD/IRR) with 95% CIs, events, and person-time"],
+  ["Cumulative incidence / Kaplan-Meier curve", "time-to-event outcome curves by group (where applicable)"],
+  ["Forest plot", "subgroup, sensitivity, or multi-site / meta-analytic estimates"],
+  ["Sensitivity-analysis outputs", "negative-control outcomes, E-value, or quantitative bias analysis"],
+];
+
 const SYSTEM_PROMPT = `You are a methodological reviewer assessing whether a research protocol or manuscript conforms to the TARGET reporting guideline (Cashin AG, Hansford HJ, Hernán MA, Swanson SA, et al. "Transparent Reporting of Observational Studies Emulating a Target Trial: The TARGET Statement." JAMA 2025; PMID 40899949).
 
 You will be given the full text of a study document. Judge EACH TARGET item below against the text and return a verdict.
@@ -83,7 +95,14 @@ ALSO extract the study design so it can be drawn as a study-design diagram, in t
 - designType: the design in a few words (e.g. "Active-comparator new-user cohort", "Self-controlled case series", "Case-crossover", "Descriptive cohort").
 - population, exposure, comparator, outcome: short phrases. Use "—" where genuinely absent (e.g. no comparator in a descriptive or self-controlled design).
 - indexDate: how time zero (cohort entry / index date) is defined in one short phrase.
+- inclusion: an array of the ACTUAL inclusion criteria stated in the protocol (short, near-verbatim phrases, one per element). Empty array if none stated.
+- exclusion: an array of the ACTUAL exclusion criteria stated. Empty array if none.
+- covariates: an array of the ACTUAL covariates / confounders the protocol adjusts for or measures at baseline. Empty array if none stated.
 - timeline: the key analysis windows on a DAY axis where day 0 = the index date. Use NEGATIVE days for time before index and POSITIVE for time after. For each window give label, kind (one of: washout, covariate, exposure, followup, grace, outcome), startDay, endDay, and an optional short note. Infer durations from the text — e.g. "365-day washout" → start -365, end 0; "180-day covariate look-back" → -180 to 0; "5-year follow-up" → 0 to 1825; "30-day grace period" → 0 to 30. If a duration is not stated, choose a reasonable default and set note to "assumed". Always include an eligibility/washout window before index and a follow-up window after index where the design has them. Order windows chronologically by startDay.
+
+SEPARATELY, assess whether the protocol PRE-SPECIFIES the planned analytical outputs that a rigorous RWE study mocks up in advance (shell tables and figure plans), in the "deliverables" array. For each item below return status: "present" (explicitly planned or described — a shell table, a named figure, or a clear statement it will be produced), "partial" (implied or partially described but not clearly pre-specified), or "absent" (no trace). Prefer "absent" over "partial" when there is no mention at all. Give short evidence and a concrete suggestion for partial/absent items. If an item is genuinely not applicable to the design (e.g. a Kaplan-Meier curve for a cross-sectional descriptive study), mark it "absent" and say so in the evidence. Return one entry per item, using the exact name.
+The deliverables (name | what it is):
+${DELIVERABLES.map(([n, d]) => `${n} | ${d}`).join("\n")}
 
 The TARGET items (id | section | what it asks):
 ${TARGET_ITEMS.map(([id, sec, label]) => `${id} | ${sec} | ${label}`).join("\n")}`;
@@ -101,6 +120,9 @@ const RESPONSE_SCHEMA = {
         comparator: { type: "string" },
         outcome: { type: "string" },
         indexDate: { type: "string" },
+        inclusion: { type: "array", items: { type: "string" } },
+        exclusion: { type: "array", items: { type: "string" } },
+        covariates: { type: "array", items: { type: "string" } },
         timeline: {
           type: "array",
           items: {
@@ -116,7 +138,20 @@ const RESPONSE_SCHEMA = {
           },
         },
       },
-      required: ["designType", "population", "exposure", "comparator", "outcome", "indexDate", "timeline"],
+      required: ["designType", "population", "exposure", "comparator", "outcome", "indexDate", "inclusion", "exclusion", "covariates", "timeline"],
+    },
+    deliverables: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          status: { type: "string", enum: ["present", "partial", "absent"] },
+          evidence: { type: "string" },
+          suggestion: { type: "string" },
+        },
+        required: ["name", "status", "evidence", "suggestion"],
+      },
     },
     items: {
       type: "array",
@@ -132,7 +167,7 @@ const RESPONSE_SCHEMA = {
       },
     },
   },
-  required: ["summary", "design", "items"],
+  required: ["summary", "design", "deliverables", "items"],
 };
 
 function corsHeaders(origin) {

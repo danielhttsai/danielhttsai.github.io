@@ -117,6 +117,15 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
               <div id="timeline"></div>
               <div id="legend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
             </div>
+            <div id="criteria" class="mt-6 grid gap-5 sm:grid-cols-3"></div>
+          </div>
+
+          <!-- Planned outputs & figures -->
+          <div id="deliverables" class="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-bold text-slate-900">Planned outputs &amp; figures</h2>
+            <p class="mt-1 text-xs text-slate-500">Does the protocol pre-specify the shell tables and figures a rigorous RWE study mocks up in advance — Table 1, a Love plot, a participant flow diagram, results shells, and so on?</p>
+            <div id="delivtally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
+            <ol id="delivlist" class="mt-4 space-y-3"></ol>
           </div>
 
           <div id="items" class="space-y-6"></div>
@@ -136,7 +145,8 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
       const drop = $("drop"), fileEl = $("file"), fileChip = $("filechip"), fileNameEl = $("filename"), fileMetaEl = $("filemeta"), removeFile = $("removefile"), fileErr = $("fileerr");
       const textEl = $("text"), checkBtn = $("check"), clearBtn = $("clear"), statusEl = $("status");
       const resultsEl = $("results"), summaryEl = $("summary"), tallyEl = $("tally"), barEl = $("bar"), itemsEl = $("items"), truncEl = $("trunc");
-      const schemeEl = $("scheme"), designGrid = $("designgrid"), timelineEl = $("timeline"), legendEl = $("legend");
+      const schemeEl = $("scheme"), designGrid = $("designgrid"), timelineEl = $("timeline"), legendEl = $("legend"), criteriaEl = $("criteria");
+      const delivEl = $("deliverables"), delivTallyEl = $("delivtally"), delivListEl = $("delivlist");
       let loadedText = "", loadedName = "", lastReport = null;
 
       const setStatus = (msg, isErr) => { statusEl.textContent = msg || ""; statusEl.className = "text-sm " + (isErr ? "text-red-600" : "text-slate-500"); };
@@ -271,7 +281,48 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
         const kinds = [...new Set((d.timeline || []).map((w) => w.kind))];
         legendEl.innerHTML = kinds.map((k) =>
           '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + (KIND_COLOR[k] || "#64748b") + '"></span>' + escapeHtml(KIND_LABEL[k] || k) + '</span>').join("");
+
+        // Explicit inclusion / exclusion / covariates, colour-keyed to the diagram
+        const col = (title, dot, items, emptyTxt) => {
+          const list = Array.isArray(items) && items.length
+            ? '<ul class="mt-2 space-y-1">' + items.map((x) => '<li class="text-xs text-slate-700 leading-snug flex gap-1.5"><span class="text-slate-300">•</span><span>' + escapeHtml(x) + '</span></li>').join("") + '</ul>'
+            : '<p class="mt-2 text-xs text-slate-400 italic">' + emptyTxt + '</p>';
+          return '<div><p class="text-[11px] uppercase tracking-wider font-bold flex items-center gap-1.5" style="color:' + dot + '"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:' + dot + '"></span>' + title + '</p>' + list + '</div>';
+        };
+        criteriaEl.innerHTML =
+          col("Inclusion", "#6366f1", d.inclusion, "— none stated —") +
+          col("Exclusion", "#ef4444", d.exclusion, "— none stated —") +
+          col("Covariates", "#f59e0b", d.covariates, "— none stated —");
+
         schemeEl.classList.remove("hidden");
+      }
+
+      const DELIV_META = {
+        present: { label: "Present", dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200", border: "border-emerald-300" },
+        partial: { label: "Partial", dot: "bg-amber-500",   chip: "bg-amber-50 text-amber-700 border-amber-200",       border: "border-amber-300" },
+        absent:  { label: "Absent",  dot: "bg-red-500",     chip: "bg-red-50 text-red-700 border-red-200",             border: "border-red-300" },
+      };
+
+      function renderDeliverables(list) {
+        if (!Array.isArray(list) || !list.length) { delivEl.classList.add("hidden"); return; }
+        const counts = { present: 0, partial: 0, absent: 0 };
+        delivListEl.innerHTML = list.map((d) => {
+          const m = DELIV_META[d.status] || DELIV_META.absent;
+          counts[d.status] = (counts[d.status] || 0) + 1;
+          return '<li class="border-l-2 pl-4 ' + m.border + '">' +
+            '<div class="flex items-start justify-between gap-3">' +
+              '<p class="text-sm font-semibold text-slate-900">' + escapeHtml(d.name) + '</p>' +
+              '<span class="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ' + m.chip + '"><span class="inline-block w-1.5 h-1.5 rounded-full ' + m.dot + '"></span>' + m.label + '</span>' +
+            '</div>' +
+            (d.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(d.evidence) + '</p>' : '') +
+            (d.suggestion && d.status !== "present" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(d.suggestion) + '</p>' : '') +
+          '</li>';
+        }).join("");
+        delivTallyEl.innerHTML = ["present", "partial", "absent"].map((k) => {
+          const m = DELIV_META[k];
+          return counts[k] ? '<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ' + m.chip + '"><span class="inline-block w-2 h-2 rounded-full ' + m.dot + '"></span>' + counts[k] + ' ' + m.label + '</span>' : "";
+        }).join("");
+        delivEl.classList.remove("hidden");
       }
 
       function render(data) {
@@ -314,6 +365,7 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
         truncEl.classList.toggle("hidden", !data.truncated);
 
         renderScheme(data.design);
+        renderDeliverables(data.deliverables);
 
         lastReport = { data, counts };
         resultsEl.classList.remove("hidden");
@@ -367,6 +419,19 @@ const WORKER_URL = "https://target-checker.danielhttsai.workers.dev"; // ← pas
             for (const w of d.timeline) md += "- " + (w.label || w.kind) + ": day " + w.startDay + " → " + w.endDay + (w.note ? " (" + w.note + ")" : "") + "\n";
             md += "\n";
           }
+          const critList = (title, arr) => { md += "**" + title + ":** " + (Array.isArray(arr) && arr.length ? "\n" + arr.map((x) => "  - " + x).join("\n") : "none stated") + "\n\n"; };
+          critList("Inclusion", d.inclusion);
+          critList("Exclusion", d.exclusion);
+          critList("Covariates", d.covariates);
+        }
+        if (Array.isArray(data.deliverables) && data.deliverables.length) {
+          md += "## Planned outputs & figures (shell tables, Love plot, …)\n\n";
+          for (const x of data.deliverables) {
+            md += "- **" + x.name + "** — _" + ((DELIV_META[x.status] || DELIV_META.absent).label) + "_\n";
+            if (x.evidence) md += "  - Evidence: " + x.evidence + "\n";
+            if (x.suggestion && x.status !== "present") md += "  - Suggestion: " + x.suggestion + "\n";
+          }
+          md += "\n";
         }
         const verdicts = {};
         for (const v of (data.items || [])) verdicts[v.id] = v;
