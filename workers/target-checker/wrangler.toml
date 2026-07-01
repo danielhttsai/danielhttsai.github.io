@@ -3,6 +3,12 @@ main = "worker.js"
 compatibility_date = "2025-06-01"
 
 # Optional variables. The API key is a SECRET — never put it here (see README).
+# GEMINI_MODEL: Flash-Lite (GA) has the most generous FREE daily allowance and
+# is cheapest — plenty for the checklist task. NOTE: the "gemini-flash-latest"
+# alias points to the newest, most capable Flash (currently Gemini 3.5 Flash),
+# which has a LOW free daily quota — that is what filled up so fast. Pin the
+# Lite GA id instead. For more quality (and a lower free cap), use a specific id
+# from aistudio.google.com/rate-limit.
 [vars]
-GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_MODEL = "gemini-3.1-flash-lite"
 ALLOWED_ORIGIN = "https://danielhttsai.github.io"
