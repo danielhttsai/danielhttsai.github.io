@@ -62,6 +62,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
             <textarea name="censor" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. A clone is artificially censored when its data first become incompatible with the assigned strategy: in the 'initiate' arm, if no anticoagulant is dispensed by the end of the grace period; in the 'deferred' arm, at the first dispensing during the grace period."></textarea></label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">IPCW covariates (baseline + time-varying)</span>
             <textarea name="ipcw" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Age, sex, CHA₂DS₂-VASc, HAS-BLED, stroke severity (NIHSS proxy), renal function, concomitant antiplatelets, time-varying bleeding events and procedures."></textarea></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariate look-back (days before time zero)</span>
+            <input type="number" name="covlookback" value="365" min="0" step="1" class="mt-1 w-28 rounded-lg border border-slate-300 p-2 text-sm" /></label>
         </fieldset>
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
@@ -115,7 +117,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), outcome: V("outcome"),
       timezero: V("timezero"), stratA: V("stratA"), stratB: V("stratB"), grace: V("grace") || "14",
-      censor: V("censor"), ipcw: V("ipcw"), followup: V("followup"), fudays: V("fudays") || "90", effect: V("effect"), sensitivity: V("sensitivity"),
+      censor: V("censor"), ipcw: V("ipcw"), covlookback: V("covlookback") || "365", followup: V("followup"), fudays: V("fudays") || "90", effect: V("effect"), sensitivity: V("sensitivity"),
     });
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -186,7 +188,7 @@ At time zero each eligible patient is **cloned** once into every strategy arm. E
 ${or(s.censor, "A clone is censored when its observed data first become incompatible with its assigned strategy (e.g. failure to initiate by the end of the grace period, or initiation in the deferred arm). Administrative censoring applies at death, disenrolment, or end of study.")}
 
 ## 8. Inverse-probability-of-censoring weights (IPCW)
-Because artificial censoring is informative, each clone receives a **stabilised inverse-probability-of-censoring weight** to restore the population that would have remained under full adherence. Censoring is modelled (pooled logistic regression over follow-up time) on:
+Because artificial censoring is informative, each clone receives a **time-varying, stabilised inverse-probability-of-censoring weight** (the inverse probability of remaining uncensored) to restore the population that would have persisted under full adherence. Censoring is modelled by pooled logistic regression over follow-up time, using baseline covariates measured in the **${s.covlookback}-day window before time zero** together with time-varying predictors:
 
 ${(s.ipcw || "(list the baseline and time-varying predictors of deviation — e.g. age, sex, comorbidity and bleeding-risk scores, disease severity, concomitant therapy, and post-baseline events)").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n") || "- (covariates)"}
 
@@ -196,16 +198,19 @@ Weights are cumulative over follow-up and truncated at the 1st/99th percentiles.
 ${or(s.followup, "Follow-up runs from time zero until the outcome, death, disenrolment, or the end of the study period, whichever comes first.")} Outcome: **${or(s.outcome, "(outcome)")}**.
 
 ## 10. Estimand and effect measure
-The target estimand is the **per-protocol effect** — the effect of receiving and adhering to each strategy. We report ${effectText(s.effect)}, with 95% confidence intervals from a **nonparametric bootstrap** (resampling patients, keeping their clones together).
+The primary estimand is the **per-protocol effect** (receiving and adhering to each strategy), estimated by the clone-censor-weight analysis. For comparison we also report an **as-started (intention-to-treat-analogue) effect** from a conventional analysis (Section 11). We report ${effectText(s.effect)}, with 95% confidence intervals from a **nonparametric bootstrap** (resampling patients, keeping each patient's clones together).
 
 ## 11. Statistical analysis
+**Primary — clone-censor-weight (per-protocol):**
 1. Clone the eligible cohort into the strategy arms and apply the censoring rule.
-2. Fit the censoring model(s) and compute stabilised IPCW.
-3. Fit a **weighted pooled logistic regression** for the discrete-time hazard of the outcome, with the assigned strategy (and time) as covariates; derive weighted cumulative-incidence curves.
-4. Contrast the curves to obtain the effect measure(s); bootstrap for inference.
+2. Fit the censoring model(s) and compute stabilised, time-varying IPCW.
+3. Fit a **weighted pooled logistic regression** for the discrete-time hazard, with the assigned strategy, follow-up time, its quadratic term, and a strategy × time interaction; derive weighted cumulative-incidence curves.
+4. Contrast the curves for the effect measure(s); obtain 95% CIs by **nonparametric bootstrap** (resampling patients).
+
+**Comparison — conventional analysis (as-started, ITT-analogue):** start follow-up at the index date, balance the arms by **propensity-score matching** (standardised mean difference < 0.1 as the balance criterion), and handle the competing risk of death with **Fine–Gray sub-distribution** and **cause-specific Cox** models. The gap between this and the CCW estimate indexes the time-lag / immortal-time bias removed.
 
 ## 12. Sensitivity analyses
-${(s.sensitivity || "Alternative grace periods; weight truncation thresholds; negative-control outcomes; E-value for unmeasured confounding; competing-risk (death) handling.").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n")}
+${(s.sensitivity || "On-treatment (per-protocol analogue): additionally censor at treatment discontinuation (no refill > 90 days) or switch\nShorter grace period (e.g. halve it)\nWeight truncation thresholds (1st/99th percentile)\nSubgroup analyses (age, sex, disease history, baseline risk)\nRestrict outcomes to inpatient / emergency records\nNegative-control outcomes; E-value for unmeasured confounding").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n")}
 
 ## References
 - Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183:758-64.
