@@ -71,14 +71,26 @@
         if (ww > 90) svg += '<text x="' + (xa + ww / 2) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="600">' + esc(dur) + '</text>';
         else svg += '<text x="' + (xb + 5) + '" y="' + (y + 16) + '" font-size="9.5" fill="#64748b">' + esc(dur) + '</text>';
       });
+      // Dashed bands drawn ON TOP of the bars (e.g. a grace period)
+      for (const b of (spec.bands || [])) {
+        const bx0 = x(Math.min(b.startDay, b.endDay)), bx1 = x(Math.max(b.startDay, b.endDay));
+        const col = b.color || "#f59e0b", bw = Math.max(1, bx1 - bx0);
+        svg += '<rect x="' + bx0 + '" y="30" width="' + bw + '" height="' + (H - 46) + '" fill="' + col + '" fill-opacity="0.10" stroke="' + col + '" stroke-width="1.25" stroke-dasharray="4 3"/>';
+        if (b.label) svg += '<text x="' + ((bx0 + bx1) / 2) + '" y="42" text-anchor="middle" font-size="9.5" fill="' + col + '" font-weight="700">' + esc(b.label) + '</text>';
+      }
       diagramEl.innerHTML = svg + "</svg>";
 
       if (legendEl) {
         const kinds = [...new Set(rows.map((w) => w.kind))];
-        legendEl.innerHTML = kinds.map((k) => {
+        let html = kinds.map((k) => {
           const m = K[k] || { c: "#64748b", l: k };
           return '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + m.c + '"></span>' + esc(m.l) + '</span>';
         }).join("");
+        for (const b of (spec.bands || [])) {
+          const col = b.color || "#f59e0b";
+          html += '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="border:1.5px dashed ' + col + ';background:' + col + '1a"></span>' + esc(b.label || "band") + '</span>';
+        }
+        legendEl.innerHTML = html;
       }
     };
   })();
