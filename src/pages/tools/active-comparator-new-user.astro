@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import PageHeader from "../../components/PageHeader.astro";
+import DesignDiagram from "../../components/DesignDiagram.astro";
 import databasesRaw from "../../data/databases.json";
 
 // Feature taxonomy; same 8 dimensions as the /databases/ compare drawer.
@@ -1091,6 +1092,15 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
 
     </div>
 
+    <!-- Study design diagram -->
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
+      <p class="mt-1 text-xs text-slate-500">Covariate look-back, new-user washout, eligibility assessment, grace, and follow-up windows relative to the index date — updates with the form.</p>
+      <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
+      <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
+    </div>
+    <DesignDiagram />
+
     <!-- ── Phenotype-library modal ───────────────────────── -->
     <div data-library-modal class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-start justify-center p-4 sm:p-8 overflow-y-auto">
       <div class="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-3xl my-8">
@@ -1458,10 +1468,28 @@ _Drafted with the AsPEN protocol builder (${today})._
       };
 
       // ── Render preview from current form state ──────
+      const renderScheme = (s) => {
+        const wash = Math.max(0, parseInt(s.washout) || 0);
+        const lb = Math.max(0, parseInt(s.lookback) || 0);
+        const grace = Math.max(0, parseInt(s.grace) || 0);
+        let fu = 1825;
+        const mfc = (s.maxFollowupChoice || "") + " " + (s.maxFollowupCustom || "");
+        const ym = mfc.match(/(\d+(?:\.\d+)?)\s*year/i), dm = mfc.match(/(\d+)\s*day/i);
+        if (ym) fu = Math.round(parseFloat(ym[1]) * 365); else if (dm) fu = parseInt(dm[1]);
+        const wins = [];
+        if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0 });
+        if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0 });
+        wins.push({ label: "Eligibility (incl./excl.) assessment", kind: "eligibility", startDay: -(Math.max(lb, wash) || 1), endDay: 0 });
+        if (grace > 0) wins.push({ label: "Grace period", kind: "grace", startDay: 0, endDay: grace });
+        wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu });
+        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Index (day 0) — treatment start" });
+      };
+
       const render = () => {
         const state = readForm();
         preview.textContent = buildMarkdown(state);
         renderFeasibility(state);
+        try { renderScheme(state); } catch {}
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
       };
 
