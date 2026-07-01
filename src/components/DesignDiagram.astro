@@ -48,7 +48,7 @@
       const pad = (hi - lo) * 0.04 || 1; lo -= pad; hi += pad;
 
       const W = 860, plotL = 205, plotR = W - 18, plotW = plotR - plotL;
-      const rowH = 30, top = 46, H = top + rows.length * rowH + 30;
+      const rowH = 30, top = 56, H = top + rows.length * rowH + 30;
       const x = (d) => plotL + ((d - lo) / (hi - lo)) * plotW;
       const x0 = x(0);
       let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:640px" xmlns="http://www.w3.org/2000/svg">';
@@ -75,8 +75,11 @@
       for (const b of (spec.bands || [])) {
         const bx0 = x(Math.min(b.startDay, b.endDay)), bx1 = x(Math.max(b.startDay, b.endDay));
         const col = b.color || "#f59e0b", bw = Math.max(1, bx1 - bx0);
-        svg += '<rect x="' + bx0 + '" y="30" width="' + bw + '" height="' + (H - 46) + '" fill="' + col + '" fill-opacity="0.10" stroke="' + col + '" stroke-width="1.25" stroke-dasharray="4 3"/>';
-        if (b.label) svg += '<text x="' + ((bx0 + bx1) / 2) + '" y="42" text-anchor="middle" font-size="9.5" fill="' + col + '" font-weight="700">' + esc(b.label) + '</text>';
+        svg += '<rect x="' + bx0 + '" y="38" width="' + bw + '" height="' + (H - 54) + '" fill="' + col + '" fill-opacity="0.10" stroke="' + col + '" stroke-width="1.25" stroke-dasharray="4 3"/>';
+        if (b.label) {
+          if (bw >= 52) svg += '<text x="' + ((bx0 + bx1) / 2) + '" y="34" text-anchor="middle" font-size="10" fill="' + col + '" font-weight="700">' + esc(b.label) + '</text>';
+          else svg += '<text x="' + (bx1 + 5) + '" y="34" font-size="10" fill="' + col + '" font-weight="700">' + esc(b.label) + '</text>';
+        }
       }
       diagramEl.innerHTML = svg + "</svg>";
 

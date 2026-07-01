@@ -164,33 +164,41 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     function renderScheme(s) {
       const interval = s.interval || "monthly";
-      const W = 860, gutter = 96, plotL = gutter, plotR = W - 18, plotW = plotR - plotL;
-      const rowH = 34, top = 30, H = top + 4 * rowH + 30;
-      const gap = plotW * 0.085, lbW = plotW * 0.10, fuW = plotW * 0.42;
-      const baseOx = plotL + lbW + 6;
+      const lb = Math.max(0, parseInt(s.covlookback) || 0);
+      const fu = Math.max(1, parseInt(s.futrial) || 1825);
+      const total = lb + fu || 1;
+      const fmt = (d) => { const a = Math.abs(d); if (a >= 365) { const y = a / 365; return (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return Math.round(a / 30) + "mo"; return a + "d"; };
+      const W = 860, gutter = 104, plotL = gutter, plotR = W - 18, plotW = plotR - plotL;
+      const rowH = 36, top = 32, H = top + 4 * rowH + 32;
+      const perW = plotW * 0.46, lbW = perW * (lb / total), fuW = perW - lbW, gap = plotW * 0.085;
+      const baseOx = plotL + lbW + 4;
       const trials = [["Trial 1", 0], ["Trial 2", 1], ["Trial N (last)", 4]];
       const rowY = [top, top + rowH, top + 3 * rowH];
-      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:640px" xmlns="http://www.w3.org/2000/svg">';
+      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:660px" xmlns="http://www.w3.org/2000/svg">';
       trials.forEach((t, i) => {
         const y = rowY[i], ox = baseOx + t[1] * gap;
-        svg += '<line x1="' + ox + '" y1="' + (y - 2) + '" x2="' + ox + '" y2="' + (H - 22) + '" stroke="#eef2f7"/>';
-        svg += '<text x="' + (gutter - 10) + '" y="' + (y + 15) + '" text-anchor="end" font-size="11" fill="#334155">' + esc(t[0]) + '</text>';
-        svg += '<rect x="' + (ox - lbW) + '" y="' + (y + 4) + '" width="' + lbW + '" height="16" rx="3" fill="#8b5cf6" fill-opacity="0.8"/>';
-        svg += '<rect x="' + ox + '" y="' + (y + 4) + '" width="' + fuW + '" height="16" rx="3" fill="#10b981" fill-opacity="0.85"/>';
-        svg += '<circle cx="' + ox + '" cy="' + (y + 12) + '" r="4" fill="#0f766e"/>';
+        svg += '<line x1="' + ox + '" y1="' + (y - 2) + '" x2="' + ox + '" y2="' + (H - 24) + '" stroke="#eef2f7"/>';
+        svg += '<text x="' + (gutter - 10) + '" y="' + (y + 16) + '" text-anchor="end" font-size="11" fill="#334155">' + esc(t[0]) + '</text>';
+        if (lbW > 1) svg += '<rect x="' + (ox - lbW) + '" y="' + (y + 5) + '" width="' + lbW + '" height="16" rx="3" fill="#8b5cf6" fill-opacity="0.8"/>';
+        svg += '<rect x="' + ox + '" y="' + (y + 5) + '" width="' + fuW + '" height="16" rx="3" fill="#10b981" fill-opacity="0.85"/>';
+        svg += '<circle cx="' + ox + '" cy="' + (y + 13) + '" r="4" fill="#0f766e"/>';
+        if (i === 0) {
+          if (lbW > 30) svg += '<text x="' + (ox - lbW / 2) + '" y="' + (y + 17) + '" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">−' + fmt(lb) + '</text>';
+          if (fuW > 44) svg += '<text x="' + (ox + fuW / 2) + '" y="' + (y + 17) + '" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">+' + fmt(fu) + '</text>';
+        }
       });
-      const dy = top + 2 * rowH + 12, dxA = baseOx + 1.7 * gap, dxB = baseOx + 3.3 * gap;
+      const dy = top + 2 * rowH + 14, dxA = baseOx + 1.7 * gap, dxB = baseOx + 3.3 * gap;
       for (let k = 0; k < 3; k++) { const dx = dxA + (dxB - dxA) * (k / 2); svg += '<circle cx="' + dx + '" cy="' + dy + '" r="2.6" fill="#94a3b8"/>'; }
       svg += '<text x="' + ((dxA + dxB) / 2) + '" y="' + (dy - 8) + '" text-anchor="middle" font-size="9.5" fill="#94a3b8">…a new trial at each origin…</text>';
-      svg += '<line x1="' + plotL + '" y1="' + (H - 20) + '" x2="' + plotR + '" y2="' + (H - 20) + '" stroke="#cbd5e1"/>';
-      svg += '<text x="' + plotR + '" y="' + (H - 7) + '" text-anchor="end" font-size="10" fill="#94a3b8">calendar time → (a new trial each ' + esc(interval) + ')</text>';
+      svg += '<line x1="' + plotL + '" y1="' + (H - 22) + '" x2="' + plotR + '" y2="' + (H - 22) + '" stroke="#cbd5e1"/>';
+      svg += '<text x="' + plotR + '" y="' + (H - 8) + '" text-anchor="end" font-size="10" fill="#94a3b8">calendar time → (a new trial each ' + esc(interval) + ')</text>';
       document.getElementById("diagram").innerHTML = svg + "</svg>";
       document.getElementById("dlegend").innerHTML =
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full" style="background:#0f766e"></span>Trial origin (time zero)</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Look-back / eligibility</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#10b981"></span>Per-trial follow-up</span>';
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Look-back / eligibility (' + fmt(lb) + ')</span>' +
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#10b981"></span>Per-trial follow-up (' + fmt(fu) + ')</span>';
       document.getElementById("dcap").textContent =
-        "A new nested trial starts at each origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "): look-back / eligibility → follow-up, staggered along calendar time. Trials 1, 2, … through the last; a patient enters every trial they stay eligible for, pooled with a patient-clustered robust variance.";
+        "A new nested trial starts at each origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "): a " + fmt(lb) + " look-back / eligibility window → " + fmt(fu) + " follow-up, staggered along calendar time. Trials 1, 2, … through the last; a patient enters every trial they stay eligible for, pooled with a patient-clustered robust variance.";
     }
 
     const or = (s, d) => (s && s.length ? s : d);
