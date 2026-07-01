@@ -1,0 +1,158 @@
+// Validated phenotype library — curated, published code sets, extracted from the
+// AsPEN ACNU builder so the local CCW / Sequential-Trial builders can reuse it.
+// Categories: indications, exposures, outcomes. Kept as data only.
+
+export interface Phenotype { name: string; codes?: string; notes?: string; definition?: string; validation?: string; }
+
+export const PHENOTYPES = {
+  indications: [
+    { name: "Type 2 diabetes (T2DM)", codes: "ICD-10 E11.* (or ICD-9 250.*0 / 250.*2); confirm by ≥1 antidiabetic dispensing", notes: "Exclude T1DM (E10.*) separately in the exclusion section." },
+    { name: "Hypertension", codes: "ICD-10 I10-I15; or ≥2 dispensings of antihypertensive (ATC C02-C09) within 365 d", notes: "" },
+    { name: "Atrial fibrillation", codes: "ICD-10 I48.*; PPV ~90% in claims when from inpatient primary diagnosis", notes: "" },
+    { name: "Heart failure", codes: "ICD-10 I50.*; or I11.0 / I13.0 / I13.2 (hypertensive HF)", notes: "" },
+    { name: "Chronic kidney disease (CKD)", codes: "ICD-10 N18.*; or eGFR <60 ml/min/1.73m² on ≥2 occasions ≥90 d apart", notes: "" },
+    { name: "COPD", codes: "ICD-10 J44.*; ≥1 inpatient or ≥2 outpatient", notes: "" },
+    { name: "Schizophrenia", codes: "ICD-10 F20.* (or F25.* schizoaffective); ≥1 inpatient or ≥2 outpatient", notes: "" },
+    { name: "Major depressive disorder", codes: "ICD-10 F32.*, F33.*", notes: "" },
+    { name: "ADHD", codes: "ICD-10 F90.*; consider linkage to stimulant dispensing for confirmation", notes: "" },
+    { name: "Dementia", codes: "ICD-10 F00-F03, G30.*, G31.0, G31.83", notes: "" },
+    { name: "Osteoporosis", codes: "ICD-10 M80.*, M81.*", notes: "" },
+    { name: "Pregnancy", codes: "ICD-10 O*, Z3*; supplemented by pregnancy-specific dispensings", notes: "Consider trimester-specific look-back." },
+    {
+      name: "Lennox-Gastaut Syndrome (LGS)",
+      codes: "Confirmed LGS: ICD-10 G40.812 OR ≥1 rufinamide dispensing. Probable LGS: age ≤10 y at index with ≥3 antiseizure medications co-prescribed, plus ICD-9/10 developmental-delay codes.",
+      notes: "NHIRD-CGRD two-stage validation: NHIRD identification adjusted by CGRD EMR-confirmed PPV. 2018 PPV-adjusted prevalence ~2.4 / 100,000 overall (0.6 adult, 10.2 paediatric).",
+      validation: "Yang ASH, Tsai DHT (co-first), Chen LW, Cheng WM, Wang CC, Shao SC, Song WW, Kouhkamari MH, Huang WC, Bowditch S, Lai ECC. Epidemiology and Burden of Illness of Lennox-Gastaut Syndrome in Taiwan: A Retrospective Cohort Study. Risk Manag Healthc Policy 2025;18:3153-3166. PMID: 41000540.",
+    },
+  ],
+  exposures: [
+    { name: "Metformin", codes: "ATC A10BA02", notes: "" },
+    { name: "Sulfonylureas", codes: "ATC A10BB* (glibenclamide A10BB01, gliclazide A10BB09, glimepiride A10BB12, glipizide A10BB07)", notes: "" },
+    { name: "DPP-4 inhibitors", codes: "ATC A10BH* (sitagliptin A10BH01, vildagliptin A10BH02, saxagliptin A10BH03, linagliptin A10BH05, alogliptin A10BH04)", notes: "" },
+    { name: "SGLT2 inhibitors", codes: "ATC A10BK* (canagliflozin A10BK02, dapagliflozin A10BK01, empagliflozin A10BK03, ertugliflozin A10BK04)", notes: "Available in most AsPEN sites from ~2014 onward." },
+    { name: "GLP-1 receptor agonists", codes: "ATC A10BJ* (exenatide A10BJ01, liraglutide A10BJ02, dulaglutide A10BJ05, semaglutide A10BJ06, tirzepatide A10BX16)", notes: "" },
+    { name: "Thiazolidinediones (TZDs)", codes: "ATC A10BG* (pioglitazone A10BG03)", notes: "" },
+    { name: "Insulin (any)", codes: "ATC A10A*", notes: "" },
+    { name: "Statins", codes: "ATC C10AA*", notes: "" },
+    { name: "ACE inhibitors", codes: "ATC C09A* / C09B*", notes: "" },
+    { name: "ARBs", codes: "ATC C09C* / C09D*", notes: "" },
+    { name: "Beta-blockers", codes: "ATC C07A*", notes: "" },
+    { name: "Antipsychotics (any)", codes: "ATC N05A*", notes: "Atypicals N05AH/N05AL/N05AX; typicals N05AA-N05AG." },
+    { name: "ADHD stimulants", codes: "ATC N06BA (methylphenidate N06BA04, amphetamine N06BA01, lisdexamfetamine N06BA12)", notes: "" },
+    { name: "Opioid analgesics", codes: "ATC N02A* (excluding diamorphine where required)", notes: "Consider OMEDD calculation for dose comparison across sites." },
+    { name: "NSAIDs", codes: "ATC M01A* (excluding M01AX, the topical / non-systemic)", notes: "" },
+    { name: "Bisphosphonates", codes: "ATC M05BA* / M05BB*", notes: "" },
+    { name: "Anticoagulants; DOACs", codes: "ATC B01AE07 (dabigatran), B01AF01 (rivaroxaban), B01AF02 (apixaban), B01AF03 (edoxaban)", notes: "" },
+    { name: "Anticoagulants; warfarin", codes: "ATC B01AA03", notes: "" },
+  ],
+  outcomes: [
+    {
+      name: "Myocardial infarction (MI)",
+      codes: "ICD-10 I21.*, I22.* (primary discharge diagnosis)",
+      definition: "First hospitalisation with a primary discharge diagnosis of acute MI.",
+      validation: "PPV ~88% in NHIRD when restricted to inpatient primary diagnosis; Cheng CL, Lee CH, Chen PS, Li YH, Lin SJ, Yang YH. Validation of acute myocardial infarction cases in the National Health Insurance Research Database in Taiwan. J Epidemiol 2014;24(6):500-7.",
+    },
+    {
+      name: "Ischemic stroke",
+      codes: "ICD-10 I63.*, I64.* (primary discharge diagnosis)",
+      definition: "First hospitalisation with a primary discharge diagnosis of ischemic stroke.",
+      validation: "Multiple AsPEN-network validations in Taiwan claims: Cheng CL et al. Validation of the NHIRD with ischemic stroke cases in Taiwan. Pharmacoepidemiol Drug Saf 2011;20(3):236-42. Hsieh CY et al. Validating the diagnosis of acute ischemic stroke in a National Health Insurance claims database. J Formos Med Assoc 2015;114(3):254-9.",
+    },
+    {
+      name: "Heart failure hospitalisation",
+      codes: "ICD-10 I50.*, I11.0, I13.0, I13.2 (primary discharge diagnosis)",
+      definition: "First hospitalisation with a primary discharge diagnosis of heart failure.",
+      validation: "Validated in NHIRD- and CGRD-linked studies; see Shao SC et al, Clinical Epidemiology series, and the broader CGRD foundational paper: Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database; a multi-institutional electronic medical records database for real-world epidemiological research in Taiwan. Pharmacoepidemiol Drug Saf 2019;28(5):593-600.",
+    },
+    {
+      name: "3-point MACE",
+      codes: "Composite: ICD-10 I21.*, I22.* (MI); I63.*, I64.* (stroke); cause-of-death I00-I99 (CV death)",
+      definition: "Time to first of: non-fatal MI, non-fatal ischemic stroke, or cardiovascular death; whichever occurs first.",
+      validation: "Standard composite endpoint in CV outcome trials; component validation as per individual outcomes above (Cheng CL 2014 J Epidemiol; Cheng CL 2011 PDS).",
+    },
+    {
+      name: "4-point MACE",
+      codes: "3-point MACE + ICD-10 I50.* heart-failure hospitalisation",
+      definition: "Time to first of: non-fatal MI, non-fatal stroke, CV death, or heart-failure hospitalisation.",
+      validation: "Composite of validated components; Cheng CL 2014 (MI), Cheng CL 2011 (stroke), Shao SC et al CGRD HF studies.",
+    },
+    {
+      name: "All-cause mortality",
+      codes: "National death-registry linkage (NHIRD ↔ Cause-of-Death; HIRA ↔ KOSIS; etc.); site-specific",
+      definition: "Date of death from any cause.",
+      validation: "Near-complete in NHIRD via Cause-of-Death registry; see Lu TH et al, Hsieh CY et al for NHIRD mortality linkage validation. Sites without linkage use disenrolment + ≥30-day gap as proxy.",
+    },
+    {
+      name: "Cardiovascular death",
+      codes: "Cause-of-death ICD-10 I00-I99 (primary cause); requires death-registry linkage",
+      definition: "Death with a cardiovascular primary cause on the death certificate.",
+      validation: "NHIRD-linked Cause-of-Death studies (Hsieh CY et al Clinical Epidemiology 2019); cause-of-death accuracy is moderate, so sensitivity analysis with broader CV cause definition is recommended.",
+    },
+    {
+      name: "Acute kidney injury (AKI)",
+      codes: "ICD-10 N17.* (primary discharge diagnosis); KDIGO criteria where serum creatinine available",
+      definition: "First hospitalisation with primary discharge AKI diagnosis OR serum-creatinine-based KDIGO definition where lab linkage exists.",
+      validation: "Code-only AKI ascertainment has moderate PPV; Shao SC et al have used both code-based and lab-confirmed AKI in CGRD; pair with eGFR / serum-creatinine trajectories where available.",
+    },
+    {
+      name: "Diabetic ketoacidosis (DKA)",
+      codes: "ICD-10 E10.1, E11.1, E13.1, E14.1 (primary discharge diagnosis)",
+      definition: "First hospitalisation with primary discharge diagnosis of DKA.",
+      validation: "High specificity when restricted to inpatient primary diagnosis; used in NHIRD-based SGLT2i safety studies (e.g., Shao SC et al Clinical Epidemiology). Confirm with site-specific PPV where possible.",
+    },
+    {
+      name: "Hip fracture",
+      codes: "ICD-10 S72.0, S72.1, S72.2 (primary discharge diagnosis); paired with surgical procedure code for highest PPV",
+      definition: "First hospitalisation with primary discharge diagnosis of hip fracture (typically also requiring surgical-fixation code).",
+      validation: "High PPV reported across multiple AsPEN-network sites; see also AsPEN multi-country hip-fracture study (Lai EC et al, BMJ Open 2021/2023; protocol & epidemiology papers).",
+    },
+    {
+      name: "Any fracture",
+      codes: "ICD-10 S02 (skull), S12 (neck), S22 (rib), S32 (lumbar/pelvis), S42 (shoulder), S52 (forearm), S62 (hand), S72 (femur), S82 (leg), S92 (foot)",
+      definition: "First hospitalisation or specialist outpatient visit with a fracture diagnosis.",
+      validation: "Site-dependent. AsPEN antipsychotic-falls/fractures SCCS (Wang GH, Man KKC, Chang WH, Liao TC, Lai ECC. BMJ 2021;PMID 34503972) used inpatient primary-diagnosis restriction for specificity.",
+    },
+    {
+      name: "Falls",
+      codes: "ICD-10 W00-W19 (external cause); R29.6 (history of falling); injury-by-fall codes",
+      definition: "First ED or hospital encounter with a fall code (often combined with fall-related injury for higher capture).",
+      validation: "Used as a primary outcome in the AsPEN antipsychotic-cholinesterase falls/fractures BMJ study (Wang GH et al, BMJ 2021;PMID 34503972); defined as fall + injury composite for specificity.",
+    },
+    {
+      name: "Pneumonia hospitalisation",
+      codes: "ICD-10 J12-J18 (primary discharge diagnosis)",
+      definition: "First hospitalisation with primary discharge pneumonia diagnosis.",
+      validation: "Used as outcome in multiple AsPEN-network pharmacoepi studies (e.g., antipsychotic safety in older adults). Specificity is high when restricted to inpatient primary diagnosis.",
+    },
+    {
+      name: "GI bleeding",
+      codes: "ICD-10 K25.0, K25.2, K25.4, K25.6, K26.0, K26.2, K26.4, K26.6, K27.*, K28.*, K29.0, K92.0, K92.1, K92.2 (primary discharge diagnosis)",
+      definition: "First hospitalisation with primary discharge diagnosis of GI bleeding.",
+      validation: "Used in AsPEN PSSA studies on NSAID and PPI safety; see Andersen M, Pratt N, Sanfélix-Gimeno G et al. Pharmacoepidemiol Drug Saf 2013 (founding AsPEN methods paper).",
+    },
+    {
+      name: "Intracranial haemorrhage",
+      codes: "ICD-10 I60.*, I61.*, I62.* (primary discharge diagnosis)",
+      definition: "First hospitalisation with primary discharge intracranial-haemorrhage diagnosis.",
+      validation: "High specificity when restricted to inpatient primary diagnosis (NHIRD-validated; CGRD-confirmed in Shao SC et al Cardiovascular Diabetology 2019 DOAC studies).",
+    },
+    {
+      name: "Suicide / self-harm",
+      codes: "ICD-10 X60-X84 (suicide attempts), Y87.0 (sequelae); T-codes for intentional poisoning; combined with mortality-record cause of death",
+      definition: "First ED or hospital encounter with suicide / intentional self-harm code, or mortality with intentional-injury cause.",
+      validation: "Used in AsPEN psychotropic-COVID work (e.g., Man KKC et al Lancet Psychiatry 2024;PMID 39241791). Codes have low sensitivity; mortality linkage substantially improves capture.",
+    },
+    {
+      name: "Dementia (incident)",
+      codes: "ICD-10 F00-F03, G30.*, G31.0, G31.83; OR ≥1 dispensing of donepezil / galantamine / rivastigmine / memantine",
+      definition: "First diagnosis of dementia OR first dispensing of a dementia medication, whichever earlier.",
+      validation: "AsPEN dementia work uses this combined definition; see Tsai DHT et al CNS Drugs 2025 (PMID 40437158, NHIRD dementia survival) and the AsPEN 2023 NeuroGEN infrastructure paper (Tsai DHT et al Clinical Epidemiology 2023;PMID 38146486).",
+    },
+    {
+      name: "Thyroid cancer",
+      codes: "ICD-10 C73; cancer-registry linkage (NHIRD ↔ TCR; HIRA ↔ KNCI); strongly recommended",
+      definition: "First diagnosis of thyroid cancer from cancer-registry linkage (preferred) or claims (with lower PPV).",
+      validation: "AsPEN GLP-1 RA thyroid-cancer studies (Shao SC et al / Lai EC et al, 2025) used NHIRD ↔ Cancer Registry linkage; see PMIDs 39772758 and 40465422 in the AsPEN publication list.",
+    },
+  ],
+};

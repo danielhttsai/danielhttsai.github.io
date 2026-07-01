@@ -1,5 +1,7 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import PhenotypeLibrary from "../../components/PhenotypeLibrary.astro";
+import SitesPicker from "../../components/SitesPicker.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
@@ -32,20 +34,41 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
             <input name="title" placeholder="e.g. Metformin vs sulfonylurea and dementia: a sequential trial emulation" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Data source(s)</span>
             <input name="data" placeholder="e.g. Taiwan NHIRD (2003–2019)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <SitesPicker target="data" />
         </fieldset>
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
           <legend class="px-2 text-sm font-bold text-brand-700">2 · Causal question</legend>
-          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population</span>
-            <input name="population" placeholder="e.g. Adults ≥ 50 with type 2 diabetes, no dementia at baseline" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Treatment (index)</span>
-              <input name="exposure" placeholder="e.g. Metformin use in the interval" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Comparator</span>
-              <input name="comparator" placeholder="e.g. Sulfonylurea use (active comparator)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population</span>
+              <button type="button" data-open-library data-category="indications" data-target-name="population" class="text-[11px] text-brand-700 font-semibold hover:underline">📚 Library</button>
+            </div>
+            <input name="population" placeholder="e.g. Adults ≥ 50 with type 2 diabetes, no dementia at baseline" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
           </div>
-          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Outcome</span>
-            <input name="outcome" placeholder="e.g. Incident all-cause dementia" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Treatment (index)</span>
+                <button type="button" data-open-library data-category="exposures" data-target-name="exposure" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
+              </div>
+              <input name="exposure" placeholder="e.g. Metformin use in the interval" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+            </div>
+            <div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Comparator</span>
+                <button type="button" data-open-library data-category="exposures" data-target-name="comparator" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
+              </div>
+              <input name="comparator" placeholder="e.g. Sulfonylurea use (active comparator)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Outcome</span>
+              <button type="button" data-open-library data-category="outcomes" data-target-name="outcome" class="text-[11px] text-brand-700 font-semibold hover:underline">📚 Library</button>
+            </div>
+            <input name="outcome" placeholder="e.g. Incident all-cause dementia" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+          </div>
         </fieldset>
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
@@ -109,6 +132,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
     </div>
+
+    <PhenotypeLibrary />
   </section>
 
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>

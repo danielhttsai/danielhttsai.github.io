@@ -1,0 +1,80 @@
+---
+// Reusable "Pick from library" modal. Drop it once on a page, then add
+// trigger buttons anywhere with:
+//   data-open-library data-category="exposures|outcomes|indications"
+//   data-target-name="fieldName" [data-target-codes="…"] [data-target-def="…"] [data-also-fill="…"]
+// Clicking a library row fills the named form fields on the page.
+import { PHENOTYPES } from "../data/phenotypes";
+---
+
+<div data-library-modal class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-start justify-center p-4 sm:p-8 overflow-y-auto">
+  <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full my-8">
+    <div class="flex items-start justify-between p-5 border-b border-slate-200">
+      <div>
+        <p class="text-xs uppercase tracking-widest text-brand-700 font-bold">Validated phenotype library</p>
+        <h3 class="text-lg font-bold text-slate-900 mt-0.5" data-library-title>Pick a phenotype</h3>
+      </div>
+      <button type="button" data-library-close class="text-slate-400 hover:text-slate-700 text-2xl leading-none">×</button>
+    </div>
+    <div class="p-5">
+      <input type="text" data-library-search placeholder="Filter… (e.g. 'MI', 'SGLT2', 'suicide')" class="w-full rounded-lg border border-slate-300 p-2 text-sm mb-4" />
+      <div data-library-list class="space-y-2 max-h-[55vh] overflow-y-auto"></div>
+    </div>
+  </div>
+</div>
+
+<script is:inline define:vars={{ PHENOTYPES }}>
+  (function () {
+    const modal = document.querySelector("[data-library-modal]");
+    if (!modal) return;
+    const listEl = modal.querySelector("[data-library-list]");
+    const searchEl = modal.querySelector("[data-library-search]");
+    const titleEl = modal.querySelector("[data-library-title]");
+    let current = { category: "exposures", trigger: null };
+
+    const close = () => modal.classList.add("hidden");
+    modal.querySelector("[data-library-close]").addEventListener("click", close);
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    function fillFrom(item) {
+      const t = current.trigger; if (!t) return;
+      const set = (name, val) => {
+        if (!name || val == null) return;
+        const el = document.querySelector('[name="' + name + '"]');
+        if (el) { el.value = val; el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); }
+      };
+      set(t.dataset.targetName, item.name);
+      set(t.dataset.targetCodes, item.codes || "");
+      if (t.dataset.targetDef) set(t.dataset.targetDef, item.definition || item.codes || "");
+      set(t.dataset.alsoFill, item.name);
+      close();
+    }
+
+    function renderList() {
+      const items = PHENOTYPES[current.category] || [];
+      const q = (searchEl.value || "").toLowerCase().trim();
+      const shown = items.filter((it) => !q || (it.name + " " + (it.codes || "") + " " + (it.definition || "")).toLowerCase().includes(q));
+      listEl.innerHTML = shown.map((it) =>
+        '<button type="button" data-idx="' + items.indexOf(it) + '" class="block w-full text-left rounded-lg border border-slate-200 p-3 hover:border-brand-400 hover:bg-brand-50/40 transition">' +
+        '<p class="text-sm font-semibold text-slate-900">' + esc(it.name) + "</p>" +
+        (it.codes ? '<p class="text-xs text-slate-500 mt-0.5">' + esc(it.codes) + "</p>" : "") +
+        (it.definition ? '<p class="text-xs text-slate-600 mt-1">' + esc(it.definition) + "</p>" : "") +
+        "</button>"
+      ).join("") || '<p class="text-sm text-slate-400 p-3">No matches.</p>';
+      listEl.querySelectorAll("[data-idx]").forEach((b) => b.addEventListener("click", () => fillFrom(items[+b.dataset.idx])));
+    }
+    searchEl.addEventListener("input", renderList);
+
+    const LABELS = { indications: "population / indication", exposures: "drug (exposure or comparator)", outcomes: "outcome" };
+    document.querySelectorAll("[data-open-library]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        current = { category: btn.dataset.category || "exposures", trigger: btn };
+        titleEl.textContent = "Pick a " + (LABELS[current.category] || "phenotype");
+        searchEl.value = ""; renderList();
+        modal.classList.remove("hidden"); searchEl.focus();
+      });
+    });
+  })();
+</script>
