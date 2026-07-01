@@ -1,30 +1,22 @@
 ---
-import BaseLayout from "../../layouts/BaseLayout.astro";
-
-const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-const SRC = "https://danielhttsai.github.io/nhird-data-dictionary/";
+// The NHIRD data dictionary is its own app (same domain, now wearing the main
+// site's header) — no longer embedded in an iframe. This stub redirects the old
+// /tools/nhird-data-dictionary URL straight to it.
+const DEST = "https://danielhttsai.github.io/nhird-data-dictionary/";
 ---
 
-<BaseLayout
-  title="NHIRD Data Dictionary — Daniel Tsai"
-  description="A searchable data dictionary / codebook for Taiwan's National Health Insurance Research Database (NHIRD) and Health and Welfare Data Center (HWDC) datasets, embedded on Daniel Tsai's site."
->
-  <div class="border-b border-slate-200 bg-slate-50">
-    <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between gap-3">
-      <a href={`${base}/tools`} class="text-sm font-semibold text-brand-700 hover:underline">← RWE Tools</a>
-      <div class="flex items-center gap-4">
-        <span class="text-sm font-semibold text-slate-700 hidden sm:inline">NHIRD Data Dictionary</span>
-        <a href={SRC} target="_blank" rel="noopener" class="text-xs text-slate-500 hover:text-brand-700">Open full screen ↗</a>
-      </div>
-    </div>
-  </div>
-
-  <iframe
-    src={SRC}
-    title="NHIRD / HWDC Data Dictionary"
-    class="w-full border-0 block"
-    style="height: calc(100dvh - 7rem);"
-    loading="lazy"
-    referrerpolicy="no-referrer-when-downgrade"
-  ></iframe>
-</BaseLayout>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content={`0; url=${DEST}`} />
+    <link rel="canonical" href={DEST} />
+    <meta name="robots" content="noindex" />
+    <title>NHIRD Data Dictionary →</title>
+    <script is:inline define:vars={{ DEST }}>window.location.replace(DEST);</script>
+  </head>
+  <body style="font-family: system-ui, sans-serif; padding: 2rem; color: #334155;">
+    <p>Opening the <a href={DEST}>NHIRD / HWDC data dictionary</a>…</p>
+  </body>
+</html>
