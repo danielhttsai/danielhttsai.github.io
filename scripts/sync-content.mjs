@@ -235,33 +235,14 @@ function openize(src) {
 }
 
 async function syncTemplates() {
-  const builders = ["active-comparator-new-user", "case-crossover", "descriptive-analysis", "self-controlled-case-series"];
-  for (const name of builders) {
-    try {
-      const raw = await fetchText(`${ASPEN_RAW}/src/pages/members/templates/${name}.astro`);
-      const out = openize(raw);
-      // Safety gate: never write a template that still carries auth or the
-      // submit flow, or that lost its activation hook.
-      if (/WORKER_URL/.test(out) || /Send to AsPEN/.test(out) || !/setState\("ready"\)/.test(out)) {
-        console.warn(`  SKIP ${name}: transform left auth/send code or lost setState — keeping existing.`);
-        continue;
-      }
-      writeFileSync(p(`src/pages/tools/${name}.astro`), out, "utf8");
-      console.log(`  synced template ${name}`);
-    } catch (e) { console.warn(`  template ${name} failed: ${e.message}`); }
-  }
-  try {
-    const db = await fetchText(`${ASPEN_RAW}/src/data/databases.json`);
-    JSON.parse(db); // validate
-    writeFileSync(p("src/data/databases.json"), db, "utf8");
-    console.log("  synced databases.json");
-  } catch (e) { console.warn(`  databases.json failed: ${e.message}`); }
-  // Shared data files the templates import (e.g. the STROBE checklist).
-  try {
-    const strobe = await fetchText(`${ASPEN_RAW}/src/data/strobe.ts`);
-    writeFileSync(p("src/data/strobe.ts"), strobe, "utf8");
-    console.log("  synced strobe.ts");
-  } catch (e) { console.warn(`  strobe.ts failed: ${e.message}`); }
+  // DISABLED. The AsPEN upstream is frozen (no longer updated), and the four
+  // builder pages — plus databases.json / strobe.ts — are now maintained
+  // directly in this repo (study-design diagrams, TARGET checklists, CCW/ST,
+  // etc.). Re-fetching from AsPEN would clobber those local edits, so this is a
+  // deliberate no-op. To re-enable, restore the fetch/openize/writeFile loop
+  // from git history.
+  console.log("  template sync disabled (AsPEN frozen; builder pages maintained in this repo)");
+  void openize; // keep the transform referenced for future re-enable
 }
 
 // ───────────────────────── C. Network logos ─────────────────────────

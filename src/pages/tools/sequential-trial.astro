@@ -2,6 +2,8 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import PhenotypeLibrary from "../../components/PhenotypeLibrary.astro";
 import SitesPicker from "../../components/SitesPicker.astro";
+import DesignDiagram from "../../components/DesignDiagram.astro";
+import TargetChecklist from "../../components/TargetChecklist.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
@@ -107,6 +109,12 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
             </select></label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Follow-up window (per trial)</span>
             <input name="followup" placeholder="e.g. From each origin to outcome, death, disenrolment, or 8 years" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariate / eligibility look-back (days before origin)</span>
+              <input type="number" name="covlookback" value="365" min="0" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Max follow-up per trial (days)</span>
+              <input type="number" name="futrial" value="1825" min="1" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          </div>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sensitivity analyses</span>
             <textarea name="sensitivity" rows="2" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Trial interval (quarterly vs yearly); trial-stratified vs pooled estimate with I²; maximum follow-up per trial; negative-control outcomes."></textarea></label>
         </fieldset>
@@ -114,6 +122,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         <div class="flex flex-wrap gap-3">
           <button type="button" data-action="download-docx" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Word (.docx)</button>
           <button type="button" data-action="download-md" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Markdown</button>
+          <button type="button" data-action="download-target" class="text-brand-700 hover:underline font-semibold text-sm" title="TARGET checklist (Cashin et al, JAMA 2025) mapped to this protocol.">⬇ TARGET checklist</button>
           <button type="button" data-action="copy" class="text-brand-700 hover:underline font-semibold text-sm">Copy</button>
           <button type="button" data-action="reset" class="text-slate-500 hover:text-slate-800 text-sm ml-auto">Reset</button>
         </div>
@@ -134,6 +143,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     </div>
 
     <PhenotypeLibrary />
+    <DesignDiagram />
+    <TargetChecklist />
   </section>
 
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
@@ -147,33 +158,23 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), comparator: V("comparator"),
       outcome: V("outcome"), first: V("first"), last: V("last"), interval: V("interval"), eligibility: V("eligibility"),
       assignment: V("assignment"), multiple: V("multiple"), confounding: V("confounding"), estimand: V("estimand"),
-      followup: V("followup"), sensitivity: V("sensitivity"),
+      followup: V("followup"), covlookback: V("covlookback") || "365", futrial: V("futrial") || "1825", sensitivity: V("sensitivity"),
     });
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     function renderScheme(s) {
       const interval = s.interval || "monthly";
-      const N = 5;
-      const W = 840, gutter = 78, plotL = gutter, plotR = W - 20, plotW = plotR - plotL;
-      const top = 34, rowH = 30, H = top + N * rowH + 36;
-      const gap = plotW * 0.08, fuLen = plotW * 0.55;
-      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:620px" xmlns="http://www.w3.org/2000/svg">';
-      for (let i = 0; i < N; i++) {
-        const y = top + i * rowH, ox = plotL + i * gap;
-        svg += '<line x1="' + ox + '" y1="' + (y + 2) + '" x2="' + ox + '" y2="' + (H - 24) + '" stroke="#f1f5f9"/>';
-        svg += '<text x="' + (gutter - 10) + '" y="' + (y + 17) + '" text-anchor="end" font-size="10.5" fill="#334155">Trial ' + (i + 1) + '</text>';
-        svg += '<rect x="' + ox + '" y="' + (y + 4) + '" width="' + fuLen + '" height="18" rx="4" fill="#10b981" fill-opacity="' + (0.85 - i * 0.09) + '"/>';
-        svg += '<circle cx="' + ox + '" cy="' + (y + 13) + '" r="4" fill="#0f766e"/>';
+      const lb = Math.max(0, parseInt(s.covlookback) || 0);
+      const fu = Math.max(1, parseInt(s.futrial) || 1825);
+      const wins = [];
+      if (lb > 0) {
+        wins.push({ label: "Eligibility (incl./excl.) at origin", kind: "eligibility", startDay: -lb, endDay: 0 });
+        wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0 });
       }
-      svg += '<line x1="' + plotL + '" y1="' + (H - 24) + '" x2="' + plotR + '" y2="' + (H - 24) + '" stroke="#cbd5e1"/>';
-      svg += '<text x="' + plotR + '" y="' + (H - 10) + '" text-anchor="end" font-size="10" fill="#94a3b8">calendar time →  (origins ' + esc(interval) + ')</text>';
-      document.getElementById("diagram").innerHTML = svg + "</svg>";
+      wins.push({ label: "Follow-up (this trial)", kind: "followup", startDay: 0, endDay: fu });
+      window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Trial origin (time zero)" });
       document.getElementById("dcap").textContent =
-        "One nested trial at each origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "). A patient enters every trial they stay eligible for; estimates are pooled across trials with a patient-clustered robust variance.";
-      document.getElementById("dlegend").innerHTML =
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full" style="background:#0f766e"></span>Trial origin (time zero)</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#10b981"></span>Per-trial follow-up</span>' +
-        '<span class="text-slate-400">Schematic — 5 of many staggered trials.</span>';
+        "Windows for ONE nested trial (its origin = time zero). A trial like this starts at every origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "); a patient enters each trial they stay eligible for, and estimates are pooled across trials with a patient-clustered robust variance.";
     }
 
     const or = (s, d) => (s && s.length ? s : d);
@@ -256,6 +257,30 @@ ${(s.sensitivity || "Trial interval (e.g. quarterly vs yearly); pooled vs trial-
 
     document.querySelector("[data-action='download-md']").addEventListener("click", () =>
       dl(new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" }), fname("md")));
+
+    document.querySelector("[data-action='download-target']").addEventListener("click", async () => {
+      const D = window.docx; if (!D || !window.buildTargetChecklistDocx) return;
+      const s = readForm();
+      const E = or(s.exposure, "(treatment)"), C = or(s.comparator, "(comparator)");
+      const estPlain = { ITT: "the intention-to-treat effect (assignment at the origin)", PP: "the per-protocol effect (deviation censoring + IPCW)", both: "both the intention-to-treat and per-protocol effects" }[s.estimand] || "the treatment effect";
+      const map = {
+        "1a": "This study emulates a sequence of nested target trials of " + E + " vs " + C + " among " + or(s.population, "(population)") + ".",
+        "1b": or(s.data, ""),
+        "3": "Among " + or(s.population, "(population)") + ", what is the effect of " + E + " vs " + C + " on " + or(s.outcome, "(outcome)") + "?",
+        "5": or(s.data, ""),
+        "6": "One trial at each origin (" + or(s.interval, "monthly") + ", " + or(s.first, "start") + "–" + or(s.last, "end") + "); " + E + " vs " + C + "; eligibility re-assessed at each origin.",
+        "7a": or(s.eligibility, or(s.population, "(population)")) + " — re-assessed at each origin; covariate/eligibility look-back " + s.covlookback + " days.",
+        "7b": E + " vs " + C + ". " + or(s.assignment, "Assignment determined within each trial at its origin."),
+        "7c": or(s.confounding, "Propensity score within/across trials; weighting or matching within trial."),
+        "7d": "Time zero = each trial's origin. " + or(s.followup, "Follow-up per trial to outcome/death/end.") + " " + or(s.multiple, "Patients may enter multiple trials."),
+        "7e": or(s.outcome, "(outcome)"),
+        "7f": "Target estimand: " + estPlain + ".",
+        "7g": "Confounding controlled within each trial (" + or(s.confounding, "PS methods") + "); patients appearing in multiple trials handled with a patient-clustered robust variance.",
+        "7h": "Pooled logistic regression across trials with trial and follow-up-time terms; patient-clustered robust variance. Sensitivity: " + or(s.sensitivity, "(see protocol)") + ".",
+        "16": "The sequential design mitigates prevalent-user and selection bias; residual and unmeasured confounding cannot be excluded.",
+      };
+      try { dl(await window.buildTargetChecklistDocx(D, map, s.title || "Sequential trial study"), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx"); } catch (e) {}
+    });
     document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
       try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
     });

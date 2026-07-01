@@ -2,6 +2,8 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import PhenotypeLibrary from "../../components/PhenotypeLibrary.astro";
 import SitesPicker from "../../components/SitesPicker.astro";
+import DesignDiagram from "../../components/DesignDiagram.astro";
+import TargetChecklist from "../../components/TargetChecklist.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
@@ -100,6 +102,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         <div class="flex flex-wrap gap-3">
           <button type="button" data-action="download-docx" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Word (.docx)</button>
           <button type="button" data-action="download-md" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Markdown</button>
+          <button type="button" data-action="download-target" class="text-brand-700 hover:underline font-semibold text-sm" title="TARGET checklist (Cashin et al, JAMA 2025) mapped to this protocol.">⬇ TARGET checklist</button>
           <button type="button" data-action="copy" class="text-brand-700 hover:underline font-semibold text-sm">Copy</button>
           <button type="button" data-action="reset" class="text-slate-500 hover:text-slate-800 text-sm ml-auto">Reset</button>
         </div>
@@ -120,6 +123,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     </div>
 
     <PhenotypeLibrary />
+    <DesignDiagram />
+    <TargetChecklist />
   </section>
 
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
@@ -139,29 +144,16 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     function renderScheme(s) {
       const grace = Math.max(0, parseInt(s.grace) || 0);
       const fu = Math.max(grace + 1, parseInt(s.fudays) || 90);
-      const W = 820, plotL = 175, plotR = W - 20, plotW = plotR - plotL, top = 52, rowH = 40, H = top + 2 * rowH + 34;
-      const hi = fu * 1.03, x = (d) => plotL + (d / hi) * plotW, x0 = x(0), gx1 = x(grace);
-      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:600px" xmlns="http://www.w3.org/2000/svg">';
-      if (grace > 0) {
-        svg += '<rect x="' + x0 + '" y="30" width="' + (gx1 - x0) + '" height="' + (H - 58) + '" fill="#f59e0b" fill-opacity="0.13"/>';
-        svg += '<text x="' + ((x0 + gx1) / 2) + '" y="24" text-anchor="middle" font-size="10" fill="#b45309" font-weight="600">grace ' + grace + 'd</text>';
+      const lb = Math.max(0, parseInt(s.covlookback) || 0);
+      const wins = [];
+      if (lb > 0) {
+        wins.push({ label: "Eligibility (incl./excl.) assessment", kind: "eligibility", startDay: -lb, endDay: 0 });
+        wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0 });
       }
-      svg += '<line x1="' + x0 + '" y1="30" x2="' + x0 + '" y2="' + (H - 26) + '" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4 3"/>';
-      svg += '<text x="' + x0 + '" y="14" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f766e">Time zero — clone into both arms</text>';
-      [["Strategy A (initiate ≤ grace)", "#14b8a6"], ["Strategy B (defer)", "#6366f1"]].forEach((r, i) => {
-        const y = top + i * rowH;
-        svg += '<text x="' + (plotL - 10) + '" y="' + (y + 17) + '" text-anchor="end" font-size="11" fill="#334155">' + esc(r[0]) + '</text>';
-        svg += '<rect x="' + x0 + '" y="' + (y + 4) + '" width="' + (x(fu) - x0) + '" height="20" rx="4" fill="' + r[1] + '" fill-opacity="0.85"/>';
-        svg += '<text x="' + (x(fu) - 6) + '" y="' + (y + 18) + '" text-anchor="end" font-size="9.5" fill="#fff" font-weight="600">follow-up → ' + fu + 'd</text>';
-      });
-      svg += '<line x1="' + plotL + '" y1="' + (H - 26) + '" x2="' + plotR + '" y2="' + (H - 26) + '" stroke="#cbd5e1"/>';
-      [...new Set([0, grace, fu])].forEach((d) => { svg += '<text x="' + x(d) + '" y="' + (H - 12) + '" text-anchor="middle" font-size="10" fill="#94a3b8">' + d + 'd</text>'; });
-      document.getElementById("diagram").innerHTML = svg + "</svg>";
-      document.getElementById("dlegend").innerHTML =
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#f59e0b;opacity:.45"></span>Grace period (arms still compatible)</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#14b8a6"></span>Strategy A follow-up</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#6366f1"></span>Strategy B follow-up</span>' +
-        '<span class="text-slate-400">Clones censored at deviation → IPCW.</span>';
+      if (grace > 0) wins.push({ label: "Grace period", kind: "grace", startDay: 0, endDay: grace });
+      wins.push({ label: "Strategy A follow-up", kind: "followup", startDay: 0, endDay: fu });
+      wins.push({ label: "Strategy B follow-up", kind: "followup", startDay: 0, endDay: fu });
+      window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Time zero — clone into both arms" });
     }
 
     const or = (s, d) => (s && s.length ? s : d);
@@ -258,6 +250,29 @@ ${(s.sensitivity || "On-treatment (per-protocol analogue): additionally censor a
 
     document.querySelector("[data-action='download-md']").addEventListener("click", () =>
       dl(new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" }), fname("md")));
+
+    document.querySelector("[data-action='download-target']").addEventListener("click", async () => {
+      const D = window.docx; if (!D || !window.buildTargetChecklistDocx) return;
+      const s = readForm();
+      const A = or(s.stratA, "(strategy A)"), B = or(s.stratB, "(strategy B)");
+      const map = {
+        "1a": "This study emulates a target trial of " + A + " vs " + B + " among " + or(s.population, "(population)") + ", using a clone-censor-weight analysis.",
+        "1b": or(s.data, ""),
+        "3": "Among " + or(s.population, "(population)") + ", what is the effect of " + A + " vs " + B + " on " + or(s.outcome, "(outcome)") + "?",
+        "5": or(s.data, ""),
+        "6": "Strategies: " + A + " vs " + B + "; time zero: " + or(s.timezero, "(define)") + "; grace period " + s.grace + " days.",
+        "7a": or(s.population, "(population)") + " — eligibility (inclusion/exclusion) assessed at time zero.",
+        "7b": A + " vs " + B + "; grace period " + s.grace + " days.",
+        "7c": "Each eligible patient is cloned into both strategy arms at time zero; baseline covariates measured in the " + s.covlookback + "-day look-back window.",
+        "7d": "Time zero: " + or(s.timezero, "(define)") + ". Follow-up: " + or(s.followup, "to outcome, death, disenrolment, or end of study") + ".",
+        "7e": or(s.outcome, "(outcome)"),
+        "7f": "Per-protocol effect — " + effectText(s.effect) + ".",
+        "7g": "Clones censored at deviation from the assigned strategy; stabilised inverse-probability-of-censoring weights on: " + or(s.ipcw, "(covariates)") + ".",
+        "7h": "Weighted pooled logistic regression with follow-up time, its quadratic term, and a strategy × time interaction; 95% CIs by nonparametric bootstrap. Sensitivity: " + or(s.sensitivity, "(see protocol)") + ".",
+        "16": "The clone-censor-weight approach removes time-lag / immortal-time bias; residual and unmeasured confounding cannot be excluded.",
+      };
+      try { dl(await window.buildTargetChecklistDocx(D, map, s.title || "CCW study"), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx"); } catch (e) {}
+    });
     document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
       try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
     });

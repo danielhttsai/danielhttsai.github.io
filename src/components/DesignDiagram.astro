@@ -1,0 +1,85 @@
+---
+// Shared study-design timeline. Include once per builder page, then in the
+// page's render() build a spec and call:
+//   window.renderDesignDiagram(diagramEl, legendEl, spec)
+// spec = {
+//   windows: [{ label, kind, startDay, endDay, note? }],  // days relative to index (day 0)
+//   indexLabel?: "Index (day 0)",   // vertical anchor line
+//   unit?: "d",                       // axis unit suffix (default "d")
+// }
+// Kinds → colours: lookback, washout, eligibility, inclusion, exclusion,
+// exposure, grace, followup, risk, control, hazard, outcome, study.
+---
+
+<script is:inline>
+  (function () {
+    const K = {
+      lookback:    { c: "#8b5cf6", l: "Covariate look-back" },
+      washout:     { c: "#6366f1", l: "Washout / new-user" },
+      eligibility: { c: "#6366f1", l: "Eligibility assessment" },
+      inclusion:   { c: "#0ea5e9", l: "Inclusion window" },
+      exclusion:   { c: "#f43f5e", l: "Exclusion window" },
+      exposure:    { c: "#14b8a6", l: "Exposure" },
+      grace:       { c: "#f59e0b", l: "Grace period" },
+      followup:    { c: "#10b981", l: "Follow-up" },
+      risk:        { c: "#ec4899", l: "Risk window" },
+      control:     { c: "#94a3b8", l: "Control window" },
+      hazard:      { c: "#ef4444", l: "Hazard window" },
+      outcome:     { c: "#dc2626", l: "Outcome window" },
+      study:       { c: "#64748b", l: "Study period" },
+    };
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    function fmtDay(d) {
+      if (!d) return "0";
+      const a = Math.abs(d), s = d < 0 ? "−" : "+";
+      if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; }
+      if (a >= 60) return s + Math.round(a / 30) + "mo";
+      return s + a + "d";
+    }
+
+    window.renderDesignDiagram = function (diagramEl, legendEl, spec) {
+      if (!diagramEl) return;
+      const wins = (spec.windows || []).filter((w) => w && Number.isFinite(+w.startDay) && Number.isFinite(+w.endDay));
+      if (!wins.length) { diagramEl.innerHTML = ""; if (legendEl) legendEl.innerHTML = ""; return; }
+      const rows = wins.slice().sort((a, b) => a.startDay - b.startDay);
+      let lo = 0, hi = 0;
+      for (const w of rows) { lo = Math.min(lo, w.startDay, w.endDay); hi = Math.max(hi, w.startDay, w.endDay); }
+      if (lo === hi) hi = lo + 1;
+      const pad = (hi - lo) * 0.04 || 1; lo -= pad; hi += pad;
+
+      const W = 860, plotL = 205, plotR = W - 18, plotW = plotR - plotL;
+      const rowH = 30, top = 46, H = top + rows.length * rowH + 30;
+      const x = (d) => plotL + ((d - lo) / (hi - lo)) * plotW;
+      const x0 = x(0);
+      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:640px" xmlns="http://www.w3.org/2000/svg">';
+      // index anchor
+      svg += '<line x1="' + x0 + '" y1="28" x2="' + x0 + '" y2="' + (H - 16) + '" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4 3"/>';
+      svg += '<text x="' + x0 + '" y="18" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">' + esc(spec.indexLabel || "Index (day 0)") + '</text>';
+      // baseline axis
+      svg += '<line x1="' + plotL + '" y1="' + (H - 16) + '" x2="' + plotR + '" y2="' + (H - 16) + '" stroke="#cbd5e1"/>';
+      const ticks = [...new Set([Math.ceil(lo), 0, Math.floor(hi)])];
+      for (const d of ticks) svg += '<text x="' + x(d) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="10" fill="#94a3b8">' + fmtDay(d) + '</text>';
+      // rows
+      rows.forEach((w, i) => {
+        const y = top + i * rowH;
+        const meta = K[w.kind] || { c: "#64748b", l: w.kind };
+        const xa = x(Math.min(w.startDay, w.endDay)), xb = x(Math.max(w.startDay, w.endDay));
+        const ww = Math.max(3, xb - xa);
+        svg += '<text x="' + (plotL - 10) + '" y="' + (y + 15) + '" text-anchor="end" font-size="11" fill="#334155">' + esc(w.label || meta.l) + '</text>';
+        svg += '<rect x="' + xa + '" y="' + (y + 3) + '" width="' + ww + '" height="18" rx="4" fill="' + meta.c + '" fill-opacity="0.88"/>';
+        const dur = w.note || (fmtDay(w.startDay) + " → " + fmtDay(w.endDay));
+        if (ww > 90) svg += '<text x="' + (xa + ww / 2) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="600">' + esc(dur) + '</text>';
+        else svg += '<text x="' + (xb + 5) + '" y="' + (y + 16) + '" font-size="9.5" fill="#64748b">' + esc(dur) + '</text>';
+      });
+      diagramEl.innerHTML = svg + "</svg>";
+
+      if (legendEl) {
+        const kinds = [...new Set(rows.map((w) => w.kind))];
+        legendEl.innerHTML = kinds.map((k) => {
+          const m = K[k] || { c: "#64748b", l: k };
+          return '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + m.c + '"></span>' + esc(m.l) + '</span>';
+        }).join("");
+      }
+    };
+  })();
+</script>

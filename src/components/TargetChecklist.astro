@@ -1,0 +1,36 @@
+---
+// Include once on a builder page (which already loads the docx UMD global).
+// Exposes window.buildTargetChecklistDocx(D, itemsMap, title) → docx Blob,
+// mapping the protocol's fields onto the 21-item TARGET checklist (target.ts).
+// itemsMap keys are TARGET item ids ("1a", "3", "7a", …); missing ids render
+// as a "to be completed" placeholder.
+import { TARGET_CHECKLIST, TARGET_CITATION, TARGET_URL } from "../data/target";
+---
+
+<script is:inline define:vars={{ CHECKLIST: TARGET_CHECKLIST, CITATION: TARGET_CITATION, URL: TARGET_URL }}>
+  window.buildTargetChecklistDocx = async function (D, itemsMap, title) {
+    const FONT = "Times New Roman";
+    const text = (t, o = {}) => new D.TextRun({ text: String(t == null ? "" : t), font: FONT, size: 22, ...o });
+    const p = (runs, o = {}) => new D.Paragraph({ children: Array.isArray(runs) ? runs : [runs], spacing: { before: 40, after: 40, ...(o.spacing || {}) }, ...o });
+    const children = [];
+    children.push(p([text("TARGET checklist — " + (title || "(untitled study)"), { bold: true, size: 30 })], { spacing: { after: 80 } }));
+    children.push(p([text("This document maps the protocol to the TARGET checklist. " + CITATION + " Full checklist with elaboration: " + URL + ".", { italics: true, size: 18, color: "777777" })], { spacing: { after: 220 } }));
+    for (const sec of CHECKLIST) {
+      children.push(p([text(sec.section, { bold: true, size: 24, color: "21443E" })], { spacing: { before: 220, after: 60 } }));
+      for (const it of sec.items) {
+        children.push(p([text(it.id + ". ", { bold: true }), text(it.label, { bold: true })]));
+        const val = itemsMap && itemsMap[it.id];
+        const filled = val != null && String(val).trim() !== "";
+        children.push(p([text(filled ? val : "[To be completed at the protocol / reporting stage.]", filled ? {} : { italics: true, color: "999999" })], { spacing: { after: 90 } }));
+      }
+    }
+    children.push(p([text("Framework: " + CITATION + " Licence CC BY-ND 4.0.", { italics: true, size: 16, color: "777777" })], { spacing: { before: 300 } }));
+    const doc = new D.Document({
+      creator: "Protocol Generator — TARGET checklist",
+      title: "TARGET checklist — " + (title || "study"),
+      styles: { default: { document: { run: { font: FONT, size: 22 } } } },
+      sections: [{ children }],
+    });
+    return await D.Packer.toBlob(doc);
+  };
+</script>
