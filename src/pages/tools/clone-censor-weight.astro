@@ -1,0 +1,228 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<BaseLayout
+  title="Clone-Censor-Weight (CCW) protocol — Daniel Tsai"
+  description="A free, in-browser protocol builder for the clone-censor-weight (sequential trial / grace-period) approach to target-trial emulation, with one-click Word / Markdown export."
+>
+  <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
+    <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
+      <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">Protocol Generator · CCW</p>
+      <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Clone-Censor-Weight protocol</h1>
+      <p class="mt-3 text-base text-slate-600 max-w-3xl">
+        Draft a target-trial-emulation protocol for treatment strategies that are only distinguishable
+        <em>after</em> time zero — grace periods, sustained use, treat-to-target. Cloning + artificial censoring +
+        inverse-probability-of-censoring weights (IPCW) remove the immortal-time and selection bias that a naïve
+        analysis introduces. Everything runs in your browser.
+      </p>
+      <a class="mt-4 inline-block text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>← All designs</a>
+    </div>
+  </header>
+
+  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid lg:grid-cols-2 gap-8">
+      <!-- Form -->
+      <form id="form" class="space-y-6">
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">1 · Identity</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Study title</span>
+            <input name="title" placeholder="e.g. Early vs deferred anticoagulation after ischaemic stroke: a clone-censor-weight emulation" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Data source(s)</span>
+            <input name="data" placeholder="e.g. Taiwan NHIRD (2010–2020), linked to the National Death Registry" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">2 · Causal question</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population</span>
+            <input name="population" placeholder="e.g. Adults ≥ 18 with a first ischaemic stroke and atrial fibrillation" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Outcome</span>
+            <input name="outcome" placeholder="e.g. Recurrent stroke or systemic embolism within 90 days" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">3 · Time zero &amp; strategies</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Time zero (must be compatible with every strategy)</span>
+            <input name="timezero" placeholder="e.g. Day of stroke admission (all patients eligible for either strategy)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Strategy A</span>
+              <input name="stratA" placeholder="e.g. Initiate anticoagulation within the grace period" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Grace period (days)</span>
+              <input type="number" name="grace" value="14" min="0" step="1" class="mt-1 w-28 rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          </div>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Strategy B</span>
+            <input name="stratB" placeholder="e.g. Do not initiate anticoagulation during the grace period (deferred)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">4 · Censoring &amp; weights</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Deviation / censoring rule</span>
+            <textarea name="censor" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. A clone is artificially censored when its data first become incompatible with the assigned strategy: in the 'initiate' arm, if no anticoagulant is dispensed by the end of the grace period; in the 'deferred' arm, at the first dispensing during the grace period."></textarea></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">IPCW covariates (baseline + time-varying)</span>
+            <textarea name="ipcw" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Age, sex, CHA₂DS₂-VASc, HAS-BLED, stroke severity (NIHSS proxy), renal function, concomitant antiplatelets, time-varying bleeding events and procedures."></textarea></label>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">5 · Follow-up &amp; analysis</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Follow-up window / end of follow-up</span>
+            <input name="followup" placeholder="e.g. From time zero to outcome, death, disenrolment, or 90 days (whichever first)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Effect measure</span>
+            <select name="effect" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="RD">Risk difference &amp; risk ratio from weighted cumulative incidence</option>
+              <option value="HR">Hazard ratio from a weighted pooled logistic / Cox model</option>
+              <option value="both">Both absolute (RD/RR) and relative (HR)</option>
+            </select></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sensitivity analyses</span>
+            <textarea name="sensitivity" rows="2" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Alternative grace periods (7, 21, 30 d); weight truncation at 1st/99th percentile; negative-control outcomes; E-value for unmeasured confounding."></textarea></label>
+        </fieldset>
+
+        <div class="flex flex-wrap gap-3">
+          <button type="button" data-action="download-docx" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Word (.docx)</button>
+          <button type="button" data-action="download-md" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Markdown</button>
+          <button type="button" data-action="copy" class="text-brand-700 hover:underline font-semibold text-sm">Copy</button>
+          <button type="button" data-action="reset" class="text-slate-500 hover:text-slate-800 text-sm ml-auto">Reset</button>
+        </div>
+      </form>
+
+      <!-- Preview -->
+      <div class="lg:sticky lg:top-20 self-start">
+        <p class="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-2">Live protocol preview</p>
+        <pre id="preview" class="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[70vh]"></pre>
+      </div>
+    </div>
+  </section>
+
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
+  <script is:inline>
+    const STORAGE_KEY = "daniel.ccw-builder";
+    const form = document.getElementById("form");
+    const preview = document.getElementById("preview");
+    const V = (n) => (form.elements[n]?.value || "").trim();
+
+    const readForm = () => ({
+      title: V("title"), data: V("data"), population: V("population"), outcome: V("outcome"),
+      timezero: V("timezero"), stratA: V("stratA"), stratB: V("stratB"), grace: V("grace") || "14",
+      censor: V("censor"), ipcw: V("ipcw"), followup: V("followup"), effect: V("effect"), sensitivity: V("sensitivity"),
+    });
+
+    const or = (s, d) => (s && s.length ? s : d);
+    const effectText = (e) => ({
+      RD: "the risk difference and risk ratio, obtained by contrasting weighted cumulative-incidence (risk) curves at the end of follow-up",
+      HR: "the hazard ratio from a weighted pooled logistic regression (discrete-time hazards) model with the assigned strategy as the exposure",
+      both: "both absolute effects (risk difference and risk ratio from weighted cumulative-incidence curves) and the relative effect (hazard ratio from a weighted pooled logistic model)",
+    })[e] || "the per-protocol effect on the risk of the outcome";
+
+    const buildMarkdown = (s) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const A = or(s.stratA, "Strategy A — initiate treatment within the grace period");
+      const B = or(s.stratB, "Strategy B — do not initiate during the grace period");
+      return `# ${or(s.title, "(Untitled clone-censor-weight study)")}
+
+_Study protocol · clone-censor-weight target-trial emulation · drafted ${today}_
+
+## 1. Background and rationale
+This study emulates a target trial to estimate the **per-protocol effect** of two treatment strategies that cannot be distinguished at time zero and are only defined by what happens over a **grace period** of ${s.grace} days. A conventional "as-treated at baseline" analysis would misclassify person-time and induce **immortal-time bias**; a "new-user" comparison cannot represent a *deferred / sustained* strategy. The clone-censor-weight (CCW) approach removes these biases by explicitly emulating the trial's assignment, adherence, and censoring structure (Hernán 2016; Maringe 2020).
+
+## 2. Causal question (target trial)
+Among **${or(s.population, "(population)")}**, what is the effect of **${A}** versus **${B}** on **${or(s.outcome, "(outcome)")}**?
+
+## 3. Study design
+A **clone-censor-weight** emulation of the target trial, using observational data from **${or(s.data, "(data source)")}**.
+
+## 4. Time zero
+${or(s.timezero, "(define time zero — a point at which every patient is compatible with, and eligible for, all strategies)")}. Eligibility, strategy assignment, and the start of follow-up are all aligned at time zero.
+
+## 5. Treatment strategies
+- **${A}**
+- **${B}**
+- **Grace period:** ${s.grace} days from time zero, during which the strategies are still compatible with the data.
+
+## 6. Cloning
+At time zero each eligible patient is **cloned** once into every strategy arm. Each clone is assigned to, and followed under, one strategy. This makes baseline covariate distributions identical across arms by construction (no baseline confounding of assignment).
+
+## 7. Artificial censoring (deviation)
+${or(s.censor, "A clone is censored when its observed data first become incompatible with its assigned strategy (e.g. failure to initiate by the end of the grace period, or initiation in the deferred arm). Administrative censoring applies at death, disenrolment, or end of study.")}
+
+## 8. Inverse-probability-of-censoring weights (IPCW)
+Because artificial censoring is informative, each clone receives a **stabilised inverse-probability-of-censoring weight** to restore the population that would have remained under full adherence. Censoring is modelled (pooled logistic regression over follow-up time) on:
+
+${(s.ipcw || "(list the baseline and time-varying predictors of deviation — e.g. age, sex, comorbidity and bleeding-risk scores, disease severity, concomitant therapy, and post-baseline events)").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n") || "- (covariates)"}
+
+Weights are cumulative over follow-up and truncated at the 1st/99th percentiles.
+
+## 9. Follow-up and outcome
+${or(s.followup, "Follow-up runs from time zero until the outcome, death, disenrolment, or the end of the study period, whichever comes first.")} Outcome: **${or(s.outcome, "(outcome)")}**.
+
+## 10. Estimand and effect measure
+The target estimand is the **per-protocol effect** — the effect of receiving and adhering to each strategy. We report ${effectText(s.effect)}, with 95% confidence intervals from a **nonparametric bootstrap** (resampling patients, keeping their clones together).
+
+## 11. Statistical analysis
+1. Clone the eligible cohort into the strategy arms and apply the censoring rule.
+2. Fit the censoring model(s) and compute stabilised IPCW.
+3. Fit a **weighted pooled logistic regression** for the discrete-time hazard of the outcome, with the assigned strategy (and time) as covariates; derive weighted cumulative-incidence curves.
+4. Contrast the curves to obtain the effect measure(s); bootstrap for inference.
+
+## 12. Sensitivity analyses
+${(s.sensitivity || "Alternative grace periods; weight truncation thresholds; negative-control outcomes; E-value for unmeasured confounding; competing-risk (death) handling.").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n")}
+
+## References
+- Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183:758-64.
+- Hernán MA. How to estimate the effect of treatment duration on survival outcomes using observational data. BMJ 2018;360:k182.
+- Maringe C, Benitez Majano S, Exarchakou A, et al. Reflections on modern methods: trial emulation in the presence of immortal-time bias. Int J Epidemiol 2020;49:1719-29.
+- Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment. Stat Med 2010;29:2757-70.
+`;
+    };
+
+    const render = () => {
+      const s = readForm();
+      preview.textContent = buildMarkdown(s);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
+    };
+
+    (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        if (saved) for (const k in saved) if (form.elements[k]) form.elements[k].value = saved[k];
+      } catch {}
+      render();
+    })();
+    form.addEventListener("input", render);
+    form.addEventListener("change", render);
+
+    const slugify = () => (readForm().title || "ccw-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "ccw-protocol";
+    const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
+    const dl = (blob, name) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
+
+    document.querySelector("[data-action='download-md']").addEventListener("click", () =>
+      dl(new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" }), fname("md")));
+    document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
+      try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
+    });
+    document.querySelector("[data-action='reset']").addEventListener("click", () => {
+      if (!confirm("Clear the form?")) return;
+      form.reset(); localStorage.removeItem(STORAGE_KEY); render();
+    });
+
+    // Word export — Markdown-ish rendered to a formatted .docx
+    document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
+      const D = window.docx; if (!D) return;
+      const FONT = "Calibri";
+      const md = preview.textContent || "";
+      const children = [];
+      for (const raw of md.split(/\r?\n/)) {
+        const line = raw.replace(/\*\*/g, "");
+        if (/^# /.test(line)) children.push(new D.Paragraph({ heading: D.HeadingLevel.TITLE, spacing: { after: 120 }, children: [new D.TextRun({ text: line.slice(2), font: FONT, bold: true, size: 32 })] }));
+        else if (/^## /.test(line)) children.push(new D.Paragraph({ heading: D.HeadingLevel.HEADING_1, spacing: { before: 200, after: 60 }, children: [new D.TextRun({ text: line.slice(3), font: FONT, bold: true, size: 26, color: "21443E" })] }));
+        else if (/^- /.test(line)) children.push(new D.Paragraph({ bullet: { level: 0 }, children: [new D.TextRun({ text: line.slice(2), font: FONT, size: 20 })] }));
+        else if (/^_.*_$/.test(line)) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.TextRun({ text: line.replace(/^_|_$/g, ""), font: FONT, italics: true, size: 18, color: "777777" })] }));
+        else if (/^\d+\. /.test(line)) children.push(new D.Paragraph({ numbering: undefined, children: [new D.TextRun({ text: line, font: FONT, size: 20 })] }));
+        else if (line.trim() === "") children.push(new D.Paragraph({ children: [] }));
+        else children.push(new D.Paragraph({ spacing: { after: 40 }, children: [new D.TextRun({ text: line, font: FONT, size: 20 })] }));
+      }
+      const doc = new D.Document({ creator: "Protocol Generator — CCW", title: readForm().title || "CCW protocol", styles: { default: { document: { run: { font: FONT, size: 20 } } } }, sections: [{ children }] });
+      dl(await D.Packer.toBlob(doc), fname("docx"));
+    });
+  </script>
+</BaseLayout>

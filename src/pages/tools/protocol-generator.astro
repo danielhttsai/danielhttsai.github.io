@@ -36,6 +36,22 @@ const designs = [
     example: "DDD/1000/day for anticonvulsants across Asian sites, 2010–2023, with joinpoint break detection",
     strengths: "Provides the denominator causal studies depend on. Covers incidence / prevalence / mortality / drug-utilisation / switching with age-standardisation + joinpoint trend analysis built in.",
   },
+  {
+    slug: "clone-censor-weight",
+    short: "CCW",
+    title: "Clone-Censor-Weight",
+    when: "When the strategies you compare can't be told apart at time zero — grace periods ('start within X days'), sustained use, or treat-to-target — so a naïve baseline analysis creates immortal-time bias.",
+    example: "Early vs deferred anticoagulation after stroke, ≤14-day grace period",
+    strengths: "Clones each patient into every strategy at time zero (no baseline confounding of assignment), censors at deviation, and reweights with IPCW to recover the per-protocol effect without immortal-time bias.",
+  },
+  {
+    slug: "sequential-trial",
+    short: "ST",
+    title: "Sequential Trial Emulation",
+    when: "When eligibility is time-varying and a single index date wastes person-time — patients who qualify later should still contribute. Emulate one nested trial at each eligible origin and pool.",
+    example: "Metformin vs sulfonylurea and dementia, monthly trials 2003–2015",
+    strengths: "Uses every eligible time origin (mitigates prevalent-user / selection bias), lets patients enter multiple nested trials, and pools with a patient-clustered robust variance. Composes with CCW for per-protocol effects.",
+  },
 ];
 ---
 
@@ -64,7 +80,7 @@ const designs = [
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 space-y-6">
     <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools`}>← All RWE tools</a>
 
-    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {designs.map((d) => (
         <a href={`${base}/tools/${d.slug}`}
            class="group flex flex-col border border-slate-200 rounded-2xl p-6 bg-white hover:shadow-md hover:border-brand-400 transition">
