@@ -66,8 +66,12 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
           <legend class="px-2 text-sm font-bold text-brand-700">5 · Follow-up &amp; analysis</legend>
-          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Follow-up window / end of follow-up</span>
-            <input name="followup" placeholder="e.g. From time zero to outcome, death, disenrolment, or 90 days (whichever first)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Follow-up window / end of follow-up</span>
+              <input name="followup" placeholder="e.g. From time zero to outcome, death, disenrolment, or 90 days (whichever first)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Max follow-up (days)</span>
+              <input type="number" name="fudays" value="90" min="1" step="1" class="mt-1 w-28 rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          </div>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Effect measure</span>
             <select name="effect" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
               <option value="RD">Risk difference &amp; risk ratio from weighted cumulative incidence</option>
@@ -92,6 +96,13 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         <pre id="preview" class="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[70vh]"></pre>
       </div>
     </div>
+
+    <div class="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
+      <p class="mt-1 text-xs text-slate-500">Cloning at time zero, the grace period, and follow-up under each strategy — updates with the form.</p>
+      <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
+      <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
+    </div>
   </section>
 
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
@@ -104,8 +115,37 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), outcome: V("outcome"),
       timezero: V("timezero"), stratA: V("stratA"), stratB: V("stratB"), grace: V("grace") || "14",
-      censor: V("censor"), ipcw: V("ipcw"), followup: V("followup"), effect: V("effect"), sensitivity: V("sensitivity"),
+      censor: V("censor"), ipcw: V("ipcw"), followup: V("followup"), fudays: V("fudays") || "90", effect: V("effect"), sensitivity: V("sensitivity"),
     });
+
+    const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    function renderScheme(s) {
+      const grace = Math.max(0, parseInt(s.grace) || 0);
+      const fu = Math.max(grace + 1, parseInt(s.fudays) || 90);
+      const W = 820, plotL = 175, plotR = W - 20, plotW = plotR - plotL, top = 52, rowH = 40, H = top + 2 * rowH + 34;
+      const hi = fu * 1.03, x = (d) => plotL + (d / hi) * plotW, x0 = x(0), gx1 = x(grace);
+      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:600px" xmlns="http://www.w3.org/2000/svg">';
+      if (grace > 0) {
+        svg += '<rect x="' + x0 + '" y="30" width="' + (gx1 - x0) + '" height="' + (H - 58) + '" fill="#f59e0b" fill-opacity="0.13"/>';
+        svg += '<text x="' + ((x0 + gx1) / 2) + '" y="24" text-anchor="middle" font-size="10" fill="#b45309" font-weight="600">grace ' + grace + 'd</text>';
+      }
+      svg += '<line x1="' + x0 + '" y1="30" x2="' + x0 + '" y2="' + (H - 26) + '" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4 3"/>';
+      svg += '<text x="' + x0 + '" y="14" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f766e">Time zero — clone into both arms</text>';
+      [["Strategy A (initiate ≤ grace)", "#14b8a6"], ["Strategy B (defer)", "#6366f1"]].forEach((r, i) => {
+        const y = top + i * rowH;
+        svg += '<text x="' + (plotL - 10) + '" y="' + (y + 17) + '" text-anchor="end" font-size="11" fill="#334155">' + esc(r[0]) + '</text>';
+        svg += '<rect x="' + x0 + '" y="' + (y + 4) + '" width="' + (x(fu) - x0) + '" height="20" rx="4" fill="' + r[1] + '" fill-opacity="0.85"/>';
+        svg += '<text x="' + (x(fu) - 6) + '" y="' + (y + 18) + '" text-anchor="end" font-size="9.5" fill="#fff" font-weight="600">follow-up → ' + fu + 'd</text>';
+      });
+      svg += '<line x1="' + plotL + '" y1="' + (H - 26) + '" x2="' + plotR + '" y2="' + (H - 26) + '" stroke="#cbd5e1"/>';
+      [...new Set([0, grace, fu])].forEach((d) => { svg += '<text x="' + x(d) + '" y="' + (H - 12) + '" text-anchor="middle" font-size="10" fill="#94a3b8">' + d + 'd</text>'; });
+      document.getElementById("diagram").innerHTML = svg + "</svg>";
+      document.getElementById("dlegend").innerHTML =
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#f59e0b;opacity:.45"></span>Grace period (arms still compatible)</span>' +
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#14b8a6"></span>Strategy A follow-up</span>' +
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#6366f1"></span>Strategy B follow-up</span>' +
+        '<span class="text-slate-400">Clones censored at deviation → IPCW.</span>';
+    }
 
     const or = (s, d) => (s && s.length ? s : d);
     const effectText = (e) => ({
@@ -178,6 +218,7 @@ ${(s.sensitivity || "Alternative grace periods; weight truncation thresholds; ne
     const render = () => {
       const s = readForm();
       preview.textContent = buildMarkdown(s);
+      renderScheme(s);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
     };
 
