@@ -6,6 +6,28 @@ import DesignDiagram from "../../components/DesignDiagram.astro";
 import TargetChecklist from "../../components/TargetChecklist.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Curated lists surfaced as checkboxes (matching the ACNU/SCCS/CCO/DA builders):
+// tick to include, plus a free-text "custom" box.
+const SUBGROUPS = [
+  "Age group (e.g. ≥65 vs <65)",
+  "Sex (male vs female)",
+  "Comorbidity burden (e.g. CCI ≥2 vs <2)",
+  "Prior cardiovascular disease",
+  "Baseline disease severity",
+  "Prior hospitalisation for the condition",
+  "Index / calendar year (before vs after a cut-point)",
+  "Baseline risk score (high vs low)",
+];
+const SENSITIVITY = [
+  "On-treatment (per-protocol analogue): censor at discontinuation (>90-day gap) or switch",
+  "Shorter / longer grace period",
+  "Weight truncation at 1st / 99th percentile",
+  "Restrict outcomes to inpatient / emergency records",
+  "Negative-control outcome",
+  "E-value for unmeasured confounding",
+  "Competing-risk (death) handling",
+];
 ---
 
 <BaseLayout
@@ -95,8 +117,30 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
               <option value="HR">Hazard ratio from a weighted pooled logistic / Cox model</option>
               <option value="both">Both absolute (RD/RR) and relative (HR)</option>
             </select></label>
-          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sensitivity analyses</span>
-            <textarea name="sensitivity" rows="2" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Alternative grace periods (7, 21, 30 d); weight truncation at 1st/99th percentile; negative-control outcomes; E-value for unmeasured confounding."></textarea></label>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Subgroup analyses (tick to perform)</span>
+            <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+              {SUBGROUPS.map((sg, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="subgroupsPick" value={sg} checked={i < 4} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{sg}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="subgroupsCustom" rows="2" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom subgroups (one per line)"></textarea>
+          </div>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sensitivity analyses (tick to perform)</span>
+            <div class="mt-1.5 grid grid-cols-1 gap-y-1">
+              {SENSITIVITY.map((sn, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="sensitivityPick" value={sn} checked={i < 5} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{sn}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="sensitivityCustom" rows="2" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom sensitivity analyses (one per line)"></textarea>
+          </div>
         </fieldset>
 
         <div class="flex flex-wrap gap-3">
@@ -133,11 +177,14 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     const form = document.getElementById("form");
     const preview = document.getElementById("preview");
     const V = (n) => (form.elements[n]?.value || "").trim();
+    const MV = (n) => [...form.querySelectorAll('[name="' + n + '"]:checked')].map((c) => c.value);
+    const mergeList = (pick, custom) => [...(pick || []), ...String(custom || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean)];
 
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), outcome: V("outcome"),
       timezero: V("timezero"), stratA: V("stratA"), stratB: V("stratB"), grace: V("grace") || "14",
-      censor: V("censor"), ipcw: V("ipcw"), covlookback: V("covlookback") || "365", followup: V("followup"), fudays: V("fudays") || "90", effect: V("effect"), sensitivity: V("sensitivity"),
+      censor: V("censor"), ipcw: V("ipcw"), covlookback: V("covlookback") || "365", followup: V("followup"), fudays: V("fudays") || "90", effect: V("effect"),
+      subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -216,8 +263,11 @@ The primary estimand is the **per-protocol effect** (receiving and adhering to e
 
 **Comparison — conventional analysis (as-started, ITT-analogue):** start follow-up at the index date, balance the arms by **propensity-score matching** (standardised mean difference < 0.1 as the balance criterion), and handle the competing risk of death with **Fine–Gray sub-distribution** and **cause-specific Cox** models. The gap between this and the CCW estimate indexes the time-lag / immortal-time bias removed.
 
-## 12. Sensitivity analyses
-${(s.sensitivity || "On-treatment (per-protocol analogue): additionally censor at treatment discontinuation (no refill > 90 days) or switch\nShorter grace period (e.g. halve it)\nWeight truncation thresholds (1st/99th percentile)\nSubgroup analyses (age, sex, disease history, baseline risk)\nRestrict outcomes to inpatient / emergency records\nNegative-control outcomes; E-value for unmeasured confounding").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n")}
+## 12. Subgroup analyses
+${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsPick, s.subgroupsCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+## 13. Sensitivity analyses
+${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensitivityPick, s.sensitivityCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
 
 ## References
 - Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183:758-64.
@@ -237,7 +287,13 @@ ${(s.sensitivity || "On-treatment (per-protocol analogue): additionally censor a
     (() => {
       try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-        if (saved) for (const k in saved) if (form.elements[k]) form.elements[k].value = saved[k];
+        if (saved) for (const k in saved) {
+          const els = form.elements[k]; if (!els) continue;
+          const val = saved[k];
+          if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
+          else if (els.type === "checkbox") els.checked = !!val;
+          else els.value = val;
+        }
       } catch {}
       render();
     })();
@@ -268,7 +324,7 @@ ${(s.sensitivity || "On-treatment (per-protocol analogue): additionally censor a
         "7e": or(s.outcome, "(outcome)"),
         "7f": "Per-protocol effect — " + effectText(s.effect) + ".",
         "7g": "Clones censored at deviation from the assigned strategy; stabilised inverse-probability-of-censoring weights on: " + or(s.ipcw, "(covariates)") + ".",
-        "7h": "Weighted pooled logistic regression with follow-up time, its quadratic term, and a strategy × time interaction; 95% CIs by nonparametric bootstrap. Sensitivity: " + or(s.sensitivity, "(see protocol)") + ".",
+        "7h": "Weighted pooled logistic regression with follow-up time, its quadratic term, and a strategy × time interaction; 95% CIs by nonparametric bootstrap. Subgroups: " + or(mergeList(s.subgroupsPick, s.subgroupsCustom).join("; "), "none pre-specified") + ". Sensitivity: " + or(mergeList(s.sensitivityPick, s.sensitivityCustom).join("; "), "(see protocol)") + ".",
         "16": "The clone-censor-weight approach removes time-lag / immortal-time bias; residual and unmeasured confounding cannot be excluded.",
       };
       try { dl(await window.buildTargetChecklistDocx(D, map, s.title || "CCW study"), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx"); } catch (e) {}
