@@ -115,6 +115,15 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
             <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Max follow-up per trial (days)</span>
               <input type="number" name="futrial" value="1825" min="1" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
           </div>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Subgroup analyses</span>
+            <textarea name="subgroups" rows="2" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Pre-specified subgroups for the primary outcome, one per line — click a chip to add, or type your own."></textarea>
+            <div class="mt-1.5 flex flex-wrap gap-1.5">
+              {["Age group", "Sex", "Comorbidity burden", "Disease / CVD history", "Concomitant medications", "Baseline risk score", "Prior hospitalisation", "Calendar period"].map((sg) => (
+                <button type="button" data-add-subgroup={sg} class="text-[11px] rounded-full border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-brand-400 hover:text-brand-700 transition">+ {sg}</button>
+              ))}
+            </div>
+          </div>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sensitivity analyses</span>
             <textarea name="sensitivity" rows="2" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Trial interval (quarterly vs yearly); trial-stratified vs pooled estimate with I²; maximum follow-up per trial; negative-control outcomes."></textarea></label>
         </fieldset>
@@ -158,7 +167,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), comparator: V("comparator"),
       outcome: V("outcome"), first: V("first"), last: V("last"), interval: V("interval"), eligibility: V("eligibility"),
       assignment: V("assignment"), multiple: V("multiple"), confounding: V("confounding"), estimand: V("estimand"),
-      followup: V("followup"), covlookback: V("covlookback") || "365", futrial: V("futrial") || "1825", sensitivity: V("sensitivity"),
+      followup: V("followup"), covlookback: V("covlookback") || "365", futrial: V("futrial") || "1825", subgroups: V("subgroups"), sensitivity: V("sensitivity"),
     });
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -247,7 +256,10 @@ The target estimand is ${estimandText(s.estimand)}.
 3. Fit a **pooled logistic (or weighted Cox) model** across all trials for the outcome hazard, with terms for the assigned treatment, follow-up time, and trial; ${s.estimand === "ITT" ? "no deviation censoring (ITT)." : s.estimand === "PP" ? "censor at deviation and apply inverse-probability-of-censoring weights (per-protocol)." : "run ITT and per-protocol (deviation censoring + IPCW) variants."}
 4. Estimate a **pooled** effect with 95% CIs from a robust variance clustered on patient (and, as a check, a trial-stratified estimate with a heterogeneity summary).
 
-## 11. Sensitivity analyses
+## 11. Subgroup analyses
+${(s.subgroups || "Pre-specified subgroups for the primary outcome (e.g. age, sex, comorbidity burden, disease history, baseline risk); effects estimated within each subgroup and compared with an interaction term.").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n")}
+
+## 12. Sensitivity analyses
 ${(s.sensitivity || "Trial interval (e.g. quarterly vs yearly); pooled vs trial-stratified estimate with I²; maximum follow-up per trial; negative-control outcomes; alternative PS specifications.").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n")}
 
 ## References
@@ -275,6 +287,14 @@ ${(s.sensitivity || "Trial interval (e.g. quarterly vs yearly); pooled vs trial-
     form.addEventListener("input", render);
     form.addEventListener("change", render);
 
+    document.querySelectorAll("[data-add-subgroup]").forEach((b) => b.addEventListener("click", () => {
+      const ta = form.elements["subgroups"], add = b.getAttribute("data-add-subgroup");
+      const lines = (ta.value || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+      if (!lines.includes(add)) lines.push(add);
+      ta.value = lines.join("\n");
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }));
+
     const slugify = () => (readForm().title || "sequential-trial-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "sequential-trial-protocol";
     const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
     const dl = (blob, name) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
@@ -300,7 +320,7 @@ ${(s.sensitivity || "Trial interval (e.g. quarterly vs yearly); pooled vs trial-
         "7e": or(s.outcome, "(outcome)"),
         "7f": "Target estimand: " + estPlain + ".",
         "7g": "Confounding controlled within each trial (" + or(s.confounding, "PS methods") + "); patients appearing in multiple trials handled with a patient-clustered robust variance.",
-        "7h": "Pooled logistic regression across trials with trial and follow-up-time terms; patient-clustered robust variance. Sensitivity: " + or(s.sensitivity, "(see protocol)") + ".",
+        "7h": "Pooled logistic regression across trials with trial and follow-up-time terms; patient-clustered robust variance. Subgroups: " + or((s.subgroups || "").replace(/\r?\n/g, "; "), "none pre-specified") + ". Sensitivity: " + or(s.sensitivity, "(see protocol)") + ".",
         "16": "The sequential design mitigates prevalent-user and selection bias; residual and unmeasured confounding cannot be excluded.",
       };
       try { dl(await window.buildTargetChecklistDocx(D, map, s.title || "Sequential trial study"), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx"); } catch (e) {}
