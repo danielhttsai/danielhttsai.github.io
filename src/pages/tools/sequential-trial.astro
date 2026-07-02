@@ -369,22 +369,100 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
       form.reset(); localStorage.removeItem(STORAGE_KEY); render();
     });
 
-    document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
-      const D = window.docx; if (!D) return;
-      const FONT = "Calibri";
-      const md = preview.textContent || "";
+    // Formatted Word protocol, matching the ACNU/SCCS/CCO/DA builders.
+    const buildDocx = async (s) => {
+      const D = window.docx;
+      const today = new Date().toISOString().slice(0, 10);
+      const FONT = "Times New Roman";
+      const text = (str, o = {}) => new D.TextRun({ text: String(str ?? ""), font: FONT, size: 22, ...o });
+      const p = (ch, o = {}) => new D.Paragraph({ children: Array.isArray(ch) ? ch : [ch], spacing: { before: 60, after: 60, ...(o.spacing || {}) }, ...o });
+      const h1 = (str) => new D.Paragraph({ children: [text(str, { bold: true, size: 28 })], spacing: { before: 200, after: 80 }, heading: D.HeadingLevel.HEADING_1 });
+      const para = (str) => p([text(str)]);
+      const bullet = (str) => new D.Paragraph({ children: [text(str)], bullet: { level: 0 }, spacing: { before: 0, after: 0 } });
+      const numItem = (str) => new D.Paragraph({ children: [text(str)], numbering: { reference: "ordered", level: 0 }, spacing: { before: 0, after: 0 } });
+      const border = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
+      const cb = { top: border, bottom: border, left: border, right: border };
+      const labelTable = (rows) => new D.Table({
+        width: { size: 9026, type: D.WidthType.DXA }, columnWidths: [3000, 6026],
+        rows: rows.map(([label, value]) => new D.TableRow({ children: [
+          new D.TableCell({ borders: cb, width: { size: 3000, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, shading: { fill: "F5F5F5", type: D.ShadingType.CLEAR }, children: [p([text(label, { bold: true })])] }),
+          new D.TableCell({ borders: cb, width: { size: 6026, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [p([text(value || "-")])] }),
+        ] })),
+      });
+
+      const E = or(s.exposure, "(treatment)"), C = or(s.comparator, "(comparator)");
+      const estPlain = ({ ITT: "the intention-to-treat effect (assignment at each origin)", PP: "the per-protocol effect (deviation censoring + IPCW within each trial)", both: "both the intention-to-treat and per-protocol effects" })[s.estimand] || "the treatment effect";
+      const subg = mergeList(s.subgroupsPick, s.subgroupsCustom);
+      const sens = mergeList(s.sensitivityPick, s.sensitivityCustom);
+
       const children = [];
-      for (const raw of md.split(/\r?\n/)) {
-        const line = raw.replace(/\*\*/g, "");
-        if (/^# /.test(line)) children.push(new D.Paragraph({ heading: D.HeadingLevel.TITLE, spacing: { after: 120 }, children: [new D.TextRun({ text: line.slice(2), font: FONT, bold: true, size: 32 })] }));
-        else if (/^## /.test(line)) children.push(new D.Paragraph({ heading: D.HeadingLevel.HEADING_1, spacing: { before: 200, after: 60 }, children: [new D.TextRun({ text: line.slice(3), font: FONT, bold: true, size: 26, color: "21443E" })] }));
-        else if (/^- /.test(line)) children.push(new D.Paragraph({ bullet: { level: 0 }, children: [new D.TextRun({ text: line.slice(2), font: FONT, size: 20 })] }));
-        else if (/^_.*_$/.test(line)) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.TextRun({ text: line.replace(/^_|_$/g, ""), font: FONT, italics: true, size: 18, color: "777777" })] }));
-        else if (line.trim() === "") children.push(new D.Paragraph({ children: [] }));
-        else children.push(new D.Paragraph({ spacing: { after: 40 }, children: [new D.TextRun({ text: line, font: FONT, size: 20 })] }));
-      }
-      const doc = new D.Document({ creator: "Protocol Generator — Sequential Trial", title: readForm().title || "Sequential trial protocol", styles: { default: { document: { run: { font: FONT, size: 20 } } } }, sections: [{ children }] });
-      dl(await D.Packer.toBlob(doc), fname("docx"));
+      children.push(p([text(or(s.title, "(Untitled sequential trial emulation)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
+      children.push(p([text("Study protocol · sequential (nested) trial emulation · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+
+      children.push(h1("1. Background and rationale"));
+      children.push(para("This study emulates a sequence of nested target trials of " + E + " versus " + C + ". A single-origin new-user design discards eligible person-time; the sequential design emulates one trial at every eligible origin, mitigating prevalent-user and selection bias (Hernán 2008; Danaei 2013; Gran 2010)."));
+
+      children.push(h1("2. Causal question (target trial)"));
+      children.push(para("Among " + or(s.population, "(population)") + ", what is the effect of " + E + " versus " + C + " on " + or(s.outcome, "(outcome)") + "?"));
+
+      children.push(h1("3. Design summary"));
+      children.push(labelTable([
+        ["Design", "Sequential (nested) trial emulation"],
+        ["Data source(s)", or(s.data, "-")],
+        ["Population", or(s.population, "-")],
+        ["Treatment", E],
+        ["Comparator", C],
+        ["Trial origins", or(s.interval, "monthly") + " (" + or(s.first, "start") + "–" + or(s.last, "end") + ")"],
+        ["Eligibility / covariate look-back", s.covlookback + " days"],
+        ["Follow-up per trial", s.futrial + " days"],
+        ["Outcome", or(s.outcome, "-")],
+      ]));
+
+      children.push(h1("4. Eligibility (re-assessed at each origin)"));
+      children.push(para(or(s.eligibility, "At each origin: meets the population definition, is outcome-free, and has not already enrolled as an index-treatment initiator in an earlier trial.")));
+
+      children.push(h1("5. Time zero and treatment assignment"));
+      children.push(para("For each trial, time zero is that trial's origin. " + or(s.assignment, "Within each trial, index-treatment users form the treated arm; eligible comparator users form the control arm.")));
+
+      children.push(h1("6. Enrolment across trials"));
+      children.push(para(or(s.multiple, "A patient may enrol in several consecutive trials until treated or the outcome occurs; all variance estimates use a robust estimator clustered on the patient.")));
+
+      children.push(h1("7. Confounding adjustment"));
+      children.push(para(or(s.confounding, "The propensity score is estimated within each trial (or pooled with a trial indicator); arms are balanced by inverse-probability-of-treatment weighting or matching within trial.")));
+
+      children.push(h1("8. Follow-up and outcome"));
+      children.push(para(or(s.followup, "Within each trial, from the origin to outcome, death, disenrolment, or the maximum follow-up.") + " Outcome: " + or(s.outcome, "(outcome)") + "."));
+
+      children.push(h1("9. Estimand"));
+      children.push(para("The target estimand is " + estPlain + "."));
+
+      children.push(h1("10. Statistical analysis"));
+      ["Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset.", "Within each trial, estimate the propensity score and apply weighting (or matching).", "Fit a pooled logistic (or weighted Cox) model across all trials with terms for the assigned treatment, follow-up time, and trial.", "Estimate a pooled effect with 95% CIs from a robust variance clustered on the patient; check with a trial-stratified estimate and a heterogeneity summary."].forEach((l) => children.push(numItem(l)));
+
+      children.push(h1("11. Subgroup analyses"));
+      (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      children.push(h1("12. Sensitivity analyses"));
+      (sens.length ? sens : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      children.push(h1("References"));
+      ["Hernán MA, Alonso A, Logan R, et al. Observational studies analyzed like randomized experiments: postmenopausal hormone therapy and coronary heart disease. Epidemiology 2008;19:766-79.", "Danaei G, Rodríguez LAG, Cantero OF, et al. Observational data for comparative effectiveness research: an emulation of randomised trials of statins. Stat Methods Med Res 2013;22:70-96.", "Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment. Stat Med 2010;29:2757-70.", "Keogh RH, Gran JM, Seaman SR, et al. Causal inference in survival analysis using longitudinal observational data. Stat Med 2023;42:2191-2225."].forEach((l) => children.push(bullet(l)));
+
+      const doc = new D.Document({
+        creator: "Protocol Generator — Sequential Trial",
+        title: "Sequential trial protocol — " + (s.title || "study"),
+        styles: { default: { document: { run: { font: FONT, size: 22 } } }, paragraphStyles: [
+          { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { size: 28, bold: true, font: FONT }, paragraph: { spacing: { before: 200, after: 80 }, outlineLevel: 0 } },
+        ] },
+        numbering: { config: [{ reference: "ordered", levels: [{ level: 0, format: D.LevelFormat.DECIMAL, text: "%1.", alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }] },
+        sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children }],
+      });
+      return await D.Packer.toBlob(doc);
+    };
+
+    document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
+      if (!window.docx) return;
+      try { dl(await buildDocx(readForm()), fname("docx")); } catch (e) {}
     });
   </script>
 </BaseLayout>

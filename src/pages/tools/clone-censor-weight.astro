@@ -338,23 +338,100 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
     });
 
     // Word export — Markdown-ish rendered to a formatted .docx
-    document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
-      const D = window.docx; if (!D) return;
-      const FONT = "Calibri";
-      const md = preview.textContent || "";
+    // Formatted Word protocol, matching the ACNU/SCCS/CCO/DA builders.
+    const buildDocx = async (s) => {
+      const D = window.docx;
+      const today = new Date().toISOString().slice(0, 10);
+      const FONT = "Times New Roman";
+      const text = (str, o = {}) => new D.TextRun({ text: String(str ?? ""), font: FONT, size: 22, ...o });
+      const p = (ch, o = {}) => new D.Paragraph({ children: Array.isArray(ch) ? ch : [ch], spacing: { before: 60, after: 60, ...(o.spacing || {}) }, ...o });
+      const h1 = (str) => new D.Paragraph({ children: [text(str, { bold: true, size: 28 })], spacing: { before: 200, after: 80 }, heading: D.HeadingLevel.HEADING_1 });
+      const para = (str) => p([text(str)]);
+      const bullet = (str) => new D.Paragraph({ children: [text(str)], bullet: { level: 0 }, spacing: { before: 0, after: 0 } });
+      const numItem = (str) => new D.Paragraph({ children: [text(str)], numbering: { reference: "ordered", level: 0 }, spacing: { before: 0, after: 0 } });
+      const border = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
+      const cb = { top: border, bottom: border, left: border, right: border };
+      const labelTable = (rows) => new D.Table({
+        width: { size: 9026, type: D.WidthType.DXA }, columnWidths: [3000, 6026],
+        rows: rows.map(([label, value]) => new D.TableRow({ children: [
+          new D.TableCell({ borders: cb, width: { size: 3000, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, shading: { fill: "F5F5F5", type: D.ShadingType.CLEAR }, children: [p([text(label, { bold: true })])] }),
+          new D.TableCell({ borders: cb, width: { size: 6026, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [p([text(value || "-")])] }),
+        ] })),
+      });
+
+      const A = or(s.stratA, "(strategy A)"), B = or(s.stratB, "(strategy B)");
+      const subg = mergeList(s.subgroupsPick, s.subgroupsCustom);
+      const sens = mergeList(s.sensitivityPick, s.sensitivityCustom);
+      const ipcwLines = String(s.ipcw || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+
       const children = [];
-      for (const raw of md.split(/\r?\n/)) {
-        const line = raw.replace(/\*\*/g, "");
-        if (/^# /.test(line)) children.push(new D.Paragraph({ heading: D.HeadingLevel.TITLE, spacing: { after: 120 }, children: [new D.TextRun({ text: line.slice(2), font: FONT, bold: true, size: 32 })] }));
-        else if (/^## /.test(line)) children.push(new D.Paragraph({ heading: D.HeadingLevel.HEADING_1, spacing: { before: 200, after: 60 }, children: [new D.TextRun({ text: line.slice(3), font: FONT, bold: true, size: 26, color: "21443E" })] }));
-        else if (/^- /.test(line)) children.push(new D.Paragraph({ bullet: { level: 0 }, children: [new D.TextRun({ text: line.slice(2), font: FONT, size: 20 })] }));
-        else if (/^_.*_$/.test(line)) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.TextRun({ text: line.replace(/^_|_$/g, ""), font: FONT, italics: true, size: 18, color: "777777" })] }));
-        else if (/^\d+\. /.test(line)) children.push(new D.Paragraph({ numbering: undefined, children: [new D.TextRun({ text: line, font: FONT, size: 20 })] }));
-        else if (line.trim() === "") children.push(new D.Paragraph({ children: [] }));
-        else children.push(new D.Paragraph({ spacing: { after: 40 }, children: [new D.TextRun({ text: line, font: FONT, size: 20 })] }));
-      }
-      const doc = new D.Document({ creator: "Protocol Generator — CCW", title: readForm().title || "CCW protocol", styles: { default: { document: { run: { font: FONT, size: 20 } } } }, sections: [{ children }] });
-      dl(await D.Packer.toBlob(doc), fname("docx"));
+      children.push(p([text(or(s.title, "(Untitled clone-censor-weight study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
+      children.push(p([text("Study protocol · clone-censor-weight target-trial emulation · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+
+      children.push(h1("1. Background and rationale"));
+      children.push(para("This study emulates a target trial to estimate the per-protocol effect of two treatment strategies distinguished only by what happens over a grace period of " + s.grace + " days. A conventional as-treated analysis would misclassify person-time and introduce immortal-time bias; the clone-censor-weight (CCW) approach removes these biases (Hernán 2016; Maringe 2020)."));
+
+      children.push(h1("2. Causal question (target trial)"));
+      children.push(para("Among " + or(s.population, "(population)") + ", what is the effect of " + A + " versus " + B + " on " + or(s.outcome, "(outcome)") + "?"));
+
+      children.push(h1("3. Design summary"));
+      children.push(labelTable([
+        ["Design", "Clone-censor-weight target-trial emulation"],
+        ["Data source(s)", or(s.data, "-")],
+        ["Population", or(s.population, "-")],
+        ["Strategy A", A],
+        ["Strategy B", B],
+        ["Grace period", s.grace + " days"],
+        ["Time zero", or(s.timezero, "-")],
+        ["Outcome", or(s.outcome, "-")],
+        ["Covariate look-back", s.covlookback + " days"],
+      ]));
+
+      children.push(h1("4. Cloning"));
+      children.push(para("At time zero each eligible patient is cloned once into every strategy arm, making baseline covariate distributions identical across arms by construction."));
+
+      children.push(h1("5. Artificial censoring (deviation)"));
+      children.push(para(or(s.censor, "A clone is censored when its observed data first become incompatible with its assigned strategy. Administrative censoring applies at death, disenrolment, or end of study.")));
+
+      children.push(h1("6. Inverse-probability-of-censoring weights (IPCW)"));
+      children.push(para("Each clone receives a time-varying, stabilised inverse-probability-of-censoring weight, modelled by pooled logistic regression using baseline covariates in the " + s.covlookback + "-day look-back window plus time-varying predictors:"));
+      (ipcwLines.length ? ipcwLines : ["(list the predictors of deviation)"]).forEach((l) => children.push(bullet(l)));
+
+      children.push(h1("7. Follow-up and outcome"));
+      children.push(para(or(s.followup, "From time zero to outcome, death, disenrolment, or end of study.") + " Outcome: " + or(s.outcome, "(outcome)") + "."));
+
+      children.push(h1("8. Estimand and effect measure"));
+      children.push(para("Primary estimand: the per-protocol effect via clone-censor-weight; a conventional as-started (intention-to-treat-analogue) analysis is reported for comparison. We report " + effectText(s.effect) + ", with 95% CIs from a nonparametric bootstrap."));
+
+      children.push(h1("9. Statistical analysis"));
+      children.push(para("Primary — clone-censor-weight (per-protocol):"));
+      ["Clone the eligible cohort into the strategy arms and apply the censoring rule.", "Fit the censoring model(s) and compute stabilised, time-varying IPCW.", "Fit a weighted pooled logistic regression for the discrete-time hazard, with the assigned strategy, follow-up time, its quadratic term, and a strategy × time interaction; derive weighted cumulative-incidence curves.", "Contrast the curves for the effect measure(s); 95% CIs by nonparametric bootstrap."].forEach((l) => children.push(numItem(l)));
+      children.push(para("Comparison — conventional analysis (as-started, ITT-analogue): start follow-up at the index date, balance the arms by propensity-score matching (standardised mean difference < 0.1), and handle the competing risk of death with Fine–Gray sub-distribution and cause-specific Cox models."));
+
+      children.push(h1("10. Subgroup analyses"));
+      (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      children.push(h1("11. Sensitivity analyses"));
+      (sens.length ? sens : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      children.push(h1("References"));
+      ["Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183:758-64.", "Hernán MA. How to estimate the effect of treatment duration on survival outcomes using observational data. BMJ 2018;360:k182.", "Maringe C, Benitez Majano S, Exarchakou A, et al. Reflections on modern methods: trial emulation in the presence of immortal-time bias. Int J Epidemiol 2020;49:1719-29.", "Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment. Stat Med 2010;29:2757-70."].forEach((l) => children.push(bullet(l)));
+
+      const doc = new D.Document({
+        creator: "Protocol Generator — CCW",
+        title: "CCW protocol — " + (s.title || "study"),
+        styles: { default: { document: { run: { font: FONT, size: 22 } } }, paragraphStyles: [
+          { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { size: 28, bold: true, font: FONT }, paragraph: { spacing: { before: 200, after: 80 }, outlineLevel: 0 } },
+        ] },
+        numbering: { config: [{ reference: "ordered", levels: [{ level: 0, format: D.LevelFormat.DECIMAL, text: "%1.", alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }] },
+        sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children }],
+      });
+      return await D.Packer.toBlob(doc);
+    };
+
+    document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
+      if (!window.docx) return;
+      try { dl(await buildDocx(readForm()), fname("docx")); } catch (e) {}
     });
   </script>
 </BaseLayout>
