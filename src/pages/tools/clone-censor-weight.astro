@@ -188,7 +188,7 @@ const SENSITIVITY = [
 
     <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
-      <p class="mt-1 text-xs text-slate-500">Cloning at time zero, the grace period, and follow-up under each strategy — updates with the form.</p>
+      <p class="mt-1 text-xs text-slate-500">Cloning at time zero, the grace period, and follow-up under each strategy. <strong>Drag the ● handles</strong> to adjust the covariate look-back, grace, and follow-up — the fields above update automatically.</p>
       <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
     </div>
@@ -224,10 +224,20 @@ const SENSITIVITY = [
         wins.push({ label: "Eligibility (incl./excl.) assessment", kind: "eligibility", startDay: -lb, endDay: 0 });
         wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0 });
       }
-      wins.push({ label: "Strategy A follow-up", kind: "followup", startDay: 0, endDay: fu });
+      wins.push({ label: "Strategy A follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "fudays", edge: "end" } });
       wins.push({ label: "Strategy B follow-up", kind: "followup", startDay: 0, endDay: fu });
-      const bands = grace > 0 ? [{ startDay: 0, endDay: grace, label: "grace " + grace + "d", color: "#f59e0b" }] : [];
-      window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, bands: bands, indexLabel: "Time zero — clone into both arms" });
+      if (lb > 0) wins[1].edit = { field: "covlookback", edge: "start" };
+      const bands = grace > 0 ? [{ startDay: 0, endDay: grace, label: "grace " + grace + "d", color: "#f59e0b", edit: { field: "grace", edge: "end" } }] : [];
+      const onEdit = (field, day) => {
+        let v;
+        if (field === "covlookback") v = Math.max(0, -day);
+        else if (field === "fudays") v = Math.max(1, day);
+        else if (field === "grace") v = Math.max(0, day);
+        else v = Math.abs(day);
+        const el = form.elements[field]; if (el) el.value = Math.round(v);
+        render();
+      };
+      window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, bands: bands, indexLabel: "Time zero — clone into both arms", onEdit: onEdit, snap: 5 });
     }
 
     const or = (s, d) => (s && s.length ? s : d);

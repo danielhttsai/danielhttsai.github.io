@@ -46,6 +46,8 @@
       for (const w of rows) { lo = Math.min(lo, w.startDay, w.endDay); hi = Math.max(hi, w.startDay, w.endDay); }
       if (lo === hi) hi = lo + 1;
       const pad = (hi - lo) * 0.04 || 1; lo -= pad; hi += pad;
+      // While an edge is being dragged, freeze the axis so bars track the cursor.
+      if (window.__diagAxis) { lo = window.__diagAxis.lo; hi = window.__diagAxis.hi; }
 
       const W = 860, plotL = 205, plotR = W - 18, plotW = plotR - plotL;
       const rowH = 30, top = 56, H = top + rows.length * rowH + 30;
@@ -70,6 +72,12 @@
         const dur = w.note || (fmtDay(w.startDay) + " → " + fmtDay(w.endDay));
         if (ww > 90) svg += '<text x="' + (xa + ww / 2) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="600">' + esc(dur) + '</text>';
         else svg += '<text x="' + (xb + 5) + '" y="' + (y + 16) + '" font-size="9.5" fill="#64748b">' + esc(dur) + '</text>';
+        if (w.edit) {
+          const ex = w.edit.edge === "start" ? xa : xb;
+          svg += '<line x1="' + ex + '" y1="' + (y + 1) + '" x2="' + ex + '" y2="' + (y + 23) + '" stroke="#0f172a" stroke-width="2" stroke-opacity="0.55"/>';
+          svg += '<circle cx="' + ex + '" cy="' + (y + 12) + '" r="5" fill="#fff" stroke="' + meta.c + '" stroke-width="2"/>';
+          svg += '<rect x="' + (ex - 8) + '" y="' + (y - 2) + '" width="16" height="28" fill="#fff" fill-opacity="0.001" class="dd-handle" data-field="' + w.edit.field + '" data-edge="' + w.edit.edge + '" data-past="' + (w.edit.allowPast ? "1" : "0") + '" style="cursor:ew-resize;touch-action:none"/>';
+        }
       });
       // Dashed bands drawn ON TOP of the bars (e.g. a grace period)
       for (const b of (spec.bands || [])) {
@@ -80,8 +88,46 @@
           if (bw >= 52) svg += '<text x="' + ((bx0 + bx1) / 2) + '" y="34" text-anchor="middle" font-size="10" fill="' + col + '" font-weight="700">' + esc(b.label) + '</text>';
           else svg += '<text x="' + (bx1 + 5) + '" y="34" font-size="10" fill="' + col + '" font-weight="700">' + esc(b.label) + '</text>';
         }
+        if (b.edit) {
+          const ex = b.edit.edge === "start" ? bx0 : bx1;
+          svg += '<rect x="' + (ex - 2) + '" y="38" width="4" height="' + (H - 54) + '" fill="' + col + '" fill-opacity="0.6" style="pointer-events:none"/>';
+          svg += '<rect x="' + (ex - 8) + '" y="30" width="16" height="' + (H - 44) + '" fill="#fff" fill-opacity="0.001" class="dd-handle" data-field="' + b.edit.field + '" data-edge="' + b.edit.edge + '" data-past="' + (b.edit.allowPast ? "1" : "0") + '" style="cursor:ew-resize;touch-action:none"/>';
+        }
       }
       diagramEl.innerHTML = svg + "</svg>";
+
+      // ── Drag-to-edit: edges call spec.onEdit(field, dayAtEdge) ──
+      if (spec.onEdit) {
+        const gLo = lo, gHi = hi, gL = plotL, gW = plotW, snap = spec.snap || 10;
+        diagramEl.querySelectorAll(".dd-handle").forEach((h) => {
+          h.addEventListener("pointerdown", (ev) => {
+            ev.preventDefault();
+            const field = h.getAttribute("data-field"), edge = h.getAttribute("data-edge"), allowPast = h.getAttribute("data-past") === "1";
+            window.__diagAxis = { lo: gLo, hi: gHi };
+            const dayAt = (clientX) => {
+              const s = diagramEl.querySelector("svg"); if (!s || !s.getScreenCTM) return null;
+              const pt = s.createSVGPoint(); pt.x = clientX; pt.y = 0;
+              const ctm = s.getScreenCTM(); if (!ctm) return null;
+              const ux = pt.matrixTransform(ctm.inverse()).x;
+              return Math.round((gLo + ((ux - gL) / gW) * (gHi - gLo)) / snap) * snap;
+            };
+            const move = (e) => {
+              let day = dayAt(e.clientX); if (day == null) return;
+              if (edge === "start" && !allowPast) day = Math.min(0, day);
+              if (edge === "end" && !allowPast) day = Math.max(snap, day);
+              spec.onEdit(field, day, edge);
+            };
+            const up = () => {
+              document.removeEventListener("pointermove", move);
+              document.removeEventListener("pointerup", up);
+              window.__diagAxis = null;
+              if (spec.onEditEnd) spec.onEditEnd();
+            };
+            document.addEventListener("pointermove", move);
+            document.addEventListener("pointerup", up);
+          });
+        });
+      }
 
       if (legendEl) {
         const kinds = [...new Set(rows.map((w) => w.kind))];
