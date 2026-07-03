@@ -76,7 +76,7 @@
           const ex = w.edit.edge === "start" ? xa : xb;
           svg += '<line x1="' + ex + '" y1="' + (y + 1) + '" x2="' + ex + '" y2="' + (y + 23) + '" stroke="#0f172a" stroke-width="2" stroke-opacity="0.55"/>';
           svg += '<circle cx="' + ex + '" cy="' + (y + 12) + '" r="5" fill="#fff" stroke="' + meta.c + '" stroke-width="2"/>';
-          svg += '<rect x="' + (ex - 8) + '" y="' + (y - 2) + '" width="16" height="28" fill="#fff" fill-opacity="0.001" class="dd-handle" data-field="' + w.edit.field + '" data-edge="' + w.edit.edge + '" data-past="' + (w.edit.allowPast ? "1" : "0") + '" style="cursor:ew-resize;touch-action:none"/>';
+          svg += '<rect x="' + (ex - 8) + '" y="' + (y - 2) + '" width="16" height="28" fill="#fff" fill-opacity="0.001" class="dd-handle" data-field="' + w.edit.field + '" data-edge="' + w.edit.edge + '" data-idx="' + (w.edit.idx != null ? w.edit.idx : "") + '" data-past="' + (w.edit.allowPast ? "1" : "0") + '" style="cursor:ew-resize;touch-action:none"/>';
         }
       });
       // Dashed bands drawn ON TOP of the bars (e.g. a grace period)
@@ -91,7 +91,7 @@
         if (b.edit) {
           const ex = b.edit.edge === "start" ? bx0 : bx1;
           svg += '<rect x="' + (ex - 2) + '" y="38" width="4" height="' + (H - 54) + '" fill="' + col + '" fill-opacity="0.6" style="pointer-events:none"/>';
-          svg += '<rect x="' + (ex - 8) + '" y="30" width="16" height="' + (H - 44) + '" fill="#fff" fill-opacity="0.001" class="dd-handle" data-field="' + b.edit.field + '" data-edge="' + b.edit.edge + '" data-past="' + (b.edit.allowPast ? "1" : "0") + '" style="cursor:ew-resize;touch-action:none"/>';
+          svg += '<rect x="' + (ex - 8) + '" y="30" width="16" height="' + (H - 44) + '" fill="#fff" fill-opacity="0.001" class="dd-handle" data-field="' + b.edit.field + '" data-edge="' + b.edit.edge + '" data-idx="" data-past="' + (b.edit.allowPast ? "1" : "0") + '" style="cursor:ew-resize;touch-action:none"/>';
         }
       }
       diagramEl.innerHTML = svg + "</svg>";
@@ -103,6 +103,7 @@
           h.addEventListener("pointerdown", (ev) => {
             ev.preventDefault();
             const field = h.getAttribute("data-field"), edge = h.getAttribute("data-edge"), allowPast = h.getAttribute("data-past") === "1";
+            const idxAttr = h.getAttribute("data-idx"), idx = (idxAttr === "" || idxAttr == null) ? null : parseInt(idxAttr);
             window.__diagAxis = { lo: gLo, hi: gHi };
             const dayAt = (clientX) => {
               const s = diagramEl.querySelector("svg"); if (!s || !s.getScreenCTM) return null;
@@ -115,7 +116,7 @@
               let day = dayAt(e.clientX); if (day == null) return;
               if (edge === "start" && !allowPast) day = Math.min(0, day);
               if (edge === "end" && !allowPast) day = Math.max(snap, day);
-              spec.onEdit(field, day, edge);
+              spec.onEdit(field, day, { edge: edge, idx: idx });
             };
             const up = () => {
               document.removeEventListener("pointermove", move);

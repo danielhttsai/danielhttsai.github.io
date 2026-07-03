@@ -129,7 +129,11 @@ const SENSITIVITY = [
             <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariate look-back(s) (days)</span>
               <input type="text" name="covlookback" value="365" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. 365, 180, 90" /></label>
           </div>
-          <p class="text-[11px] text-slate-400">Inclusion, exclusion, and covariate windows can differ; covariate accepts several comma-separated look-backs.</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" data-add-cov class="text-[11px] rounded-full border border-slate-200 px-2.5 py-0.5 text-brand-700 font-semibold hover:border-brand-400">+ add covariate look-back</button>
+            <button type="button" data-unify-cov class="text-[11px] rounded-full border border-slate-200 px-2.5 py-0.5 text-slate-600 hover:border-brand-400">unify to one</button>
+            <span class="text-[11px] text-slate-400">…or drag each covariate window in the diagram below.</span>
+          </div>
         </fieldset>
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
@@ -233,10 +237,20 @@ const SENSITIVITY = [
       const wins = [];
       if (incl > 0) wins.push({ label: "Inclusion assessment", kind: "inclusion", startDay: -incl, endDay: 0, edit: { field: "incllookback", edge: "start" } });
       if (excl > 0) wins.push({ label: "Exclusion assessment", kind: "exclusion", startDay: -excl, endDay: 0, edit: { field: "excllookback", edge: "start" } });
-      covs.forEach((d, i) => wins.push({ label: covs.length > 1 ? "Covariate look-back " + (i + 1) : "Covariate look-back", kind: "lookback", startDay: -d, endDay: 0 }));
+      covs.forEach((d, i) => wins.push({ label: covs.length > 1 ? "Covariate look-back " + (i + 1) : "Covariate look-back", kind: "lookback", startDay: -d, endDay: 0, edit: { field: "covlookback", edge: "start", idx: i } }));
       wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "fudays", edge: "end" } });
       const bands = grace > 0 ? [{ startDay: 0, endDay: grace, label: "grace " + grace + "d", color: "#f59e0b", edit: { field: "grace", edge: "end" } }] : [];
-      const onEdit = (field, day) => {
+      const onEdit = (field, day, meta) => {
+        if (field === "covlookback") {
+          const cel = form.elements["covlookback"];
+          const list = String(cel.value || "").split(/[,\s]+/).map((x) => parseInt(x)).filter((n) => n > 0);
+          const idx = meta && meta.idx != null ? meta.idx : 0;
+          const cv = Math.max(5, Math.round(-day));
+          if (idx < list.length) list[idx] = cv; else list.push(cv);
+          cel.value = list.join(", ");
+          render();
+          return;
+        }
         let v;
         if (field === "incllookback" || field === "excllookback") v = Math.max(0, -day);
         else if (field === "fudays") v = Math.max(1, day);
@@ -362,6 +376,18 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
     })();
     form.addEventListener("input", render);
     form.addEventListener("change", render);
+
+    const covEl = () => form.elements["covlookback"];
+    const covArr = () => String(covEl().value || "").split(/[,\s]+/).map((x) => parseInt(x)).filter((n) => n > 0);
+    document.querySelector("[data-add-cov]")?.addEventListener("click", () => {
+      const list = covArr();
+      list.push(list.length ? Math.max(30, Math.round(list[list.length - 1] / 2)) : 180);
+      covEl().value = list.join(", "); render();
+    });
+    document.querySelector("[data-unify-cov]")?.addEventListener("click", () => {
+      const list = covArr();
+      covEl().value = String(list.length ? Math.max.apply(null, list) : 365); render();
+    });
 
     const slugify = () => (readForm().title || "ccw-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "ccw-protocol";
     const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
