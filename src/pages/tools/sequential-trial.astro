@@ -179,7 +179,12 @@ const SENSITIVITY = [
       </div>
     </div>
 
-    <div class="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div class="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-base font-bold text-slate-900">Consistency checks <span class="text-xs font-normal text-slate-400">· target-trial 防呆</span></h2>
+      <div id="checks" class="mt-3 space-y-1.5"></div>
+    </div>
+
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
       <p id="dcap" class="mt-1 text-xs text-slate-500"></p>
       <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
@@ -308,10 +313,25 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 `;
     };
 
+    const computeChecks = (s) => {
+      const checks = [];
+      const lb = parseInt(s.covlookback) || 0, fu = parseInt(s.futrial) || 0;
+      if (!s.first || !s.last) checks.push({ level: "warn", msg: "Set the first and last trial origins so the sequence of nested trials is defined." });
+      if (lb <= 0) checks.push({ level: "warn", msg: "No covariate / eligibility look-back — each trial assesses eligibility and covariates only at its origin. Set a look-back window before the origin." });
+      if (fu <= 0) checks.push({ level: "warn", msg: "Set the per-trial follow-up window." });
+      if (!s.multiple || !s.multiple.trim()) checks.push({ level: "warn", msg: "Patients can enter multiple trials — state the patient-clustered (robust) variance used to handle this re-use, or the analysis will over-state precision." });
+      if (!s.confounding || !s.confounding.trim()) checks.push({ level: "warn", msg: "Specify how confounding is controlled within each trial (e.g. PS weighting or matching)." });
+      if (!s.population || !s.population.trim()) checks.push({ level: "info", msg: "Specify the population." });
+      if (!s.exposure || !s.comparator) checks.push({ level: "info", msg: "Specify the treatment and comparator." });
+      if (!s.outcome || !s.outcome.trim()) checks.push({ level: "info", msg: "Specify the outcome." });
+      return checks;
+    };
+
     const render = () => {
       const s = readForm();
       preview.textContent = buildMarkdown(s);
       renderScheme(s);
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch {}
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
     };
 

@@ -96,5 +96,21 @@
         legendEl.innerHTML = html;
       }
     };
+
+    // Consistency-check panel: pass [{ level: "error"|"warn"|"info"|"ok", msg }].
+    window.renderChecks = function (el, checks) {
+      if (!el) return;
+      if (!checks || !checks.length) { el.innerHTML = '<div class="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs"><span class="text-emerald-700 font-bold">✓</span><span class="text-slate-700">No consistency issues flagged.</span></div>'; return; }
+      const M = {
+        error: { c: "text-red-700", bg: "bg-red-50 border-red-200", i: "✕" },
+        warn:  { c: "text-amber-700", bg: "bg-amber-50 border-amber-200", i: "!" },
+        info:  { c: "text-slate-500", bg: "bg-slate-50 border-slate-200", i: "ⓘ" },
+        ok:    { c: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200", i: "✓" },
+      };
+      el.innerHTML = checks.map((c) => {
+        const m = M[c.level] || M.info;
+        return '<div class="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ' + m.bg + '"><span class="' + m.c + ' font-bold shrink-0">' + m.i + '</span><span class="text-slate-700 leading-snug">' + esc(c.msg) + '</span></div>';
+      }).join("");
+    };
   })();
 </script>
