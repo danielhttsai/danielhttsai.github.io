@@ -324,6 +324,9 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
       if (!s.population || !s.population.trim()) checks.push({ level: "info", msg: "Specify the population." });
       if (!s.exposure || !s.comparator) checks.push({ level: "info", msg: "Specify the treatment and comparator." });
       if (!s.outcome || !s.outcome.trim()) checks.push({ level: "info", msg: "Specify the outcome." });
+      const est = s.estimand;
+      if (est === "ITT" || est === "both") checks.push({ level: "info", msg: "ITT (assignment at each origin): the strategy is fixed at the origin — later switching or add-on is ignored (no deviation censoring)." });
+      if (est === "PP" || est === "both") checks.push({ level: "info", msg: "Per-protocol: within each trial, censor at deviation and apply IPCW (a clone-censor-weight step) — fit the weights separately per arm and per censoring reason." });
       return checks;
     };
 

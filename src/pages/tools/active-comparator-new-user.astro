@@ -825,6 +825,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
                   <option value="OT" selected>On-treatment (per-protocol)</option>
                   <option value="ITT">Intention-to-treat (ITT)</option>
                   <option value="both">Both ITT and on-treatment</option>
+                  <option value="landmark">Landmark</option>
                 </select>
               </label>
               <label class="flex flex-col gap-1">
@@ -1500,6 +1501,10 @@ _Drafted with the AsPEN protocol builder (${today})._
         if (grace <= 0) checks.push({ level: "info", msg: "Grace period 0 — the on-treatment analysis will censor at the first dispensing gap." });
         if (!s.exposureName || !s.comparatorName) checks.push({ level: "info", msg: "Specify the exposure and the active comparator." });
         if (!s.picoO && !s.outcomeDef) checks.push({ level: "info", msg: "Specify the outcome." });
+        const pa = s.primaryAnalysisType;
+        if (pa === "ITT" || pa === "both") checks.push({ level: "info", msg: "ITT (as-assigned): the treatment strategy is fixed at the index date — later switching or add-on therapy is ignored (no deviation censoring)." });
+        if (pa === "OT" || pa === "both") checks.push({ level: "info", msg: "On-treatment (per-protocol): follow-up is censored at deviation (discontinuation/switch), so this informative censoring should be adjusted with IPCW." });
+        if (pa === "landmark") checks.push({ level: "warn", msg: "Landmark analysis is conditional on patients who survive event-free to the landmark time — it estimates a conditional effect and drops early events; state the landmark time and interpret accordingly." });
         checks.push({ level: "ok", msg: "Eligibility, treatment assignment, and follow-up start are aligned at the index date (time zero) — this is what avoids immortal-time bias." });
         return checks;
       };
