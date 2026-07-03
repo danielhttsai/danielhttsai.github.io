@@ -19,6 +19,10 @@ const SUBGROUPS = [
   "Index / calendar year (before vs after a cut-point)",
   "Baseline risk score (high vs low)",
 ];
+// Common covariate groups / exclusion criteria, offered as quick-add chips.
+const COV_TYPES = ["Demographics (age, sex)", "Comorbidities (CCI)", "Comedications", "Disease severity", "Prior healthcare use", "Labs / vitals", "Frailty", "Socioeconomic status"];
+const EXCL_TYPES = ["Prior outcome event", "Competing diagnosis", "Prior exposure (washout)", "Contraindication", "Pregnancy", "End-stage disease", "Short enrolment"];
+
 // Events that create informative (artificial) censoring, each weighted by IPCW.
 // Weights are fitted separately per arm; each event maps to the assigned strategy.
 const IPCW_REASONS = [
@@ -121,18 +125,29 @@ const SENSITIVITY = [
             <textarea name="ipcwReasonsCustom" rows="1" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom censoring events (one per line)"></textarea>
             <p class="mt-1 text-[11px] text-slate-400">Weights are estimated <strong>separately for the treatment and control arms</strong>; each event maps to the assigned strategy.</p>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Inclusion look-back (days)</span>
-              <input type="number" name="incllookback" value="365" min="0" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exclusion look-back (days)</span>
-              <input type="number" name="excllookback" value="365" min="0" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariate look-back(s) (days)</span>
-              <input type="text" name="covlookback" value="365" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. 365, 180, 90" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Inclusion look-back (days)</span>
+            <input type="number" name="incllookback" value="365" min="0" step="1" class="mt-1 w-32 rounded-lg border border-slate-300 p-2 text-sm" /></label>
+
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exclusion criteria <span class="font-normal text-slate-400 normal-case">(name | look-back days, one per line)</span></span>
+            <textarea name="excllist" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Prior outcome event | 365&#10;Competing diagnosis | 365">Prior outcome event | 365</textarea>
+            <div class="mt-1.5 flex flex-wrap gap-1.5">
+              {EXCL_TYPES.map((t) => (
+                <button type="button" data-add-row data-target="excllist" data-name={t} class="text-[11px] rounded-full border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-brand-400 hover:text-brand-700">+ {t}</button>
+              ))}
+            </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <button type="button" data-add-cov class="text-[11px] rounded-full border border-slate-200 px-2.5 py-0.5 text-brand-700 font-semibold hover:border-brand-400">+ add covariate look-back</button>
-            <button type="button" data-unify-cov class="text-[11px] rounded-full border border-slate-200 px-2.5 py-0.5 text-slate-600 hover:border-brand-400">unify to one</button>
-            <span class="text-[11px] text-slate-400">…or drag each covariate window in the diagram below.</span>
+
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariate types <span class="font-normal text-slate-400 normal-case">(name | look-back days, one per line)</span></span>
+            <textarea name="covlist" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Comorbidities (CCI) | 365&#10;Comedications | 180">Comorbidities (CCI) | 365
+Comedications | 180</textarea>
+            <div class="mt-1.5 flex flex-wrap gap-1.5">
+              {COV_TYPES.map((t) => (
+                <button type="button" data-add-row data-target="covlist" data-name={t} class="text-[11px] rounded-full border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-brand-400 hover:text-brand-700">+ {t}</button>
+              ))}
+            </div>
+            <p class="mt-1 text-[11px] text-slate-400">Each exclusion / covariate line is drawn as its own labelled window in the diagram — drag its edge to adjust that look-back.</p>
           </div>
         </fieldset>
 
@@ -217,13 +232,14 @@ const SENSITIVITY = [
     const V = (n) => (form.elements[n]?.value || "").trim();
     const MV = (n) => [...form.querySelectorAll('[name="' + n + '"]:checked')].map((c) => c.value);
     const mergeList = (pick, custom) => [...(pick || []), ...String(custom || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean)];
-    const covList = (s) => String(s.covlookback || "").split(/[,\s]+/).map((x) => parseInt(x)).filter((n) => n > 0);
-    const covText = (s) => (covList(s).length ? covList(s).join(", ") : "0");
+    const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
+    const rowsText = (txt) => parseRows(txt).map((r) => r.name + " (" + r.days + " d)").join("; ") || "none";
+    const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
 
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), outcome: V("outcome"),
       timezero: V("timezero"), stratA: V("stratA"), stratB: V("stratB"), grace: V("grace") || "14",
-      censor: V("censor"), ipcw: V("ipcw"), ipcwReasonsPick: MV("ipcwReasonsPick"), ipcwReasonsCustom: V("ipcwReasonsCustom"), incllookback: V("incllookback") || "365", excllookback: V("excllookback") || "365", covlookback: V("covlookback") || "365", followup: V("followup"), fudays: V("fudays") || "90", effect: V("effect"),
+      censor: V("censor"), ipcw: V("ipcw"), ipcwReasonsPick: MV("ipcwReasonsPick"), ipcwReasonsCustom: V("ipcwReasonsCustom"), incllookback: V("incllookback") || "365", excllist: V("excllist"), covlist: V("covlist"), followup: V("followup"), fudays: V("fudays") || "90", effect: V("effect"),
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
 
@@ -232,27 +248,24 @@ const SENSITIVITY = [
       const grace = Math.max(0, parseInt(s.grace) || 0);
       const fu = Math.max(grace + 1, parseInt(s.fudays) || 90);
       const incl = Math.max(0, parseInt(s.incllookback) || 0);
-      const excl = Math.max(0, parseInt(s.excllookback) || 0);
-      const covs = covList(s);
+      const exRows = parseRows(s.excllist);
+      const covRows = parseRows(s.covlist);
       const wins = [];
       if (incl > 0) wins.push({ label: "Inclusion assessment", kind: "inclusion", startDay: -incl, endDay: 0, edit: { field: "incllookback", edge: "start" } });
-      if (excl > 0) wins.push({ label: "Exclusion assessment", kind: "exclusion", startDay: -excl, endDay: 0, edit: { field: "excllookback", edge: "start" } });
-      covs.forEach((d, i) => wins.push({ label: covs.length > 1 ? "Covariate look-back " + (i + 1) : "Covariate look-back", kind: "lookback", startDay: -d, endDay: 0, edit: { field: "covlookback", edge: "start", idx: i } }));
+      exRows.forEach((r, i) => wins.push({ label: r.name, kind: "exclusion", startDay: -r.days, endDay: 0, edit: { field: "excllist", edge: "start", idx: i } }));
+      covRows.forEach((r, i) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covlist", edge: "start", idx: i } }));
       wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "fudays", edge: "end" } });
       const bands = grace > 0 ? [{ startDay: 0, endDay: grace, label: "grace " + grace + "d", color: "#f59e0b", edit: { field: "grace", edge: "end" } }] : [];
       const onEdit = (field, day, meta) => {
-        if (field === "covlookback") {
-          const cel = form.elements["covlookback"];
-          const list = String(cel.value || "").split(/[,\s]+/).map((x) => parseInt(x)).filter((n) => n > 0);
+        if (field === "covlist" || field === "excllist") {
+          const rel = form.elements[field];
+          const rows = parseRows(rel.value);
           const idx = meta && meta.idx != null ? meta.idx : 0;
-          const cv = Math.max(5, Math.round(-day));
-          if (idx < list.length) list[idx] = cv; else list.push(cv);
-          cel.value = list.join(", ");
-          render();
+          if (rows[idx]) { rows[idx].days = Math.max(5, Math.round(-day)); rel.value = rowsJoin(rows); render(); }
           return;
         }
         let v;
-        if (field === "incllookback" || field === "excllookback") v = Math.max(0, -day);
+        if (field === "incllookback") v = Math.max(0, -day);
         else if (field === "fudays") v = Math.max(1, day);
         else if (field === "grace") v = Math.max(0, day);
         else v = Math.abs(day);
@@ -301,7 +314,7 @@ At time zero each eligible patient is **cloned** once into every strategy arm. E
 ${or(s.censor, "A clone is censored when its observed data first become incompatible with its assigned strategy (e.g. failure to initiate by the end of the grace period, or initiation in the deferred arm). Administrative censoring applies at death, disenrolment, or end of study.")}
 
 ## 8. Inverse-probability-of-censoring weights (IPCW)
-Because artificial censoring is informative, each clone receives a **time-varying, stabilised inverse-probability-of-censoring weight** (the inverse probability of remaining uncensored) to restore the population that would have persisted under full adherence. Censoring is modelled by pooled logistic regression over follow-up time, using baseline covariates measured in the **${covText(s)}-day covariate look-back window(s)** (inclusion criteria assessed over ${s.incllookback} d, exclusion over ${s.excllookback} d) together with time-varying predictors:
+Because artificial censoring is informative, each clone receives a **time-varying, stabilised inverse-probability-of-censoring weight** (the inverse probability of remaining uncensored) to restore the population that would have persisted under full adherence. Censoring is modelled by pooled logistic regression over follow-up time, using baseline covariates over their look-back windows (**${rowsText(s.covlist)}**), with inclusion criteria assessed over ${s.incllookback} d and exclusions (${rowsText(s.excllist)}), together with time-varying predictors:
 
 ${(s.ipcw || "(list the baseline and time-varying predictors of deviation — e.g. age, sex, comorbidity and bleeding-risk scores, disease severity, concomitant therapy, and post-baseline events)").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n") || "- (covariates)"}
 
@@ -338,7 +351,7 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 
     const computeChecks = (s) => {
       const checks = [];
-      const grace = parseInt(s.grace) || 0, fu = parseInt(s.fudays) || 0, lb = covList(s).length ? Math.max.apply(null, covList(s)) : 0;
+      const grace = parseInt(s.grace) || 0, fu = parseInt(s.fudays) || 0, lb = parseRows(s.covlist).length;
       if (grace <= 0) checks.push({ level: "error", msg: "Grace period is 0 — with no grace window the two strategies cannot be distinguished by cloning. Set a grace period > 0." });
       if (fu > 0 && grace >= fu) checks.push({ level: "warn", msg: "Grace period (" + grace + "d) is ≥ the follow-up (" + fu + "d) — almost all follow-up falls inside the grace window. Shorten the grace or lengthen follow-up." });
       if (lb <= 0) checks.push({ level: "warn", msg: "No covariate look-back — baseline confounders and eligibility are assessed only at time zero. Set a look-back window before index." });
@@ -377,17 +390,11 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
     form.addEventListener("input", render);
     form.addEventListener("change", render);
 
-    const covEl = () => form.elements["covlookback"];
-    const covArr = () => String(covEl().value || "").split(/[,\s]+/).map((x) => parseInt(x)).filter((n) => n > 0);
-    document.querySelector("[data-add-cov]")?.addEventListener("click", () => {
-      const list = covArr();
-      list.push(list.length ? Math.max(30, Math.round(list[list.length - 1] / 2)) : 180);
-      covEl().value = list.join(", "); render();
-    });
-    document.querySelector("[data-unify-cov]")?.addEventListener("click", () => {
-      const list = covArr();
-      covEl().value = String(list.length ? Math.max.apply(null, list) : 365); render();
-    });
+    document.querySelectorAll("[data-add-row]").forEach((b) => b.addEventListener("click", () => {
+      const el = form.elements[b.getAttribute("data-target")], name = b.getAttribute("data-name");
+      const rows = parseRows(el.value);
+      if (!rows.some((r) => r.name === name)) { rows.push({ name: name, days: 365 }); el.value = rowsJoin(rows); render(); }
+    }));
 
     const slugify = () => (readForm().title || "ccw-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "ccw-protocol";
     const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
@@ -408,7 +415,7 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
         "6": "Strategies: " + A + " vs " + B + "; time zero: " + or(s.timezero, "(define)") + "; grace period " + s.grace + " days.",
         "7a": or(s.population, "(population)") + " — eligibility (inclusion/exclusion) assessed at time zero.",
         "7b": A + " vs " + B + "; grace period " + s.grace + " days.",
-        "7c": "Each eligible patient is cloned into both strategy arms at time zero; covariate look-back " + covText(s) + " d; inclusion assessed over " + s.incllookback + " d, exclusion over " + s.excllookback + " d.",
+        "7c": "Each eligible patient is cloned into both strategy arms at time zero; covariates: " + rowsText(s.covlist) + "; inclusion assessed over " + s.incllookback + " d; exclusions: " + rowsText(s.excllist) + ".",
         "7d": "Time zero: " + or(s.timezero, "(define)") + ". Follow-up: " + or(s.followup, "to outcome, death, disenrolment, or end of study") + ".",
         "7e": or(s.outcome, "(outcome)"),
         "7f": "Per-protocol effect — " + effectText(s.effect) + ".",
@@ -474,8 +481,8 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
         ["Time zero", or(s.timezero, "-")],
         ["Outcome", or(s.outcome, "-")],
         ["Inclusion look-back", s.incllookback + " days"],
-        ["Exclusion look-back", s.excllookback + " days"],
-        ["Covariate look-back(s)", covText(s) + " days"],
+        ["Exclusion criteria", rowsText(s.excllist)],
+        ["Covariates", rowsText(s.covlist)],
       ]));
 
       children.push(h1("4. Cloning"));
@@ -485,7 +492,7 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
       children.push(para(or(s.censor, "A clone is censored when its observed data first become incompatible with its assigned strategy. Administrative censoring applies at death, disenrolment, or end of study.")));
 
       children.push(h1("6. Inverse-probability-of-censoring weights (IPCW)"));
-      children.push(para("Each clone receives a time-varying, stabilised inverse-probability-of-censoring weight, modelled by pooled logistic regression using baseline covariates in the " + covText(s) + "-day covariate look-back window(s) (inclusion assessed over " + s.incllookback + " d, exclusion over " + s.excllookback + " d) plus time-varying predictors:"));
+      children.push(para("Each clone receives a time-varying, stabilised inverse-probability-of-censoring weight, modelled by pooled logistic regression using baseline covariates over their look-back windows (" + rowsText(s.covlist) + "); inclusion assessed over " + s.incllookback + " d; exclusions: " + rowsText(s.excllist) + "; plus time-varying predictors:"));
       (ipcwLines.length ? ipcwLines : ["(list the predictors of deviation)"]).forEach((l) => children.push(bullet(l)));
       children.push(para("Separate weight models are fitted for the treatment and control arms. Events weighted by IPCW (each mapping to the assigned strategy): " + (mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).join("; ") || "(none selected)") + "."));
 
