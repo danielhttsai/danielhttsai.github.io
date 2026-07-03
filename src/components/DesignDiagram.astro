@@ -97,35 +97,58 @@
       diagramEl.innerHTML = svg + "</svg>";
 
       // ── Drag-to-edit: edges call spec.onEdit(field, dayAtEdge) ──
+      // Exactly ONE edge is ever draggable at a time. Each pointermove triggers a
+      // re-render that replaces this SVG (and the handle you grabbed) — so we pin
+      // the pointer capture to the stable container, keep the drag state in one
+      // module-level slot, and always tear down on up OR cancel. Without this, a
+      // pointercancel (fired when the grabbed handle is destroyed mid-drag) would
+      // leak the move-listener and a later drag of a *different* edge would also
+      // move this one.
       if (spec.onEdit) {
         const gLo = lo, gHi = hi, gL = plotL, gW = plotW, snap = spec.snap || 10;
+        // Kill any drag orphaned by a previous render before wiring fresh handles.
+        if (window.__diagDrag) { window.__diagDrag.cleanup(); }
+        const dayAt = (clientX) => {
+          const s = diagramEl.querySelector("svg"); if (!s || !s.getScreenCTM) return null;
+          const pt = s.createSVGPoint(); pt.x = clientX; pt.y = 0;
+          const ctm = s.getScreenCTM(); if (!ctm) return null;
+          const ux = pt.matrixTransform(ctm.inverse()).x;
+          return Math.round((gLo + ((ux - gL) / gW) * (gHi - gLo)) / snap) * snap;
+        };
         diagramEl.querySelectorAll(".dd-handle").forEach((h) => {
           h.addEventListener("pointerdown", (ev) => {
             ev.preventDefault();
+            ev.stopPropagation();
+            // Never let two edges be live at once.
+            if (window.__diagDrag) { window.__diagDrag.cleanup(); }
             const field = h.getAttribute("data-field"), edge = h.getAttribute("data-edge"), allowPast = h.getAttribute("data-past") === "1";
             const idxAttr = h.getAttribute("data-idx"), idx = (idxAttr === "" || idxAttr == null) ? null : parseInt(idxAttr);
             window.__diagAxis = { lo: gLo, hi: gHi };
-            const dayAt = (clientX) => {
-              const s = diagramEl.querySelector("svg"); if (!s || !s.getScreenCTM) return null;
-              const pt = s.createSVGPoint(); pt.x = clientX; pt.y = 0;
-              const ctm = s.getScreenCTM(); if (!ctm) return null;
-              const ux = pt.matrixTransform(ctm.inverse()).x;
-              return Math.round((gLo + ((ux - gL) / gW) * (gHi - gLo)) / snap) * snap;
-            };
+            const pid = ev.pointerId;
+            // Capture on the container (survives the mid-drag innerHTML rebuild),
+            // not the handle (which gets destroyed on the first re-render).
+            try { diagramEl.setPointerCapture(pid); } catch (e) {}
             const move = (e) => {
+              if (e.pointerId !== pid) return;
               let day = dayAt(e.clientX); if (day == null) return;
               if (edge === "start" && !allowPast) day = Math.min(0, day);
               if (edge === "end" && !allowPast) day = Math.max(snap, day);
               spec.onEdit(field, day, { edge: edge, idx: idx });
             };
-            const up = () => {
+            const end = (e) => {
+              if (e && e.pointerId != null && e.pointerId !== pid) return;
               document.removeEventListener("pointermove", move);
-              document.removeEventListener("pointerup", up);
+              document.removeEventListener("pointerup", end);
+              document.removeEventListener("pointercancel", end);
+              try { diagramEl.releasePointerCapture(pid); } catch (e2) {}
               window.__diagAxis = null;
+              window.__diagDrag = null;
               if (spec.onEditEnd) spec.onEditEnd();
             };
+            window.__diagDrag = { cleanup: end };
             document.addEventListener("pointermove", move);
-            document.addEventListener("pointerup", up);
+            document.addEventListener("pointerup", end);
+            document.addEventListener("pointercancel", end);
           });
         });
       }
