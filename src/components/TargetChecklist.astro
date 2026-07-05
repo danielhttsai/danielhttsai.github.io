@@ -1,35 +1,107 @@
 ---
 // Include once on a builder page (which already loads the docx UMD global).
-// Exposes window.buildTargetChecklistDocx(D, itemsMap, title) → docx Blob,
-// mapping the protocol's fields onto the 21-item TARGET checklist (target.ts).
-// itemsMap keys are TARGET item ids ("1a", "3", "7a", …); missing ids render
-// as a "to be completed" placeholder.
+// Exposes window.buildTargetChecklistDocx(D, opts) → docx Blob, producing the
+// SAME rich two-part TARGET document the ACNU builder emits:
+//   1. Item 7 (a–h) — a 3-column table: Target-trial specification vs Emulation.
+//   2. Full 21-item checklist — a 3-column table grouped by section, each item
+//      mapped to the protocol's fields (missing → "to be completed" placeholder).
+//   opts = {
+//     title,                       // study title
+//     designName,                  // e.g. "clone-censor-weight emulation"
+//     item7: [[label, spec, emul], …],   // 8 rows a–h; emul may contain "\n"
+//     map:   { "1a": "…", "3": "…", … },  // full-checklist item values by id
+//   }
 import { TARGET_CHECKLIST, TARGET_CITATION, TARGET_URL } from "../data/target";
 ---
 
 <script is:inline define:vars={{ CHECKLIST: TARGET_CHECKLIST, CITATION: TARGET_CITATION, URL: TARGET_URL }}>
-  window.buildTargetChecklistDocx = async function (D, itemsMap, title) {
+  window.buildTargetChecklistDocx = async function (D, opts) {
+    opts = opts || {};
+    const title = opts.title || "(untitled study)";
+    const designName = opts.designName || "target-trial emulation";
+    const item7 = opts.item7 || [];
+    const map = opts.map || {};
     const FONT = "Times New Roman";
+    const today = new Date().toISOString().slice(0, 10);
+
     const text = (t, o = {}) => new D.TextRun({ text: String(t == null ? "" : t), font: FONT, size: 22, ...o });
-    const p = (runs, o = {}) => new D.Paragraph({ children: Array.isArray(runs) ? runs : [runs], spacing: { before: 40, after: 40, ...(o.spacing || {}) }, ...o });
-    const children = [];
-    children.push(p([text("TARGET checklist — " + (title || "(untitled study)"), { bold: true, size: 30 })], { spacing: { after: 80 } }));
-    children.push(p([text("This document maps the protocol to the TARGET checklist. " + CITATION + " Full checklist with elaboration: " + URL + ".", { italics: true, size: 18, color: "777777" })], { spacing: { after: 220 } }));
+    const p = (runs, o = {}) => new D.Paragraph({ children: Array.isArray(runs) ? runs : [runs], spacing: { before: 60, after: 60, ...(o.spacing || {}) }, ...o });
+    const h1 = (str) => new D.Paragraph({ children: [text(str, { bold: true, size: 28 })], spacing: { before: 240, after: 100 }, heading: D.HeadingLevel.HEADING_1 });
+    const para = (str) => p([text(str)]);
+    const multi = (str) => String(str == null ? "" : str).split("\n").map((line) => p([text(line)]));
+
+    const border = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
+    const cb = { top: border, bottom: border, left: border, right: border };
+    const HEADER_FILL = { fill: "21443E", type: D.ShadingType.CLEAR };
+    const LABEL_FILL = { fill: "F5F5F5", type: D.ShadingType.CLEAR };
+    const SECTION_FILL = { fill: "E8F0EE", type: D.ShadingType.CLEAR };
+    const M = { top: 80, bottom: 80, left: 120, right: 120 };
+    const headerCell = (str) => new D.TableCell({ borders: cb, shading: HEADER_FILL, margins: M, children: [p([text(str, { bold: true, color: "FFFFFF" })])] });
+
+    // ── Item 7 table: label · target-trial spec · emulation ──
+    const COL7 = [1700, 3563, 3763];
+    const row7 = (label, spec, emul) => new D.TableRow({ children: [
+      new D.TableCell({ borders: cb, margins: M, shading: LABEL_FILL, width: { size: COL7[0], type: D.WidthType.DXA }, children: [p([text(label, { bold: true })])] }),
+      new D.TableCell({ borders: cb, margins: M, width: { size: COL7[1], type: D.WidthType.DXA }, children: multi(spec) }),
+      new D.TableCell({ borders: cb, margins: M, width: { size: COL7[2], type: D.WidthType.DXA }, children: multi(emul) }),
+    ]});
+    const item7Table = new D.Table({
+      width: { size: 9026, type: D.WidthType.DXA }, columnWidths: COL7,
+      rows: [
+        new D.TableRow({ tableHeader: true, children: [
+          headerCell("Item 7 element"), headerCell("Target trial specification"), headerCell("Emulation with the observational data"),
+        ]}),
+        ...item7.map((r) => row7(r[0], r[1], r[2])),
+      ],
+    });
+
+    // ── Full 21-item checklist table (7a–h live in the Item 7 table above) ──
+    const COLF = [800, 4113, 4113];
+    const rows = [ new D.TableRow({ tableHeader: true, children: [headerCell("#"), headerCell("Item"), headerCell("Where reported in this protocol")] }) ];
     for (const sec of CHECKLIST) {
-      children.push(p([text(sec.section, { bold: true, size: 24, color: "21443E" })], { spacing: { before: 220, after: 60 } }));
+      rows.push(new D.TableRow({ children: [
+        new D.TableCell({ borders: cb, columnSpan: 3, shading: SECTION_FILL, margins: { top: 60, bottom: 60, left: 120, right: 120 }, children: [p([text(sec.section, { bold: true, color: "21443E" })])] }),
+      ]}));
       for (const it of sec.items) {
-        children.push(p([text(it.id + ". ", { bold: true }), text(it.label, { bold: true })]));
-        const val = itemsMap && itemsMap[it.id];
-        const filled = val != null && String(val).trim() !== "";
-        children.push(p([text(filled ? val : "[To be completed at the protocol / reporting stage.]", filled ? {} : { italics: true, color: "999999" })], { spacing: { after: 90 } }));
+        if (/^7[a-h]$/.test(it.id)) continue;                 // shown in the Item 7 table
+        const val = it.id === "7" ? "See the Item 7 comparison table above."
+          : (map[it.id] != null && String(map[it.id]).trim() !== "" ? String(map[it.id]) : null);
+        rows.push(new D.TableRow({ children: [
+          new D.TableCell({ borders: cb, margins: { top: 60, bottom: 60, left: 120, right: 120 }, width: { size: COLF[0], type: D.WidthType.DXA }, shading: LABEL_FILL, children: [p([text(it.id, { bold: true })])] }),
+          new D.TableCell({ borders: cb, margins: { top: 60, bottom: 60, left: 120, right: 120 }, width: { size: COLF[1], type: D.WidthType.DXA }, children: [p([text(it.label)])] }),
+          new D.TableCell({ borders: cb, margins: { top: 60, bottom: 60, left: 120, right: 120 }, width: { size: COLF[2], type: D.WidthType.DXA },
+            children: val != null ? multi(val) : [p([text("[To be completed at the reporting stage.]", { italics: true, color: "999999" })])] }),
+        ]}));
       }
     }
-    children.push(p([text("Framework: " + CITATION + " Licence CC BY-ND 4.0.", { italics: true, size: 16, color: "777777" })], { spacing: { before: 300 } }));
+    const fullChecklistTable = new D.Table({ width: { size: 9026, type: D.WidthType.DXA }, columnWidths: COLF, rows });
+
+    // ── Assemble ──
+    const children = [];
+    children.push(new D.Paragraph({ children: [text("TARGET checklist; " + title, { bold: true, size: 32 })], spacing: { before: 0, after: 120 } }));
+    children.push(p([text("This document maps the protocol fields to the TARGET (TrAnsparent ReportinG of studies Emulating a Target trial) checklist as published in " + CITATION + " The full checklist with elaboration is at " + URL + ".", { italics: true, size: 20, color: "555555" })]));
+    children.push(p([text("Generated " + today + " from the " + designName + " protocol builder. Methods items 5–7 are pre-filled from your protocol; Results / Discussion / Other-information items are placeholders to be completed at the time of reporting.", { italics: true, size: 18, color: "777777" })], { spacing: { after: 240 } }));
+
+    children.push(h1("Item 7; Target trial specification vs emulation"));
+    children.push(para("Item 7 is the heart of TARGET. Rows a–h show what the target trial would specify and how this study emulates each piece in observational data."));
+    children.push(item7Table);
+
+    children.push(h1("Full TARGET checklist"));
+    children.push(para("All 21 reporting items with the protocol's current mapping. Replace bracketed placeholders at the manuscript stage."));
+    children.push(fullChecklistTable);
+
+    children.push(p([text("Citation for the framework: " + CITATION + " Licence CC BY-ND 4.0.", { italics: true, size: 18, color: "777777" })], { spacing: { before: 400 } }));
+
     const doc = new D.Document({
       creator: "Protocol Generator — TARGET checklist",
-      title: "TARGET checklist — " + (title || "study"),
-      styles: { default: { document: { run: { font: FONT, size: 22 } } } },
-      sections: [{ children }],
+      title: "TARGET checklist; " + title,
+      styles: {
+        default: { document: { run: { font: FONT, size: 22 } } },
+        paragraphStyles: [
+          { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { size: 28, bold: true, font: FONT }, paragraph: { spacing: { before: 240, after: 100 }, outlineLevel: 0 } },
+        ],
+      },
+      sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children }],
     });
     return await D.Packer.toBlob(doc);
   };

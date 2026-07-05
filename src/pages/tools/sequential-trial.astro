@@ -365,24 +365,47 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
       const D = window.docx; if (!D || !window.buildTargetChecklistDocx) return;
       const s = readForm();
       const E = or(s.exposure, "(treatment)"), C = or(s.comparator, "(comparator)");
-      const estPlain = { ITT: "the intention-to-treat effect (assignment at the origin)", PP: "the per-protocol effect (deviation censoring + IPCW)", both: "both the intention-to-treat and per-protocol effects" }[s.estimand] || "the treatment effect";
+      const origins = or(s.interval, "monthly") + " (" + or(s.first, "start") + "–" + or(s.last, "end") + ")";
+      const estPlain = { ITT: "the intention-to-treat effect (assignment at each origin, ignoring later switching)", PP: "the per-protocol effect (deviation censoring + IPCW within each trial)", both: "both the intention-to-treat and per-protocol effects" }[s.estimand] || "the treatment effect";
+      const subg = mergeList(s.subgroupsPick, s.subgroupsCustom).join("; ") || "none pre-specified";
+      const sens = mergeList(s.sensitivityPick, s.sensitivityCustom).join("; ") || "(see protocol)";
+      // Item 7 (a–h): one target trial specified per origin; emulated at each.
+      const item7 = [
+        ["a. Eligibility criteria",
+          "At each origin, patients meeting the population definition, outcome-free, and not previously enrolled as an index initiator.",
+          or(s.eligibility, "Meets the population definition, outcome-free, not already enrolled as an index-treatment initiator in an earlier trial.") + "\nRe-assessed at every origin; covariate / eligibility look-back " + s.covlookback + " days."],
+        ["b. Treatment strategies",
+          "Initiate " + E + " vs " + C + ", assigned at each trial's origin.",
+          E + " vs " + C + ".\n" + or(s.assignment, "Within each trial, index-treatment users form the treated arm; eligible comparator users form the control arm.")],
+        ["c. Assignment procedures",
+          "Random assignment at each origin.",
+          "One nested trial is emulated at each origin (" + origins + "). Baseline confounding within each trial is addressed by " + or(s.confounding, "a propensity score estimated at that origin, with weighting or matching") + "."],
+        ["d. Follow-up",
+          "Follow-up begins at assignment (each trial's origin) and ends at outcome, death, or end of study.",
+          "Time zero = each trial's origin.\n" + or(s.followup, "Within each trial, follow-up runs from the origin to outcome, death, disenrolment, or the maximum follow-up.") + "\n" + or(s.multiple, "A patient may enrol in several consecutive trials until treated or the outcome occurs.")],
+        ["e. Outcomes",
+          "Primary outcome: " + or(s.outcome, "(specify)") + ".",
+          "Outcome: " + or(s.outcome, "(specify)") + "."],
+        ["f. Causal contrasts",
+          "Effect of being assigned (and, optionally, adhering to) the treatment strategy at the origin.",
+          "Target estimand: " + estPlain + "."],
+        ["g. Identifying assumptions",
+          "Exchangeability, positivity, and consistency within each nested trial.",
+          "Conditional exchangeability within each trial via " + or(s.confounding, "propensity-score methods at each origin") + ". Because a patient can appear in several trials, all variance estimates use a robust (sandwich) estimator clustered on the patient." + (s.estimand === "PP" || s.estimand === "both" ? " Per-protocol contrasts censor at deviation and apply inverse-probability-of-censoring weights within each trial." : "")],
+        ["h. Data analysis plan",
+          "An estimator that recovers the causal contrast under the identifying assumptions.",
+          "Pooled logistic (or weighted Cox) regression across the stacked, trial-indexed dataset with terms for assigned treatment, follow-up time, and trial; pooled effect with 95% CIs from a patient-clustered robust variance.\nSubgroups: " + subg + ".\nSensitivity: " + sens + "."],
+      ];
       const map = {
         "1a": "This study emulates a sequence of nested target trials of " + E + " vs " + C + " among " + or(s.population, "(population)") + ".",
         "1b": or(s.data, ""),
         "3": "Among " + or(s.population, "(population)") + ", what is the effect of " + E + " vs " + C + " on " + or(s.outcome, "(outcome)") + "?",
+        "4": "A single-origin new-user design discards eligible person-time and cannot use patients who become eligible later; the target trial is emulated at every eligible origin (Hernán 2008; Danaei 2013; Gran 2010).",
         "5": or(s.data, ""),
-        "6": "One trial at each origin (" + or(s.interval, "monthly") + ", " + or(s.first, "start") + "–" + or(s.last, "end") + "); " + E + " vs " + C + "; eligibility re-assessed at each origin.",
-        "7a": or(s.eligibility, or(s.population, "(population)")) + " — re-assessed at each origin; covariate/eligibility look-back " + s.covlookback + " days.",
-        "7b": E + " vs " + C + ". " + or(s.assignment, "Assignment determined within each trial at its origin."),
-        "7c": or(s.confounding, "Propensity score within/across trials; weighting or matching within trial."),
-        "7d": "Time zero = each trial's origin. " + or(s.followup, "Follow-up per trial to outcome/death/end.") + " " + or(s.multiple, "Patients may enter multiple trials."),
-        "7e": or(s.outcome, "(outcome)"),
-        "7f": "Target estimand: " + estPlain + ".",
-        "7g": "Confounding controlled within each trial (" + or(s.confounding, "PS methods") + "); patients appearing in multiple trials handled with a patient-clustered robust variance.",
-        "7h": "Pooled logistic regression across trials with trial and follow-up-time terms; patient-clustered robust variance. Subgroups: " + or(mergeList(s.subgroupsPick, s.subgroupsCustom).join("; "), "none pre-specified") + ". Sensitivity: " + or(mergeList(s.sensitivityPick, s.sensitivityCustom).join("; "), "(see protocol)") + ".",
+        "6": "Target trial: at each origin (" + origins + "), randomise eligible patients to " + E + " vs " + C + " and follow per trial to the outcome, death, or end of study.",
         "16": "The sequential design mitigates prevalent-user and selection bias; residual and unmeasured confounding cannot be excluded.",
       };
-      try { dl(await window.buildTargetChecklistDocx(D, map, s.title || "Sequential trial study"), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx"); } catch (e) {}
+      try { dl(await window.buildTargetChecklistDocx(D, { title: s.title || "Sequential trial study", designName: "sequential trial", item7: item7, map: map }), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx"); } catch (e) {}
     });
     document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
       try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
@@ -470,6 +493,8 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 
       children.push(h1("References"));
       ["Hernán MA, Alonso A, Logan R, et al. Observational studies analyzed like randomized experiments: postmenopausal hormone therapy and coronary heart disease. Epidemiology 2008;19:766-79.", "Danaei G, Rodríguez LAG, Cantero OF, et al. Observational data for comparative effectiveness research: an emulation of randomised trials of statins. Stat Methods Med Res 2013;22:70-96.", "Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment. Stat Med 2010;29:2757-70.", "Keogh RH, Gran JM, Seaman SR, et al. Causal inference in survival analysis using longitudinal observational data. Stat Med 2023;42:2191-2225."].forEach((l) => children.push(bullet(l)));
+
+      children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
 
       const doc = new D.Document({
         creator: "Protocol Generator — Sequential Trial",

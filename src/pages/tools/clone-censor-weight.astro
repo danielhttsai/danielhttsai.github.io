@@ -407,23 +407,47 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
       const D = window.docx; if (!D || !window.buildTargetChecklistDocx) return;
       const s = readForm();
       const A = or(s.stratA, "(strategy A)"), B = or(s.stratB, "(strategy B)");
+      const grace = s.grace, tz = or(s.timezero, "(define time zero)");
+      const ipcwReasons = mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).join("; ") || "(none selected)";
+      const subg = mergeList(s.subgroupsPick, s.subgroupsCustom).join("; ") || "none pre-specified";
+      const sens = mergeList(s.sensitivityPick, s.sensitivityCustom).join("; ") || "(see protocol)";
+      // Item 7 (a–h): what the target trial specifies vs how CCW emulates it.
+      const item7 = [
+        ["a. Eligibility criteria",
+          "Patients meeting the indication at time zero; compatible with, and eligible for, every treatment strategy at that point.",
+          "Population: " + or(s.population, "(specify)") + ".\nInclusion assessed over " + s.incllookback + " d.\nExclusions: " + rowsText(s.excllist) + "."],
+        ["b. Treatment strategies",
+          "Initiate " + A + " vs " + B + " — strategies distinguished only by what happens over a grace period of " + grace + " days.",
+          "Strategy A: " + A + ".\nStrategy B: " + B + ".\nGrace period: " + grace + " days from time zero."],
+        ["c. Assignment procedures",
+          "Random assignment to strategy at time zero.",
+          "Every eligible patient is CLONED into both strategy arms at time zero, so assignment is unconfounded by construction (baseline covariate distributions identical across arms). Covariates: " + rowsText(s.covlist) + "."],
+        ["d. Follow-up",
+          "Follow-up begins at assignment (time zero) and ends at the outcome, death, or end of study.",
+          "Time zero: " + tz + ".\n" + or(s.followup, "Follow-up from time zero to outcome, death, disenrolment, or end of study.") + "\nGrace period: " + grace + " days."],
+        ["e. Outcomes",
+          "Primary outcome: " + or(s.outcome, "(specify)") + ".",
+          "Outcome: " + or(s.outcome, "(specify)") + "."],
+        ["f. Causal contrasts",
+          "Per-protocol effect — the effect of receiving and adhering to the assigned strategy.",
+          "Primary estimand: the per-protocol effect via clone-censor-weight; " + effectText(s.effect) + ". A conventional as-started (ITT-analogue) analysis is reported for comparison."],
+        ["g. Identifying assumptions",
+          "Exchangeability, positivity, and consistency; and — because artificial censoring is informative — no unmeasured predictors of censoring.",
+          "Baseline exchangeability by cloning. Informative censoring at deviation is addressed with stabilised, time-varying inverse-probability-of-censoring weights fitted SEPARATELY per arm, over: " + or(s.ipcw, "(covariates)") + ". Censoring events weighted (each mapped to the assigned strategy): " + ipcwReasons + "."],
+        ["h. Data analysis plan",
+          "An estimator that recovers the per-protocol effect under the identifying assumptions.",
+          "Weighted pooled logistic regression (discrete-time hazard) with the assigned strategy, follow-up time, its quadratic term, and a strategy × time interaction; weighted cumulative-incidence curves contrasted for the effect measure; 95% CIs by nonparametric bootstrap.\nSubgroups: " + subg + ".\nSensitivity: " + sens + "."],
+      ];
       const map = {
-        "1a": "This study emulates a target trial of " + A + " vs " + B + " among " + or(s.population, "(population)") + ", using a clone-censor-weight analysis.",
+        "1a": "This study emulates a target trial of " + A + " vs " + B + " among " + or(s.population, "(population)") + ", analysed by clone-censor-weight.",
         "1b": or(s.data, ""),
-        "3": "Among " + or(s.population, "(population)") + ", what is the effect of " + A + " vs " + B + " on " + or(s.outcome, "(outcome)") + "?",
+        "3": "Among " + or(s.population, "(population)") + ", what is the per-protocol effect of " + A + " vs " + B + " on " + or(s.outcome, "(outcome)") + "?",
+        "4": "The two strategies cannot be distinguished at time zero and differ only over a " + grace + "-day grace period, so a conventional as-treated analysis is biased by immortal time; the target trial is specified de novo and emulated by clone-censor-weight (Hernán 2016; Maringe 2020).",
         "5": or(s.data, ""),
-        "6": "Strategies: " + A + " vs " + B + "; time zero: " + or(s.timezero, "(define)") + "; grace period " + s.grace + " days.",
-        "7a": or(s.population, "(population)") + " — eligibility (inclusion/exclusion) assessed at time zero.",
-        "7b": A + " vs " + B + "; grace period " + s.grace + " days.",
-        "7c": "Each eligible patient is cloned into both strategy arms at time zero; covariates: " + rowsText(s.covlist) + "; inclusion assessed over " + s.incllookback + " d; exclusions: " + rowsText(s.excllist) + ".",
-        "7d": "Time zero: " + or(s.timezero, "(define)") + ". Follow-up: " + or(s.followup, "to outcome, death, disenrolment, or end of study") + ".",
-        "7e": or(s.outcome, "(outcome)"),
-        "7f": "Per-protocol effect — " + effectText(s.effect) + ".",
-        "7g": "Clones censored at deviation from the assigned strategy; stabilised inverse-probability-of-censoring weights on: " + or(s.ipcw, "(covariates)") + ".",
-        "7h": "Weighted pooled logistic regression with follow-up time, its quadratic term, and a strategy × time interaction; 95% CIs by nonparametric bootstrap. Subgroups: " + or(mergeList(s.subgroupsPick, s.subgroupsCustom).join("; "), "none pre-specified") + ". Sensitivity: " + or(mergeList(s.sensitivityPick, s.sensitivityCustom).join("; "), "(see protocol)") + ".",
-        "16": "The clone-censor-weight approach removes time-lag / immortal-time bias; residual and unmeasured confounding cannot be excluded.",
+        "6": "Target trial: randomise eligible patients at time zero to " + A + " vs " + B + " (strategies distinguished over a " + grace + "-day grace period) and follow to the outcome, death, or end of study.",
+        "16": "The clone-censor-weight approach removes time-lag / immortal-time bias; residual and unmeasured confounding cannot be excluded, and the IPCW models assume no unmeasured predictors of deviation.",
       };
-      try { dl(await window.buildTargetChecklistDocx(D, map, s.title || "CCW study"), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx"); } catch (e) {}
+      try { dl(await window.buildTargetChecklistDocx(D, { title: s.title || "CCW study", designName: "clone-censor-weight", item7: item7, map: map }), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx"); } catch (e) {}
     });
     document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
       try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
@@ -515,6 +539,8 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 
       children.push(h1("References"));
       ["Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183:758-64.", "Hernán MA. How to estimate the effect of treatment duration on survival outcomes using observational data. BMJ 2018;360:k182.", "Maringe C, Benitez Majano S, Exarchakou A, et al. Reflections on modern methods: trial emulation in the presence of immortal-time bias. Int J Epidemiol 2020;49:1719-29.", "Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment. Stat Med 2010;29:2757-70."].forEach((l) => children.push(bullet(l)));
+
+      children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
 
       const doc = new D.Document({
         creator: "Protocol Generator — CCW",
