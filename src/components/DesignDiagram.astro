@@ -33,7 +33,7 @@
       if (!d) return "0";
       const a = Math.abs(d), s = d < 0 ? "−" : "+";
       if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; }
-      if (a >= 60) return s + Math.round(a / 30) + "mo";
+      if (a >= 60) { const mo = Math.round(a / 30); return s + (mo % 12 === 0 ? mo / 12 + "y" : mo + "mo"); }
       return s + a + "d";
     }
 
