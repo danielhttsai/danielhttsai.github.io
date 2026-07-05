@@ -847,11 +847,21 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         let dos = parseInt(s.daysOfSupply); if (!(dos > 0)) dos = 30;
         const wins = [];
         wins.push({ label: "Control (unexposed) time", kind: "control", startDay: -(pre + 90), endDay: -pre, note: "…baseline" });
-        if (pre > 0) wins.push({ label: "Pre-exposure risk window", kind: "risk", startDay: -pre, endDay: 0 });
-        wins.push({ label: "Risk window (exposure)", kind: "exposure", startDay: 0, endDay: dos });
-        if (post > 0) wins.push({ label: "Post-exposure risk window", kind: "risk", startDay: dos, endDay: dos + post });
+        if (pre > 0) wins.push({ label: "Pre-exposure risk window", kind: "risk", startDay: -pre, endDay: 0, edit: { field: "preRisk", edge: "start" } });
+        wins.push({ label: "Risk window (exposure)", kind: "exposure", startDay: 0, endDay: dos, edit: { field: "daysOfSupply", edge: "end" } });
+        if (post > 0) wins.push({ label: "Post-exposure risk window", kind: "risk", startDay: dos, endDay: dos + post, edit: { field: "postRisk", edge: "end" } });
         wins.push({ label: "Control time (resumes)", kind: "control", startDay: dos + post, endDay: dos + post + 90, note: "baseline…" });
-        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Exposure start (day 0)" });
+        const onEdit = (field, day) => {
+          const el = form.elements[field]; if (!el) return;
+          let v;
+          if (field === "preRisk") v = Math.max(0, -day);
+          else if (field === "daysOfSupply") v = Math.max(1, day);
+          else if (field === "postRisk") v = Math.max(0, day - dos);   // window ends at dos + post
+          else return;
+          el.value = Math.round(v);
+          render();
+        };
+        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Exposure start (day 0)", onEdit: onEdit, snap: 5 });
       };
 
       const render = () => {

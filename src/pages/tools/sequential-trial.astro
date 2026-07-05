@@ -244,13 +244,56 @@ const SENSITIVITY = [
       svg += '<text x="' + ((dxA + dxB) / 2) + '" y="' + (dy - 8) + '" text-anchor="middle" font-size="9.5" fill="#94a3b8">…a new trial at each origin…</text>';
       svg += '<line x1="' + plotL + '" y1="' + (H - 22) + '" x2="' + plotR + '" y2="' + (H - 22) + '" stroke="#cbd5e1"/>';
       svg += '<text x="' + plotR + '" y="' + (H - 8) + '" text-anchor="end" font-size="10" fill="#94a3b8">calendar time → (a new trial each ' + esc(interval) + ')</text>';
-      document.getElementById("diagram").innerHTML = svg + "</svg>";
+      // Draggable edges on Trial 1: look-back left edge (covlookback) and
+      // follow-up right edge (futrial). Grab dots double as the hit targets.
+      if (lbW > 2) svg += '<circle cx="' + (baseOx - lbW) + '" cy="' + (top + 13) + '" r="4.5" fill="#fff" stroke="#8b5cf6" stroke-width="2" class="st-handle" data-field="covlookback" style="cursor:ew-resize;touch-action:none"/>';
+      svg += '<circle cx="' + (baseOx + fuW) + '" cy="' + (top + 13) + '" r="4.5" fill="#fff" stroke="#10b981" stroke-width="2" class="st-handle" data-field="futrial" style="cursor:ew-resize;touch-action:none"/>';
+      const diag = document.getElementById("diagram");
+      diag.innerHTML = svg + "</svg>";
+
+      // ── Drag-to-edit (frozen px/day so the drag stays linear) ──
+      const svgXof = (clientX) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = clientX; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
+      diag.querySelectorAll(".st-handle").forEach((h) => {
+        h.addEventListener("pointerdown", (ev) => {
+          ev.preventDefault(); ev.stopPropagation();
+          if (window.__diagDrag) window.__diagDrag.cleanup();
+          const field = h.getAttribute("data-field");
+          const lb0 = Math.max(0, parseInt(s.covlookback) || 0), fu0 = Math.max(1, parseInt(s.futrial) || 1);
+          const p0 = perW / ((lb0 + fu0) || 1);      // px per day, frozen for this drag
+          const startVal = field === "covlookback" ? lb0 : fu0;
+          const pid = ev.pointerId, x0 = svgXof(ev.clientX);
+          try { diag.setPointerCapture(pid); } catch (e) {}
+          let pending = null, raf = 0;
+          const apply = () => { raf = 0; if (pending == null) return; const el = form.elements[field]; if (el) { el.value = pending; render(); } };
+          const move = (e) => {
+            if (e.pointerId !== pid) return;
+            const x = svgXof(e.clientX); if (x == null || x0 == null) return;
+            const dDays = (x - x0) / p0;
+            let v = field === "covlookback" ? (startVal - dDays) : (startVal + dDays);   // look-back edge sits left of origin
+            pending = Math.max(field === "futrial" ? 5 : 0, Math.round(v / 5) * 5);
+            if (!raf) raf = requestAnimationFrame(apply);
+          };
+          const end = (e) => {
+            if (e && e.pointerId != null && e.pointerId !== pid) return;
+            document.removeEventListener("pointermove", move);
+            document.removeEventListener("pointerup", end);
+            document.removeEventListener("pointercancel", end);
+            if (raf) { cancelAnimationFrame(raf); raf = 0; } apply();
+            try { diag.releasePointerCapture(pid); } catch (e2) {}
+            window.__diagDrag = null;
+          };
+          window.__diagDrag = { cleanup: end };
+          document.addEventListener("pointermove", move);
+          document.addEventListener("pointerup", end);
+          document.addEventListener("pointercancel", end);
+        });
+      });
       document.getElementById("dlegend").innerHTML =
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full" style="background:#0f766e"></span>Trial origin (time zero)</span>' +
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Look-back / eligibility (' + fmt(lb) + ')</span>' +
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#10b981"></span>Per-trial follow-up (' + fmt(fu) + ')</span>';
       document.getElementById("dcap").textContent =
-        "A new nested trial starts at each origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "): a " + fmt(lb) + " look-back / eligibility window → " + fmt(fu) + " follow-up, staggered along calendar time. Trials 1, 2, … through the last; a patient enters every trial they stay eligible for, pooled with a patient-clustered robust variance.";
+        "A new nested trial starts at each origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "): a " + fmt(lb) + " look-back / eligibility window → " + fmt(fu) + " follow-up, staggered along calendar time. Trials 1, 2, … through the last; a patient enters every trial they stay eligible for, pooled with a patient-clustered robust variance. Drag the ○ handles on Trial 1 to adjust the look-back and per-trial follow-up.";
     }
 
     const or = (s, d) => (s && s.length ? s : d);

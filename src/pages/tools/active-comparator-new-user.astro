@@ -1484,12 +1484,17 @@ _Drafted with the AsPEN protocol builder (${today})._
         const ym = mfc.match(/(\d+(?:\.\d+)?)\s*year/i), dm = mfc.match(/(\d+)\s*day/i);
         if (ym) fu = Math.round(parseFloat(ym[1]) * 365); else if (dm) fu = parseInt(dm[1]);
         const wins = [];
-        if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0 });
-        if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0 });
+        if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
+        if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
         wins.push({ label: "Eligibility (incl./excl.) assessment", kind: "eligibility", startDay: -(Math.max(lb, wash) || 1), endDay: 0 });
-        if (grace > 0) wins.push({ label: "Grace period", kind: "grace", startDay: 0, endDay: grace });
+        if (grace > 0) wins.push({ label: "Grace period", kind: "grace", startDay: 0, endDay: grace, edit: { field: "grace", edge: "end" } });
         wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu });
-        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Index (day 0) — treatment start" });
+        const onEdit = (field, day) => {
+          const el = form.elements[field]; if (!el) return;
+          el.value = Math.round(field === "grace" ? Math.max(0, day) : Math.max(0, -day));
+          render();
+        };
+        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Index (day 0) — treatment start", onEdit: onEdit, snap: 5 });
       };
 
       const computeChecks = (s) => {
