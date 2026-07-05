@@ -1341,7 +1341,9 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
         })[s.ciMethod] || "Exact Poisson / Wilson";
         const ticked = s.metricsPick || [];
 
+        let __phdcLogo = null; try { const __r = await fetch("/images/networks/phdc.png"); if (__r.ok) __phdcLogo = new Uint8Array(await __r.arrayBuffer()); } catch (e) {}
         const children = [];
+        if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
         children.push(new D.Paragraph({ children: [text(s.title || "(Untitled multi-national descriptive study)", { bold: true, size: 32 })], spacing: { before: 0, after: 120 } }));
         children.push(labelTable([
           ["Study ID", s.shortId || ""],

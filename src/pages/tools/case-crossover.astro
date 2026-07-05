@@ -957,7 +957,9 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         const meta = ({ re: "Random-effects (DerSimonian-Laird)", "re-reml": "Random-effects (REML)", fe: "Fixed-effects (inverse-variance)" })[s.metaMethod] || "Random-effects";
         const arch = ({ federated: "Federated; each AsPEN site executes locally; aggregate ORs leave.", cdm: "Common Data Model; transforms to OMOP/Sentinel, runs shared package.", centralised: "Centralised; pooled individual data under DUA." })[s.arch] || "Federated";
 
+        let __phdcLogo = null; try { const __r = await fetch("/images/networks/phdc.png"); if (__r.ok) __phdcLogo = new Uint8Array(await __r.arrayBuffer()); } catch (e) {}
         const children = [];
+        if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
         children.push(new D.Paragraph({ children: [text(s.title || "(Untitled multi-national case-crossover study)", { bold: true, size: 32 })], spacing: { before: 0, after: 120 } }));
         children.push(labelTable([
           ["Study ID", s.shortId || ""],
