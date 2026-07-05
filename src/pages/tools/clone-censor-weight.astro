@@ -196,7 +196,9 @@ Comedications | 180</textarea>
           <button type="button" data-action="download-md" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Markdown</button>
           <button type="button" data-action="download-target" class="text-brand-700 hover:underline font-semibold text-sm" title="TARGET checklist (Cashin et al, JAMA 2025) mapped to this protocol.">⬇ TARGET checklist</button>
           <button type="button" data-action="copy" class="text-brand-700 hover:underline font-semibold text-sm">Copy</button>
-          <button type="button" data-action="reset" class="text-slate-500 hover:text-slate-800 text-sm ml-auto">Reset</button>
+          <button type="button" data-action="reset" class="ml-auto text-slate-500 hover:text-rose-600 hover:underline text-sm font-semibold">Clear all</button>
+          <span class="basis-full text-[11px] text-slate-400">Auto-saved to this browser.</span>
+          <p data-action-msg class="basis-full text-xs"></p>
         </div>
       </form>
 
@@ -452,9 +454,21 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
     document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
       try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
     });
+    const actionMsg = document.querySelector("[data-action-msg]");
+    const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
     document.querySelector("[data-action='reset']").addEventListener("click", () => {
-      if (!confirm("Clear the form?")) return;
-      form.reset(); localStorage.removeItem(STORAGE_KEY); render();
+      if (!confirm("Clear every field and forget the saved draft?")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      // True blank slate — form.reset() only restores HTML defaults (and leaves
+      // the pre-filled covariate/exclusion rows and checkboxes). Walk every
+      // control and zero it out so "Clear" actually means clear.
+      form.querySelectorAll("input, textarea, select").forEach((el) => {
+        if (el.type === "checkbox" || el.type === "radio") el.checked = false;
+        else if (el.tagName === "SELECT") el.selectedIndex = 0;
+        else el.value = "";
+      });
+      render();
+      setMsg("Cleared.");
     });
 
     // Word export — Markdown-ish rendered to a formatted .docx
