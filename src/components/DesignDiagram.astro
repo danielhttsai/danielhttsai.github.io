@@ -41,7 +41,20 @@
       if (!diagramEl) return;
       const wins = (spec.windows || []).filter((w) => w && Number.isFinite(+w.startDay) && Number.isFinite(+w.endDay));
       if (!wins.length) { diagramEl.innerHTML = ""; if (legendEl) legendEl.innerHTML = ""; return; }
-      const rows = wins.slice().sort((a, b) => a.startDay - b.startDay);
+      // Row order: sort by start day when idle, but FREEZE that order while an
+      // edge is being dragged — otherwise the dragged bar would swap rows every
+      // time its start crosses a neighbour's, which feels like the bars "stick"
+      // to each other and jump.
+      const keyOf = (w) => w.edit ? (w.edit.field + "#" + (w.edit.idx == null ? "" : w.edit.idx)) : ("_" + w.kind + "#" + (w.label || ""));
+      let rows;
+      if (window.__diagAxis && window.__diagRowKeys) {
+        const ord = window.__diagRowKeys;
+        const rank = (w) => { const i = ord.indexOf(keyOf(w)); return i < 0 ? 1e6 : i; };
+        rows = wins.slice().sort((a, b) => rank(a) - rank(b));
+      } else {
+        rows = wins.slice().sort((a, b) => a.startDay - b.startDay);
+        window.__diagRowKeys = rows.map(keyOf);
+      }
       let lo = 0, hi = 0;
       for (const w of rows) { lo = Math.min(lo, w.startDay, w.endDay); hi = Math.max(hi, w.startDay, w.endDay); }
       if (lo === hi) hi = lo + 1;
@@ -106,8 +119,9 @@
       // move this one.
       if (spec.onEdit) {
         const gLo = lo, gHi = hi, gL = plotL, gW = plotW, snap = spec.snap || 10;
-        // Kill any drag orphaned by a previous render before wiring fresh handles.
-        if (window.__diagDrag) { window.__diagDrag.cleanup(); }
+        // NB: do NOT tear down window.__diagDrag here. This block re-runs on the
+        // drag's own re-render, so cleaning up here would kill the live drag after
+        // its first move. Orphans are prevented at pointerdown + pointercancel.
         const dayAt = (clientX) => {
           const s = diagramEl.querySelector("svg"); if (!s || !s.getScreenCTM) return null;
           const pt = s.createSVGPoint(); pt.x = clientX; pt.y = 0;
@@ -128,20 +142,34 @@
             // Capture on the container (survives the mid-drag innerHTML rebuild),
             // not the handle (which gets destroyed on the first re-render).
             try { diagramEl.setPointerCapture(pid); } catch (e) {}
+            // Coalesce moves to one apply per animation frame — a full page
+            // re-render on every raw pointermove is what made dragging feel
+            // sticky and stutter. We keep the latest day and flush on rAF.
+            let pendingDay = null, raf = 0, lastApplied = null;
+            const flush = () => {
+              raf = 0;
+              if (pendingDay == null || pendingDay === lastApplied) return;
+              lastApplied = pendingDay;
+              spec.onEdit(field, pendingDay, { edge: edge, idx: idx });
+            };
             const move = (e) => {
               if (e.pointerId !== pid) return;
               let day = dayAt(e.clientX); if (day == null) return;
               if (edge === "start" && !allowPast) day = Math.min(0, day);
               if (edge === "end" && !allowPast) day = Math.max(snap, day);
-              spec.onEdit(field, day, { edge: edge, idx: idx });
+              pendingDay = day;
+              if (!raf) raf = requestAnimationFrame(flush);
             };
             const end = (e) => {
               if (e && e.pointerId != null && e.pointerId !== pid) return;
               document.removeEventListener("pointermove", move);
               document.removeEventListener("pointerup", end);
               document.removeEventListener("pointercancel", end);
+              if (raf) { cancelAnimationFrame(raf); raf = 0; }
+              flush(); // apply the final position
               try { diagramEl.releasePointerCapture(pid); } catch (e2) {}
               window.__diagAxis = null;
+              window.__diagRowKeys = null;
               window.__diagDrag = null;
               if (spec.onEditEnd) spec.onEditEnd();
             };
