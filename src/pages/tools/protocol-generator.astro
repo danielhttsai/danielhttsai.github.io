@@ -41,7 +41,7 @@ const designs = [
     short: "CCW",
     title: "Clone-Censor-Weight",
     when: "When the strategies you compare can't be told apart at time zero — grace periods ('start within X days'), sustained use, or treat-to-target — so a naïve baseline analysis creates immortal-time bias.",
-    example: "Early vs deferred anticoagulation after stroke, ≤14-day grace period",
+    example: "Early vs delayed statin initiation after MI, ≤90-day grace period",
     strengths: "Clones each patient into every strategy at time zero (no baseline confounding of assignment), censors at deviation, and reweights with IPCW to recover the per-protocol effect without immortal-time bias.",
   },
   {
@@ -49,8 +49,8 @@ const designs = [
     short: "ST",
     title: "Sequential Trial Emulation",
     when: "When eligibility is time-varying and a single index date wastes person-time — patients who qualify later should still contribute. Emulate one nested trial at each eligible origin and pool.",
-    example: "Metformin vs sulfonylurea and dementia, monthly trials 2003–2015",
-    strengths: "Uses every eligible time origin (mitigates prevalent-user / selection bias), lets patients enter multiple nested trials, and pools with a patient-clustered robust variance. Composes with CCW for per-protocol effects.",
+    example: "Benzodiazepine vs no use in pregnancy, a trial at each gestational week",
+    strengths: "Uses every eligible time origin (mitigates prevalent-user / selection bias), lets patients enter multiple nested trials, and pools with a patient-clustered robust variance.",
   },
 ];
 ---
