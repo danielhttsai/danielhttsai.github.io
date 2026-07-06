@@ -109,6 +109,17 @@
   },
   {
     "year": "2026",
+    "doi": "10.2139/ssrn.7028064",
+    "citation": "Chou TC, Chou YT, Liao KYC, Sun ZJ, Chen HY, Ho TS, Tsai DHT, Wu JS, Lai ECC. Association of Uric Acid Level Mortality and Cardiovascular Outcomes in Liver Transplant Recipients. 2026.",
+    "isOA": true,
+    "oaUrl": "https://doi.org/10.2139/ssrn.7028064",
+    "pmid": "",
+    "pmcid": "",
+    "ris": "TY  - JOUR\r\nTI  - Association of Uric Acid Level Mortality and Cardiovascular Outcomes in Liver Transplant Recipients\r\nAU  - Chou, Tsung-Ching\r\nAU  - Chou, Yu-Tsung\r\nAU  - Liao, Kevin Yi-Chen\r\nAU  - Sun, Zih-Jie\r\nAU  - Chen, Hui-Yu\r\nAU  - Ho, Tzong-Shiann\r\nAU  - Tsai, Daniel  Hsiang-Te\r\nAU  - Wu, Jin-Shang\r\nAU  - Lai, Edward Chia-Cheng\r\nPY  - 2026\r\nDO  - 10.2139/ssrn.7028064\r\nUR  - https://doi.org/10.2139/ssrn.7028064\r\nER  - \r\n",
+    "date": 20260000
+  },
+  {
+    "year": "2026",
     "doi": "10.1002/bcp.70373",
     "citation": "Hsu HY, Chen KW, Lu HF, Chang SS, Tsai DHT, Lai ECC, Chang KC, Tsai FJ. Comparative Effectiveness of Clopidogrel vs. Potent P2Y12 Inhibitors in CYP2C19 Normal Metabolizers Following Percutaneous Coronary Intervention: A Real-World Cohort Study. British Journal of Clinical Pharmacology. 2026 Apr;92(4):1167-1176.",
     "isOA": true,
