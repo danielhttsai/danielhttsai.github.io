@@ -14,6 +14,9 @@
  *      transform is re-applied. A safety check skips any file that still
  *      contains auth code, so a broken upstream change can never go live.
  *   C. Network logos — copied from PHD-Center/AsPEN.
+ *   D. Scholar metrics — citations + h-index scraped from the public Google
+ *      Scholar profile page (no API). On any failure or implausible parse the
+ *      existing metrics.json is kept, so the numbers are never zeroed.
  *
  * Every section is wrapped in try/catch and the script always exits 0: a
  * failure in one section logs a warning but never blocks the others or the
@@ -27,6 +30,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const ORCID = "0000-0003-2841-0338";
 const EMAIL = "danielhttsai@gmail.com";
 const ASPEN_RAW = "https://raw.githubusercontent.com/PHD-Center/AsPEN/main";
+const SCHOLAR_ID = "3IxiZOoAAAAJ";
 
 const p = (rel) => ROOT + rel;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -262,9 +266,50 @@ async function syncLogos() {
   }
 }
 
+// ───────────────────────── D. Scholar metrics ─────────────────────────
+// Google Scholar has no API, so we open the public profile page and parse its
+// metrics table (#gsc_rsb_st → cells .gsc_rsb_std, in order: citations-all,
+// citations-since, h-all, h-since, i10-all, i10-since). Scholar sometimes
+// blocks datacenter IPs; on ANY failure or an implausible parse we KEEP the
+// existing metrics.json and only warn — the numbers must never be zeroed.
+async function syncMetrics() {
+  const file = p("src/data/metrics.json");
+  const cur = JSON.parse(readFileSync(file, "utf8"));
+  const keep = (why) => console.warn(`  ${why}; keeping metrics.json (${cur.citations} citations, h-index ${cur.hIndex}).`);
+  let html;
+  try {
+    const r = await fetch(`https://scholar.google.com/citations?user=${SCHOLAR_ID}&hl=en`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    html = await r.text();
+  } catch (e) { return keep(`Scholar fetch failed (${e.message})`); }
+
+  const nums = [...html.matchAll(/class="gsc_rsb_std"[^>]*>(?:<a[^>]*>)?(\d[\d,]*)/g)].map((m) => parseInt(m[1].replace(/,/g, ""), 10));
+  if (nums.length < 3) return keep("Scholar metrics table not found (blocked or markup changed)");
+  const citations = nums[0], hIndex = nums[2];
+  // Sanity: must be positive, and citations never legitimately fall below the
+  // last known total — a lower value means a partial page / parse error.
+  if (!(citations > 0) || !(hIndex > 0) || citations < cur.citations) {
+    return keep(`Scholar parse implausible (citations=${citations}, h-index=${hIndex} vs current ${cur.citations}/${cur.hIndex})`);
+  }
+  if (citations === cur.citations && hIndex === cur.hIndex) {
+    console.log(`  Scholar unchanged: ${citations} citations, h-index ${hIndex}.`);
+    return;
+  }
+  writeFileSync(file, JSON.stringify({ ...cur, citations, hIndex, source: "Google Scholar", updated: new Date().toISOString().slice(0, 10) }, null, 2) + "\n", "utf8");
+  console.log(`  Scholar metrics updated: ${cur.citations}→${citations} citations, h-index ${cur.hIndex}→${hIndex}.`);
+}
+
 // ───────────────────────────── run ─────────────────────────────
 console.log("== Weekly content sync ==");
 try { await syncPublications(); } catch (e) { console.warn("Publications section failed:", e.message); }
 try { await syncTemplates(); } catch (e) { console.warn("Templates section failed:", e.message); }
 try { await syncLogos(); } catch (e) { console.warn("Logos section failed:", e.message); }
+try { await syncMetrics(); } catch (e) { console.warn("Metrics section failed:", e.message); }
 console.log("Done.");
