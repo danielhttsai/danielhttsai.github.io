@@ -272,10 +272,27 @@ async function syncLogos() {
 // citations-since, h-all, h-since, i10-all, i10-since). Scholar sometimes
 // blocks datacenter IPs; on ANY failure or an implausible parse we KEEP the
 // existing metrics.json and only warn — the numbers must never be zeroed.
-async function syncMetrics() {
-  const file = p("src/data/metrics.json");
-  const cur = JSON.parse(readFileSync(file, "utf8"));
-  const keep = (why) => console.warn(`  ${why}; keeping metrics.json (${cur.citations} citations, h-index ${cur.hIndex}).`);
+// Preferred source: SerpAPI's Google Scholar Author API (reliable from CI, free
+// tier). Enabled only when a SERPAPI_KEY secret is present. Returns
+// { citations, hIndex } or null.
+async function metricsFromSerpApi() {
+  const key = process.env.SERPAPI_KEY;
+  if (!key) return null;
+  try {
+    const j = await fetchJson(`https://serpapi.com/search.json?engine=google_scholar_author&author_id=${SCHOLAR_ID}&api_key=${key}&num=1`);
+    const table = j?.cited_by?.table || [];
+    const citations = table.find((r) => r.citations)?.citations?.all;
+    const hIndex = table.find((r) => r.h_index)?.h_index?.all;
+    if (Number.isInteger(citations) && Number.isInteger(hIndex)) return { citations, hIndex, via: "SerpAPI" };
+    console.warn("  SerpAPI response missing citations/h-index.");
+  } catch (e) { console.warn(`  SerpAPI fetch failed (${e.message}).`); }
+  return null;
+}
+
+// Fallback: scrape the public profile page. Works from a residential IP but
+// Google blocks datacenter IPs (GitHub Actions gets HTTP 403), in which case
+// this returns null and the caller keeps the existing numbers.
+async function metricsFromScrape() {
   let html;
   try {
     const r = await fetch(`https://scholar.google.com/citations?user=${SCHOLAR_ID}&hl=en`, {
@@ -288,22 +305,32 @@ async function syncMetrics() {
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     html = await r.text();
-  } catch (e) { return keep(`Scholar fetch failed (${e.message})`); }
-
+  } catch (e) { console.warn(`  Scholar scrape failed (${e.message}).`); return null; }
   const nums = [...html.matchAll(/class="gsc_rsb_std"[^>]*>(?:<a[^>]*>)?(\d[\d,]*)/g)].map((m) => parseInt(m[1].replace(/,/g, ""), 10));
-  if (nums.length < 3) return keep("Scholar metrics table not found (blocked or markup changed)");
-  const citations = nums[0], hIndex = nums[2];
-  // Sanity: must be positive, and citations never legitimately fall below the
-  // last known total — a lower value means a partial page / parse error.
+  if (nums.length < 3) { console.warn("  Scholar metrics table not found (blocked or markup changed)."); return null; }
+  return { citations: nums[0], hIndex: nums[2], via: "scrape" };
+}
+
+async function syncMetrics() {
+  const file = p("src/data/metrics.json");
+  const cur = JSON.parse(readFileSync(file, "utf8"));
+  const keep = () => console.warn(`  Metrics unchanged — keeping metrics.json (${cur.citations} citations, h-index ${cur.hIndex}).`);
+
+  const got = (await metricsFromSerpApi()) || (await metricsFromScrape());
+  if (!got) return keep();
+  const { citations, hIndex, via } = got;
+  // Sanity: positive, and citations never legitimately fall below the last
+  // known total — a lower value means a partial page / parse error.
   if (!(citations > 0) || !(hIndex > 0) || citations < cur.citations) {
-    return keep(`Scholar parse implausible (citations=${citations}, h-index=${hIndex} vs current ${cur.citations}/${cur.hIndex})`);
+    console.warn(`  ${via} value implausible (citations=${citations}, h-index=${hIndex} vs current ${cur.citations}/${cur.hIndex}).`);
+    return keep();
   }
   if (citations === cur.citations && hIndex === cur.hIndex) {
-    console.log(`  Scholar unchanged: ${citations} citations, h-index ${hIndex}.`);
+    console.log(`  Scholar unchanged (${via}): ${citations} citations, h-index ${hIndex}.`);
     return;
   }
   writeFileSync(file, JSON.stringify({ ...cur, citations, hIndex, source: "Google Scholar", updated: new Date().toISOString().slice(0, 10) }, null, 2) + "\n", "utf8");
-  console.log(`  Scholar metrics updated: ${cur.citations}→${citations} citations, h-index ${cur.hIndex}→${hIndex}.`);
+  console.log(`  Scholar metrics updated (${via}): ${cur.citations}→${citations} citations, h-index ${cur.hIndex}→${hIndex}.`);
 }
 
 // ───────────────────────────── run ─────────────────────────────

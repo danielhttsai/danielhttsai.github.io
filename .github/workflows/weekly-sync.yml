@@ -32,6 +32,11 @@ jobs:
 
       - name: Sync external content
         run: node scripts/sync-content.mjs
+        env:
+          # Optional: enables reliable Google Scholar citation/h-index sync from
+          # CI (datacenter IPs are blocked from scraping the page directly).
+          # Get a free key at serpapi.com and add it as a repo Actions secret.
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
 
       - name: Detect changes
         id: detect
