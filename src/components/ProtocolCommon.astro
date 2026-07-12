@@ -32,7 +32,14 @@
       ? nz(s.design, "target-trial-emulation study") + " that emulates a target trial using observational data from " + nz(s.data, "(data source)")
       : nz(s.design, "observational study") + " using data from " + nz(s.data, "(data source)");
 
-    const abstractLines = (s) => ([
+    const abstractLines = (s) => s.descriptive ? ([
+      ["Objective. ", "To describe and quantify " + O(s) + " among " + P(s) + "."],
+      ["Design. ", designLine(s) + "."],
+      ["Data source(s). ", nz(s.data, "(data source)") + (s.dataMeta ? " — " + s.dataMeta : "") + "."],
+      ["Measures. ", O(s) + ", overall and by the pre-specified strata."],
+      ["Analysis. ", nz(s.analysis, "descriptive estimates with 95% confidence intervals") + "."],
+      ["Reporting. ", "This protocol follows the HARPER template."],
+    ]) : ([
       ["Objective. ", "To estimate the effect of " + contrast(s) + " on " + O(s) + " among " + P(s) + "."],
       ["Design. ", designLine(s) + "."],
       ["Data source(s). ", nz(s.data, "(data source)") + (s.dataMeta ? " — " + s.dataMeta : "") + "."],

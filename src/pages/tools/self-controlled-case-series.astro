@@ -2,6 +2,7 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import PageHeader from "../../components/PageHeader.astro";
 import DesignDiagram from "../../components/DesignDiagram.astro";
+import ProtocolCommon from "../../components/ProtocolCommon.astro";
 import databasesRaw from "../../data/databases.json";
 import { STROBE_ITEMS } from "../../data/strobe";
 
@@ -556,6 +557,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
     </div>
     <DesignDiagram />
+    <ProtocolCommon />
 
     <!-- Phenotype library modal -->
     <div data-library-modal class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-start justify-center p-4 sm:p-8 overflow-y-auto">
@@ -701,6 +703,20 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const bullets = (arr) => arr.length === 0 ? "_(none specified)_" : arr.map((l) => "- " + l).join("\n");
       const numbered = (arr) => arr.length === 0 ? "_(none)_" : arr.map((l, i) => (i + 1) + ". " + l).join("\n");
       const orFb = (s, fb) => (s && s.trim()) ? s : fb;
+      const pcOf = (s) => ({
+        design: "self-controlled case series",
+        tte: false,
+        population: orFb(s.picoP, "(population)"),
+        exposure: orFb(s.picoI, "(exposure)"),
+        comparator: "",
+        outcome: orFb(s.picoO, "(outcome)"),
+        data: (s.sites && s.sites.length ? s.sites.length + " AsPEN data source(s)" : "multi-national AsPEN data sources"),
+        analysis: "a conditional Poisson (self-controlled) model contrasting exposed vs unexposed person-time within each case, pooled across sites",
+        groupBy: "risk vs baseline period",
+        skip: ["ethics"],
+        limitations: "SCCS removes time-invariant between-person confounding but assumes events do not affect subsequent exposure and do not censor observation; time-varying confounders (age, season) must be modelled.",
+        plannedOutputs: ["Case-selection flow diagram.", "Distribution of exposed vs unexposed person-time and events.", "Incidence-rate ratio by risk window, with a forest plot across sites."],
+      });
       const sitesLine = (ids, otherText) => {
         const parts = (ids || []).map((c) => "- " + formatSiteFull(c));
         const others = (otherText || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -745,6 +761,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
 
 ---
 
+${window.PC.abstractMd(pcOf(s))}
 ## 1. Research question
 
 | | |
@@ -830,6 +847,8 @@ ${numbered(milestones)}
 **Ethics.** ${orFb(s.ethics, "Each participating site obtains local IRB / ethics approval before data extraction.")}
 
 **Dissemination.** ${orFb(s.dissemination, "Primary manuscript to a peer-reviewed pharmacoepidemiology journal.")}
+
+${window.PC.tailMd(pcOf(s))}
 
 ## 12. Key references
 
@@ -1082,6 +1101,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           ["Design", "Multi-national self-controlled case series (SCCS); " + sccsVariantShort],
         ]));
 
+        window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
         children.push(h1("1. Research question"));
         children.push(labelTable([["Population", s.picoP || ""], ["Exposure", s.picoI || ""], ["Outcome", s.picoO || ""]]));
 
@@ -1145,6 +1165,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         children.push(p([text("Ethics. ", { bold: true }), text(s.ethics || "Each participating site obtains local IRB / ethics approval before data extraction.")]));
         children.push(p([text("Dissemination. ", { bold: true }), text(s.dissemination || "Primary manuscript to a peer-reviewed pharmacoepidemiology journal.")]));
 
+        window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
         children.push(h1("12. Key references"));
         refs.length ? refs.forEach((l) => children.push(numItem(l))) : children.push(para("(none)"));
 

@@ -2,6 +2,7 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import PageHeader from "../../components/PageHeader.astro";
 import DesignDiagram from "../../components/DesignDiagram.astro";
+import ProtocolCommon from "../../components/ProtocolCommon.astro";
 import databasesRaw from "../../data/databases.json";
 
 // Feature taxonomy; same 8 dimensions as the /databases/ compare drawer.
@@ -1107,6 +1108,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
     </div>
     <DesignDiagram />
+    <ProtocolCommon />
 
     <!-- ── Phenotype-library modal ───────────────────────── -->
     <div data-library-modal class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-start justify-center p-4 sm:p-8 overflow-y-auto">
@@ -1279,6 +1281,20 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         arr.length === 0 ? "_(none)_" : arr.map((l, i) => (i + 1) + ". " + l).join("\n");
 
       const orFb = (s, fb) => (s && s.trim()) ? s : fb;
+      const pcOf = (s) => ({
+        design: "active-comparator new-user cohort study under a target-trial-emulation framework",
+        tte: true,
+        population: orFb(s.picoP, "(population)"),
+        exposure: orFb(s.picoI, "(exposure)"),
+        comparator: orFb(s.picoC, "(active comparator)"),
+        outcome: orFb(s.picoO, "(primary outcome)"),
+        data: (s.sites && s.sites.length ? s.sites.length + " AsPEN data source(s)" : "multi-national AsPEN data sources"),
+        analysis: "propensity-score confounding control with an intention-to-treat / on-treatment Cox analysis, pooled across sites by meta-analysis",
+        groupBy: "treatment group",
+        skip: ["studySize", "ethics"],
+        limitations: "The active comparator must share the indication and have no a-priori association with the outcome; residual confounding by unmeasured indication severity and informative censoring under the on-treatment analysis remain possible.",
+        plannedOutputs: ["Cohort-attrition / participant-flow diagram.", "Table 1 with standardised mean differences before/after PS adjustment (Love plot).", "Kaplan–Meier / cumulative-incidence curves and a forest plot of site-specific and pooled effects."],
+      });
       const sitesLine = (ids, otherText) => {
         const parts = (ids || []).map((c) => "- " + formatSiteFull(c));
         const others = (otherText || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -1362,6 +1378,7 @@ The active comparator is used as an emulated placebo arm; a drug class with simi
 
 ---
 
+${window.PC.abstractMd(pcOf(s))}
 ## 1. Research question
 
 | | |
@@ -1463,6 +1480,8 @@ ${numbered(milestones)}
 **Ethics.** ${orFb(s.ethics, "Each participating site obtains local IRB / ethics approval before data extraction.")}
 
 **Dissemination.** ${orFb(s.dissemination, "Primary manuscript to a peer-reviewed pharmacoepidemiology journal; conference presentation at ICPE / ISPE Asian conference.")}
+
+${window.PC.tailMd(pcOf(s))}
 
 ## 12. Key references
 
@@ -1812,6 +1831,7 @@ _Drafted with the AsPEN protocol builder (${today})._
           "The active comparator is used as an emulated placebo arm; a drug class with similar indication, similar temporal trends in use, and no known a priori association with the outcome of interest. This minimises confounding by indication and addresses immortal-time / prevalent-user bias by anchoring follow-up at the moment of treatment commencement, similar to randomisation in a target RCT (Hernán & Robins 2016)."
         )]));
 
+        window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
         children.push(h1("1. Research question"));
         children.push(labelTable([
           ["Population", s.picoP || ""],
@@ -1897,6 +1917,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         children.push(p([text("Ethics. ", { bold: true }), text(s.ethics || "Each participating site obtains local IRB / ethics approval before data extraction.")]));
         children.push(p([text("Dissemination. ", { bold: true }), text(s.dissemination || "Primary manuscript to a peer-reviewed pharmacoepidemiology journal; conference presentation at ICPE / ISPE Asian conference.")]));
 
+        window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
         children.push(h1("12. Key references"));
         refs.length ? refs.forEach((l) => children.push(numItem(l))) : children.push(para("(none)"));
 
