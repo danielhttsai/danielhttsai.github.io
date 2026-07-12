@@ -314,21 +314,13 @@ const TIMELINE_PRESETS: Record<string, string> = {
           <div class="px-5 pb-5 grid sm:grid-cols-2 gap-3">
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Hazard window length (days)</span>
-              <select name="hazardLen" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
-                <option value="1">1 day (immediate trigger)</option>
-                <option value="7" selected>7 days</option>
-                <option value="14">14 days</option>
-                <option value="30">30 days</option>
-                <option value="60">60 days</option>
-              </select>
+              <input type="number" name="hazardLen" value="7" min="1" step="1" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <span class="text-[11px] text-slate-500">e.g. 1 (immediate trigger), 7, 14, 30. Drag the hazard bar in the diagram to adjust.</span>
             </label>
             <label class="flex flex-col gap-1">
-              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">End anchor (relative to event)</span>
-              <select name="hazardEnd" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
-                <option value="day-minus-1" selected>Day -1 (day before event)</option>
-                <option value="day-0">Day 0 (day of event, inclusive)</option>
-              </select>
-              <span class="text-[11px] text-slate-500">Day -1 avoids reverse-causation where the exposure is dispensed because the event has occurred.</span>
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Gap before event (days)</span>
+              <input type="number" name="hazardEnd" value="1" min="0" step="1" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <span class="text-[11px] text-slate-500">1 (hazard window ends at day −1) avoids reverse causation where the exposure is dispensed because the event occurred; 0 includes the event day.</span>
             </label>
           </div>
         </details>
@@ -347,21 +339,12 @@ const TIMELINE_PRESETS: Record<string, string> = {
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Offset to first control (days before event)</span>
-              <select name="controlOffset" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
-                <option value="30">30 d before event</option>
-                <option value="60" selected>60 d before event</option>
-                <option value="90">90 d before event</option>
-                <option value="180">180 d before event</option>
-                <option value="365">365 d before event (annual recurrence control)</option>
-              </select>
+              <input type="number" name="controlOffset" value="60" min="1" step="1" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <span class="text-[11px] text-slate-500">e.g. 30, 60, 90, or 365 (annual recurrence control). Drag control window 1 to adjust.</span>
             </label>
             <label class="flex flex-col gap-1 sm:col-span-2">
-              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Length of each control window</span>
-              <select name="controlLen" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
-                <option value="same" selected>Same as hazard window (matched)</option>
-                <option value="custom">Custom; specify below</option>
-              </select>
-              <input type="text" name="controlLenCustom" placeholder="Used only if 'Custom' selected" class="border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Length of each control window (days)</span>
+              <input type="number" name="controlLen" min="1" step="1" placeholder="blank = same as the hazard window (matched)" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
             </label>
           </div>
         </details>
@@ -653,9 +636,9 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const buildMarkdown = (s) => {
         const today = new Date().toISOString().slice(0, 10);
         const title = orFb(s.title, "(Untitled multi-national case-crossover study)");
-        const hazardEnd = s.hazardEnd === "day-0" ? "Day 0 (event day inclusive)" : "Day -1 (day before event)";
+        const _gap = Math.max(0, parseInt(s.hazardEnd) || 0); const hazardEnd = _gap <= 0 ? "Day 0 (event day inclusive)" : ("Day -" + _gap + " (" + _gap + " day(s) before the event)");
         const variant = ({ standard: "Standard (Maclure 1991); fixed offset(s) before event", "time-stratified": "Time-stratified (Janes 2005); controls drawn from same calendar stratum", symmetric: "Symmetric bidirectional; controls before AND after event", cctc: "Case-case-time-control (CCTC, Huang/Yang/Tsai BMJ 2023; PMID 37758279); current-case crossover paired with a future-case control crossover; OR_CCTC = OR_Case / OR_Control" })[s.ccoVariant] || "Standard";
-        const controlLenText = s.controlLen === "same" ? "Same as hazard window (matched)" : (s.controlLenCustom || "Custom (specify)");
+        const controlLenText = (parseInt(s.controlLen) > 0) ? (parseInt(s.controlLen) + " days") : ("Same as hazard window (" + (s.hazardLen || "7") + " days, matched)");
         const meta = ({ re: "Random-effects (DerSimonian-Laird) meta-analysis pooling site-specific ORs; report I² and τ². Forest plot per outcome.", "re-reml": "Random-effects (REML) meta-analysis; report I² and τ²; forest plot per outcome.", fe: "Fixed-effects (inverse-variance) meta-analysis; forest plot per outcome." })[s.metaMethod] || "Random-effects meta-analysis.";
         const arch = ({ federated: "Federated; each AsPEN site executes a common analytic package locally and shares aggregate ORs.", cdm: "Common Data Model; each site transforms data into agreed CDM, runs shared package.", centralised: "Centralised; site-level individual data pooled under DUA." })[s.arch] || "Federated";
 
@@ -762,15 +745,28 @@ _Drafted with the AsPEN case-crossover builder (${today})._
       const renderScheme = (s) => {
         const hlen = Math.max(1, parseInt(s.hazardLen) || 1);
         const hend = Math.max(0, parseInt(s.hazardEnd) || 0);
-        const clen = Math.max(1, parseInt(s.controlLen) || parseInt(s.controlLenCustom) || hlen);
+        const clen = Math.max(1, parseInt(s.controlLen) || hlen);
         const off = Math.max(1, parseInt(s.controlOffset) || (hlen + 1));
         const n = Math.min(6, Math.max(1, parseInt(s.nControls) || 1));
-        const wins = [{ label: "Hazard window", kind: "hazard", startDay: -(hend + hlen), endDay: -hend }];
+        const wins = [{ label: "Hazard window", kind: "hazard", startDay: -(hend + hlen), endDay: -hend, edits: [{ field: "hazardLen", edge: "start", allowPast: true }, { field: "hazardEnd", edge: "end", allowPast: true }] }];
         for (let k = 1; k <= n; k++) {
           const end = -hend - k * off;
-          wins.push({ label: "Control window " + k, kind: "control", startDay: end - clen, endDay: end });
+          wins.push({ label: "Control window " + k, kind: "control", startDay: end - clen, endDay: end, edits: k === 1 ? [{ field: "controlLen", edge: "start", allowPast: true }, { field: "controlOffset", edge: "end", allowPast: true }] : undefined });
         }
-        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Event (day 0)" });
+        const onEdit = (field, day) => {
+          const el = form.elements[field]; if (!el) return;
+          const cHend = Math.max(0, parseInt(form.elements.hazardEnd && form.elements.hazardEnd.value) || 0);
+          const cOff = Math.max(1, parseInt(form.elements.controlOffset && form.elements.controlOffset.value) || 60);
+          let v;
+          if (field === "hazardLen") v = Math.max(1, (-day) - cHend);          // hazard spans -(hend+hlen) … -hend
+          else if (field === "hazardEnd") v = Math.max(0, -day);               // gap before the event
+          else if (field === "controlOffset") v = Math.max(1, (-day) - cHend); // control 1 ends at -hend-off
+          else if (field === "controlLen") v = Math.max(1, (-cHend - cOff) - day); // control 1 starts at -hend-off-clen
+          else return;
+          el.value = Math.round(v);
+          render();
+        };
+        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Event (day 0)", onEdit: onEdit, snap: 5 });
       };
       const render = () => { const state = readForm(); preview.textContent = buildMarkdown(state); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {} renderFeasibility(state); try { renderScheme(state); } catch {} };
       try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) writeForm(JSON.parse(saved)); } catch {}
@@ -940,9 +936,9 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         const sitesPart = (s.sites && s.sites.length > 0) ? s.sites.map((c) => formatSiteFull(c)).join("; ") : "";
         const sitesOthersList = (s.sitesOther || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const sitesText = !sitesPart && sitesOthersList.length === 0 ? "(no sites selected)" : [sitesPart, sitesOthersList.length > 0 ? ("Others: " + sitesOthersList.join("; ")) : ""].filter(Boolean).join(" | ");
-        const hazardEnd = s.hazardEnd === "day-0" ? "Day 0 (event day inclusive)" : "Day -1 (day before event)";
+        const _gap = Math.max(0, parseInt(s.hazardEnd) || 0); const hazardEnd = _gap <= 0 ? "Day 0 (event day inclusive)" : ("Day -" + _gap + " (" + _gap + " day(s) before the event)");
         const variant = ({ standard: "Standard (Maclure 1991)", "time-stratified": "Time-stratified (Janes 2005)", symmetric: "Symmetric bidirectional", cctc: "Case-case-time-control (Huang/Yang/Tsai BMJ 2023; PMID 37758279)" })[s.ccoVariant] || "Standard";
-        const controlLenText = s.controlLen === "same" ? "Same as hazard window (matched)" : (s.controlLenCustom || "Custom");
+        const controlLenText = (parseInt(s.controlLen) > 0) ? (parseInt(s.controlLen) + " days") : ("Same as hazard window (" + (s.hazardLen || "7") + " days, matched)");
         const meta = ({ re: "Random-effects (DerSimonian-Laird)", "re-reml": "Random-effects (REML)", fe: "Fixed-effects (inverse-variance)" })[s.metaMethod] || "Random-effects";
         const arch = ({ federated: "Federated; each AsPEN site executes locally; aggregate ORs leave.", cdm: "Common Data Model; transforms to OMOP/Sentinel, runs shared package.", centralised: "Centralised; pooled individual data under DUA." })[s.arch] || "Federated";
 
