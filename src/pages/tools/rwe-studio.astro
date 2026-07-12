@@ -186,6 +186,29 @@ const DESIGNS = [
         <label class="flex items-center gap-2"><input type="checkbox" id="c_dedupe" checked /> Drop exact duplicate rows</label>
         <label class="flex items-center gap-2"><input type="checkbox" id="c_dropmiss" checked /> Drop rows missing a required mapped variable</label>
       </div>
+
+      <div id="dupwrap" class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Duplicate patients / cases</span>
+          <span id="dupcount" class="text-[11px] font-semibold"></span>
+        </div>
+        <p class="text-[11px] text-slate-500">The same patient appearing in more than one row. For a one-row-per-person design (ACNU, descriptive) this is usually a data error to resolve; for interval/window formats (SCCS, case-crossover) repeats are expected — leave as "flag only".</p>
+        <div class="mt-2 grid gap-2 sm:grid-cols-3 text-xs">
+          <label class="block"><span class="text-slate-600">Patient / case ID column</span>
+            <select id="dup_id" class="mt-1 w-full rounded border border-slate-300 p-1.5"></select></label>
+          <label class="block"><span class="text-slate-600">When an ID repeats</span>
+            <select id="dup_strategy" class="mt-1 w-full rounded border border-slate-300 p-1.5">
+              <option value="all">Keep all rows (flag only)</option>
+              <option value="first">Keep the first record</option>
+              <option value="last">Keep the last record</option>
+              <option value="earliest">Keep the earliest by date →</option>
+              <option value="latest">Keep the latest by date →</option>
+            </select></label>
+          <label class="block"><span class="text-slate-600">Date column (for earliest / latest)</span>
+            <select id="dup_date" class="mt-1 w-full rounded border border-slate-300 p-1.5"></select></label>
+        </div>
+      </div>
+
       <div class="mt-4 flex flex-wrap items-center gap-3">
         <button id="applyclean" type="button" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-4 py-2 rounded-lg text-sm">Build master file</button>
         <span id="cleaninfo" class="text-xs text-slate-600"></span>
@@ -543,8 +566,46 @@ const DESIGNS = [
       }).join("");
       $("maproles").querySelectorAll("select[data-role]").forEach((sel) => sel.addEventListener("change", () => { MAP[sel.getAttribute("data-role")] = sel.value; renderCovs(spec); validateMap(); }));
       renderCovs(spec);
+      try { renderDupUI(); } catch (e) {}
       validateMap();
     }
+    function detectIdCol() {
+      const spec = SPEC[getDesign()];
+      if (spec && spec.roles.some((r) => r.k === "ID") && MAP.ID) return MAP.ID;
+      const byType = DATA.profile.find((p) => p.type === "id");
+      if (byType) return byType.name;
+      const byName = DATA.columns.find((c) => /(^|_)id$|patient|subject|pid|caseid/i.test(c));
+      return byName || "";
+    }
+    function renderDupUI() {
+      const spec = SPEC[getDesign()];
+      // Repeated IDs are the DESIGN for SCCS / case-crossover (long format), so
+      // duplicate-ID resolution only applies to one-row-per-person designs
+      // (ACNU, descriptive). Hide it otherwise.
+      const hasIdRole = spec && spec.roles.some((r) => r.k === "ID");
+      $("dupwrap").classList.toggle("hidden", !!hasIdRole);
+      if (hasIdRole || !DATA.columns.length) return;
+      const idSel = $("dup_id"), dateSel = $("dup_date");
+      const cur = idSel.value || detectIdCol();
+      idSel.innerHTML = '<option value="">— none —</option>' + DATA.columns.map((c) => '<option value="' + esc(c) + '"' + (c === cur ? " selected" : "") + ">" + esc(c) + "</option>").join("");
+      const dcur = dateSel.value;
+      const dateCols = DATA.profile.filter((p) => p.type === "date").map((p) => p.name);
+      dateSel.innerHTML = '<option value="">— none —</option>' + dateCols.map((c) => '<option value="' + esc(c) + '"' + (c === dcur ? " selected" : "") + ">" + esc(c) + "</option>").join("");
+      if (!$("dup_strategy").dataset.touched) $("dup_strategy").value = "first";
+      updateDupCount();
+    }
+    function updateDupCount() {
+      const idc = $("dup_id").value;
+      if (!idc) { $("dupcount").textContent = "no ID column selected"; $("dupcount").className = "text-[11px] font-semibold text-slate-400"; return; }
+      const counts = {};
+      (DATA.rows || []).forEach((r) => { const k = String(r[idc] == null ? "" : r[idc]).trim(); if (k !== "") counts[k] = (counts[k] || 0) + 1; });
+      const dup = Object.values(counts).filter((c) => c > 1);
+      const extra = dup.reduce((a, c) => a + (c - 1), 0);
+      $("dupcount").textContent = dup.length ? (dup.length + " ID(s) repeat · " + extra + " extra row(s)") : "no repeated IDs ✓";
+      $("dupcount").className = "text-[11px] font-semibold " + (dup.length ? "text-amber-700" : "text-emerald-600");
+    }
+    $("dup_id").addEventListener("change", updateDupCount);
+    $("dup_strategy").addEventListener("change", () => { $("dup_strategy").dataset.touched = "1"; });
     function renderCovs(spec) {
       if (!spec.covariates) { $("covwrap").classList.add("hidden"); return; }
       $("covwrap").classList.remove("hidden");
@@ -590,6 +651,26 @@ const DESIGNS = [
       rows.forEach((r) => numCols.forEach((c) => { const n = Number(String(r[c] == null ? "" : r[c]).replace(/,/g, "")); if (!isNaN(n) && String(r[c]).trim() !== "") r[c] = n; }));
       const before = rows.length;
       if ($("c_dedupe").checked) { const seen = new Set(); rows = rows.filter((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) return false; seen.add(k); return true; }); }
+      // Duplicate patients/cases — one-row-per-person designs only (SCCS/CCO repeat IDs by design).
+      const idRoleDesign = spec.roles.some((r) => r.k === "ID");
+      const dupId = $("dup_id").value, dupStrat = $("dup_strategy").value;
+      if (!idRoleDesign && dupId && dupStrat !== "all") {
+        const dcol = $("dup_date").value, groups = new Map();
+        rows.forEach((r, i) => { const k = String(r[dupId] == null ? "" : r[dupId]).trim(); if (k === "") return; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); });
+        const drop = new Set();
+        groups.forEach((idxs) => {
+          if (idxs.length < 2) return;
+          let keep;
+          if (dupStrat === "last") keep = idxs[idxs.length - 1];
+          else if (dupStrat === "earliest" || dupStrat === "latest") {
+            const wd = idxs.map((i) => ({ i, t: dcol ? Date.parse(String(rows[i][dcol])) : NaN }));
+            wd.sort((a, b) => (isNaN(a.t) ? Infinity : a.t) - (isNaN(b.t) ? Infinity : b.t));
+            keep = dupStrat === "earliest" ? wd[0].i : wd[wd.length - 1].i;
+          } else keep = idxs[0];
+          idxs.forEach((i) => { if (i !== keep) drop.add(i); });
+        });
+        rows = rows.filter((r, i) => !drop.has(i));
+      }
       if ($("c_dropmiss").checked) { const req = spec.roles.filter((r) => r.req).map((r) => roleCol[r.k]).filter(Boolean).concat(spec.covariates ? COVS : []); rows = rows.filter((r) => req.every((c) => r[c] != null && String(r[c]).trim() !== "")); }
       MASTER = rows;
       $("cleaninfo").textContent = "Master file: " + rows.length + " rows (from " + before + "; " + (before - rows.length) + " removed).";

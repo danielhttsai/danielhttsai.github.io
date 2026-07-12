@@ -2344,6 +2344,9 @@ _Drafted with the AsPEN protocol builder (${today})._
       document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLibrary(); });
       modalSearch.addEventListener("input", () => renderLibrary(modalSearch.value));
 
+      // Exported for testing (and any future reuse): the IIFE otherwise hides these.
+      window.__builder = { readForm, buildMarkdown, buildDocx };
+
       setState("ready");
     })();
   </script>
