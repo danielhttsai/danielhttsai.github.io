@@ -276,14 +276,53 @@ const SENSITIVITY = [
         const v = (isPre ? vpre(u) : vpost(u)) + jit(k + (isPre ? 0 : 100));
         svg += '<circle cx="' + xF(u) + '" cy="' + yF(v) + '" r="2.6" fill="' + (isPre ? "#8b5cf6" : "#10b981") + '" fill-opacity="0.55"/>';
       }
-      document.getElementById("diagram").innerHTML = svg + "</svg>";
+      // Drag handles: interruption → # pre points; right end → # post points.
+      svg += '<circle cx="' + xi + '" cy="' + ((yF(vpre(uI)) + yF(vpost(uI))) / 2) + '" r="5" fill="#fff" stroke="#0f766e" stroke-width="2" class="its-handle" data-field="prePoints" style="cursor:ew-resize;touch-action:none"/>';
+      svg += '<circle cx="' + xF(1) + '" cy="' + yF(vpost(1)) + '" r="5" fill="#fff" stroke="#10b981" stroke-width="2" class="its-handle" data-field="postPoints" style="cursor:ew-resize;touch-action:none"/>';
+      const diag = document.getElementById("diagram");
+      diag.innerHTML = svg + "</svg>";
       document.getElementById("dlegend").innerHTML =
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Pre-intervention trend</span>' +
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#10b981"></span>Post-intervention trend</span>' +
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="border-top:2px dashed #f59e0b"></span>Counterfactual (expected without the intervention)</span>' +
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3" style="border-left:2px dashed #0f766e"></span>Interruption</span>';
       document.getElementById("dcap").textContent =
-        "Segmented regression fits the pre-intervention trend (" + s.prePoints + " " + s.unit + " points) and projects it forward as the counterfactual; the post-intervention segment (" + s.postPoints + " points) is contrasted against it to estimate the immediate level change and the change in slope" + (s.controlled ? ", differenced against the control series" : "") + ". Schematic — shapes are illustrative, not your data.";
+        "Segmented regression fits the pre-intervention trend (" + s.prePoints + " " + s.unit + " points) and projects it forward as the counterfactual; the post-intervention segment (" + s.postPoints + " points) is contrasted against it to estimate the immediate level change and the change in slope" + (s.controlled ? ", differenced against the control series" : "") + ". Drag the ○ handles to change the pre / post point counts. Schematic — shapes are illustrative, not your data.";
+
+      // ── Drag-to-edit (frozen px/point so the drag stays linear) ──
+      const svgXof = (clientX) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = clientX; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
+      const pxPerPoint = (plotR - plotL) / Math.max(1, N - 1);
+      diag.querySelectorAll(".its-handle").forEach((h) => {
+        h.addEventListener("pointerdown", (ev) => {
+          ev.preventDefault(); ev.stopPropagation();
+          if (window.__diagDrag) window.__diagDrag.cleanup();
+          const field = h.getAttribute("data-field");
+          const startVal = Math.max(3, parseInt(form.elements[field] && form.elements[field].value) || 24);
+          const pid = ev.pointerId, x0 = svgXof(ev.clientX);
+          try { diag.setPointerCapture(pid); } catch (e) {}
+          let pending = null, raf = 0;
+          const apply = () => { raf = 0; if (pending == null) return; const el = form.elements[field]; if (el) { el.value = pending; render(); } };
+          const move = (e) => {
+            if (e.pointerId !== pid) return;
+            const x = svgXof(e.clientX); if (x == null || x0 == null) return;
+            pending = Math.max(3, Math.min(240, startVal + Math.round((x - x0) / pxPerPoint)));
+            if (!raf) raf = requestAnimationFrame(apply);
+          };
+          const end = (e) => {
+            if (e && e.pointerId != null && e.pointerId !== pid) return;
+            document.removeEventListener("pointermove", move);
+            document.removeEventListener("pointerup", end);
+            document.removeEventListener("pointercancel", end);
+            if (raf) { cancelAnimationFrame(raf); raf = 0; } apply();
+            try { diag.releasePointerCapture(pid); } catch (e2) {}
+            window.__diagDrag = null;
+          };
+          window.__diagDrag = { cleanup: end };
+          document.addEventListener("pointermove", move);
+          document.addEventListener("pointerup", end);
+          document.addEventListener("pointercancel", end);
+        });
+      });
     }
 
     const buildMarkdown = (s) => {
