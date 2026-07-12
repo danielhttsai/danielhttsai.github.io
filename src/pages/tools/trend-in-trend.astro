@@ -1,0 +1,489 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PhenotypeLibrary from "../../components/PhenotypeLibrary.astro";
+import SitesPicker from "../../components/SitesPicker.astro";
+import DesignDiagram from "../../components/DesignDiagram.astro";
+import ProtocolCommon from "../../components/ProtocolCommon.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const SUBGROUPS = [
+  "Age group (e.g. ≥65 vs <65)",
+  "Sex (male vs female)",
+  "Region / hospital level",
+  "Baseline outcome risk (high vs low)",
+  "Calendar sub-period",
+  "Comorbidity burden",
+];
+const SENSITIVITY = [
+  "Number of CPE strata (e.g. 3 vs 5 vs 10)",
+  "Alternative exposure-prevalence definition",
+  "Restrict to periods with a strong prevalence trend",
+  "Alternative outcome model / link function",
+  "Negative-control outcome",
+  "Exclude the early-adoption period",
+  "Alternative calendar-period length",
+];
+---
+
+<BaseLayout
+  title="Trend-in-Trend (TIT) protocol — Daniel Tsai"
+  description="A free, in-browser protocol builder for the trend-in-trend design (Ji & Hennessy 2017), which exploits calendar trends in exposure prevalence to estimate effects robust to time-invariant unmeasured confounding. One-click Word / Markdown export."
+>
+  <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
+    <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
+      <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">Protocol Generator · TIT</p>
+      <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Trend-in-Trend protocol</h1>
+      <p class="mt-3 text-base text-slate-600 max-w-3xl">
+        Draft a <strong>trend-in-trend (TIT)</strong> protocol (Ji &amp; Hennessy 2017). When a drug's <strong>prevalence
+        of use rises (or falls) over calendar time</strong>, TIT compares the outcome trend across strata defined by
+        each subgroup's <strong>cumulative percentage exposed (CPE)</strong>: if the outcome tracks the exposure trend
+        more steeply where uptake is faster, that supports a causal effect — and the estimate is
+        <strong>robust to time-invariant unmeasured confounding</strong>. Everything runs in your browser.
+      </p>
+      <a class="mt-4 inline-block text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>← All designs</a>
+    </div>
+  </header>
+
+  <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid gap-8 lg:grid-cols-[1fr,1fr] items-start">
+      <form id="form" class="space-y-6">
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">1 · Identity</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Study title</span>
+            <input name="title" placeholder="e.g. Statins and diabetes incidence: a trend-in-trend analysis" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Data source(s)</span>
+            <input name="data" placeholder="e.g. Taiwan NHIRD (2005–2018)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <SitesPicker target="data" />
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">2 · Question</legend>
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population</span>
+              <button type="button" data-open-library data-category="indications" data-target-name="population" class="text-[11px] text-brand-700 font-semibold hover:underline">📚 Library</button>
+            </div>
+            <input name="population" placeholder="e.g. Adults ≥ 40 without diabetes at baseline" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure (rising/falling in use)</span>
+                <button type="button" data-open-library data-category="exposures" data-target-name="exposure" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
+              </div>
+              <input name="exposure" placeholder="e.g. Statins" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+            </div>
+            <div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Outcome</span>
+                <button type="button" data-open-library data-category="outcomes" data-target-name="outcome" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
+              </div>
+              <input name="outcome" placeholder="e.g. Incident type 2 diabetes" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">3 · Calendar trend &amp; CPE strata</legend>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Period length</span>
+              <select name="period" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+                <option>yearly</option><option>quarterly</option><option>every 6 months</option><option>monthly</option>
+              </select></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">First period</span>
+              <input name="first" placeholder="e.g. 2005" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Last period</span>
+              <input name="last" placeholder="e.g. 2018" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Number of calendar periods</span>
+              <input type="number" name="nperiods" value="10" min="3" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Number of CPE strata</span>
+              <input type="number" name="nstrata" value="5" min="2" max="10" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          </div>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure-prevalence definition (per period)</span>
+            <input name="prevdef" placeholder="e.g. Proportion of the population dispensed the exposure in the period" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">CPE strata definition</span>
+            <input name="cpedef" placeholder="e.g. Quintiles of each subgroup's cumulative percentage exposed by the end of follow-up" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">4 · Estimator &amp; assumptions</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Estimator</span>
+            <select name="estimator" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="ml">Trend-in-trend maximum-likelihood (Ji &amp; Hennessy 2017)</option>
+              <option value="logistic">Logistic-regression approximation (outcome on CPE-stratum × time)</option>
+            </select></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Effect measure</span>
+            <select name="effect" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="OR">Odds ratio (95% CI)</option>
+              <option value="RR">Risk ratio (95% CI)</option>
+            </select></label>
+          <p class="text-[11px] text-slate-500">Key assumptions: exposure prevalence changes over calendar time; unmeasured confounding is <strong>time-invariant</strong>; and the outcome trend is otherwise stable across CPE strata (no differential secular trend or co-intervention).</p>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">5 · Subgroups &amp; sensitivity</legend>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Subgroup analyses (tick to perform)</span>
+            <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+              {SUBGROUPS.map((sg, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="subgroupsPick" value={sg} checked={i < 2} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{sg}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="subgroupsCustom" rows="2" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom subgroups (one per line)"></textarea>
+          </div>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sensitivity analyses (tick to perform)</span>
+            <div class="mt-1.5 grid grid-cols-1 gap-y-1">
+              {SENSITIVITY.map((sn, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="sensitivityPick" value={sn} checked={i < 4} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{sn}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="sensitivityCustom" rows="2" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom sensitivity analyses (one per line)"></textarea>
+          </div>
+        </fieldset>
+
+        <div class="flex flex-wrap gap-3">
+          <button type="button" data-action="download-docx" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Word (.docx)</button>
+          <button type="button" data-action="download-md" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Markdown</button>
+          <button type="button" data-action="copy" class="text-brand-700 hover:underline font-semibold text-sm">Copy</button>
+          <button type="button" data-action="reset" class="ml-auto text-slate-500 hover:text-rose-600 hover:underline text-sm font-semibold">Clear all</button>
+          <span class="basis-full text-[11px] text-slate-400">Auto-saved to this browser.</span>
+          <p data-action-msg class="basis-full text-xs"></p>
+        </div>
+      </form>
+
+      <div class="lg:sticky lg:top-20 self-start">
+        <p class="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-2">Live protocol preview</p>
+        <pre id="preview" class="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[70vh]"></pre>
+      </div>
+    </div>
+
+    <div class="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-base font-bold text-slate-900">Consistency checks <span class="text-xs font-normal text-slate-400">· TIT 防呆</span></h2>
+      <div id="checks" class="mt-3 space-y-1.5"></div>
+    </div>
+
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
+      <p id="dcap" class="mt-1 text-xs text-slate-500"></p>
+      <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
+      <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
+    </div>
+
+    <PhenotypeLibrary />
+    <DesignDiagram />
+    <ProtocolCommon />
+  </section>
+
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
+  <script is:inline>
+    const STORAGE_KEY = "daniel.tit-builder";
+    const form = document.getElementById("form");
+    const preview = document.getElementById("preview");
+    const V = (n) => (form.elements[n]?.value || "").trim();
+    const MV = (n) => [...form.querySelectorAll('[name="' + n + '"]:checked')].map((c) => c.value);
+    const mergeList = (pick, custom) => [...(pick || []), ...String(custom || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean)];
+    const or = (s, d) => (s && s.length ? s : d);
+    const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    const readForm = () => ({
+      title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), outcome: V("outcome"),
+      period: V("period") || "yearly", first: V("first"), last: V("last"),
+      nperiods: V("nperiods") || "10", nstrata: V("nstrata") || "5", prevdef: V("prevdef"), cpedef: V("cpedef"),
+      estimator: V("estimator") || "ml", effect: V("effect") || "OR",
+      subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
+    });
+
+    const estimatorText = (e) => e === "logistic"
+      ? "a logistic-regression approximation, regressing the individual outcome on calendar time interacted with the CPE stratum (the interaction estimates the trend-in-trend effect)"
+      : "the trend-in-trend maximum-likelihood estimator (Ji & Hennessy 2017), which models the joint distribution of exposure prevalence and outcome across CPE strata over calendar time";
+    const effectText = (e) => e === "RR" ? "risk ratio" : "odds ratio";
+
+    const pcOf = (s) => ({
+      design: "trend-in-trend design (Ji & Hennessy 2017)",
+      tte: false,
+      population: or(s.population, "(population)"),
+      exposure: or(s.exposure, "(exposure)"),
+      comparator: "",
+      outcome: or(s.outcome, "(outcome)"),
+      data: s.data,
+      analysis: estimatorText(s.estimator) + ", reporting the " + effectText(s.effect) + " with 95% confidence intervals",
+      groupBy: "cumulative-percentage-exposed (CPE) stratum",
+      limitations: "Trend-in-trend is robust to time-invariant unmeasured confounding but assumes exposure prevalence changes over time and that no differential secular trend or co-intervention coincides with faster uptake across CPE strata; it needs a meaningful prevalence trend to have power.",
+      plannedOutputs: ["Exposure-prevalence trend by calendar period.", "Outcome trend by CPE stratum (the trend-in-trend figure).", "Effect estimate with 95% CI, and CPE-stratum-specific trends."],
+    });
+
+    const buildMarkdown = (s) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const P = or(s.population, "(population)"), E = or(s.exposure, "(exposure)"), O = or(s.outcome, "(outcome)");
+      return `# ${or(s.title, "(Untitled trend-in-trend study)")}
+
+_Study protocol · trend-in-trend design · drafted ${today}_
+
+${window.PC.abstractMd(pcOf(s))}
+## 1. Background and rationale
+This study uses the **trend-in-trend (TIT)** design (Ji & Hennessy 2017) to estimate the effect of **${E}** on **${O}** in **${P}**. When the **prevalence of ${E} changes over calendar time**, TIT contrasts the outcome trend across strata defined by each subgroup's **cumulative percentage exposed (CPE)**: if the outcome trend tracks the exposure-prevalence trend more strongly where uptake is faster, that supports a causal effect. Because the comparison is *within* the same calendar trend, the estimate is **robust to time-invariant unmeasured confounding** — its key advantage over a conventional cohort.
+
+## 2. Question
+Among **${P}**, does **${E}** affect the incidence of **${O}**, as inferred from the co-movement of the exposure-prevalence trend and the outcome trend across CPE strata?
+
+## 3. Study design
+A **trend-in-trend** analysis using observational data from **${or(s.data, "(data source)")}**, over **${or(s.first, "(first)")}–${or(s.last, "(last)")}** in **${or(s.period, "yearly")}** periods (**${s.nperiods}** periods), with **${s.nstrata}** CPE strata.
+
+## 4. Exposure-prevalence trend
+${or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure.")} A meaningful monotone trend in prevalence is required for the design to have power.
+
+## 5. CPE strata
+${or(s.cpedef, "The population is divided into " + s.nstrata + " strata by cumulative percentage exposed (CPE) — the fraction of each subgroup ever exposed by the end of follow-up — so strata differ in how fast exposure was taken up.")}
+
+## 6. Outcome model and estimator
+The outcome is modelled with ${estimatorText(s.estimator)}. The trend-in-trend effect is identified from the **interaction between the calendar-time trend and CPE stratum**: a steeper outcome trend in higher-uptake strata indicates a causal effect.
+
+## 7. Estimand and effect measure
+The estimand is the causal effect of ${E} on ${O}, reported as the **${effectText(s.effect)}** with 95% confidence intervals (bootstrap or model-based).
+
+## 8. Statistical analysis
+1. Compute exposure prevalence per calendar period and confirm a monotone trend.
+2. Assign the population to ${s.nstrata} CPE strata.
+3. Compute the outcome rate per period within each CPE stratum.
+4. Fit ${estimatorText(s.estimator)}; estimate the ${effectText(s.effect)} with 95% CI.
+5. Plot the exposure-prevalence trend and the CPE-stratum-specific outcome trends.
+
+## 9. Subgroup analyses
+${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsPick, s.subgroupsCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+## 10. Sensitivity analyses
+${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensitivityPick, s.sensitivityCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+${window.PC.tailMd(pcOf(s))}
+
+## References
+- Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-trend Research Design for Causal Inference. Epidemiology 2017;28(4):529-536.
+- Hennessy S, Leonard CE. The Trend-in-trend Research Design. Am J Epidemiol 2020 (commentary).
+- Ertefaie A, Small DS, Ji X, Leonard C, Hennessy S. Statistical Power for Trend-in-trend design. Epidemiology 2018;29(3):e21-e23.
+`;
+    };
+
+    const computeChecks = (s) => {
+      const checks = [];
+      const np = parseInt(s.nperiods) || 0, ns = parseInt(s.nstrata) || 0;
+      if (!s.exposure || !s.exposure.trim()) checks.push({ level: "info", msg: "Specify the exposure whose prevalence changes over time — the trend in its use is what drives identification." });
+      if (!s.outcome || !s.outcome.trim()) checks.push({ level: "info", msg: "Specify the outcome." });
+      if (np < 5) checks.push({ level: "warn", msg: "Only " + np + " calendar periods — the exposure-prevalence trend is estimated across periods; too few weakens power. Aim for ≥ 5–10." });
+      if (ns < 3) checks.push({ level: "warn", msg: "Only " + ns + " CPE strata — trend-in-trend contrasts the outcome trend across CPE strata; use ≥ 3 (commonly 5)." });
+      checks.push({ level: "info", msg: "Core assumption: exposure prevalence genuinely trends over calendar time. Verify and report the prevalence trend before interpreting the effect." });
+      checks.push({ level: "info", msg: "Trend-in-trend removes TIME-INVARIANT unmeasured confounding, but a differential secular trend or a co-intervention correlated with uptake would bias it — pre-specify a negative-control outcome or a pseudo-period to check." });
+      if (!s.prevdef || !s.prevdef.trim()) checks.push({ level: "info", msg: "Define how exposure prevalence is measured per period." });
+      return checks;
+    };
+
+    // ── Custom TIT diagram: exposure-prevalence trend + CPE-stratum outcome trends ──
+    function renderScheme(s) {
+      const np = Math.max(3, Math.min(24, parseInt(s.nperiods) || 10));
+      const ns = Math.max(2, Math.min(6, parseInt(s.nstrata) || 5));
+      const W = 860, H = 300, plotL = 60, plotR = W - 20, plotT = 30, plotB = H - 44;
+      const xF = (i) => plotL + (i / (np - 1)) * (plotR - plotL);
+      const yF = (v) => plotB - v * (plotB - plotT);            // v in 0..1
+      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:640px" xmlns="http://www.w3.org/2000/svg">';
+      svg += '<line x1="' + plotL + '" y1="' + plotT + '" x2="' + plotL + '" y2="' + plotB + '" stroke="#cbd5e1"/>';
+      svg += '<line x1="' + plotL + '" y1="' + plotB + '" x2="' + plotR + '" y2="' + plotB + '" stroke="#cbd5e1"/>';
+      svg += '<text x="' + plotL + '" y="' + (plotT - 12) + '" font-size="10" fill="#94a3b8">Prevalence / outcome rate</text>';
+      svg += '<text x="' + plotR + '" y="' + (plotB + 30) + '" text-anchor="end" font-size="10" fill="#94a3b8">Calendar period (' + esc(s.period || "yearly") + ') →</text>';
+      // exposure prevalence: rising S-curve
+      let prev = "";
+      for (let i = 0; i < np; i++) { const t = i / (np - 1); const v = 0.12 + 0.72 / (1 + Math.exp(-8 * (t - 0.5))); prev += (i ? " L" : "M") + xF(i) + " " + yF(v); }
+      svg += '<path d="' + prev + '" fill="none" stroke="#6366f1" stroke-width="3"/>';
+      svg += '<text x="' + xF(np - 1) + '" y="' + (yF(0.86) - 6) + '" text-anchor="end" font-size="9.5" fill="#6366f1" font-weight="600">exposure prevalence</text>';
+      // outcome trends per CPE stratum: higher stratum tracks prevalence more steeply (if causal)
+      for (let k = 0; k < ns; k++) {
+        const slope = 0.05 + 0.30 * (k / (ns - 1));            // higher CPE → steeper outcome trend
+        const col = k === ns - 1 ? "#dc2626" : (k === 0 ? "#94a3b8" : "#f59e0b");
+        let path = "";
+        for (let i = 0; i < np; i++) { const t = i / (np - 1); const base = 0.20 + 0.02 * k; const v = base + slope * (0.12 + 0.72 / (1 + Math.exp(-8 * (t - 0.5)))); path += (i ? " L" : "M") + xF(i) + " " + yF(v); }
+        svg += '<path d="' + path + '" fill="none" stroke="' + col + '" stroke-width="' + (k === ns - 1 || k === 0 ? 2.25 : 1.5) + '" stroke-opacity="0.9"/>';
+      }
+      // draggable right-end handle → number of periods
+      svg += '<circle cx="' + xF(np - 1) + '" cy="' + plotB + '" r="5" fill="#fff" stroke="#6366f1" stroke-width="2" class="tit-handle" data-field="nperiods" style="cursor:ew-resize;touch-action:none"/>';
+      const diag = document.getElementById("diagram");
+      diag.innerHTML = svg + "</svg>";
+      document.getElementById("dlegend").innerHTML =
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#6366f1"></span>Exposure prevalence trend</span>' +
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#dc2626"></span>Outcome trend, high-CPE stratum (fast uptake)</span>' +
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#94a3b8"></span>Outcome trend, low-CPE stratum (slow uptake)</span>';
+      document.getElementById("dcap").textContent =
+        "As exposure prevalence rises across " + s.nperiods + " " + s.period + " periods, the outcome trend is compared across " + s.nstrata + " CPE strata. A steeper outcome trend where uptake is faster (high-CPE stratum) supports a causal effect, net of time-invariant confounding. Drag the ○ handle to change the number of periods. Schematic — shapes are illustrative.";
+
+      // drag (frozen px/period)
+      const svgXof = (clientX) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = clientX; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
+      const pxPer = (plotR - plotL) / Math.max(1, np - 1);
+      diag.querySelectorAll(".tit-handle").forEach((h) => {
+        h.addEventListener("pointerdown", (ev) => {
+          ev.preventDefault(); ev.stopPropagation();
+          if (window.__diagDrag) window.__diagDrag.cleanup();
+          const startVal = Math.max(3, parseInt(form.elements.nperiods.value) || 10);
+          const pid = ev.pointerId, x0 = svgXof(ev.clientX);
+          try { diag.setPointerCapture(pid); } catch (e) {}
+          let pending = null, raf = 0;
+          const apply = () => { raf = 0; if (pending == null) return; form.elements.nperiods.value = pending; render(); };
+          const move = (e) => { if (e.pointerId !== pid) return; const x = svgXof(e.clientX); if (x == null || x0 == null) return; pending = Math.max(3, Math.min(24, startVal + Math.round((x - x0) / pxPer))); if (!raf) raf = requestAnimationFrame(apply); };
+          const end = (e) => { if (e && e.pointerId != null && e.pointerId !== pid) return; document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", end); document.removeEventListener("pointercancel", end); if (raf) { cancelAnimationFrame(raf); raf = 0; } apply(); try { diag.releasePointerCapture(pid); } catch (e2) {} window.__diagDrag = null; };
+          window.__diagDrag = { cleanup: end };
+          document.addEventListener("pointermove", move); document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);
+        });
+      });
+    }
+
+    const render = () => {
+      const s = readForm();
+      preview.textContent = buildMarkdown(s);
+      renderScheme(s);
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch {}
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
+    };
+
+    (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        if (saved) for (const k in saved) {
+          const els = form.elements[k]; if (!els) continue;
+          const val = saved[k];
+          if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
+          else if (els.type === "checkbox") els.checked = !!val;
+          else els.value = val;
+        }
+      } catch {}
+      render();
+    })();
+    form.addEventListener("input", render);
+    form.addEventListener("change", render);
+
+    const slugify = () => (readForm().title || "trend-in-trend-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "trend-in-trend-protocol";
+    const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
+    const dl = (blob, name) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
+
+    document.querySelector("[data-action='download-md']").addEventListener("click", () =>
+      dl(new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" }), fname("md")));
+    document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
+      try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
+    });
+
+    const actionMsg = document.querySelector("[data-action-msg]");
+    const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
+    document.querySelector("[data-action='reset']").addEventListener("click", () => {
+      if (!confirm("Clear every field and forget the saved draft?")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      form.querySelectorAll("input, textarea, select").forEach((el) => {
+        if (el.type === "checkbox" || el.type === "radio") el.checked = false;
+        else if (el.tagName === "SELECT") el.selectedIndex = 0;
+        else el.value = "";
+      });
+      render();
+      setMsg("Cleared.");
+    });
+
+    const buildDocx = async (s) => {
+      const D = window.docx;
+      const today = new Date().toISOString().slice(0, 10);
+      const FONT = "Times New Roman";
+      const text = (str, o = {}) => new D.TextRun({ text: String(str ?? ""), font: FONT, size: 22, ...o });
+      const p = (ch, o = {}) => new D.Paragraph({ children: Array.isArray(ch) ? ch : [ch], spacing: { before: 60, after: 60, ...(o.spacing || {}) }, ...o });
+      const h1 = (str) => new D.Paragraph({ children: [text(str, { bold: true, size: 28 })], spacing: { before: 200, after: 80 }, heading: D.HeadingLevel.HEADING_1 });
+      const para = (str) => p([text(str)]);
+      const bullet = (str) => new D.Paragraph({ children: [text(str)], bullet: { level: 0 }, spacing: { before: 0, after: 0 } });
+      const numItem = (str) => new D.Paragraph({ children: [text(str)], numbering: { reference: "ordered", level: 0 }, spacing: { before: 0, after: 0 } });
+      const border = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
+      const cb = { top: border, bottom: border, left: border, right: border };
+      const labelTable = (rows) => new D.Table({
+        width: { size: 9026, type: D.WidthType.DXA }, columnWidths: [3000, 6026],
+        rows: rows.map(([label, value]) => new D.TableRow({ children: [
+          new D.TableCell({ borders: cb, width: { size: 3000, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, shading: { fill: "F5F5F5", type: D.ShadingType.CLEAR }, children: [p([text(label, { bold: true })])] }),
+          new D.TableCell({ borders: cb, width: { size: 6026, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [p([text(value || "-")])] }),
+        ] })),
+      });
+
+      const subg = mergeList(s.subgroupsPick, s.subgroupsCustom);
+      const sens = mergeList(s.sensitivityPick, s.sensitivityCustom);
+      const P = or(s.population, "(population)"), E = or(s.exposure, "(exposure)"), O = or(s.outcome, "(outcome)");
+
+      let __phdcLogo = null; try { const __r = await fetch("/images/networks/phdc.png"); if (__r.ok) __phdcLogo = new Uint8Array(await __r.arrayBuffer()); } catch (e) {}
+      const children = [];
+      if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
+      children.push(p([text(or(s.title, "(Untitled trend-in-trend study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
+      children.push(p([text("Study protocol · trend-in-trend design · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
+
+      children.push(h1("1. Background and rationale"));
+      children.push(para("This study uses the trend-in-trend design (Ji & Hennessy 2017) to estimate the effect of " + E + " on " + O + " in " + P + ". When the prevalence of " + E + " changes over calendar time, the outcome trend is contrasted across CPE strata; because the comparison is within the same calendar trend, the estimate is robust to time-invariant unmeasured confounding."));
+
+      children.push(h1("2. Design summary"));
+      children.push(labelTable([
+        ["Design", "Trend-in-trend (Ji & Hennessy 2017)"],
+        ["Data source(s)", or(s.data, "-")],
+        ["Population", P],
+        ["Exposure", E],
+        ["Outcome", O],
+        ["Calendar range", or(s.first, "(first)") + "–" + or(s.last, "(last)") + " (" + or(s.period, "yearly") + ", " + s.nperiods + " periods)"],
+        ["CPE strata", String(s.nstrata)],
+        ["Estimator", s.estimator === "logistic" ? "Logistic-regression approximation" : "Trend-in-trend maximum likelihood"],
+        ["Effect measure", effectText(s.effect)],
+      ]));
+
+      children.push(h1("3. Exposure-prevalence trend"));
+      children.push(para(or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure. A meaningful monotone trend is required for power.")));
+
+      children.push(h1("4. CPE strata"));
+      children.push(para(or(s.cpedef, "The population is divided into " + s.nstrata + " strata by cumulative percentage exposed (CPE), so strata differ in how fast exposure was taken up.")));
+
+      children.push(h1("5. Outcome model and estimator"));
+      children.push(para("The outcome is modelled with " + estimatorText(s.estimator) + ". The effect is identified from the interaction between the calendar-time trend and CPE stratum: a steeper outcome trend in higher-uptake strata indicates a causal effect."));
+
+      children.push(h1("6. Estimand and effect measure"));
+      children.push(para("The estimand is the causal effect of " + E + " on " + O + ", reported as the " + effectText(s.effect) + " with 95% confidence intervals."));
+
+      children.push(h1("7. Statistical analysis"));
+      ["Compute exposure prevalence per period and confirm a monotone trend.",
+       "Assign the population to " + s.nstrata + " CPE strata.",
+       "Compute the outcome rate per period within each CPE stratum.",
+       "Fit " + estimatorText(s.estimator) + "; estimate the " + effectText(s.effect) + " with 95% CI.",
+       "Plot the exposure-prevalence trend and the CPE-stratum-specific outcome trends."].forEach((l) => children.push(numItem(l)));
+
+      children.push(h1("8. Subgroup analyses"));
+      (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+      children.push(h1("9. Sensitivity analyses"));
+      (sens.length ? sens : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
+
+      children.push(h1("References"));
+      ["Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-trend Research Design for Causal Inference. Epidemiology 2017;28(4):529-536.",
+       "Ertefaie A, Small DS, Ji X, Leonard C, Hennessy S. Statistical power for trend-in-trend. Epidemiology 2018;29(3):e21-e23."].forEach((l) => children.push(bullet(l)));
+
+      children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
+
+      const doc = new D.Document({
+        creator: "Protocol Generator — Trend-in-Trend",
+        title: "TIT protocol — " + (s.title || "study"),
+        styles: { default: { document: { run: { font: FONT, size: 22 } } }, paragraphStyles: [
+          { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { size: 28, bold: true, font: FONT }, paragraph: { spacing: { before: 200, after: 80 }, outlineLevel: 0 } },
+        ] },
+        numbering: { config: [{ reference: "ordered", levels: [{ level: 0, format: D.LevelFormat.DECIMAL, text: "%1.", alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }] },
+        sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children }],
+      });
+      return await D.Packer.toBlob(doc);
+    };
+
+    document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
+      if (!window.docx) return;
+      try { dl(await buildDocx(readForm()), fname("docx")); } catch (e) {}
+    });
+  </script>
+</BaseLayout>

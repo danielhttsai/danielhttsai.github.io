@@ -60,6 +60,14 @@ const designs = [
     example: "Effect of a 2019 reimbursement policy on monthly SGLT2-inhibitor initiation rates",
     strengths: "Strong quasi-experiment when randomisation is impossible; separates an immediate level change from a change in slope via segmented regression, with an optional control series to guard against co-interventions and secular trends.",
   },
+  {
+    slug: "trend-in-trend",
+    short: "TIT",
+    title: "Trend-in-Trend",
+    when: "When a drug's prevalence of use changes markedly over calendar time and you want an estimate robust to time-invariant unmeasured confounding — comparing the outcome trend across strata that took up the drug at different speeds.",
+    example: "Statins and incident diabetes, using the rise in statin prevalence 2005–2018",
+    strengths: "Exploits the calendar trend in exposure prevalence (Ji & Hennessy 2017): removes time-invariant unmeasured confounding without needing to measure the confounders, by contrasting outcome trends across cumulative-percentage-exposed strata.",
+  },
 ];
 ---
 
