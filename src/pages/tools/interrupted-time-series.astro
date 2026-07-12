@@ -1,0 +1,508 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PhenotypeLibrary from "../../components/PhenotypeLibrary.astro";
+import SitesPicker from "../../components/SitesPicker.astro";
+import DesignDiagram from "../../components/DesignDiagram.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Curated lists surfaced as checkboxes (matching the ACNU/SCCS/CCO/DA builders).
+const SUBGROUPS = [
+  "Age group (e.g. ≥65 vs <65)",
+  "Sex (male vs female)",
+  "Region / hospital level",
+  "Urban vs rural",
+  "Baseline outcome level (high vs low)",
+  "Outcome subtype",
+  "Provider / prescriber type",
+  "Calendar sub-period",
+];
+const SENSITIVITY = [
+  "Alternative interruption date (announcement vs implementation lag)",
+  "Exclude a transition / phase-in period around the interruption",
+  "Alternative model (Poisson vs negative-binomial vs linear)",
+  "Add / remove seasonality terms",
+  "Alternative autocorrelation handling (Newey–West / Prais–Winsten / ARIMA)",
+  "Controlled vs uncontrolled series",
+  "Negative-control outcome or a placebo (pseudo) interruption date",
+  "Restrict to the primary outcome definition / setting",
+];
+---
+
+<BaseLayout
+  title="Interrupted Time Series (ITS) protocol — Daniel Tsai"
+  description="A free, in-browser protocol builder for interrupted time series (segmented regression) evaluations of a policy or intervention, with one-click Word / Markdown export."
+>
+  <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
+    <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
+      <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">Protocol Generator · ITS</p>
+      <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Interrupted Time Series protocol</h1>
+      <p class="mt-3 text-base text-slate-600 max-w-3xl">
+        Draft a quasi-experimental <strong>interrupted time series (ITS)</strong> protocol — segmented regression that
+        tests whether a policy or intervention changed the <strong>level</strong> and/or <strong>slope</strong> of an
+        outcome over time, using the pre-intervention trend as the counterfactual. Optionally add a
+        <strong>control series</strong> to guard against co-interventions and secular change. Everything runs in your browser.
+      </p>
+      <a class="mt-4 inline-block text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>← All designs</a>
+    </div>
+  </header>
+
+  <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid gap-8 lg:grid-cols-[1fr,1fr] items-start">
+      <!-- Form -->
+      <form id="form" class="space-y-6">
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">1 · Identity</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Study title</span>
+            <input name="title" placeholder="e.g. Effect of the 2019 reimbursement policy on monthly SGLT2-inhibitor initiation" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Data source(s)</span>
+            <input name="data" placeholder="e.g. Taiwan NHIRD (2015–2022)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <SitesPicker target="data" />
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">2 · Question</legend>
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population</span>
+              <button type="button" data-open-library data-category="indications" data-target-name="population" class="text-[11px] text-brand-700 font-semibold hover:underline">📚 Library</button>
+            </div>
+            <input name="population" placeholder="e.g. Adults with type 2 diabetes in Taiwan" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+          </div>
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Outcome (a rate, count, or level over time)</span>
+              <button type="button" data-open-library data-category="outcomes" data-target-name="outcome" class="text-[11px] text-brand-700 font-semibold hover:underline">📚 Library</button>
+            </div>
+            <input name="outcome" placeholder="e.g. Monthly rate of new SGLT2-inhibitor initiations per 1,000 patients" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+          </div>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Intervention / policy (the interruption)</span>
+            <input name="intervention" placeholder="e.g. National Health Insurance reimbursement expansion for SGLT2 inhibitors" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">3 · Time series &amp; interruption</legend>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Interruption date</span>
+              <input name="interruptDate" placeholder="e.g. 2019-04" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Time unit</span>
+              <select name="unit" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+                <option>monthly</option><option>quarterly</option><option>every 6 months</option><option>yearly</option><option>weekly</option>
+              </select></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Transition / phase-in</span>
+              <input name="lag" placeholder="e.g. exclude 2 months around the date" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Pre-intervention points</span>
+              <input type="number" name="prePoints" value="24" min="3" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Post-intervention points</span>
+              <input type="number" name="postPoints" value="24" min="3" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          </div>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Denominator / offset (for rates)</span>
+            <input name="denom" placeholder="e.g. person-months of the eligible population (log offset)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">4 · Model specification</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Regression model</span>
+            <select name="model" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="poisson">Segmented Poisson / negative-binomial (rates or counts)</option>
+              <option value="linear">Segmented linear regression (OLS; continuous outcome)</option>
+            </select></label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Seasonality</span>
+              <select name="seasonality" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+                <option value="none">None</option>
+                <option value="harmonic">Harmonic (Fourier) terms</option>
+                <option value="month">Calendar-month / quarter dummies</option>
+              </select></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Autocorrelation</span>
+              <select name="autocorr" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+                <option value="none">None — check Durbin–Watson / ACF</option>
+                <option value="newey">Newey–West (HAC) robust SE</option>
+                <option value="prais">Prais–Winsten / Cochrane–Orcutt</option>
+                <option value="arima">ARIMA errors</option>
+              </select></label>
+          </div>
+          <label class="flex items-start gap-2 text-sm text-slate-700">
+            <input type="checkbox" name="controlled" class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+            <span><strong>Controlled ITS</strong> — add a comparison series unaffected by the intervention (a control group / region / outcome) to strengthen causal inference.</span>
+          </label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Control series (if controlled)</span>
+            <input name="controlSeries" placeholder="e.g. Same outcome in a region where the policy did not apply" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">5 · Subgroups &amp; sensitivity</legend>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Subgroup analyses (tick to perform)</span>
+            <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+              {SUBGROUPS.map((sg, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="subgroupsPick" value={sg} checked={i < 2} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{sg}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="subgroupsCustom" rows="2" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom subgroups (one per line)"></textarea>
+          </div>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sensitivity analyses (tick to perform)</span>
+            <div class="mt-1.5 grid grid-cols-1 gap-y-1">
+              {SENSITIVITY.map((sn, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="sensitivityPick" value={sn} checked={i < 5} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{sn}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="sensitivityCustom" rows="2" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom sensitivity analyses (one per line)"></textarea>
+          </div>
+        </fieldset>
+
+        <div class="flex flex-wrap gap-3">
+          <button type="button" data-action="download-docx" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Word (.docx)</button>
+          <button type="button" data-action="download-md" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Markdown</button>
+          <button type="button" data-action="copy" class="text-brand-700 hover:underline font-semibold text-sm">Copy</button>
+          <button type="button" data-action="reset" class="ml-auto text-slate-500 hover:text-rose-600 hover:underline text-sm font-semibold">Clear all</button>
+          <span class="basis-full text-[11px] text-slate-400">Auto-saved to this browser.</span>
+          <p data-action-msg class="basis-full text-xs"></p>
+        </div>
+      </form>
+
+      <!-- Preview -->
+      <div class="lg:sticky lg:top-20 self-start">
+        <p class="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-2">Live protocol preview</p>
+        <pre id="preview" class="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[70vh]"></pre>
+      </div>
+    </div>
+
+    <div class="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-base font-bold text-slate-900">Consistency checks <span class="text-xs font-normal text-slate-400">· ITS 防呆</span></h2>
+      <div id="checks" class="mt-3 space-y-1.5"></div>
+    </div>
+
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
+      <p id="dcap" class="mt-1 text-xs text-slate-500"></p>
+      <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
+      <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
+    </div>
+
+    <PhenotypeLibrary />
+    <DesignDiagram />
+  </section>
+
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
+  <script is:inline>
+    const STORAGE_KEY = "daniel.its-builder";
+    const form = document.getElementById("form");
+    const preview = document.getElementById("preview");
+    const V = (n) => (form.elements[n]?.value || "").trim();
+    const CH = (n) => !!(form.elements[n] && form.elements[n].checked);
+    const MV = (n) => [...form.querySelectorAll('[name="' + n + '"]:checked')].map((c) => c.value);
+    const mergeList = (pick, custom) => [...(pick || []), ...String(custom || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean)];
+    const or = (s, d) => (s && s.length ? s : d);
+    const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    const readForm = () => ({
+      title: V("title"), data: V("data"), population: V("population"), outcome: V("outcome"), intervention: V("intervention"),
+      interruptDate: V("interruptDate"), unit: V("unit") || "monthly", lag: V("lag"),
+      prePoints: V("prePoints") || "24", postPoints: V("postPoints") || "24", denom: V("denom"),
+      model: V("model") || "poisson", seasonality: V("seasonality") || "none", autocorr: V("autocorr") || "none",
+      controlled: CH("controlled"), controlSeries: V("controlSeries"),
+      subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
+    });
+
+    const modelText = (m) => m === "linear"
+      ? "segmented linear (ordinary least squares) regression on the continuous outcome"
+      : "segmented Poisson regression (with a negative-binomial alternative if overdispersed) on the aggregated rate/count, using a log link and a log-population / person-time offset";
+    const seasonText = (s) => ({
+      none: "No explicit seasonality adjustment is applied (justify only if the outcome is non-seasonal)",
+      harmonic: "Seasonality is modelled with harmonic (Fourier sine/cosine) terms",
+      month: "Seasonality is modelled with calendar-month (or quarter) indicator terms",
+    })[s] || "No explicit seasonality adjustment";
+    const autocorrText = (a) => ({
+      none: "Residual autocorrelation is assessed with the Durbin–Watson statistic and ACF/PACF plots",
+      newey: "Newey–West heteroskedasticity- and autocorrelation-consistent (HAC) standard errors are used",
+      prais: "A Prais–Winsten (Cochrane–Orcutt) correction for first-order autocorrelation is applied",
+      arima: "Autocorrelated errors are modelled with an ARIMA structure (order chosen by AIC and residual diagnostics)",
+    })[a] || "Residual autocorrelation is assessed with the Durbin–Watson statistic";
+    const effectText = (m) => m === "linear"
+      ? "the change in level (immediate step) and the change in slope (trend), both on the outcome's natural scale, with 95% confidence intervals"
+      : "the change in level and the change in slope expressed as rate ratios (incidence-rate ratios) with 95% confidence intervals";
+
+    // ── Custom ITS diagram: pre/post fitted segments, interruption line, counterfactual ──
+    function renderScheme(s) {
+      const pre = Math.max(2, Math.min(36, parseInt(s.prePoints) || 24));
+      const post = Math.max(2, Math.min(36, parseInt(s.postPoints) || 24));
+      const N = pre + post;
+      const W = 860, H = 300, plotL = 64, plotR = W - 20, plotT = 34, plotB = H - 46;
+      const xF = (u) => plotL + u * (plotR - plotL);
+      const yF = (v) => plotB - ((v - 10) / 80) * (plotB - plotT);
+      const uAt = (k) => (N === 1 ? 0 : k / (N - 1));
+      const uI = (pre - 0.5) / (N - 1);                 // interruption fraction (between pre and post)
+      // Illustrative fitted lines in value-space (0..~70)
+      const vpre = (u) => 40 + 22 * u;                  // gentle upward baseline trend
+      const level = -15;                                // downward level change at the interruption
+      const spost = -34;                                // downward slope change after
+      const vpost = (u) => vpre(u) + level + spost * (u - uI);
+      const jit = (i) => (((i * 9301 + 49297) % 233280) / 233280 - 0.5) * 6;
+
+      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:640px" xmlns="http://www.w3.org/2000/svg">';
+      // axes
+      svg += '<line x1="' + plotL + '" y1="' + plotT + '" x2="' + plotL + '" y2="' + plotB + '" stroke="#cbd5e1"/>';
+      svg += '<line x1="' + plotL + '" y1="' + plotB + '" x2="' + plotR + '" y2="' + plotB + '" stroke="#cbd5e1"/>';
+      svg += '<text x="' + plotL + '" y="' + (plotT - 12) + '" font-size="10" fill="#94a3b8">Outcome (' + esc(s.model === "linear" ? "level" : "rate") + ')</text>';
+      svg += '<text x="' + plotR + '" y="' + (plotB + 30) + '" text-anchor="end" font-size="10" fill="#94a3b8">Time (' + esc(s.unit || "monthly") + ') →</text>';
+      // interruption band / line
+      const xi = xF(uI);
+      svg += '<line x1="' + xi + '" y1="' + (plotT - 4) + '" x2="' + xi + '" y2="' + (plotB) + '" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4 3"/>';
+      svg += '<text x="' + xi + '" y="' + (plotT - 14) + '" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f766e">' + esc(or(s.intervention, "Intervention")) + (s.interruptDate ? " · " + esc(s.interruptDate) : "") + '</text>';
+      // counterfactual (dashed continuation of the pre-trend)
+      svg += '<line x1="' + xi + '" y1="' + yF(vpre(uI)) + '" x2="' + xF(1) + '" y2="' + yF(vpre(1)) + '" stroke="#f59e0b" stroke-width="1.75" stroke-dasharray="5 4"/>';
+      // fitted pre line
+      svg += '<line x1="' + xF(0) + '" y1="' + yF(vpre(0)) + '" x2="' + xi + '" y2="' + yF(vpre(uI)) + '" stroke="#8b5cf6" stroke-width="2.5"/>';
+      // fitted post line
+      svg += '<line x1="' + xi + '" y1="' + yF(vpost(uI)) + '" x2="' + xF(1) + '" y2="' + yF(vpost(1)) + '" stroke="#10b981" stroke-width="2.5"/>';
+      // level-change bracket at the interruption
+      const yCf = yF(vpre(uI)), yPost = yF(vpost(uI));
+      svg += '<line x1="' + (xi + 8) + '" y1="' + yCf + '" x2="' + (xi + 8) + '" y2="' + yPost + '" stroke="#334155" stroke-width="1"/>';
+      svg += '<text x="' + (xi + 13) + '" y="' + ((yCf + yPost) / 2 + 3) + '" font-size="9.5" fill="#334155">level change</text>';
+      svg += '<text x="' + xF(0.8) + '" y="' + (yF(vpost(0.8)) - 8) + '" font-size="9.5" fill="#10b981" font-weight="600">slope change</text>';
+      // observed points (scatter around the fitted segments)
+      for (let k = 0; k < N; k++) {
+        const u = uAt(k), isPre = k < pre;
+        const v = (isPre ? vpre(u) : vpost(u)) + jit(k + (isPre ? 0 : 100));
+        svg += '<circle cx="' + xF(u) + '" cy="' + yF(v) + '" r="2.6" fill="' + (isPre ? "#8b5cf6" : "#10b981") + '" fill-opacity="0.55"/>';
+      }
+      document.getElementById("diagram").innerHTML = svg + "</svg>";
+      document.getElementById("dlegend").innerHTML =
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Pre-intervention trend</span>' +
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#10b981"></span>Post-intervention trend</span>' +
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="border-top:2px dashed #f59e0b"></span>Counterfactual (expected without the intervention)</span>' +
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3" style="border-left:2px dashed #0f766e"></span>Interruption</span>';
+      document.getElementById("dcap").textContent =
+        "Segmented regression fits the pre-intervention trend (" + s.prePoints + " " + s.unit + " points) and projects it forward as the counterfactual; the post-intervention segment (" + s.postPoints + " points) is contrasted against it to estimate the immediate level change and the change in slope" + (s.controlled ? ", differenced against the control series" : "") + ". Schematic — shapes are illustrative, not your data.";
+    }
+
+    const buildMarkdown = (s) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const P = or(s.population, "(population)"), O = or(s.outcome, "(outcome)"), I = or(s.intervention, "(intervention/policy)");
+      const D = or(s.interruptDate, "(interruption date)");
+      return `# ${or(s.title, "(Untitled interrupted time series study)")}
+
+_Study protocol · interrupted time series (segmented regression) · drafted ${today}_
+
+## 1. Background and rationale
+This study uses an **interrupted time series (ITS)** design to evaluate whether **${I}** changed the **level** and/or the **slope (trend)** of **${O}** in **${P}**. ITS is among the strongest quasi-experimental designs for a population-level intervention with a clear date: the pre-intervention trend, projected forward, serves as the **counterfactual** for what would have happened without the intervention (Wagner 2002; Bernal 2017).${s.controlled ? " A **controlled** series is added to separate the intervention's effect from co-interventions and secular change." : ""}
+
+## 2. Question
+Among **${P}**, did **${I}** (interrupted at **${D}**) change the level and/or slope of **${O}**?
+
+## 3. Study design
+A ${s.controlled ? "**controlled** " : "single-group "}**interrupted time series** analysed by segmented regression, using observational data from **${or(s.data, "(data source)")}**. Time unit: **${s.unit}**. Series length: **${s.prePoints}** pre-intervention and **${s.postPoints}** post-intervention points.
+
+## 4. Time series construction
+The outcome is aggregated per **${s.unit}** interval across the study window (${s.prePoints} pre + ${s.postPoints} post points).${s.model === "poisson" ? ` The denominator / offset is: ${or(s.denom, "(person-time / eligible population; entered as a log offset)")}.` : ""} Each interval is indexed by a continuous **time** variable; an interruption indicator marks intervals from **${D}** onward; and a **time-since-interruption** variable captures the post-intervention slope.${s.lag ? ` A transition / phase-in period is handled as: ${s.lag}.` : ""}
+
+## 5. Intervention and interruption
+- **Intervention / policy:** ${I}
+- **Interruption date:** ${D}
+- **Transition / phase-in:** ${or(s.lag, "none (a single, sharp interruption is assumed)")}
+
+## 6. Model specification
+The outcome is modelled with ${modelText(s.model)}. The segmented model estimates: (i) the **baseline level** and **pre-intervention slope**; (ii) the **change in level** (immediate step at the interruption); and (iii) the **change in slope** (post- minus pre-intervention trend). ${seasonText(s.seasonality)}. ${autocorrText(s.autocorr)}.${s.controlled ? ` A control series (${or(s.controlSeries, "a comparison group/region/outcome unaffected by the intervention")}) is included, with group-by-segment interaction terms so the **difference** in level and slope changes (intervention minus control) is the primary estimate.` : ""}
+
+## 7. Estimand and effect measures
+The primary estimands are ${effectText(s.model)}. We also report the **absolute and relative difference** between the observed outcome and the counterfactual (extrapolated pre-trend) at a pre-specified post-intervention time point, with 95% confidence intervals.
+
+## 8. Statistical analysis
+1. Construct the aggregated time series and the segmented-regression design matrix (time, interruption, time-since-interruption${s.controlled ? ", control-group, and their interactions" : ""}).
+2. Fit the ${s.model === "linear" ? "segmented linear" : "segmented Poisson (or negative-binomial)"} model; ${autocorrText(s.autocorr).toLowerCase()}.
+3. ${seasonText(s.seasonality).replace(/^No explicit.*/, "Assess and, if present, adjust for seasonality")}.
+4. Report the level change and slope change (with 95% CI), plot the observed series with the fitted segments and the counterfactual, and estimate the difference-from-counterfactual at the chosen horizon.
+5. Check model fit and residual autocorrelation (Durbin–Watson, ACF/PACF); refit if diagnostics indicate.
+
+## 9. Subgroup analyses
+${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsPick, s.subgroupsCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+## 10. Sensitivity analyses
+${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensitivityPick, s.sensitivityCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+## References
+- Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27:299-309.
+- Lopez Bernal J, Cummins S, Gasparrini A. Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2017;46:348-355.
+- Lopez Bernal J, Cummins S, Gasparrini A. The use of controls in interrupted time series studies of public health interventions. Int J Epidemiol 2018;47:2082-2093.
+- Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. Regression based quasi-experimental approach when randomisation is not an option: interrupted time series analysis. BMJ 2015;350:h2750.
+- Penfold RB, Zhang F. Use of interrupted time series analysis in evaluating health care quality improvements. Acad Pediatr 2013;13(6 Suppl):S38-44.
+`;
+    };
+
+    const computeChecks = (s) => {
+      const checks = [];
+      const pre = parseInt(s.prePoints) || 0, post = parseInt(s.postPoints) || 0;
+      if (!s.interruptDate) checks.push({ level: "error", msg: "Set the interruption date — the whole design hinges on when the intervention took effect; it defines the pre/post segments." });
+      if (pre < 8) checks.push({ level: "warn", msg: "Only " + pre + " pre-intervention points — segmented regression needs a well-estimated baseline trend; aim for ≥ 8 (ideally ≥ 12) points before the interruption." });
+      if (post < 8) checks.push({ level: "warn", msg: "Only " + post + " post-intervention points — the slope change is hard to detect with few post points; aim for ≥ 8 (ideally ≥ 12)." });
+      if ((s.unit === "monthly" || s.unit === "quarterly" || s.unit === "weekly") && s.seasonality === "none")
+        checks.push({ level: "warn", msg: "No seasonality adjustment with " + s.unit + " data — seasonal outcomes can bias the level/slope estimates. Add harmonic or calendar-period terms, or justify that the outcome is non-seasonal." });
+      if (s.autocorr === "none") checks.push({ level: "warn", msg: "No autocorrelation handling — serial correlation between adjacent time points inflates precision. Check Durbin–Watson / ACF-PACF and use Newey–West, Prais–Winsten, or ARIMA errors if present." });
+      if (!s.controlled) checks.push({ level: "info", msg: "Single-group ITS assumes no co-intervention or secular change coincides with the interruption. A control series (controlled ITS) lets you difference those out and strengthens causal inference." });
+      if (s.model === "poisson" && !s.denom) checks.push({ level: "info", msg: "For a Poisson rate model, specify the denominator / offset (person-time or eligible population) so the outcome is modelled as a rate, not a raw count." });
+      checks.push({ level: "info", msg: "ITS estimates two things against the extrapolated pre-trend counterfactual: an immediate change in level (step) and a change in slope (trend)." });
+      if (!s.population || !s.population.trim()) checks.push({ level: "info", msg: "Specify the population." });
+      if (!s.outcome || !s.outcome.trim()) checks.push({ level: "info", msg: "Specify the outcome (a rate, count, or level measured over time)." });
+      if (!s.intervention || !s.intervention.trim()) checks.push({ level: "info", msg: "Specify the intervention / policy that defines the interruption." });
+      return checks;
+    };
+
+    const render = () => {
+      const s = readForm();
+      preview.textContent = buildMarkdown(s);
+      renderScheme(s);
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch {}
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
+    };
+
+    (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        if (saved) for (const k in saved) {
+          const els = form.elements[k]; if (!els) continue;
+          const val = saved[k];
+          if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
+          else if (els.type === "checkbox") els.checked = !!val;
+          else els.value = val;
+        }
+      } catch {}
+      render();
+    })();
+    form.addEventListener("input", render);
+    form.addEventListener("change", render);
+
+    const slugify = () => (readForm().title || "its-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "its-protocol";
+    const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
+    const dl = (blob, name) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
+
+    document.querySelector("[data-action='download-md']").addEventListener("click", () =>
+      dl(new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" }), fname("md")));
+
+    document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
+      try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
+    });
+
+    const actionMsg = document.querySelector("[data-action-msg]");
+    const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
+    document.querySelector("[data-action='reset']").addEventListener("click", () => {
+      if (!confirm("Clear every field and forget the saved draft?")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      form.querySelectorAll("input, textarea, select").forEach((el) => {
+        if (el.type === "checkbox" || el.type === "radio") el.checked = false;
+        else if (el.tagName === "SELECT") el.selectedIndex = 0;
+        else el.value = "";
+      });
+      render();
+      setMsg("Cleared.");
+    });
+
+    // Formatted Word protocol, matching the ACNU/SCCS/CCO/DA builders.
+    const buildDocx = async (s) => {
+      const D = window.docx;
+      const today = new Date().toISOString().slice(0, 10);
+      const FONT = "Times New Roman";
+      const text = (str, o = {}) => new D.TextRun({ text: String(str ?? ""), font: FONT, size: 22, ...o });
+      const p = (ch, o = {}) => new D.Paragraph({ children: Array.isArray(ch) ? ch : [ch], spacing: { before: 60, after: 60, ...(o.spacing || {}) }, ...o });
+      const h1 = (str) => new D.Paragraph({ children: [text(str, { bold: true, size: 28 })], spacing: { before: 200, after: 80 }, heading: D.HeadingLevel.HEADING_1 });
+      const para = (str) => p([text(str)]);
+      const bullet = (str) => new D.Paragraph({ children: [text(str)], bullet: { level: 0 }, spacing: { before: 0, after: 0 } });
+      const numItem = (str) => new D.Paragraph({ children: [text(str)], numbering: { reference: "ordered", level: 0 }, spacing: { before: 0, after: 0 } });
+      const border = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
+      const cb = { top: border, bottom: border, left: border, right: border };
+      const labelTable = (rows) => new D.Table({
+        width: { size: 9026, type: D.WidthType.DXA }, columnWidths: [3000, 6026],
+        rows: rows.map(([label, value]) => new D.TableRow({ children: [
+          new D.TableCell({ borders: cb, width: { size: 3000, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, shading: { fill: "F5F5F5", type: D.ShadingType.CLEAR }, children: [p([text(label, { bold: true })])] }),
+          new D.TableCell({ borders: cb, width: { size: 6026, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [p([text(value || "-")])] }),
+        ] })),
+      });
+
+      const subg = mergeList(s.subgroupsPick, s.subgroupsCustom);
+      const sens = mergeList(s.sensitivityPick, s.sensitivityCustom);
+      const P = or(s.population, "(population)"), O = or(s.outcome, "(outcome)"), I = or(s.intervention, "(intervention/policy)"), Dt = or(s.interruptDate, "(interruption date)");
+
+      let __phdcLogo = null; try { const __r = await fetch("/images/networks/phdc.png"); if (__r.ok) __phdcLogo = new Uint8Array(await __r.arrayBuffer()); } catch (e) {}
+      const children = [];
+      if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
+      children.push(p([text(or(s.title, "(Untitled interrupted time series study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
+      children.push(p([text("Study protocol · interrupted time series (segmented regression) · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+
+      children.push(h1("1. Background and rationale"));
+      children.push(para("This study uses an interrupted time series (ITS) design to evaluate whether " + I + " changed the level and/or slope of " + O + " in " + P + ". The pre-intervention trend, projected forward, is the counterfactual (Wagner 2002; Lopez Bernal 2017)." + (s.controlled ? " A controlled series separates the intervention's effect from co-interventions and secular change." : "")));
+
+      children.push(h1("2. Question"));
+      children.push(para("Among " + P + ", did " + I + " (interrupted at " + Dt + ") change the level and/or slope of " + O + "?"));
+
+      children.push(h1("3. Design summary"));
+      children.push(labelTable([
+        ["Design", (s.controlled ? "Controlled " : "Single-group ") + "interrupted time series (segmented regression)"],
+        ["Data source(s)", or(s.data, "-")],
+        ["Population", P],
+        ["Outcome", O],
+        ["Intervention / policy", I],
+        ["Interruption date", Dt],
+        ["Time unit", s.unit],
+        ["Pre / post points", s.prePoints + " / " + s.postPoints],
+        ["Regression model", s.model === "linear" ? "Segmented linear (OLS)" : "Segmented Poisson / negative-binomial"],
+        ["Seasonality", ({ none: "None", harmonic: "Harmonic (Fourier) terms", month: "Calendar-month / quarter dummies" })[s.seasonality] || "None"],
+        ["Autocorrelation", ({ none: "Durbin–Watson / ACF check", newey: "Newey–West (HAC) SE", prais: "Prais–Winsten", arima: "ARIMA errors" })[s.autocorr] || "-"],
+        ["Control series", s.controlled ? or(s.controlSeries, "(specify)") : "None (uncontrolled)"],
+      ]));
+
+      children.push(h1("4. Time series construction"));
+      children.push(para("The outcome is aggregated per " + s.unit + " interval (" + s.prePoints + " pre + " + s.postPoints + " post points)." + (s.model === "poisson" ? " Denominator / offset: " + or(s.denom, "(person-time / eligible population, entered as a log offset).") : "") + " Each interval is indexed by a continuous time variable; an interruption indicator marks intervals from " + Dt + " onward; and a time-since-interruption variable captures the post-intervention slope." + (s.lag ? " Transition / phase-in: " + s.lag + "." : "")));
+
+      children.push(h1("5. Model specification"));
+      children.push(para("The outcome is modelled with " + modelText(s.model) + ". The segmented model estimates the baseline level and pre-intervention slope, the change in level (step at the interruption), and the change in slope (post minus pre). " + seasonText(s.seasonality) + ". " + autocorrText(s.autocorr) + "." + (s.controlled ? " A control series (" + or(s.controlSeries, "a comparison series unaffected by the intervention") + ") is included with group-by-segment interactions, so the difference in level and slope changes is the primary estimate." : "")));
+
+      children.push(h1("6. Estimand and effect measures"));
+      children.push(para("Primary estimands: " + effectText(s.model) + ". We also report the absolute and relative difference between the observed outcome and the counterfactual at a pre-specified post-intervention time point."));
+
+      children.push(h1("7. Statistical analysis"));
+      ["Construct the aggregated series and the segmented-regression design matrix (time, interruption, time-since-interruption" + (s.controlled ? ", control group, and interactions" : "") + ").",
+       "Fit the " + (s.model === "linear" ? "segmented linear" : "segmented Poisson / negative-binomial") + " model; " + autocorrText(s.autocorr).toLowerCase() + ".",
+       "Report the level change and slope change (95% CI); plot the observed series with fitted segments and the counterfactual; estimate the difference-from-counterfactual at the chosen horizon.",
+       "Check model fit and residual autocorrelation (Durbin–Watson, ACF/PACF) and refit if indicated."].forEach((l) => children.push(numItem(l)));
+
+      children.push(h1("8. Subgroup analyses"));
+      (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      children.push(h1("9. Sensitivity analyses"));
+      (sens.length ? sens : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      children.push(h1("References"));
+      ["Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27:299-309.",
+       "Lopez Bernal J, Cummins S, Gasparrini A. Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2017;46:348-355.",
+       "Lopez Bernal J, Cummins S, Gasparrini A. The use of controls in interrupted time series studies of public health interventions. Int J Epidemiol 2018;47:2082-2093.",
+       "Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. Regression based quasi-experimental approach when randomisation is not an option: interrupted time series analysis. BMJ 2015;350:h2750."].forEach((l) => children.push(bullet(l)));
+
+      children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
+
+      const doc = new D.Document({
+        creator: "Protocol Generator — Interrupted Time Series",
+        title: "ITS protocol — " + (s.title || "study"),
+        styles: { default: { document: { run: { font: FONT, size: 22 } } }, paragraphStyles: [
+          { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { size: 28, bold: true, font: FONT }, paragraph: { spacing: { before: 200, after: 80 }, outlineLevel: 0 } },
+        ] },
+        numbering: { config: [{ reference: "ordered", levels: [{ level: 0, format: D.LevelFormat.DECIMAL, text: "%1.", alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }] },
+        sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children }],
+      });
+      return await D.Packer.toBlob(doc);
+    };
+
+    document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
+      if (!window.docx) return;
+      try { dl(await buildDocx(readForm()), fname("docx")); } catch (e) {}
+    });
+  </script>
+</BaseLayout>

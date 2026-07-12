@@ -52,6 +52,14 @@ const designs = [
     example: "Benzodiazepine vs no use in pregnancy, a trial at each gestational week",
     strengths: "Uses every eligible time origin (mitigates prevalent-user / selection bias), lets patients enter multiple nested trials, and pools with a patient-clustered robust variance.",
   },
+  {
+    slug: "interrupted-time-series",
+    short: "ITS",
+    title: "Interrupted Time Series",
+    when: "When a population-level intervention or policy has a clear date, and you want to know whether it changed the level and/or trend of an outcome over time — using the pre-intervention trend as the counterfactual.",
+    example: "Effect of a 2019 reimbursement policy on monthly SGLT2-inhibitor initiation rates",
+    strengths: "Strong quasi-experiment when randomisation is impossible; separates an immediate level change from a change in slope via segmented regression, with an optional control series to guard against co-interventions and secular trends.",
+  },
 ];
 ---
 
