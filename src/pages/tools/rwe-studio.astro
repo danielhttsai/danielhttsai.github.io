@@ -329,9 +329,10 @@ const DESIGNS = [
           outcome: i % 5 === 0 ? 1 : 0,
           event_date: i % 5 === 0 ? "2020-03-1" + (i % 9) : null,
           cci: (i % 7) - 1,
+          followup_days: 90 + (i * 37) % 900,
         });
       }
-      DATA = { rows, columns: ["patient_id", "index_date", "age", "sex", "exposure", "outcome", "event_date", "cci"], name: "demo-dataset" };
+      DATA = { rows, columns: ["patient_id", "index_date", "age", "sex", "exposure", "outcome", "event_date", "cci", "followup_days"], name: "demo-dataset" };
       DATA.profile = DATA.columns.map((c) => profileColumn(c, rows));
       $("fileinfo").textContent = "demo-dataset · 60 rows × 8 cols";
       setMsg("Loaded the synthetic demo dataset.");
