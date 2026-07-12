@@ -1,0 +1,55 @@
+---
+// TEMPORARY feasibility spike for RWE Studio (Workstream B, Phase 0).
+// Confirms WebR runs survival::coxph / clogit fully in-browser on GitHub Pages
+// via the PostMessage channel (no COOP/COEP headers, no service worker).
+// Delete this page once the decision gate is passed.
+import BaseLayout from "../../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="WebR spike" description="Temporary WebR feasibility spike">
+  <section class="mx-auto max-w-3xl px-4 sm:px-6 py-10">
+    <h1 class="text-2xl font-bold text-slate-900">WebR feasibility spike</h1>
+    <p class="mt-1 text-sm text-slate-600">Temporary. Runs <code>survival::coxph</code> + <code>clogit</code> in your browser via WebR (PostMessage channel). Watch the log below.</p>
+    <pre id="log" class="mt-4 rounded-lg bg-slate-900 text-slate-100 p-4 text-xs leading-relaxed whitespace-pre-wrap min-h-[240px]"></pre>
+  </section>
+
+  <script type="module" is:inline>
+    const el = document.getElementById("log");
+    const log = (m) => { el.textContent += m + "\n"; try { console.log("[webr-spike]", m); } catch (e) {} };
+    log("crossOriginIsolated = " + window.crossOriginIsolated);
+    log("SharedArrayBuffer available = " + (typeof SharedArrayBuffer !== "undefined"));
+    log("starting… (first load downloads the R runtime; please wait)");
+    (async () => {
+      const t0 = performance.now();
+      try {
+        const mod = await import("https://webr.r-wasm.org/latest/webr.mjs");
+        const { WebR, ChannelType } = mod;
+        log("WebR module loaded (" + Math.round(performance.now() - t0) + " ms)");
+        const webr = new WebR({ channelType: ChannelType.PostMessage });
+        let t = performance.now();
+        await webr.init();
+        log("webr.init() OK (" + Math.round(performance.now() - t) + " ms)");
+        t = performance.now();
+        await webr.installPackages(["survival"]);
+        log("installPackages(['survival']) OK (" + Math.round(performance.now() - t) + " ms)");
+        t = performance.now();
+        const out = await webr.evalRString(
+          "library(survival); set.seed(1);" +
+          "n<-400; x<-rbinom(n,1,0.5); time<-rexp(n, rate=0.05*exp(log(2)*x)); status<-rbinom(n,1,0.9);" +
+          "cox<-coxph(Surv(time,status)~x);" +
+          "m<-150;K<-4;id<-rep(1:m,each=K);case<-rep(c(1,0,0,0),m);" +
+          "ex<-rbinom(m*K,1,ifelse(case==1,0.6,0.35)); cl<-clogit(case~ex+strata(id));" +
+          "paste0('coxHR=',round(exp(coef(cox)[['x']]),3),'; clogitOR=',round(exp(coef(cl)[['ex']]),3),'; Rver=',as.character(getRversion()))"
+        );
+        log("eval OK (" + Math.round(performance.now() - t) + " ms): " + out);
+        log("TOTAL cold load: " + ((performance.now() - t0) / 1000).toFixed(1) + " s");
+        log(out.indexOf("coxHR=") === 0 ? "✅ PASS — WebR runs survival in-browser via PostMessage" : "⚠️ unexpected output");
+        window.__WEBR_SPIKE = { ok: out.indexOf("coxHR=") === 0, out: out };
+      } catch (e) {
+        log("❌ ERROR: " + (e && e.message ? e.message : String(e)));
+        try { console.error(e); } catch (x) {}
+        window.__WEBR_SPIKE = { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    })();
+  </script>
+</BaseLayout>
