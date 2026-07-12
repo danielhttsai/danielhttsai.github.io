@@ -68,6 +68,14 @@ const designs = [
     example: "Statins and incident diabetes, using the rise in statin prevalence 2005–2018",
     strengths: "Exploits the calendar trend in exposure prevalence (Ji & Hennessy 2017): removes time-invariant unmeasured confounding without needing to measure the confounders, by contrasting outcome trends across cumulative-percentage-exposed strata.",
   },
+  {
+    slug: "case-control",
+    short: "CC",
+    title: "Case-Control",
+    when: "When the outcome is rare and you want an efficient design: enrol on the outcome (cases), sample controls from the source population, and look back for exposure — matched or unmatched.",
+    example: "NSAIDs and hospitalised upper-GI bleeding, 4:1 risk-set-matched controls",
+    strengths: "Efficient for rare outcomes; risk-set (incidence-density) sampling estimates the incidence-rate ratio without a rare-disease assumption; matching plus conditional logistic regression controls confounding by the matched factors.",
+  },
 ];
 ---
 

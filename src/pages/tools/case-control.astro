@@ -1,0 +1,480 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PhenotypeLibrary from "../../components/PhenotypeLibrary.astro";
+import SitesPicker from "../../components/SitesPicker.astro";
+import DesignDiagram from "../../components/DesignDiagram.astro";
+import ProtocolCommon from "../../components/ProtocolCommon.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const MATCHING = [
+  "Age (± 2–5 years)",
+  "Sex",
+  "Index / calendar date",
+  "Region / site",
+  "Primary-care practice",
+  "Duration of database enrolment",
+];
+const COVARIATES = [
+  "Comorbidities (e.g. Charlson index)",
+  "Comedications",
+  "Smoking status",
+  "Body-mass index",
+  "Alcohol use",
+  "Prior healthcare utilisation",
+  "Socioeconomic status",
+];
+const SUBGROUPS = [
+  "Age group (e.g. ≥65 vs <65)",
+  "Sex (male vs female)",
+  "Region / hospital level",
+  "Comorbidity burden",
+  "Calendar sub-period",
+  "Duration / dose of exposure",
+];
+const SENSITIVITY = [
+  "Controls per case (1:1 vs 1:4)",
+  "Alternative exposure-ascertainment window",
+  "Matched vs unmatched analysis",
+  "Exclude exposure in the immediate pre-index window (latency)",
+  "Negative-control exposure",
+  "Alternative outcome / case definition",
+  "Alternative control-sampling scheme",
+];
+---
+
+<BaseLayout
+  title="Case-Control protocol — Daniel Tsai"
+  description="A free, in-browser protocol builder for case-control studies — risk-set / cumulative / case-cohort sampling, matching, exposure ascertainment, and conditional or unconditional logistic regression. One-click Word / Markdown export."
+>
+  <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
+    <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
+      <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">Protocol Generator · CC</p>
+      <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Case-Control protocol</h1>
+      <p class="mt-3 text-base text-slate-600 max-w-3xl">
+        Draft a <strong>case-control</strong> protocol — enrol on the outcome (cases), sample <strong>controls</strong>
+        from the source population (risk-set, cumulative, or case-cohort), optionally <strong>match</strong>, ascertain
+        exposure <strong>before the index date</strong>, and estimate the odds ratio by conditional or unconditional
+        logistic regression. Efficient for rare outcomes. Everything runs in your browser.
+      </p>
+      <a class="mt-4 inline-block text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>← All designs</a>
+    </div>
+  </header>
+
+  <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid gap-8 lg:grid-cols-[1fr,1fr] items-start">
+      <form id="form" class="space-y-6">
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">1 · Identity</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Study title</span>
+            <input name="title" placeholder="e.g. NSAIDs and upper-GI bleeding: a matched case-control study" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Data source(s)</span>
+            <input name="data" placeholder="e.g. Taiwan NHIRD (2010–2020)" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <SitesPicker target="data" />
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">2 · Question</legend>
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Source population</span>
+              <button type="button" data-open-library data-category="indications" data-target-name="population" class="text-[11px] text-brand-700 font-semibold hover:underline">📚 Library</button>
+            </div>
+            <input name="population" placeholder="e.g. Adults in the NHI database, 2010–2020" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure</span>
+                <button type="button" data-open-library data-category="exposures" data-target-name="exposure" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
+              </div>
+              <input name="exposure" placeholder="e.g. NSAID dispensing" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+            </div>
+            <div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Outcome (defines cases)</span>
+                <button type="button" data-open-library data-category="outcomes" data-target-name="outcome" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
+              </div>
+              <input name="outcome" placeholder="e.g. Hospitalised upper-GI bleeding" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">3 · Cases, index date &amp; controls</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Case definition</span>
+            <input name="casedef" placeholder="e.g. First hospitalisation with a primary diagnosis of upper-GI bleeding" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Index date</span>
+            <input name="indexdate" placeholder="e.g. The case's event (admission) date; matched controls take the same date" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Control sampling</span>
+              <select name="sampling" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+                <option value="riskset">Incidence-density (risk-set) sampling</option>
+                <option value="cumulative">Cumulative (survivor) sampling</option>
+                <option value="casecohort">Case-cohort (controls = random subcohort)</option>
+              </select></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Controls per case</span>
+              <input type="number" name="nControls" value="4" min="1" max="20" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          </div>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Matching factors (tick to match on)</span>
+            <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+              {MATCHING.map((mf, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="matchingPick" value={mf} checked={i < 3} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{mf}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="matchingCustom" rows="1" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom matching factors (one per line)"></textarea>
+          </div>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">4 · Exposure &amp; covariate ascertainment</legend>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure definition</span>
+            <input name="expdef" placeholder="e.g. ≥ 1 NSAID dispensing in the ascertainment window before index" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure look-back (days before index)</span>
+              <input type="number" name="lookback" value="90" min="0" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariate look-back (days before index)</span>
+              <input type="number" name="covlookback" value="365" min="0" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          </div>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariates / potential confounders (tick to adjust)</span>
+            <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+              {COVARIATES.map((cv, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="covariatesPick" value={cv} checked={i < 2} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{cv}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="covariatesCustom" rows="2" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom covariates (one per line)"></textarea>
+          </div>
+        </fieldset>
+
+        <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+          <legend class="px-2 text-sm font-bold text-brand-700">5 · Subgroups &amp; sensitivity</legend>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Subgroup analyses (tick to perform)</span>
+            <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+              {SUBGROUPS.map((sg, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="subgroupsPick" value={sg} checked={i < 2} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{sg}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="subgroupsCustom" rows="2" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom subgroups (one per line)"></textarea>
+          </div>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Sensitivity analyses (tick to perform)</span>
+            <div class="mt-1.5 grid grid-cols-1 gap-y-1">
+              {SENSITIVITY.map((sn, i) => (
+                <label class="flex items-start gap-2 text-xs text-slate-700">
+                  <input type="checkbox" name="sensitivityPick" value={sn} checked={i < 4} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{sn}</span>
+                </label>
+              ))}
+            </div>
+            <textarea name="sensitivityCustom" rows="2" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom sensitivity analyses (one per line)"></textarea>
+          </div>
+        </fieldset>
+
+        <div class="flex flex-wrap gap-3">
+          <button type="button" data-action="download-docx" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Word (.docx)</button>
+          <button type="button" data-action="download-md" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-5 py-2.5 rounded-lg text-sm">⬇ Markdown</button>
+          <button type="button" data-action="copy" class="text-brand-700 hover:underline font-semibold text-sm">Copy</button>
+          <button type="button" data-action="reset" class="ml-auto text-slate-500 hover:text-rose-600 hover:underline text-sm font-semibold">Clear all</button>
+          <span class="basis-full text-[11px] text-slate-400">Auto-saved to this browser.</span>
+          <p data-action-msg class="basis-full text-xs"></p>
+        </div>
+      </form>
+
+      <div class="lg:sticky lg:top-20 self-start">
+        <p class="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-2">Live protocol preview</p>
+        <pre id="preview" class="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[70vh]"></pre>
+      </div>
+    </div>
+
+    <div class="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-base font-bold text-slate-900">Consistency checks <span class="text-xs font-normal text-slate-400">· case-control 防呆</span></h2>
+      <div id="checks" class="mt-3 space-y-1.5"></div>
+    </div>
+
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
+      <p class="mt-1 text-xs text-slate-500">Exposure and covariates are assessed in look-back windows before the index date. <strong>Drag the ● handles</strong> to adjust the windows.</p>
+      <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
+      <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
+    </div>
+
+    <PhenotypeLibrary />
+    <DesignDiagram />
+    <ProtocolCommon />
+  </section>
+
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
+  <script is:inline>
+    const STORAGE_KEY = "daniel.cc-builder";
+    const form = document.getElementById("form");
+    const preview = document.getElementById("preview");
+    const V = (n) => (form.elements[n]?.value || "").trim();
+    const MV = (n) => [...form.querySelectorAll('[name="' + n + '"]:checked')].map((c) => c.value);
+    const mergeList = (pick, custom) => [...(pick || []), ...String(custom || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean)];
+    const or = (s, d) => (s && s.length ? s : d);
+
+    const readForm = () => ({
+      title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), outcome: V("outcome"),
+      casedef: V("casedef"), indexdate: V("indexdate"), sampling: V("sampling") || "riskset", nControls: V("nControls") || "4",
+      matchingPick: MV("matchingPick"), matchingCustom: V("matchingCustom"),
+      expdef: V("expdef"), lookback: V("lookback") || "90", covlookback: V("covlookback") || "365",
+      covariatesPick: MV("covariatesPick"), covariatesCustom: V("covariatesCustom"),
+      subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
+    });
+
+    const isMatched = (s) => mergeList(s.matchingPick, s.matchingCustom).length > 0;
+    const samplingText = (v) => ({
+      riskset: "incidence-density (risk-set) sampling — for each case, controls are sampled from those still at risk at the case's index date, so the odds ratio estimates the incidence-rate ratio without a rare-disease assumption",
+      cumulative: "cumulative (survivor) sampling — controls are sampled from those outcome-free at the end of the period; the odds ratio approximates the risk ratio only if the outcome is rare",
+      casecohort: "case-cohort sampling — controls are a random subcohort of the source population sampled at baseline, allowing several outcomes to share one control group",
+    })[v] || "the specified control-sampling scheme";
+    const analysisText = (s) => isMatched(s)
+      ? "conditional logistic regression (conditioning on the matched sets)"
+      : "unconditional logistic regression (adjusting for the covariates)";
+
+    const pcOf = (s) => ({
+      design: (isMatched(s) ? "matched " : "") + "case-control study",
+      tte: false,
+      population: or(s.population, "(source population)"),
+      exposure: or(s.exposure, "(exposure)"),
+      comparator: "no/less exposure",
+      outcome: or(s.outcome, "(outcome)"),
+      data: s.data,
+      analysis: analysisText(s) + " estimating the odds ratio with 95% confidence intervals",
+      groupBy: "case/control status",
+      limitations: "Exposure is ascertained before the index date, so recall/measurement of exposure and control selection are the main threats; risk-set sampling and an active-comparator exposure definition mitigate them.",
+      plannedOutputs: ["Case/control selection flow (with matching yield).", "Table 1 — characteristics of cases vs controls.", "Odds ratio (crude and adjusted) with 95% CI."],
+    });
+
+    function renderScheme(s) {
+      const lb = Math.max(0, parseInt(s.lookback) || 0);
+      const cb = Math.max(0, parseInt(s.covlookback) || 0);
+      const wins = [];
+      if (cb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -cb, endDay: 0, edit: { field: "covlookback", edge: "start" } });
+      if (lb > 0) wins.push({ label: "Exposure ascertainment", kind: "exposure", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
+      const onEdit = (field, day) => { const el = form.elements[field]; if (!el) return; el.value = Math.round(Math.max(0, -day)); render(); };
+      window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Index date (event / matched time)", onEdit: onEdit, snap: 5 });
+    }
+
+    const buildMarkdown = (s) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const P = or(s.population, "(source population)"), E = or(s.exposure, "(exposure)"), O = or(s.outcome, "(outcome)");
+      const match = mergeList(s.matchingPick, s.matchingCustom);
+      const covs = mergeList(s.covariatesPick, s.covariatesCustom);
+      return `# ${or(s.title, "(Untitled case-control study)")}
+
+_Study protocol · ${isMatched(s) ? "matched " : ""}case-control study · drafted ${today}_
+
+${window.PC.abstractMd(pcOf(s))}
+## 1. Background and rationale
+This ${isMatched(s) ? "matched " : ""}**case-control** study estimates the association between **${E}** and **${O}** in **${P}**. Enrolling on the outcome makes the design **efficient for a rare outcome**; sampling controls from the source population and ascertaining exposure **before the index date** yields the exposure odds ratio.
+
+## 2. Question
+Among **${P}**, is **${E}** associated with **${O}**?
+
+## 3. Study design
+A ${isMatched(s) ? "matched " : ""}case-control study using observational data from **${or(s.data, "(data source)")}**, with **${samplingText(s.sampling).split(" — ")[0]}** and **${s.nControls}** control(s) per case.
+
+## 4. Cases and index date
+- **Case definition:** ${or(s.casedef, "(define the outcome that identifies cases)")}
+- **Index date:** ${or(s.indexdate, "The case's event date; matched controls are assigned the same date.")}
+
+## 5. Control selection${isMatched(s) ? " and matching" : ""}
+Controls are selected by ${samplingText(s.sampling)}, at a ratio of **${s.nControls}:1**.${isMatched(s) ? ` Cases and controls are **matched** on: ${match.join("; ")}.` : " No matching is applied; confounders are adjusted for in the analysis."}
+
+## 6. Exposure ascertainment
+${or(s.expdef, "Exposure is defined as at least one qualifying record in the ascertainment window before the index date.")} Exposure is assessed in the **${s.lookback}-day** window before index; covariates in the **${s.covlookback}-day** window before index.
+
+## 7. Covariates
+${(covs.length ? covs : ["(none specified)"]).map((l) => "- " + l).join("\n")}
+
+## 8. Estimand and analysis
+The estimand is the **exposure odds ratio** (95% CI), estimated by ${analysisText(s)}.${s.sampling === "riskset" ? " With risk-set sampling the odds ratio estimates the incidence-rate ratio directly." : ""} A crude and a covariate-adjusted OR are both reported.
+
+## 9. Subgroup analyses
+${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsPick, s.subgroupsCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+## 10. Sensitivity analyses
+${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensitivityPick, s.sensitivityCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+${window.PC.tailMd(pcOf(s))}
+
+## References
+- Vandenbroucke JP, Pearce N. Case-control studies: basic concepts. Int J Epidemiol 2012;41(5):1480-1489.
+- Wacholder S, Silverman DT, McLaughlin JK, Mandel JS. Selection of controls in case-control studies. Am J Epidemiol 1992;135(9):1019-1050.
+- Essebag V, Genest J, Suissa S, Pilote L. The nested case-control study in cardiology. Am Heart J 2003;146(4):581-590.
+`;
+    };
+
+    const computeChecks = (s) => {
+      const checks = [];
+      const lb = parseInt(s.lookback) || 0, nc = parseInt(s.nControls) || 0;
+      if (lb <= 0) checks.push({ level: "warn", msg: "Exposure look-back is 0 — set the window before the index date over which exposure is ascertained." });
+      if (nc < 1) checks.push({ level: "warn", msg: "Set at least 1 control per case (commonly up to 4; more controls add little precision beyond ~4:1)." });
+      if (!s.casedef || !s.casedef.trim()) checks.push({ level: "info", msg: "Define the case (the outcome that identifies cases) precisely, including the code set and setting." });
+      if (!s.indexdate || !s.indexdate.trim()) checks.push({ level: "info", msg: "Define the index date; matched controls must be assigned the same date so exposure windows are comparable." });
+      if (isMatched(s)) checks.push({ level: "info", msg: "Matched design → analyse with CONDITIONAL logistic regression, and do NOT additionally adjust for the matching factors as covariates." });
+      else checks.push({ level: "info", msg: "Unmatched design → analyse with UNCONDITIONAL logistic regression, adjusting for the confounders you listed." });
+      if (s.sampling === "riskset") checks.push({ level: "ok", msg: "Risk-set (incidence-density) sampling: the odds ratio estimates the incidence-rate ratio without a rare-disease assumption." });
+      else if (s.sampling === "cumulative") checks.push({ level: "warn", msg: "Cumulative sampling: the odds ratio approximates the risk ratio only if the outcome is rare (< ~10%)." });
+      checks.push({ level: "info", msg: "Guard against selection and exposure-measurement bias: sample controls from the same source population that gave rise to the cases, and ascertain exposure identically for cases and controls." });
+      return checks;
+    };
+
+    const render = () => {
+      const s = readForm();
+      preview.textContent = buildMarkdown(s);
+      renderScheme(s);
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch {}
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
+    };
+
+    (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        if (saved) for (const k in saved) {
+          const els = form.elements[k]; if (!els) continue;
+          const val = saved[k];
+          if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
+          else if (els.type === "checkbox") els.checked = !!val;
+          else els.value = val;
+        }
+      } catch {}
+      render();
+    })();
+    form.addEventListener("input", render);
+    form.addEventListener("change", render);
+
+    const slugify = () => (readForm().title || "case-control-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "case-control-protocol";
+    const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
+    const dl = (blob, name) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
+
+    document.querySelector("[data-action='download-md']").addEventListener("click", () =>
+      dl(new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" }), fname("md")));
+    document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
+      try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
+    });
+
+    const actionMsg = document.querySelector("[data-action-msg]");
+    const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
+    document.querySelector("[data-action='reset']").addEventListener("click", () => {
+      if (!confirm("Clear every field and forget the saved draft?")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      form.querySelectorAll("input, textarea, select").forEach((el) => {
+        if (el.type === "checkbox" || el.type === "radio") el.checked = false;
+        else if (el.tagName === "SELECT") el.selectedIndex = 0;
+        else el.value = "";
+      });
+      render();
+      setMsg("Cleared.");
+    });
+
+    const buildDocx = async (s) => {
+      const D = window.docx;
+      const today = new Date().toISOString().slice(0, 10);
+      const FONT = "Times New Roman";
+      const text = (str, o = {}) => new D.TextRun({ text: String(str ?? ""), font: FONT, size: 22, ...o });
+      const p = (ch, o = {}) => new D.Paragraph({ children: Array.isArray(ch) ? ch : [ch], spacing: { before: 60, after: 60, ...(o.spacing || {}) }, ...o });
+      const h1 = (str) => new D.Paragraph({ children: [text(str, { bold: true, size: 28 })], spacing: { before: 200, after: 80 }, heading: D.HeadingLevel.HEADING_1 });
+      const para = (str) => p([text(str)]);
+      const bullet = (str) => new D.Paragraph({ children: [text(str)], bullet: { level: 0 }, spacing: { before: 0, after: 0 } });
+      const border = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
+      const cb = { top: border, bottom: border, left: border, right: border };
+      const labelTable = (rows) => new D.Table({
+        width: { size: 9026, type: D.WidthType.DXA }, columnWidths: [3000, 6026],
+        rows: rows.map(([label, value]) => new D.TableRow({ children: [
+          new D.TableCell({ borders: cb, width: { size: 3000, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, shading: { fill: "F5F5F5", type: D.ShadingType.CLEAR }, children: [p([text(label, { bold: true })])] }),
+          new D.TableCell({ borders: cb, width: { size: 6026, type: D.WidthType.DXA }, margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [p([text(value || "-")])] }),
+        ] })),
+      });
+
+      const P = or(s.population, "(source population)"), E = or(s.exposure, "(exposure)"), O = or(s.outcome, "(outcome)");
+      const match = mergeList(s.matchingPick, s.matchingCustom);
+      const covs = mergeList(s.covariatesPick, s.covariatesCustom);
+      const subg = mergeList(s.subgroupsPick, s.subgroupsCustom);
+      const sens = mergeList(s.sensitivityPick, s.sensitivityCustom);
+
+      let __phdcLogo = null; try { const __r = await fetch("/images/networks/phdc.png"); if (__r.ok) __phdcLogo = new Uint8Array(await __r.arrayBuffer()); } catch (e) {}
+      const children = [];
+      if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
+      children.push(p([text(or(s.title, "(Untitled case-control study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
+      children.push(p([text("Study protocol · " + (isMatched(s) ? "matched " : "") + "case-control study · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
+
+      children.push(h1("1. Background and rationale"));
+      children.push(para("This " + (isMatched(s) ? "matched " : "") + "case-control study estimates the association between " + E + " and " + O + " in " + P + ". Enrolling on the outcome makes it efficient for a rare outcome; sampling controls from the source population and ascertaining exposure before the index date yields the exposure odds ratio."));
+
+      children.push(h1("2. Design summary"));
+      children.push(labelTable([
+        ["Design", (isMatched(s) ? "Matched " : "") + "case-control study"],
+        ["Data source(s)", or(s.data, "-")],
+        ["Source population", P],
+        ["Exposure", E],
+        ["Outcome (cases)", O],
+        ["Control sampling", ({ riskset: "Incidence-density (risk-set)", cumulative: "Cumulative (survivor)", casecohort: "Case-cohort" })[s.sampling] || "-"],
+        ["Controls per case", String(s.nControls)],
+        ["Matching", match.length ? match.join("; ") : "None (unmatched)"],
+        ["Exposure look-back", s.lookback + " days"],
+        ["Covariate look-back", s.covlookback + " days"],
+        ["Analysis", isMatched(s) ? "Conditional logistic regression → OR" : "Unconditional logistic regression → OR"],
+      ]));
+
+      children.push(h1("3. Cases and index date"));
+      children.push(p([text("Case definition. ", { bold: true }), text(or(s.casedef, "(define)"))]));
+      children.push(p([text("Index date. ", { bold: true }), text(or(s.indexdate, "The case's event date; matched controls take the same date."))]));
+
+      children.push(h1("4. Control selection" + (isMatched(s) ? " and matching" : "")));
+      children.push(para("Controls are selected by " + samplingText(s.sampling) + ", at " + s.nControls + ":1." + (isMatched(s) ? " Matched on: " + match.join("; ") + "." : " No matching; confounders adjusted in the analysis.")));
+
+      children.push(h1("5. Exposure ascertainment"));
+      children.push(para(or(s.expdef, "At least one qualifying record in the ascertainment window before the index date.") + " Exposure window: " + s.lookback + " days before index; covariate window: " + s.covlookback + " days before index."));
+
+      children.push(h1("6. Covariates"));
+      (covs.length ? covs : ["(none specified)"]).forEach((l) => children.push(bullet(l)));
+
+      children.push(h1("7. Estimand and analysis"));
+      children.push(para("The estimand is the exposure odds ratio (95% CI), estimated by " + analysisText(s) + "." + (s.sampling === "riskset" ? " With risk-set sampling the OR estimates the incidence-rate ratio directly." : "") + " Crude and adjusted ORs are reported."));
+
+      children.push(h1("8. Subgroup analyses"));
+      (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+      children.push(h1("9. Sensitivity analyses"));
+      (sens.length ? sens : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
+
+      children.push(h1("References"));
+      ["Vandenbroucke JP, Pearce N. Case-control studies: basic concepts. Int J Epidemiol 2012;41(5):1480-1489.",
+       "Wacholder S, Silverman DT, McLaughlin JK, Mandel JS. Selection of controls in case-control studies. Am J Epidemiol 1992;135(9):1019-1050."].forEach((l) => children.push(bullet(l)));
+
+      children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
+
+      const doc = new D.Document({
+        creator: "Protocol Generator — Case-Control",
+        title: "Case-control protocol — " + (s.title || "study"),
+        styles: { default: { document: { run: { font: FONT, size: 22 } } }, paragraphStyles: [
+          { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { size: 28, bold: true, font: FONT }, paragraph: { spacing: { before: 200, after: 80 }, outlineLevel: 0 } },
+        ] },
+        numbering: { config: [{ reference: "ordered", levels: [{ level: 0, format: D.LevelFormat.DECIMAL, text: "%1.", alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }] },
+        sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children }],
+      });
+      return await D.Packer.toBlob(doc);
+    };
+
+    document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
+      if (!window.docx) return;
+      try { dl(await buildDocx(readForm()), fname("docx")); } catch (e) {}
+    });
+  </script>
+</BaseLayout>
