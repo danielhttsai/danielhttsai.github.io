@@ -1,6 +1,14 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// The four in-scope designs the analysis can run (Phase 5).
+const DESIGNS = [
+  { v: "descriptive", t: "Descriptive analysis", d: "Characterise a population — incidence, prevalence, drug utilisation, mortality." },
+  { v: "acnu", t: "Active-comparator new-user cohort", d: "Compare two treatments' effect on an outcome as users start therapy." },
+  { v: "sccs", t: "Self-controlled case series", d: "Transient exposure + acute outcome; each case is its own control." },
+  { v: "cco", t: "Case-crossover", d: "Acute, abrupt-onset event; compare exposure in a hazard window vs control windows." },
+];
 ---
 
 <BaseLayout
@@ -29,17 +37,57 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
     <!-- Step tracker -->
     <ol class="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-400">
-      <li class="text-brand-700">1 · Upload &amp; profile</li>
-      <li>2 · Clean → master file</li>
-      <li>3 · Question &amp; design</li>
-      <li>4 · Map columns</li>
+      <li class="text-brand-700">1 · Question &amp; design</li>
+      <li>2 · Upload &amp; profile</li>
+      <li>3 · Map columns</li>
+      <li>4 · Clean → master file</li>
       <li>5 · Analyse (R)</li>
       <li>6 · Export</li>
     </ol>
 
+    <!-- Step 1: clinical question & design -->
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">1 · Clinical question &amp; study design</h2>
+      <p class="mt-1 text-sm text-slate-600">Decide this <strong>first</strong> — the design determines which columns you'll map and what cleaning actually matters.</p>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population</span>
+          <input name="q_pop" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Adults with type 2 diabetes" /></label>
+        <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Outcome</span>
+          <input name="q_out" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Hospitalisation for heart failure" /></label>
+        <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure / intervention</span>
+          <input name="q_exp" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. SGLT2 inhibitor" /></label>
+        <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Comparator (if any)</span>
+          <input name="q_comp" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. DPP-4 inhibitor" /></label>
+      </div>
+
+      <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <p class="text-xs font-semibold text-slate-700">Not sure which design? Tick what applies, then get a recommendation:</p>
+        <div class="mt-2 grid gap-1 sm:grid-cols-2 text-xs text-slate-700">
+          <label class="flex items-start gap-2"><input type="checkbox" name="s_describe" class="mt-0.5" /> <span>Goal is to describe / quantify (not test a causal effect)</span></label>
+          <label class="flex items-start gap-2"><input type="checkbox" name="s_twodrugs" class="mt-0.5" /> <span>Comparing two active treatments from the same indication</span></label>
+          <label class="flex items-start gap-2"><input type="checkbox" name="s_transient" class="mt-0.5" /> <span>Exposure is transient / intermittent (short course)</span></label>
+          <label class="flex items-start gap-2"><input type="checkbox" name="s_acute" class="mt-0.5" /> <span>Outcome is acute / abrupt-onset</span></label>
+        </div>
+        <button id="suggest" type="button" class="mt-2 text-xs font-semibold text-brand-700 hover:underline">→ Recommend a design</button>
+        <p id="suggestmsg" class="mt-1 text-xs text-brand-800"></p>
+      </div>
+
+      <div class="mt-4">
+        <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Study design</span>
+        <div class="mt-1.5 grid gap-2 sm:grid-cols-2">
+          {DESIGNS.map((d) => (
+            <label class="flex items-start gap-2 rounded-xl border border-slate-200 p-3 cursor-pointer hover:border-brand-400 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50/60">
+              <input type="radio" name="design" value={d.v} class="mt-0.5" />
+              <span><span class="text-sm font-semibold text-slate-800">{d.t}</span><br /><span class="text-xs text-slate-600">{d.d}</span></span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+
     <!-- Upload -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 class="text-lg font-bold text-slate-900">1 · Upload a dataset</h2>
+      <h2 class="text-lg font-bold text-slate-900">2 · Upload a dataset</h2>
       <p class="mt-1 text-sm text-slate-600">CSV or Excel (.xlsx). One row per record; a header row with column names. Small extracts work best.</p>
       <label id="drop" class="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 transition">
         <span class="text-3xl">📄</span>
@@ -83,10 +131,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       </div>
 
       <div class="rounded-2xl border border-brand-200 bg-brand-50/50 p-5 text-sm text-slate-700">
-        <strong>Next steps (in progress):</strong> guided cleaning → tidy master file, then pick a study design
-        (Descriptive · ACNU · SCCS · Case-crossover), map your columns to its roles, and run the analysis in real R
-        via WebR — with the estimate, Table 1, and a reproducible R script. The analysis engine is verified working
-        in your browser.
+        <strong>Next steps (in progress):</strong> map your columns to the chosen design's roles, guided cleaning →
+        tidy master file, then run the analysis in real R via WebR — with the estimate, Table 1, and a reproducible
+        R script. The analysis engine is verified working in your browser.
       </div>
     </div>
   </section>
@@ -248,13 +295,44 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
     $("dlmaster").addEventListener("click", () => {
       if (!DATA.rows.length) return;
-      dl(new Blob([toCSV(DATA.columns, DATA.rows)], { type: "text/csv;charset=utf-8" }), DATA.name + "-master.csv");
+      dl(new Blob(["﻿" + toCSV(DATA.columns, DATA.rows)], { type: "text/csv;charset=utf-8" }), DATA.name + "-master.csv");
     });
     $("dldict").addEventListener("click", () => {
       if (!DATA.profile.length) return;
       const cols = ["column", "inferred_type", "missing_pct", "distinct", "range_or_top", "flags"];
       const rows = DATA.profile.map((p) => ({ column: p.name, inferred_type: p.type, missing_pct: Math.round(p.missingPct), distinct: p.distinct, range_or_top: p.range, flags: p.flags.map((f) => f.msg).join("; ") }));
-      dl(new Blob([toCSV(cols, rows)], { type: "text/csv;charset=utf-8" }), DATA.name + "-dictionary.csv");
+      dl(new Blob(["﻿" + toCSV(cols, rows)], { type: "text/csv;charset=utf-8" }), DATA.name + "-dictionary.csv");
+    });
+
+    // ── Step 1: clinical question + design (persisted) ──
+    const Q_KEY = "daniel.rwe-studio";
+    const qNames = ["q_pop", "q_exp", "q_comp", "q_out"];
+    const saveQ = () => {
+      const s = {};
+      qNames.forEach((n) => { const e = document.querySelector('[name="' + n + '"]'); if (e) s[n] = e.value; });
+      const d = document.querySelector('[name="design"]:checked'); s.design = d ? d.value : "";
+      try { localStorage.setItem(Q_KEY, JSON.stringify(s)); } catch (e) {}
+    };
+    (() => {
+      try {
+        const s = JSON.parse(localStorage.getItem(Q_KEY) || "null"); if (!s) return;
+        qNames.forEach((n) => { const e = document.querySelector('[name="' + n + '"]'); if (e && s[n] != null) e.value = s[n]; });
+        if (s.design) { const r = document.querySelector('[name="design"][value="' + s.design + '"]'); if (r) r.checked = true; }
+      } catch (e) {}
+    })();
+    document.querySelectorAll('[name="q_pop"],[name="q_exp"],[name="q_comp"],[name="q_out"],[name="design"]').forEach((e) => e.addEventListener("input", saveQ));
+
+    const DESIGN_LABEL = { descriptive: "Descriptive analysis", acnu: "Active-comparator new-user cohort", sccs: "Self-controlled case series", cco: "Case-crossover" };
+    $("suggest").addEventListener("click", () => {
+      const ck = (n) => { const e = document.querySelector('[name="' + n + '"]'); return !!(e && e.checked); };
+      let v, why;
+      if (ck("s_describe")) { v = "descriptive"; why = "your goal is to describe / quantify rather than test a causal effect."; }
+      else if (ck("s_twodrugs")) { v = "acnu"; why = "you're comparing two active treatments — an active-comparator new-user cohort minimises confounding by indication."; }
+      else if (ck("s_transient") && ck("s_acute")) { v = "sccs"; why = "a transient exposure with an acute outcome suits a self-controlled design (each case is its own control); a case-crossover is a good alternative."; }
+      else if (ck("s_acute")) { v = "cco"; why = "for an acute, abrupt-onset event, a case-crossover contrasts exposure just before the event with earlier control windows."; }
+      else { v = "acnu"; why = "defaulting to an active-comparator new-user cohort — tick more boxes for a sharper suggestion."; }
+      const r = document.querySelector('[name="design"][value="' + v + '"]'); if (r) { r.checked = true; saveQ(); }
+      $("suggestmsg").textContent = "Recommended: " + DESIGN_LABEL[v] + " — " + why;
     });
   </script>
 </BaseLayout>
