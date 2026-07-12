@@ -1,0 +1,40 @@
+---
+// Lazy WebR engine — runs real R in the browser via the PostMessage channel
+// (no COOP/COEP headers, no service worker; verified on GitHub Pages). Include
+// once, then call: await window.RWEngine.run(rScript, csvString, onStatus).
+// Returns the captured stdout/stderr as a string. WebR + survival load once and
+// are cached for the session.
+---
+
+<script is:inline>
+  (function () {
+    let webrP = null;
+    async function getWebR(onStatus) {
+      if (webrP) return webrP;
+      webrP = (async () => {
+        if (onStatus) onStatus("Downloading the R runtime (first run only, ~a few seconds)…");
+        const mod = await import("https://webr.r-wasm.org/latest/webr.mjs");
+        const webr = new mod.WebR({ channelType: mod.ChannelType.PostMessage });
+        await webr.init();
+        if (onStatus) onStatus("Installing R packages (survival)…");
+        await webr.installPackages(["survival"]);
+        return webr;
+      })();
+      return webrP;
+    }
+    window.RWEngine = {
+      async run(script, csv, onStatus) {
+        const webr = await getWebR(onStatus);
+        if (onStatus) onStatus("Running the analysis in R…");
+        await webr.FS.writeFile("/data.csv", new TextEncoder().encode(csv));
+        const shelter = await new webr.Shelter();
+        try {
+          const cap = await shelter.captureR(script, { withAutoprint: false, captureStreams: true });
+          return cap.output.filter((o) => o.type === "stdout" || o.type === "stderr").map((o) => o.data).join("\n");
+        } finally {
+          shelter.purge();
+        }
+      },
+    };
+  })();
+</script>

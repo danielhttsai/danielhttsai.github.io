@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import WebrEngine from "../../components/WebrEngine.astro";
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // The four in-scope designs the analysis can run (Phase 5).
@@ -130,13 +131,61 @@ const DESIGNS = [
         </div>
       </div>
 
-      <div class="rounded-2xl border border-brand-200 bg-brand-50/50 p-5 text-sm text-slate-700">
-        <strong>Next steps (in progress):</strong> map your columns to the chosen design's roles, guided cleaning →
-        tidy master file, then run the analysis in real R via WebR — with the estimate, Table 1, and a reproducible
-        R script. The analysis engine is verified working in your browser.
+    </div>
+
+    <!-- Step 3: map columns to the design's roles -->
+    <div id="mapcard" class="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">3 · Map columns → <span id="designname" class="text-brand-700"></span> roles</h2>
+      <p id="maphint" class="mt-1 text-sm text-slate-600"></p>
+      <div id="maproles" class="mt-4 grid gap-3 sm:grid-cols-2"></div>
+      <div id="covwrap" class="hidden mt-4">
+        <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Baseline covariates (for the propensity score) — tick the columns to adjust for</span>
+        <div id="covlist" class="mt-1.5 grid gap-1 sm:grid-cols-3 text-xs text-slate-700"></div>
+      </div>
+      <p id="mapmsg" class="mt-3 text-xs"></p>
+    </div>
+
+    <!-- Step 4: clean -> master file -->
+    <div id="cleancard" class="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">4 · Clean → master file</h2>
+      <p class="mt-1 text-sm text-slate-600">Apply the fixes you want; each is logged and re-emitted into the exported R script. The mapped variables are coerced to the types the analysis needs.</p>
+      <div class="mt-3 grid gap-1.5 sm:grid-cols-2 text-sm text-slate-700">
+        <label class="flex items-center gap-2"><input type="checkbox" id="c_trim" checked /> Trim leading/trailing whitespace</label>
+        <label class="flex items-center gap-2"><input type="checkbox" id="c_std" checked /> Standardise Yes/No &amp; sex codes; coerce mapped binaries to 0/1</label>
+        <label class="flex items-center gap-2"><input type="checkbox" id="c_dedupe" checked /> Drop exact duplicate rows</label>
+        <label class="flex items-center gap-2"><input type="checkbox" id="c_dropmiss" checked /> Drop rows missing a required mapped variable</label>
+      </div>
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <button id="applyclean" type="button" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-4 py-2 rounded-lg text-sm">Build master file</button>
+        <span id="cleaninfo" class="text-xs text-slate-600"></span>
+      </div>
+    </div>
+
+    <!-- Step 5: analyse in R -->
+    <div id="anacard" class="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">5 · Analyse in R (WebR)</h2>
+      <p class="mt-1 text-sm text-slate-600">Runs the design's model on your master file in real R, in your browser. First run downloads the R runtime (~a few seconds).</p>
+      <div class="mt-3 flex flex-wrap items-center gap-3">
+        <button id="runanalysis" type="button" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-5 py-2.5 rounded-lg text-sm">▶ Run analysis in R</button>
+        <span id="anastatus" class="text-xs text-slate-600"></span>
+      </div>
+      <div id="estimate" class="mt-4 hidden rounded-xl border border-brand-200 bg-brand-50/60 p-4"></div>
+      <pre id="routput" class="mt-3 hidden rounded-lg bg-slate-900 text-slate-100 p-4 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[360px]"></pre>
+    </div>
+
+    <!-- Step 6: export -->
+    <div id="expcard" class="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">6 · Export</h2>
+      <p class="mt-1 text-sm text-slate-600">The R script is exactly what ran — it reproduces the on-screen result in desktop R.</p>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <button id="dlmaster2" type="button" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ Master file (CSV)</button>
+        <button id="dlscript" type="button" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ R script (.R)</button>
+        <button id="dlreport" type="button" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ Report (Markdown)</button>
       </div>
     </div>
   </section>
+
+  <WebrEngine />
 
   <script is:inline>
     const $ = (id) => document.getElementById(id);
@@ -246,6 +295,7 @@ const DESIGNS = [
           "<td class='py-2 pr-3'>" + badges + "</td>" +
         "</tr>";
       }).join("");
+      try { renderMap(); } catch (e) {}
     }
 
     async function ingest(file) {
@@ -334,5 +384,205 @@ const DESIGNS = [
       const r = document.querySelector('[name="design"][value="' + v + '"]'); if (r) { r.checked = true; saveQ(); }
       $("suggestmsg").textContent = "Recommended: " + DESIGN_LABEL[v] + " — " + why;
     });
+
+    // ── Steps 3–6: map → clean → analyse (R) → export ──
+    const SPEC = {
+      descriptive: {
+        label: "Descriptive analysis",
+        hint: "One row per person. Map the outcome event and the person-time each person contributes; group/age/sex are optional.",
+        covariates: false,
+        roles: [
+          { k: "EVENT", label: "Outcome event (0/1)", types: ["binary", "number"], req: true },
+          { k: "PT", label: "Person-time (days or years)", types: ["number"], req: true },
+          { k: "GROUP", label: "Group / stratum", types: ["categorical", "binary", "text", "id"], req: false },
+          { k: "AGE", label: "Age", types: ["number"], req: false },
+          { k: "SEX", label: "Sex", types: ["categorical", "binary", "text"], req: false },
+        ],
+        rscript: () =>
+          "d<-read.csv('/data.csv')\n" +
+          "ev<-sum(d$EVENT==1,na.rm=TRUE); pt<-sum(as.numeric(d$PT),na.rm=TRUE); r<-ev/pt*1000\n" +
+          "ci<-tryCatch(poisson.test(ev,pt)$conf.int*1000, error=function(e) c(NA,NA))\n" +
+          "cat(sprintf('Overall incidence rate: %.3f per 1000 person-time (95%% CI %.3f to %.3f)\\n', r, ci[1], ci[2]))\n" +
+          "cat(sprintf('Events: %d; person-time: %.1f; rows: %d\\n\\n', ev, pt, nrow(d)))\n" +
+          "if ('GROUP' %in% names(d)) { cat('By group:\\n'); for (g in sort(unique(d$GROUP))) { s<-d[d$GROUP==g,]; e<-sum(s$EVENT==1,na.rm=TRUE); p<-sum(as.numeric(s$PT),na.rm=TRUE); cat(sprintf('  %s: %.3f/1000 (%d events / %.1f pt)\\n', g, e/p*1000, e, p)) }; cat('\\n') }\n" +
+          "cat('Table 1:\\n'); cat(sprintf('  N = %d\\n', nrow(d)))\n" +
+          "if ('AGE' %in% names(d)) cat(sprintf('  Age: mean %.1f (SD %.1f)\\n', mean(as.numeric(d$AGE),na.rm=TRUE), sd(as.numeric(d$AGE),na.rm=TRUE)))\n" +
+          "if ('SEX' %in% names(d)) { t<-table(d$SEX); cat('  Sex: ', paste(names(t), as.integer(t), sep='=', collapse=', '), '\\n', sep='') }\n" +
+          "cat(sprintf('RESULT_ESTIMATE|Incidence rate|%.2f per 1000 (95%% CI %.2f-%.2f)\\n', r, ci[1], ci[2]))",
+      },
+      acnu: {
+        label: "Active-comparator new-user cohort",
+        hint: "One row per new user. Map treatment (1=exposure, 0=comparator), follow-up time, and the outcome event; tick baseline covariates for the propensity score.",
+        covariates: true,
+        roles: [
+          { k: "TREAT", label: "Treatment (1=exposure, 0=comparator)", types: ["binary", "number"], req: true },
+          { k: "TIME", label: "Follow-up time (days)", types: ["number"], req: true },
+          { k: "EVENT", label: "Outcome event (0/1)", types: ["binary", "number"], req: true },
+        ],
+        rscript: (cov) =>
+          "d<-read.csv('/data.csv'); library(survival)\n" +
+          "covs<-c(" + cov.map((c) => "'" + c + "'").join(",") + ")\n" +
+          "ps<-glm(as.formula(paste('TREAT ~', paste(covs, collapse=' + '))), data=d, family=binomial)$fitted.values\n" +
+          "w<-ifelse(d$TREAT==1, 1/ps, 1/(1-ps))\n" +
+          "fit<-coxph(Surv(TIME, EVENT) ~ TREAT, data=d, weights=w, robust=TRUE); s<-summary(fit)\n" +
+          "hr<-s$conf.int['TREAT','exp(coef)']; lci<-s$conf.int['TREAT','lower .95']; uci<-s$conf.int['TREAT','upper .95']\n" +
+          "cat(sprintf('IPTW-weighted hazard ratio (treatment vs comparator): %.3f (95%% CI %.3f to %.3f)\\n', hr, lci, uci))\n" +
+          "c0<-summary(coxph(Surv(TIME,EVENT)~TREAT, data=d))$conf.int\n" +
+          "cat(sprintf('Crude hazard ratio: %.3f (95%% CI %.3f to %.3f)\\n', c0['TREAT','exp(coef)'], c0['TREAT','lower .95'], c0['TREAT','upper .95']))\n" +
+          "cat(sprintf('N = %d; events = %d; treated = %d\\n\\n', nrow(d), sum(d$EVENT==1,na.rm=TRUE), sum(d$TREAT==1,na.rm=TRUE)))\n" +
+          "cat('Covariate balance (standardised mean difference, unweighted vs IPTW):\\n')\n" +
+          "for (c in covs) { x<-as.numeric(d[[c]]); tr<-d$TREAT==1; sp<-sqrt((var(x[tr])+var(x[!tr]))/2); u<-(mean(x[tr])-mean(x[!tr]))/sp; wt<-(weighted.mean(x[tr],w[tr])-weighted.mean(x[!tr],w[!tr]))/sp; cat(sprintf('  %s: %.3f -> %.3f\\n', c, u, wt)) }\n" +
+          "cat(sprintf('RESULT_ESTIMATE|Hazard ratio (IPTW)|%.2f (95%% CI %.2f-%.2f)\\n', hr, lci, uci))",
+      },
+      sccs: {
+        label: "Self-controlled case series",
+        hint: "Long format — one row per person-interval. Map the case ID, an exposed indicator (0/1), the event count in the interval, and the interval length (person-time).",
+        covariates: false,
+        roles: [
+          { k: "ID", label: "Case ID", types: ["id", "number", "text"], req: true },
+          { k: "EXPOSED", label: "Exposed indicator (0/1)", types: ["binary", "number"], req: true },
+          { k: "EVENTS", label: "Event count in interval", types: ["number"], req: true },
+          { k: "INTERVAL", label: "Interval length (person-time)", types: ["number"], req: true },
+        ],
+        rscript: () =>
+          "d<-read.csv('/data.csv')\n" +
+          "fit<-glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=d)\n" +
+          "b<-coef(fit)['EXPOSED']; se<-sqrt(diag(vcov(fit)))['EXPOSED']; irr<-exp(b)\n" +
+          "cat(sprintf('Conditional Poisson incidence-rate ratio (exposed vs unexposed): %.3f (95%% CI %.3f to %.3f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))\n" +
+          "cat(sprintf('Cases (strata): %d; interval-rows: %d; events: %d\\n', length(unique(d$ID)), nrow(d), sum(d$EVENTS)))\n" +
+          "cat(sprintf('RESULT_ESTIMATE|Incidence-rate ratio|%.2f (95%% CI %.2f-%.2f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))",
+      },
+      cco: {
+        label: "Case-crossover",
+        hint: "Long format — one row per window. Map the case ID (stratum), a case indicator (1=hazard window, 0=control window), and an exposed indicator (0/1).",
+        covariates: false,
+        roles: [
+          { k: "ID", label: "Case ID (stratum)", types: ["id", "number", "text"], req: true },
+          { k: "CASE", label: "Case indicator (1=hazard, 0=control)", types: ["binary", "number"], req: true },
+          { k: "EXPOSED", label: "Exposed (0/1)", types: ["binary", "number"], req: true },
+        ],
+        rscript: () =>
+          "d<-read.csv('/data.csv'); library(survival)\n" +
+          "fit<-clogit(CASE ~ EXPOSED + strata(ID), data=d); s<-summary(fit)\n" +
+          "or<-s$conf.int['EXPOSED','exp(coef)']; lci<-s$conf.int['EXPOSED','lower .95']; uci<-s$conf.int['EXPOSED','upper .95']\n" +
+          "cat(sprintf('Conditional logistic odds ratio (case vs control windows): %.3f (95%% CI %.3f to %.3f)\\n', or, lci, uci))\n" +
+          "cat(sprintf('Strata (cases): %d; rows: %d\\n', length(unique(d$ID)), nrow(d)))\n" +
+          "cat(sprintf('RESULT_ESTIMATE|Odds ratio|%.2f (95%% CI %.2f-%.2f)\\n', or, lci, uci))",
+      },
+    };
+
+    const KW = { EVENT: /event|outcome|death|died|dead|case|status/i, PT: /person|_pt$|persontime|py|followup|fu_|duration|time|days/i, GROUP: /group|arm|stratum|site|cohort/i, AGE: /age/i, SEX: /sex|gender/i, TREAT: /treat|exposure|exposed|arm|drug|group/i, TIME: /time|fu|follow|days|duration|survtime/i, ID: /(^|_)id$|patient|subject|caseid|pid/i, EXPOSED: /expos|treat|drug/i, EVENTS: /event|count|nevent/i, INTERVAL: /interval|persontime|offset|length|days|time/i, CASE: /case|hazard|window|status/i };
+    const getDesign = () => { const r = document.querySelector('[name="design"]:checked'); return r ? r.value : ""; };
+    let MAP = {}, COVS = [], MASTER = null, LAST = null;
+
+    function suggestCol(role) {
+      const kw = KW[role.k];
+      let best = "", score = 0;
+      for (const p of DATA.profile) { let sc = 0; if (kw && kw.test(p.name)) sc += 3; if (role.types.includes(p.type)) sc += 1; if (sc > score) { score = sc; best = p.name; } }
+      return score >= 3 ? best : "";
+    }
+    function renderMap() {
+      const spec = SPEC[getDesign()];
+      if (!spec || !DATA.columns.length) { $("mapcard").classList.add("hidden"); return; }
+      $("mapcard").classList.remove("hidden");
+      $("designname").textContent = spec.label;
+      $("maphint").textContent = spec.hint;
+      const opts = (sel) => '<option value="">— choose —</option>' + DATA.columns.map((c) => '<option value="' + esc(c) + '"' + (sel === c ? " selected" : "") + ">" + esc(c) + "</option>").join("");
+      $("maproles").innerHTML = spec.roles.map((r) => {
+        if (!(r.k in MAP)) MAP[r.k] = suggestCol(r);
+        return '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">' + esc(r.label) + (r.req ? " *" : " (optional)") + '</span><select data-role="' + r.k + '" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">' + opts(MAP[r.k]) + "</select></label>";
+      }).join("");
+      $("maproles").querySelectorAll("select[data-role]").forEach((sel) => sel.addEventListener("change", () => { MAP[sel.getAttribute("data-role")] = sel.value; renderCovs(spec); validateMap(); }));
+      renderCovs(spec);
+      validateMap();
+    }
+    function renderCovs(spec) {
+      if (!spec.covariates) { $("covwrap").classList.add("hidden"); return; }
+      $("covwrap").classList.remove("hidden");
+      const used = new Set(spec.roles.map((r) => MAP[r.k]).filter(Boolean));
+      $("covlist").innerHTML = DATA.columns.filter((c) => !used.has(c)).map((c) => '<label class="flex items-center gap-1.5"><input type="checkbox" data-cov="' + esc(c) + '"' + (COVS.includes(c) ? " checked" : "") + "/> " + esc(c) + "</label>").join("");
+      $("covlist").querySelectorAll("input[data-cov]").forEach((cb) => cb.addEventListener("change", () => { const c = cb.getAttribute("data-cov"); if (cb.checked) { if (!COVS.includes(c)) COVS.push(c); } else COVS = COVS.filter((x) => x !== c); validateMap(); }));
+    }
+    function validateMap() {
+      const spec = SPEC[getDesign()]; if (!spec) return false;
+      const missing = spec.roles.filter((r) => r.req && !MAP[r.k]).map((r) => r.label);
+      const needCov = spec.covariates && COVS.length === 0;
+      const ok = missing.length === 0 && !needCov;
+      const m = $("mapmsg");
+      if (missing.length) { m.textContent = "Map the required roles (*): " + missing.join(", "); m.className = "mt-3 text-xs text-amber-700"; }
+      else if (needCov) { m.textContent = "Tick at least one baseline covariate for the propensity score."; m.className = "mt-3 text-xs text-amber-700"; }
+      else { m.textContent = "Mapping complete ✓ — build the master file below."; m.className = "mt-3 text-xs text-emerald-700"; }
+      $("cleancard").classList.toggle("hidden", !ok);
+      return ok;
+    }
+
+    const NUM_ROLES = ["PT", "TIME", "AGE", "INTERVAL", "EVENTS"];
+    const BIN_ROLES = ["EVENT", "TREAT", "EXPOSED", "CASE"];
+    const stdSex = (v) => { const l = String(v == null ? "" : v).trim().toLowerCase(); return l === "male" || l === "m" ? "M" : (l === "female" || l === "f" ? "F" : v); };
+    const toBin = (v) => { if (v == null || v === "") return null; const l = String(v).trim().toLowerCase(); if (["1", "yes", "y", "true", "t", "case", "event", "exposed", "positive"].includes(l)) return 1; if (["0", "no", "n", "false", "f", "control", "none", "unexposed", "negative"].includes(l)) return 0; const n = Number(l); return isNaN(n) ? null : (n > 0 ? 1 : 0); };
+
+    function buildMaster() {
+      const spec = SPEC[getDesign()]; if (!spec || !validateMap()) return;
+      const roleCol = {}; spec.roles.forEach((r) => { if (MAP[r.k]) roleCol[r.k] = MAP[r.k]; });
+      let rows = DATA.rows.map((r) => Object.assign({}, r));
+      if ($("c_trim").checked) rows.forEach((r) => DATA.columns.forEach((c) => { if (typeof r[c] === "string") r[c] = r[c].trim(); }));
+      if ($("c_std").checked) rows.forEach((r) => {
+        if (roleCol.SEX) r[roleCol.SEX] = stdSex(r[roleCol.SEX]);
+        BIN_ROLES.forEach((rk) => { if (roleCol[rk]) { const b = toBin(r[roleCol[rk]]); if (b != null) r[roleCol[rk]] = b; } });
+      });
+      const numCols = NUM_ROLES.map((k) => roleCol[k]).filter(Boolean).concat(spec.covariates ? COVS : []);
+      rows.forEach((r) => numCols.forEach((c) => { const n = Number(String(r[c] == null ? "" : r[c]).replace(/,/g, "")); if (!isNaN(n) && String(r[c]).trim() !== "") r[c] = n; }));
+      const before = rows.length;
+      if ($("c_dedupe").checked) { const seen = new Set(); rows = rows.filter((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) return false; seen.add(k); return true; }); }
+      if ($("c_dropmiss").checked) { const req = spec.roles.filter((r) => r.req).map((r) => roleCol[r.k]).filter(Boolean).concat(spec.covariates ? COVS : []); rows = rows.filter((r) => req.every((c) => r[c] != null && String(r[c]).trim() !== "")); }
+      MASTER = rows;
+      $("cleaninfo").textContent = "Master file: " + rows.length + " rows (from " + before + "; " + (before - rows.length) + " removed).";
+      $("anacard").classList.remove("hidden"); $("expcard").classList.remove("hidden");
+    }
+
+    function analysisCSV() {
+      const spec = SPEC[getDesign()]; const outCols = [], colFor = {}, covNames = [];
+      spec.roles.forEach((r) => { if (MAP[r.k]) { outCols.push(r.k); colFor[r.k] = MAP[r.k]; } });
+      if (spec.covariates) COVS.forEach((src, i) => { const cn = "COV" + (i + 1); outCols.push(cn); colFor[cn] = src; covNames.push(cn); });
+      const rows = (MASTER || []).map((r) => { const o = {}; outCols.forEach((cn) => { o[cn] = r[colFor[cn]]; }); return o; });
+      return { csv: toCSV(outCols, rows), covNames };
+    }
+    function buildScript() { const spec = SPEC[getDesign()]; const { covNames } = analysisCSV(); return spec.rscript(covNames); }
+
+    $("applyclean").addEventListener("click", buildMaster);
+    document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; MASTER = null; $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden"); renderMap(); }));
+
+    $("runanalysis").addEventListener("click", async () => {
+      if (!MASTER) buildMaster();
+      if (!MASTER) return;
+      const { csv } = analysisCSV(); const script = buildScript();
+      const setS = (m) => { $("anastatus").textContent = m; };
+      $("runanalysis").disabled = true; $("estimate").classList.add("hidden");
+      try {
+        const out = await window.RWEngine.run(script, csv, setS);
+        setS("Done ✓");
+        let est = null;
+        out.split("\n").forEach((l) => { if (l.indexOf("RESULT_ESTIMATE|") === 0) { const p = l.split("|"); est = { label: p[1], value: p[2] }; } });
+        const display = out.replace(/^RESULT_ESTIMATE\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+        if (est) { $("estimate").classList.remove("hidden"); $("estimate").innerHTML = '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold">' + esc(est.label) + '</div><div class="text-2xl font-bold text-slate-900 mt-0.5">' + esc(est.value) + "</div>"; }
+        $("routput").classList.remove("hidden"); $("routput").textContent = display || "(no output)";
+        LAST = { out: display, script: script, est: est };
+      } catch (e) { setS("Error"); $("routput").classList.remove("hidden"); $("routput").textContent = "Error: " + (e && e.message ? e.message : e); }
+      finally { $("runanalysis").disabled = false; }
+    });
+
+    const readQ = () => { const g = (n) => { const e = document.querySelector('[name="' + n + '"]'); return e ? e.value : ""; }; return { pop: g("q_pop"), exp: g("q_exp"), comp: g("q_comp"), out: g("q_out"), design: getDesign() }; };
+    function buildReport(q) {
+      const today = new Date().toISOString().slice(0, 10);
+      const label = (SPEC[q.design] || {}).label || q.design || "(design)";
+      return "# RWE Studio analysis report\n\n_Generated " + today + " · analysis run locally in the browser via WebR (real R)_\n\n" +
+        "## Question\n- Population: " + (q.pop || "(specify)") + "\n- Exposure: " + (q.exp || "(specify)") + "\n- Comparator: " + (q.comp || "—") + "\n- Outcome: " + (q.out || "(specify)") + "\n- Design: " + label + "\n\n" +
+        "## Result\n" + (LAST && LAST.est ? "**" + LAST.est.label + ":** " + LAST.est.value : "(run the analysis first)") + "\n\n" +
+        "## R output\n\n```\n" + (LAST ? LAST.out : "(run the analysis first)") + "\n```\n\n" +
+        "## Reproducible R script\n\n```r\n" + (LAST ? LAST.script : buildScript()) + "\n```\n";
+    }
+    $("dlmaster2").addEventListener("click", () => { if (!MASTER) buildMaster(); if (MASTER) dl(new Blob(["﻿" + toCSV(DATA.columns, MASTER)], { type: "text/csv;charset=utf-8" }), DATA.name + "-master.csv"); });
+    $("dlscript").addEventListener("click", () => { const s = LAST ? LAST.script : buildScript(); dl(new Blob(["# Analysis script generated by RWE Studio — reads the master file as data.csv\n# Reproduces the on-screen result in desktop R.\n\n" + s + "\n"], { type: "text/plain;charset=utf-8" }), DATA.name + "-analysis.R"); });
+    $("dlreport").addEventListener("click", () => { dl(new Blob([buildReport(readQ())], { type: "text/markdown;charset=utf-8" }), DATA.name + "-report.md"); });
   </script>
 </BaseLayout>
