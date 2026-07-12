@@ -1124,14 +1124,9 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
         let meas = parseInt(s.picoWindow); if (!(meas > 0)) meas = 365;
         const wins = [
           { label: "Baseline look-back (prevalent-case exclusion)", kind: "lookback", startDay: -365, endDay: 0 },
-          { label: "Person-time / measurement window", kind: "study", startDay: 0, endDay: meas, edit: { field: "picoWindow", edge: "end" } },
+          { label: "Person-time / measurement window", kind: "study", startDay: 0, endDay: meas },
         ];
-        const onEdit = (field, day) => {
-          const el = form.elements[field]; if (!el) return;
-          el.value = Math.round(Math.max(1, day));
-          render();
-        };
-        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Cohort entry / index", onEdit: onEdit, snap: 5 });
+        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Cohort entry / index" });
       };
 
       const render = () => {

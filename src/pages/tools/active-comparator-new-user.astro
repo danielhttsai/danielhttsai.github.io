@@ -1486,10 +1486,15 @@ _Drafted with the AsPEN protocol builder (${today})._
         const wins = [];
         if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
         if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
-        wins.push({ label: "Eligibility (incl./excl.) assessment", kind: "eligibility", startDay: -(Math.max(lb, wash) || 1), endDay: 0 });
         if (grace > 0) wins.push({ label: "Grace period", kind: "grace", startDay: 0, endDay: grace, edit: { field: "grace", edge: "end" } });
-        wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu });
+        wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "maxFollowup", edge: "end" } });
         const onEdit = (field, day) => {
+          if (field === "maxFollowup") {
+            const yrs = day / 365;
+            if (form.elements.maxFollowupChoice) form.elements.maxFollowupChoice.value = "custom";
+            if (form.elements.maxFollowupCustom) form.elements.maxFollowupCustom.value = (yrs >= 1 ? (Math.round(yrs * 10) / 10) + " years" : Math.max(1, Math.round(day)) + " days");
+            render(); return;
+          }
           const el = form.elements[field]; if (!el) return;
           el.value = Math.round(field === "grace" ? Math.max(0, day) : Math.max(0, -day));
           render();

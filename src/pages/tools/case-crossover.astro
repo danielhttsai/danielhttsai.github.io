@@ -765,23 +765,12 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         const clen = Math.max(1, parseInt(s.controlLen) || parseInt(s.controlLenCustom) || hlen);
         const off = Math.max(1, parseInt(s.controlOffset) || (hlen + 1));
         const n = Math.min(6, Math.max(1, parseInt(s.nControls) || 1));
-        const wins = [{ label: "Hazard window", kind: "hazard", startDay: -(hend + hlen), endDay: -hend, edit: { field: "hazardLen", edge: "start" } }];
+        const wins = [{ label: "Hazard window", kind: "hazard", startDay: -(hend + hlen), endDay: -hend }];
         for (let k = 1; k <= n; k++) {
           const end = -hend - k * off;
-          wins.push({ label: "Control window " + k, kind: "control", startDay: end - clen, endDay: end, edit: k === 1 ? { field: "controlLen", edge: "start" } : undefined });
+          wins.push({ label: "Control window " + k, kind: "control", startDay: end - clen, endDay: end });
         }
-        const onEdit = (field, day) => {
-          const el = form.elements[field]; if (!el) return;
-          const cHend = Math.max(0, parseInt(form.elements.hazardEnd && form.elements.hazardEnd.value) || 0);
-          const cOff = Math.max(1, parseInt(form.elements.controlOffset && form.elements.controlOffset.value) || (hlen + 1));
-          let v;
-          if (field === "hazardLen") v = Math.max(1, (-day) - cHend);            // window spans -(hend+hlen) … -hend
-          else if (field === "controlLen") v = Math.max(1, (-cHend - cOff) - day); // control 1 starts at (-hend-off) - clen
-          else return;
-          el.value = Math.round(v);
-          render();
-        };
-        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Event (day 0)", onEdit: onEdit, snap: 5 });
+        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Event (day 0)" });
       };
       const render = () => { const state = readForm(); preview.textContent = buildMarkdown(state); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {} renderFeasibility(state); try { renderScheme(state); } catch {} };
       try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) writeForm(JSON.parse(saved)); } catch {}
