@@ -3,6 +3,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import PhenotypeLibrary from "../../components/PhenotypeLibrary.astro";
 import SitesPicker from "../../components/SitesPicker.astro";
 import DesignDiagram from "../../components/DesignDiagram.astro";
+import ProtocolCommon from "../../components/ProtocolCommon.astro";
 import TargetChecklist from "../../components/TargetChecklist.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -224,6 +225,7 @@ Comedications | 180</textarea>
     <PhenotypeLibrary />
     <DesignDiagram />
     <TargetChecklist />
+    <ProtocolCommon />
   </section>
 
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
@@ -284,6 +286,21 @@ Comedications | 180</textarea>
       both: "both absolute effects (risk difference and risk ratio from weighted cumulative-incidence curves) and the relative effect (hazard ratio from a weighted pooled logistic model)",
     })[e] || "the per-protocol effect on the risk of the outcome";
 
+    // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
+    const pcOf = (s) => ({
+      design: "clone-censor-weight target-trial emulation",
+      tte: true,
+      population: or(s.population, "(population)"),
+      exposure: or(s.stratA, "(strategy A)"),
+      comparator: or(s.stratB, "(strategy B)"),
+      outcome: or(s.outcome, "(outcome)"),
+      data: s.data,
+      analysis: "a clone-censor-weight per-protocol analysis estimating " + effectText(s.effect) + ", with 95% CIs by nonparametric bootstrap",
+      groupBy: "treatment strategy",
+      limitations: "Artificial censoring is informative and adjusted with inverse-probability-of-censoring weights, which assume no unmeasured predictors of deviation; baseline confounding of the cloned assignment is removed only to the extent covariates are measured.",
+      plannedOutputs: ["Weighted cumulative-incidence (risk) curves by strategy.", "Weight-distribution and covariate-balance (SMD) diagnostics.", "Comparison of the CCW estimate with a conventional as-started analysis."],
+    });
+
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
       const A = or(s.stratA, "Strategy A — initiate treatment within the grace period");
@@ -292,6 +309,7 @@ Comedications | 180</textarea>
 
 _Study protocol · clone-censor-weight target-trial emulation · drafted ${today}_
 
+${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
 This study emulates a target trial to estimate the **per-protocol effect** of two treatment strategies that cannot be distinguished at time zero and are only defined by what happens over a **grace period** of ${s.grace} days. A conventional "as-treated at baseline" analysis would misclassify person-time and induce **immortal-time bias**; a "new-user" comparison cannot represent a *deferred / sustained* strategy. The clone-censor-weight (CCW) approach removes these biases by explicitly emulating the trial's assignment, adherence, and censoring structure (Hernán 2016; Maringe 2020).
 
@@ -342,6 +360,8 @@ ${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsP
 
 ## 13. Sensitivity analyses
 ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensitivityPick, s.sensitivityCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+${window.PC.tailMd(pcOf(s))}
 
 ## References
 - Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183:758-64.
@@ -503,6 +523,7 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
       if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
       children.push(p([text(or(s.title, "(Untitled clone-censor-weight study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
       children.push(p([text("Study protocol · clone-censor-weight target-trial emulation · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      window.PC.abstractDocx(window.docx, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
       children.push(para("This study emulates a target trial to estimate the per-protocol effect of two treatment strategies distinguished only by what happens over a grace period of " + s.grace + " days. A conventional as-treated analysis would misclassify person-time and introduce immortal-time bias; the clone-censor-weight (CCW) approach removes these biases (Hernán 2016; Maringe 2020)."));
@@ -552,6 +573,8 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 
       children.push(h1("11. Sensitivity analyses"));
       (sens.length ? sens : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      window.PC.tailDocx(window.docx, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("References"));
       ["Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183:758-64.", "Hernán MA. How to estimate the effect of treatment duration on survival outcomes using observational data. BMJ 2018;360:k182.", "Maringe C, Benitez Majano S, Exarchakou A, et al. Reflections on modern methods: trial emulation in the presence of immortal-time bias. Int J Epidemiol 2020;49:1719-29.", "Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment. Stat Med 2010;29:2757-70."].forEach((l) => children.push(bullet(l)));

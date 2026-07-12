@@ -1,0 +1,115 @@
+---
+// Shared "common protocol sections" so every generated protocol covers the
+// HARPER / TARGET reporting items the Protocol Checker judges — a structured
+// abstract, study size, data-source provenance, data management & QC, planned
+// analytical outputs, limitations, human-subjects & governance, registration &
+// amendments, adverse-event handling, and funding/COI. Include once per builder
+// page (it exposes window.PC), then in buildMarkdown()/buildDocx() splice in:
+//   md:   PC.abstractMd(pc) after the title/subtitle, PC.tailMd(pc) before "## References"
+//   docx: ...PC.abstractDocx(D, pc) after the subtitle, ...PC.tailDocx(D, pc) before the References heading
+//
+// pc = {
+//   design,            // e.g. "active-comparator new-user cohort"
+//   tte,               // true for target-trial-emulation designs (ACNU/CCW/ST)
+//   population, exposure, comparator, outcome, data, analysis,
+//   groupBy,           // label for Table 1 columns (default "exposure group")
+//   dataMeta, studySize, ethics, registration,  // optional; sensible defaults
+//   limitations,       // optional design-specific sentence, appended to the generic one
+//   plannedOutputs,    // optional array of extra shell tables/figures for this design
+// }
+---
+
+<script is:inline>
+  (function () {
+    const nz = (v, d) => (v && String(v).trim() ? String(v).trim() : d);
+    const P = (s) => nz(s.population, "(population)");
+    const E = (s) => nz(s.exposure, "(exposure/intervention)");
+    const C = (s) => nz(s.comparator, "");
+    const O = (s) => nz(s.outcome, "(outcome)");
+    const contrast = (s) => E(s) + (C(s) ? " versus " + C(s) : "");
+
+    const designLine = (s) => s.tte
+      ? nz(s.design, "target-trial-emulation study") + " that emulates a target trial using observational data from " + nz(s.data, "(data source)")
+      : nz(s.design, "observational study") + " using data from " + nz(s.data, "(data source)");
+
+    const abstractLines = (s) => ([
+      ["Objective. ", "To estimate the effect of " + contrast(s) + " on " + O(s) + " among " + P(s) + "."],
+      ["Design. ", designLine(s) + "."],
+      ["Data source(s). ", nz(s.data, "(data source)") + (s.dataMeta ? " — " + s.dataMeta : "") + "."],
+      ["Population, exposure, comparator, outcome. ", P(s) + "; " + contrast(s) + "; " + O(s) + "."],
+      ["Analysis. ", nz(s.analysis, "the pre-specified primary analysis with 95% confidence intervals") + "."],
+      ["Reporting. ", "This protocol follows the HARPER template" + (s.tte ? "; target-trial-emulation elements follow the TARGET statement" : "") + "."],
+    ]);
+
+    const defaultOutputs = (s) => {
+      const base = [
+        "Participant-flow diagram (source population → analytic cohort, with exclusions and counts).",
+        "Table 1 — baseline characteristics by " + nz(s.groupBy, "exposure group") + ".",
+        "Primary-results table — the effect estimate with its 95% confidence interval.",
+      ];
+      return base.concat(Array.isArray(s.plannedOutputs) ? s.plannedOutputs : []);
+    };
+
+    const limitationsText = (s) =>
+      "Residual and unmeasured confounding cannot be excluded; the outcome and exposure may be misclassified in secondary data; and generalisability is bounded by the source population." +
+      (s.limitations ? " " + s.limitations : "");
+
+    const ethicsText = (s) => nz(s.ethics,
+      "Each participating data source obtains local institutional review board / ethics approval (or a documented waiver) before data extraction; only de-identified data are analysed.");
+
+    // Keyed tail sections. A builder can drop any it already prints itself via
+    // pc.skip (e.g. AsPEN builders skip "studySize"/"ethics"). Each entry is
+    // [key, heading, bodyLines[], kind?] where kind "bullets" renders a list.
+    function tailSections(s) {
+      const skip = s.skip || [];
+      return [
+        ["studySize", "Study size and feasibility", [nz(s.studySize, "Power is assessed per data source from observed exposure and outcome frequencies in a pilot extraction; the study targets ≥ 80% power to detect the smallest clinically important effect at a two-sided α = 0.05. Feasibility (available person-time and event counts) is confirmed before the analysis is executed.")]],
+        ["provenance", "Data sources and provenance", [nz(s.dataMeta, "For each source, we record its original purpose, type (claims / EHR / registry), geographic setting, calendar coverage, any record linkage, and the analytic software used.")]],
+        ["dataMgmt", "Data management and quality control", ["Source data are extracted and transformed into the analytic dataset with all derived-variable definitions retained and version-controlled. Analytic code is peer-reviewed; variable distributions, cross-variable logic checks, and expected code frequencies are inspected; and missing data are quantified and handled as pre-specified."]],
+        ["outputs", "Planned analytical outputs (shell tables and figures)", defaultOutputs(s), "bullets"],
+        ["limitations", "Limitations", [limitationsText(s)]],
+        ["ethics", "Human subjects, data governance, and dissemination", [ethicsText(s) + " Findings are disseminated via a peer-reviewed manuscript and conference presentation; data-sharing and code-availability follow each source's governance agreements."]],
+        ["registration", "Registration and amendments", ["The protocol is registered before analysis (e.g. the EU PAS Register / ClinicalTrials.gov) where applicable" + (s.registration ? ": " + s.registration : "") + ". Amendments are version-controlled and logged with date and rationale."]],
+        ["ae", "Adverse-event reporting", ["As a secondary-data analysis of a pre-specified outcome, individual adverse-event reporting does not apply; safety is addressed through the pre-specified outcome analyses."]],
+        ["funding", "Funding and conflicts of interest", ["Funding source(s) and each author's conflicts of interest are declared in the final report."]],
+      ].filter((x) => !skip.includes(x[0]));
+    }
+
+    // ── Markdown ──────────────────────────────────────────────
+    function abstractMd(s) {
+      return "## Structured abstract\n" + abstractLines(s).map((l) => "**" + l[0].trim() + "** " + l[1]).join(" ") + "\n";
+    }
+    function tailMd(s) {
+      return tailSections(s).map(([key, h, lines, kind]) =>
+        "## " + h + "\n" + (kind === "bullets" ? lines.map((x) => "- " + x).join("\n") : lines.join("\n"))
+      ).join("\n\n");
+    }
+
+    // ── docx (needs the docx global D) ────────────────────────
+    function docxKit(D) {
+      const FONT = "Times New Roman";
+      const text = (str, o = {}) => new D.TextRun({ text: String(str == null ? "" : str), font: FONT, size: 22, ...o });
+      const p = (ch, o = {}) => new D.Paragraph({ children: Array.isArray(ch) ? ch : [ch], spacing: { before: 60, after: 60, ...(o.spacing || {}) }, ...o });
+      const h1 = (str) => new D.Paragraph({ children: [text(str, { bold: true, size: 28 })], spacing: { before: 200, after: 80 }, heading: D.HeadingLevel.HEADING_1 });
+      const bullet = (str) => new D.Paragraph({ children: [text(str)], bullet: { level: 0 }, spacing: { before: 0, after: 0 } });
+      return { text, p, h1, bullet };
+    }
+    function abstractDocx(D, s) {
+      const k = docxKit(D);
+      const out = [k.h1("Structured abstract")];
+      abstractLines(s).forEach((l) => out.push(k.p([k.text(l[0], { bold: true }), k.text(l[1])])));
+      return out;
+    }
+    function tailDocx(D, s) {
+      const k = docxKit(D), out = [];
+      tailSections(s).forEach(([key, h, lines, kind]) => {
+        out.push(k.h1(h));
+        if (kind === "bullets") lines.forEach((b) => out.push(k.bullet(b)));
+        else lines.forEach((b) => out.push(k.p([k.text(b)])));
+      });
+      return out;
+    }
+
+    window.PC = { abstractMd, tailMd, abstractDocx, tailDocx };
+  })();
+</script>

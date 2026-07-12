@@ -3,6 +3,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import PhenotypeLibrary from "../../components/PhenotypeLibrary.astro";
 import SitesPicker from "../../components/SitesPicker.astro";
 import DesignDiagram from "../../components/DesignDiagram.astro";
+import ProtocolCommon from "../../components/ProtocolCommon.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -191,6 +192,7 @@ const SENSITIVITY = [
 
     <PhenotypeLibrary />
     <DesignDiagram />
+    <ProtocolCommon />
   </section>
 
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
@@ -231,6 +233,21 @@ const SENSITIVITY = [
     const effectText = (m) => m === "linear"
       ? "the change in level (immediate step) and the change in slope (trend), both on the outcome's natural scale, with 95% confidence intervals"
       : "the change in level and the change in slope expressed as rate ratios (incidence-rate ratios) with 95% confidence intervals";
+
+    // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
+    const pcOf = (s) => ({
+      design: (s.controlled ? "controlled " : "single-group ") + "interrupted time series (segmented regression)",
+      tte: false,
+      population: or(s.population, "(population)"),
+      exposure: or(s.intervention, "(intervention/policy)"),
+      comparator: "",
+      outcome: or(s.outcome, "(outcome)"),
+      data: s.data,
+      analysis: "segmented " + (s.model === "linear" ? "linear" : "Poisson") + " regression estimating the change in level and change in slope at the interruption" + (s.autocorr === "none" ? "" : ", with autocorrelation-adjusted inference"),
+      groupBy: "period (pre- vs post-intervention)",
+      limitations: "Co-interventions or secular changes coinciding with the interruption can confound an uncontrolled ITS; " + (s.controlled ? "the control series mitigates this." : "a control series would strengthen inference."),
+      plannedOutputs: ["Observed series with the fitted pre/post segments and the extrapolated counterfactual (the core ITS figure).", "Level-change and slope-change estimates with 95% CIs."],
+    });
 
     // ── Custom ITS diagram: pre/post fitted segments, interruption line, counterfactual ──
     function renderScheme(s) {
@@ -333,6 +350,7 @@ const SENSITIVITY = [
 
 _Study protocol · interrupted time series (segmented regression) · drafted ${today}_
 
+${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
 This study uses an **interrupted time series (ITS)** design to evaluate whether **${I}** changed the **level** and/or the **slope (trend)** of **${O}** in **${P}**. ITS is among the strongest quasi-experimental designs for a population-level intervention with a clear date: the pre-intervention trend, projected forward, serves as the **counterfactual** for what would have happened without the intervention (Wagner 2002; Bernal 2017).${s.controlled ? " A **controlled** series is added to separate the intervention's effect from co-interventions and secular change." : ""}
 
@@ -368,6 +386,8 @@ ${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsP
 
 ## 10. Sensitivity analyses
 ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensitivityPick, s.sensitivityCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+${window.PC.tailMd(pcOf(s))}
 
 ## References
 - Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27:299-309.
@@ -475,6 +495,7 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
       if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
       children.push(p([text(or(s.title, "(Untitled interrupted time series study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
       children.push(p([text("Study protocol · interrupted time series (segmented regression) · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
       children.push(para("This study uses an interrupted time series (ITS) design to evaluate whether " + I + " changed the level and/or slope of " + O + " in " + P + ". The pre-intervention trend, projected forward, is the counterfactual (Wagner 2002; Lopez Bernal 2017)." + (s.controlled ? " A controlled series separates the intervention's effect from co-interventions and secular change." : "")));
@@ -518,6 +539,8 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 
       children.push(h1("9. Sensitivity analyses"));
       (sens.length ? sens : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("References"));
       ["Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27:299-309.",

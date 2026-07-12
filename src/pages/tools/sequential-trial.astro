@@ -3,6 +3,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import PhenotypeLibrary from "../../components/PhenotypeLibrary.astro";
 import SitesPicker from "../../components/SitesPicker.astro";
 import DesignDiagram from "../../components/DesignDiagram.astro";
+import ProtocolCommon from "../../components/ProtocolCommon.astro";
 import TargetChecklist from "../../components/TargetChecklist.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -196,6 +197,7 @@ const SENSITIVITY = [
     <PhenotypeLibrary />
     <DesignDiagram />
     <TargetChecklist />
+    <ProtocolCommon />
   </section>
 
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
@@ -305,12 +307,28 @@ const SENSITIVITY = [
       both: "both the **intention-to-treat** and the **per-protocol** effects (the latter using censoring at deviation with inverse-probability-of-censoring weights)",
     })[e] || "the treatment effect";
 
+    // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
+    const pcOf = (s) => ({
+      design: "sequential (nested) trial emulation",
+      tte: true,
+      population: or(s.population, "(population)"),
+      exposure: or(s.exposure, "(treatment)"),
+      comparator: or(s.comparator, "(comparator)"),
+      outcome: or(s.outcome, "(outcome)"),
+      data: s.data,
+      analysis: "a sequence of nested trials emulated at each eligible origin and pooled with a patient-clustered robust variance, estimating " + estimandText(s.estimand).replace(/\*\*/g, ""),
+      groupBy: "treatment arm",
+      limitations: "Patients contribute to several trials, so the robust variance must be correctly clustered on the patient; residual and unmeasured confounding within each trial cannot be excluded.",
+      plannedOutputs: ["Per-trial and pooled effect estimates with a heterogeneity summary.", "Within-trial covariate-balance (SMD) diagnostics.", "Cumulative-incidence or survival curves by arm."],
+    });
+
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
       return `# ${or(s.title, "(Untitled sequential trial emulation)")}
 
 _Study protocol · sequential (nested) trial emulation · drafted ${today}_
 
+${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
 This study emulates a **sequence of nested target trials** to estimate the effect of **${or(s.exposure, "(treatment)")}** versus **${or(s.comparator, "(comparator)")}**. A single-origin new-user design discards eligible person-time and cannot use patients who become eligible later; the sequential design emulates one trial at every eligible time origin, so each person contributes wherever they are eligible, mitigating the prevalent-user and selection problems (Hernán 2008; Danaei 2013; Gran 2010).
 
@@ -349,6 +367,8 @@ ${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsP
 
 ## 12. Sensitivity analyses
 ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensitivityPick, s.sensitivityCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
+
+${window.PC.tailMd(pcOf(s))}
 
 ## References
 - Hernán MA, Alonso A, Logan R, et al. Observational studies analyzed like randomized experiments: an application to postmenopausal hormone therapy and coronary heart disease. Epidemiology 2008;19:766-79.
@@ -502,6 +522,7 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
       if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
       children.push(p([text(or(s.title, "(Untitled sequential trial emulation)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
       children.push(p([text("Study protocol · sequential (nested) trial emulation · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      window.PC.abstractDocx(window.docx, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
       children.push(para("This study emulates a sequence of nested target trials of " + E + " versus " + C + ". A single-origin new-user design discards eligible person-time; the sequential design emulates one trial at every eligible origin, mitigating prevalent-user and selection bias (Hernán 2008; Danaei 2013; Gran 2010)."));
@@ -548,6 +569,8 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 
       children.push(h1("12. Sensitivity analyses"));
       (sens.length ? sens : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
+
+      window.PC.tailDocx(window.docx, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("References"));
       ["Hernán MA, Alonso A, Logan R, et al. Observational studies analyzed like randomized experiments: postmenopausal hormone therapy and coronary heart disease. Epidemiology 2008;19:766-79.", "Danaei G, Rodríguez LAG, Cantero OF, et al. Observational data for comparative effectiveness research: an emulation of randomised trials of statins. Stat Methods Med Res 2013;22:70-96.", "Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment. Stat Med 2010;29:2757-70.", "Keogh RH, Gran JM, Seaman SR, et al. Causal inference in survival analysis using longitudinal observational data. Stat Med 2023;42:2191-2225."].forEach((l) => children.push(bullet(l)));
