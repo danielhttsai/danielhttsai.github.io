@@ -141,13 +141,15 @@ const DESIGNS = [
       <div id="covwrap" class="hidden mt-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Baseline covariates (for the propensity score)</span>
-          <span class="flex gap-3 text-[11px]">
-            <button type="button" id="cov_auto" class="text-brand-700 font-semibold hover:underline">✨ Auto-select (clinical)</button>
-            <button type="button" id="cov_all" class="text-brand-700 font-semibold hover:underline">Select all</button>
+          <span class="flex flex-wrap gap-3 text-[11px]">
+            <button type="button" id="cov_ai" class="text-brand-700 font-semibold hover:underline">🧠 AI: classify (causal)</button>
+            <button type="button" id="cov_auto" class="text-slate-500 hover:underline">Quick pick (offline)</button>
+            <button type="button" id="cov_all" class="text-slate-500 hover:underline">Select all</button>
             <button type="button" id="cov_none" class="text-slate-500 hover:underline">Clear</button>
           </span>
         </div>
-        <p class="text-[11px] text-slate-500">Auto-select flags clinically-plausible confounders by column name; then tick/untick to refine.</p>
+        <p class="text-[11px] text-slate-500"><strong>AI classify</strong> judges each column's causal role for <em>your specific exposure→outcome</em> — ticking genuine <strong>confounders</strong> and warning against adjusting for <strong>mediators / colliders / instruments</strong>. Only the <strong>column names + your question</strong> are sent to the AI — never any patient data. Always review and edit; you have the final clinical say.</p>
+        <p id="cov_ai_msg" class="text-[11px]"></p>
         <div id="covlist" class="mt-1.5 grid gap-1 sm:grid-cols-3 text-xs text-slate-700"></div>
 
         <div id="acnuopts" class="hidden mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -546,7 +548,7 @@ const DESIGNS = [
 
     const KW = { EVENT: /event|outcome|death|died|dead|case|status/i, PT: /person|_pt$|persontime|py|followup|fu_|duration|time|days/i, GROUP: /group|arm|stratum|site|cohort/i, AGE: /age/i, SEX: /sex|gender/i, TREAT: /treat|exposure|exposed|arm|drug|group/i, TIME: /time|fu|follow|days|duration|survtime/i, ID: /(^|_)id$|patient|subject|caseid|pid/i, EXPOSED: /expos|treat|drug/i, EVENTS: /event|count|nevent/i, INTERVAL: /interval|persontime|offset|length|days|time/i, CASE: /case|hazard|window|status/i, DISC: /disc|discont|switch|stop|cessation|deviat/i };
     const getDesign = () => { const r = document.querySelector('[name="design"]:checked'); return r ? r.value : ""; };
-    let MAP = {}, COVS = [], MASTER = null, LAST = null;
+    let MAP = {}, COVS = [], MASTER = null, LAST = null, COVROLE = {};
 
     function suggestCol(role) {
       const kw = KW[role.k];
@@ -612,7 +614,11 @@ const DESIGNS = [
       if (!spec.covariates) { $("covwrap").classList.add("hidden"); return; }
       $("covwrap").classList.remove("hidden");
       const used = new Set(spec.roles.map((r) => MAP[r.k]).filter(Boolean));
-      $("covlist").innerHTML = DATA.columns.filter((c) => !used.has(c)).map((c) => '<label class="flex items-center gap-1.5"><input type="checkbox" data-cov="' + esc(c) + '"' + (COVS.includes(c) ? " checked" : "") + "/> " + esc(c) + "</label>").join("");
+      $("covlist").innerHTML = DATA.columns.filter((c) => !used.has(c)).map((c) => {
+        const rc = COVROLE[c];
+        const badge = rc ? ' <span class="rounded px-1 py-0.5 text-[9px] font-semibold ' + ROLE_CLS(rc.role) + '">' + esc(rc.role) + "</span>" : "";
+        return '<label class="flex items-start gap-1.5" title="' + (rc ? esc(rc.reason) : "") + '"><input type="checkbox" data-cov="' + esc(c) + '"' + (COVS.includes(c) ? " checked" : "") + ' class="mt-0.5"/> <span>' + esc(c) + badge + "</span></label>";
+      }).join("");
       $("covlist").querySelectorAll("input[data-cov]").forEach((cb) => cb.addEventListener("change", () => { const c = cb.getAttribute("data-cov"); if (cb.checked) { if (!COVS.includes(c)) COVS.push(c); } else COVS = COVS.filter((x) => x !== c); validateMap(); }));
       $("acnuopts").classList.toggle("hidden", getDesign() !== "acnu");
     }
@@ -622,6 +628,31 @@ const DESIGNS = [
     $("cov_auto").addEventListener("click", () => { COVS = availCovCols().filter((c) => COV_KW.test(c) && !COV_EXCL.test(c)); renderCovs(SPEC[getDesign()]); validateMap(); });
     $("cov_all").addEventListener("click", () => { COVS = availCovCols().slice(); renderCovs(SPEC[getDesign()]); validateMap(); });
     $("cov_none").addEventListener("click", () => { COVS = []; renderCovs(SPEC[getDesign()]); validateMap(); });
+
+    // AI causal triage — metadata-only (column names + the clinical question).
+    const WORKER_URL = "https://target-checker.danielhttsai.workers.dev";
+    const ROLE_CLS = (r) => ({ confounder: "bg-emerald-100 text-emerald-800", mediator: "bg-amber-100 text-amber-800", collider: "bg-rose-100 text-rose-800", instrument: "bg-violet-100 text-violet-800", structural: "bg-slate-100 text-slate-600", unclear: "bg-slate-100 text-slate-500" }[r] || "bg-slate-100 text-slate-600");
+    const setCovAiMsg = (t, bad) => { const el = $("cov_ai_msg"); if (el) { el.textContent = t || ""; el.className = "text-[11px] " + (bad ? "text-rose-600" : "text-emerald-700"); } };
+    $("cov_ai").addEventListener("click", async () => {
+      const q = readQ();
+      if (!q.exp || !q.out) { setCovAiMsg("Enter the exposure and outcome in step 1 first.", true); return; }
+      const cols = availCovCols().map((c) => { const p = DATA.profile.find((x) => x.name === c); return { name: c, type: p ? p.type : "" }; });
+      if (!cols.length) { setCovAiMsg("No candidate columns to classify yet — map the roles first.", true); return; }
+      const btn = $("cov_ai"); btn.disabled = true;
+      setCovAiMsg("Asking the AI to classify each column for your exposure→outcome (only column names are sent, never patient data)…");
+      try {
+        const res = await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "confounders", question: { population: q.pop, exposure: q.exp, comparator: q.comp, outcome: q.out }, columns: cols }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.items) { setCovAiMsg(data.error || "The AI could not classify the columns.", true); return; }
+        COVROLE = {};
+        data.items.forEach((it) => { if (it && it.name) COVROLE[it.name] = { role: it.role, adjust: !!it.adjust, reason: it.reason || "" }; });
+        COVS = cols.map((c) => c.name).filter((n) => COVROLE[n] && COVROLE[n].adjust);
+        renderCovs(SPEC[getDesign()]); validateMap();
+        const warn = data.items.filter((i) => i.role === "mediator" || i.role === "collider" || i.role === "instrument").length;
+        setCovAiMsg("Ticked " + COVS.length + " confounder(s); flagged " + warn + " mediator/collider/instrument to NOT adjust. Hover a badge for the reason — review and edit; the final clinical call is yours.");
+      } catch (e) { setCovAiMsg("Couldn't reach the AI: " + (e && e.message ? e.message : e), true); }
+      finally { btn.disabled = false; }
+    });
     function validateMap() {
       const spec = SPEC[getDesign()]; if (!spec) return false;
       const missing = spec.roles.filter((r) => r.req && !MAP[r.k]).map((r) => r.label);
@@ -700,7 +731,7 @@ const DESIGNS = [
     function buildScript() { const spec = SPEC[getDesign()]; const { covNames } = analysisCSV(); return getDesign() === "acnu" ? spec.rscript(covNames, acnuOpts()) : spec.rscript(covNames); }
 
     $("applyclean").addEventListener("click", buildMaster);
-    document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; MASTER = null; $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden"); renderMap(); }));
+    document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; COVROLE = {}; MASTER = null; $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden"); renderMap(); }));
 
     $("runanalysis").addEventListener("click", async () => {
       if (!MASTER) buildMaster();

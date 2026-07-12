@@ -288,6 +288,92 @@ export default {
       return json({ error: "Invalid request body." }, 400, origin);
     }
 
+    // ── Mode: confounder triage (RWE Studio) ─────────────────────────────
+    // Receives ONLY metadata — the clinical question and column names/types,
+    // never patient-level rows. Classifies each column's causal role for the
+    // SPECIFIC exposure→outcome pair, so the client can pre-tick genuine
+    // confounders and warn against adjusting for mediators/colliders.
+    if (payload && payload.mode === "confounders") {
+      if (env.TURNSTILE_SECRET) {
+        const ok = await verifyTurnstile(env.TURNSTILE_SECRET, payload.turnstileToken, request.headers.get("CF-Connecting-IP"));
+        if (!ok) return json({ error: "Bot check failed. Please reload and try again." }, 403, origin);
+      }
+      const q = payload.question || {};
+      const exposure = String(q.exposure || "").slice(0, 300).trim();
+      const outcome = String(q.outcome || "").slice(0, 300).trim();
+      const population = String(q.population || "").slice(0, 300).trim();
+      const comparator = String(q.comparator || "").slice(0, 300).trim();
+      const cols = (Array.isArray(payload.columns) ? payload.columns : [])
+        .slice(0, 150)
+        .map((c) => ({ name: String(c && c.name || "").slice(0, 120), type: String(c && c.type || "").slice(0, 20) }))
+        .filter((c) => c.name);
+      if (!exposure || !outcome || !cols.length) {
+        return json({ error: "Provide the exposure, outcome, and a column list." }, 400, origin);
+      }
+
+      const sysText = [
+        "You are a senior pharmacoepidemiologist doing causal-inference variable triage for a new-user active-comparator cohort study.",
+        "Study question: among " + (population || "(population not stated)") + ", the effect of " + exposure +
+          (comparator ? " versus " + comparator : "") + " on " + outcome + ".",
+        "You are given ONLY the dataset's column names (and rough types) — no data. For EACH column, judge its causal role FOR THIS SPECIFIC exposure–outcome pair:",
+        "- confounder: plausibly a common cause of (or proxy for a common cause of) BOTH treatment choice and the outcome, measured at/before baseline → SHOULD be adjusted (adjust=true).",
+        "- mediator: plausibly on the causal pathway from the exposure to the outcome, or measured after treatment start → must NOT be adjusted.",
+        "- collider: plausibly caused by both exposure and outcome (or a consequence of the outcome) → must NOT be adjusted.",
+        "- instrument: affects treatment choice but has no independent path to the outcome (e.g. prescriber preference, calendar period of policy) → should NOT be adjusted (amplifies bias).",
+        "- structural: IDs, dates, follow-up time, the treatment/outcome variables themselves, or administrative bookkeeping → not applicable (adjust=false).",
+        "- unclear: cannot tell from the name → adjust=false, say why in one clause.",
+        "Be conservative: only mark adjust=true when the column plausibly precedes treatment and relates to BOTH prescribing and the outcome. Cryptic names are 'unclear', not guesses.",
+        "Give a SHORT reason (max ~15 words) for every column, phrased clinically (e.g. 'renal function influences both drug choice and MACE risk').",
+      ].join("\n");
+      const userText = "COLUMNS (name : type):\n" + cols.map((c) => c.name + " : " + (c.type || "?")).join("\n");
+      const schema = {
+        type: "OBJECT",
+        properties: {
+          items: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                name: { type: "STRING" },
+                role: { type: "STRING", enum: ["confounder", "mediator", "collider", "instrument", "structural", "unclear"] },
+                adjust: { type: "BOOLEAN" },
+                reason: { type: "STRING" },
+              },
+              required: ["name", "role", "adjust", "reason"],
+            },
+          },
+        },
+        required: ["items"],
+      };
+
+      const gBody = {
+        system_instruction: { parts: [{ text: sysText }] },
+        contents: [{ role: "user", parts: [{ text: userText }] }],
+        generationConfig: { temperature: 0.2, responseMimeType: "application/json", responseSchema: schema },
+      };
+      const RETRY2 = new Set([500, 502, 503]);
+      let res2 = null, net2 = false;
+      const url2 = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL || DEFAULT_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`;
+      for (let a = 0; a < 2; a++) {
+        if (a > 0) await new Promise((r) => setTimeout(r, 1200));
+        try { res2 = await fetch(url2, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(gBody) }); }
+        catch { net2 = true; continue; }
+        net2 = false;
+        if (res2.ok || !RETRY2.has(res2.status)) break;
+      }
+      if (net2 || !res2) return json({ error: "Could not reach the AI service. Please try again shortly." }, 502, origin);
+      if (!res2.ok) {
+        if (res2.status === 429) return json({ error: "The AI is rate-limited right now. Please wait a minute and try again." }, 429, origin);
+        return json({ error: "The AI service returned an error (" + res2.status + ")." }, 502, origin);
+      }
+      const data2 = await res2.json().catch(() => null);
+      const raw2 = data2?.candidates?.[0]?.content?.parts?.[0]?.text;
+      let parsed2 = null;
+      try { parsed2 = JSON.parse(raw2); } catch {}
+      if (!parsed2 || !Array.isArray(parsed2.items)) return json({ error: "The AI returned an unreadable result. Please try again." }, 502, origin);
+      return json({ items: parsed2.items }, 200, origin);
+    }
+
     let text = (payload && typeof payload.text === "string" ? payload.text : "").trim();
     if (text.length < 200) {
       return json({ error: "Please paste at least a few paragraphs of the protocol (200+ characters)." }, 400, origin);
