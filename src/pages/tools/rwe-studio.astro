@@ -139,8 +139,39 @@ const DESIGNS = [
       <p id="maphint" class="mt-1 text-sm text-slate-600"></p>
       <div id="maproles" class="mt-4 grid gap-3 sm:grid-cols-2"></div>
       <div id="covwrap" class="hidden mt-4">
-        <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Baseline covariates (for the propensity score) — tick the columns to adjust for</span>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Baseline covariates (for the propensity score)</span>
+          <span class="flex gap-3 text-[11px]">
+            <button type="button" id="cov_auto" class="text-brand-700 font-semibold hover:underline">✨ Auto-select (clinical)</button>
+            <button type="button" id="cov_all" class="text-brand-700 font-semibold hover:underline">Select all</button>
+            <button type="button" id="cov_none" class="text-slate-500 hover:underline">Clear</button>
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-500">Auto-select flags clinically-plausible confounders by column name; then tick/untick to refine.</p>
         <div id="covlist" class="mt-1.5 grid gap-1 sm:grid-cols-3 text-xs text-slate-700"></div>
+
+        <div id="acnuopts" class="hidden mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Estimand</span>
+            <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-700">
+              <label class="flex items-center gap-1.5"><input type="checkbox" id="est_itt" checked/> Intention-to-treat (ITT)</label>
+              <label class="flex items-center gap-1.5"><input type="checkbox" id="est_pp"/> Per-protocol (PP) — needs a discontinuation-time column mapped</label>
+            </div>
+          </div>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Propensity-score methods (run together)</span>
+            <div class="mt-1 grid gap-1 sm:grid-cols-2 text-xs text-slate-700">
+              <label class="flex items-center gap-1.5"><input type="checkbox" id="m_match" checked/> PS matching, ratio
+                <select id="m_ratio" class="rounded border border-slate-300 px-1 py-0.5 text-[11px]"><option>1</option><option selected>2</option><option>3</option><option>4</option></select>:1</label>
+              <label class="flex items-center gap-1.5"><input type="checkbox" id="m_iptw" checked/> IPTW (ATE)</label>
+              <label class="flex items-center gap-1.5"><input type="checkbox" id="m_smrw"/> SMR weighting (ATT)</label>
+              <label class="flex items-center gap-1.5"><input type="checkbox" id="m_overlap"/> Overlap weighting</label>
+              <label class="flex items-center gap-1.5"><input type="checkbox" id="m_fine"/> Fine stratification,
+                <select id="m_nstrata" class="rounded border border-slate-300 px-1 py-0.5 text-[11px]"><option>5</option><option selected>10</option><option>20</option><option>50</option></select> strata</label>
+            </div>
+            <p class="text-[11px] text-slate-400">Crude is always shown alongside.</p>
+          </div>
+        </div>
       </div>
       <p id="mapmsg" class="mt-3 text-xs"></p>
     </div>
@@ -169,7 +200,8 @@ const DESIGNS = [
         <button id="runanalysis" type="button" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-5 py-2.5 rounded-lg text-sm">▶ Run analysis in R</button>
         <span id="anastatus" class="text-xs text-slate-600"></span>
       </div>
-      <div id="estimate" class="mt-4 hidden rounded-xl border border-brand-200 bg-brand-50/60 p-4"></div>
+      <div id="anaresults" class="mt-4 hidden rounded-xl border border-brand-200 bg-brand-50/60 p-4"></div>
+      <div id="table1" class="mt-4 hidden rounded-xl border border-slate-200 bg-white p-4 overflow-x-auto"></div>
       <pre id="routput" class="mt-3 hidden rounded-lg bg-slate-900 text-slate-100 p-4 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[360px]"></pre>
     </div>
 
@@ -180,11 +212,13 @@ const DESIGNS = [
       <div class="mt-3 flex flex-wrap gap-2">
         <button id="dlmaster2" type="button" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ Master file (CSV)</button>
         <button id="dlscript" type="button" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ R script (.R)</button>
+        <button id="dlreportword" type="button" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-4 py-2 rounded-lg text-sm">⬇ Report (Word)</button>
         <button id="dlreport" type="button" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ Report (Markdown)</button>
       </div>
     </div>
   </section>
 
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
   <WebrEngine />
 
   <script is:inline>
@@ -330,9 +364,10 @@ const DESIGNS = [
           event_date: i % 5 === 0 ? "2020-03-1" + (i % 9) : null,
           cci: (i % 7) - 1,
           followup_days: 90 + (i * 37) % 900,
+          disc_days: i % 3 === 0 ? Math.round((90 + (i * 37) % 900) * 0.55) : null,
         });
       }
-      DATA = { rows, columns: ["patient_id", "index_date", "age", "sex", "exposure", "outcome", "event_date", "cci", "followup_days"], name: "demo-dataset" };
+      DATA = { rows, columns: ["patient_id", "index_date", "age", "sex", "exposure", "outcome", "event_date", "cci", "followup_days", "disc_days"], name: "demo-dataset" };
       DATA.profile = DATA.columns.map((c) => profileColumn(c, rows));
       $("fileinfo").textContent = "demo-dataset · 60 rows × 8 cols";
       setMsg("Loaded the synthetic demo dataset.");
@@ -419,21 +454,34 @@ const DESIGNS = [
           { k: "TREAT", label: "Treatment (1=exposure, 0=comparator)", types: ["binary", "number"], req: true },
           { k: "TIME", label: "Follow-up time (days)", types: ["number"], req: true },
           { k: "EVENT", label: "Outcome event (0/1)", types: ["binary", "number"], req: true },
+          { k: "DISC", label: "Time to discontinuation / switch (days, for PP)", types: ["number"], req: false },
         ],
-        rscript: (cov) =>
-          "d<-read.csv('/data.csv'); library(survival)\n" +
-          "covs<-c(" + cov.map((c) => "'" + c + "'").join(",") + ")\n" +
-          "ps<-glm(as.formula(paste('TREAT ~', paste(covs, collapse=' + '))), data=d, family=binomial)$fitted.values\n" +
-          "w<-ifelse(d$TREAT==1, 1/ps, 1/(1-ps))\n" +
-          "fit<-coxph(Surv(TIME, EVENT) ~ TREAT, data=d, weights=w, robust=TRUE); s<-summary(fit)\n" +
-          "hr<-s$conf.int['TREAT','exp(coef)']; lci<-s$conf.int['TREAT','lower .95']; uci<-s$conf.int['TREAT','upper .95']\n" +
-          "cat(sprintf('IPTW-weighted hazard ratio (treatment vs comparator): %.3f (95%% CI %.3f to %.3f)\\n', hr, lci, uci))\n" +
-          "c0<-summary(coxph(Surv(TIME,EVENT)~TREAT, data=d))$conf.int\n" +
-          "cat(sprintf('Crude hazard ratio: %.3f (95%% CI %.3f to %.3f)\\n', c0['TREAT','exp(coef)'], c0['TREAT','lower .95'], c0['TREAT','upper .95']))\n" +
-          "cat(sprintf('N = %d; events = %d; treated = %d\\n\\n', nrow(d), sum(d$EVENT==1,na.rm=TRUE), sum(d$TREAT==1,na.rm=TRUE)))\n" +
-          "cat('Covariate balance (standardised mean difference, unweighted vs IPTW):\\n')\n" +
-          "for (c in covs) { x<-as.numeric(d[[c]]); tr<-d$TREAT==1; sp<-sqrt((var(x[tr])+var(x[!tr]))/2); u<-(mean(x[tr])-mean(x[!tr]))/sp; wt<-(weighted.mean(x[tr],w[tr])-weighted.mean(x[!tr],w[!tr]))/sp; cat(sprintf('  %s: %.3f -> %.3f\\n', c, u, wt)) }\n" +
-          "cat(sprintf('RESULT_ESTIMATE|Hazard ratio (IPTW)|%.2f (95%% CI %.2f-%.2f)\\n', hr, lci, uci))",
+        rscript: (cov, opts) => {
+          opts = opts || {};
+          const covs = cov.map((c) => "'" + c + "'").join(",");
+          const M = opts.methods || [], E = (opts.estimands && opts.estimands.length) ? opts.estimands : ["ITT"], ratio = opts.ratio || 2, ns = opts.nstrata || 10;
+          let r = "d<-read.csv('/data.csv'); library(survival)\n";
+          r += "covs<-c(" + covs + ")\n";
+          r += "ps<-predict(glm(as.formula(paste('TREAT ~', paste(covs, collapse=' + '))), data=d, family=binomial), type='response')\n";
+          r += "ps<-pmin(pmax(ps,1e-6),1-1e-6); d$lp<-qlogis(ps); tr<-d$TREAT==1; n<-nrow(d)\n";
+          r += "cat(sprintf('N = %d; exposure = %d; comparator = %d; events = %d\\n\\n', n, sum(tr), sum(!tr), sum(d$EVENT==1,na.rm=TRUE)))\n";
+          r += "wsmd<-function(x,g,w){ m1<-weighted.mean(x[g],w[g]); m0<-weighted.mean(x[!g],w[!g]); v1<-sum(w[g]*(x[g]-m1)^2)/sum(w[g]); v0<-sum(w[!g]*(x[!g]-m0)^2)/sum(w[!g]); (m1-m0)/sqrt((v1+v0)/2) }\n";
+          r += "cat('TABLE1|Characteristic|Comparator (n=',sum(!tr),')|Exposure (n=',sum(tr),')|SMD\\n',sep='')\n";
+          r += "for(c in covs){ x<-as.numeric(d[[c]]); cat(sprintf('TABLE1|%s, mean (SD)|%.2f (%.2f)|%.2f (%.2f)|%.3f\\n', c, mean(x[!tr]), sd(x[!tr]), mean(x[tr]), sd(x[tr]), wsmd(x,tr,rep(1,n)))) }\ncat('\\n')\n";
+          r += "ET<-list(); EE<-list(); ET[['ITT']]<-d$TIME; EE[['ITT']]<-d$EVENT\n";
+          if (E.indexOf("PP") >= 0) r += "if('DISC' %in% names(d)){ disc<-ifelse(is.na(d$DISC), Inf, as.numeric(d$DISC)); ET[['PP']]<-pmin(d$TIME, disc); EE[['PP']]<-d$EVENT*(d$TIME<=disc) }\n";
+          r += "fitw<-function(t,e,w,idx,label){ dd<-data.frame(t=t[idx],e=e[idx],TREAT=d$TREAT[idx],w=w[idx]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd,weights=w,robust=TRUE),error=function(x)NULL); if(is.null(fit)){cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label));return(invisible())}; s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', label, s$conf.int[1,'exp(coef)'], s$conf.int[1,'lower .95'], s$conf.int[1,'upper .95'])) }\n";
+          if (M.indexOf("matching") >= 0) r += "matchidx<-function(){ ci<-which(!tr); ti<-which(tr); used<-logical(n); cal<-0.2*sd(d$lp); out<-integer(0); ord<-ti[order(d$lp[ti])]; for(i in ord){ cand<-ci[!used[ci]]; if(!length(cand))next; dd<-abs(d$lp[cand]-d$lp[i]); o<-order(dd); k<-0; for(j in o){ if(dd[j]<=cal){ out<-c(out,i,cand[j]); used[cand[j]]<-TRUE; k<-k+1; if(k>=" + ratio + ")break } } }; unique(out) }\n";
+          r += "for(est in names(ET)){ t<-ET[[est]]; e<-EE[[est]]; all<-1:n\n";
+          r += "  fitw(t,e,rep(1,n),all, paste0('Crude - ',est,' HR'))\n";
+          if (M.indexOf("iptw") >= 0) r += "  fitw(t,e,ifelse(tr,1/ps,1/(1-ps)),all, paste0('IPTW (ATE) - ',est,' HR'))\n";
+          if (M.indexOf("smrw") >= 0) r += "  fitw(t,e,ifelse(tr,1,ps/(1-ps)),all, paste0('SMR weighting (ATT) - ',est,' HR'))\n";
+          if (M.indexOf("overlap") >= 0) r += "  fitw(t,e,ifelse(tr,1-ps,ps),all, paste0('Overlap weighting - ',est,' HR'))\n";
+          if (M.indexOf("finestrat") >= 0) r += "  { br<-unique(quantile(ps,probs=seq(0,1,length.out=" + (ns + 1) + "))); if(length(br)>=3){ q<-cut(ps,breaks=br,include.lowest=TRUE,labels=FALSE); keep<-ave(as.integer(tr),q,FUN=function(z)length(unique(z)))==2; ok<-which(keep); dd<-data.frame(t=t[ok],e=e[ok],TREAT=d$TREAT[ok],st=q[ok]); fit<-tryCatch(coxph(Surv(t,e)~TREAT+strata(st),data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|Fine stratification (" + ns + " strata) - %s HR|%.2f (95%% CI %.2f-%.2f)\\n',est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))} } }\n";
+          if (M.indexOf("matching") >= 0) r += "  { mi<-matchidx(); if(length(mi)>2){ dd<-data.frame(t=t[mi],e=e[mi],TREAT=d$TREAT[mi]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|" + ratio + ":1 PS matching (%d matched) - %s HR|%.2f (95%% CI %.2f-%.2f)\\n',length(mi),est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))} } }\n";
+          r += "}\n";
+          return r;
+        },
       },
       sccs: {
         label: "Self-controlled case series",
@@ -472,7 +520,7 @@ const DESIGNS = [
       },
     };
 
-    const KW = { EVENT: /event|outcome|death|died|dead|case|status/i, PT: /person|_pt$|persontime|py|followup|fu_|duration|time|days/i, GROUP: /group|arm|stratum|site|cohort/i, AGE: /age/i, SEX: /sex|gender/i, TREAT: /treat|exposure|exposed|arm|drug|group/i, TIME: /time|fu|follow|days|duration|survtime/i, ID: /(^|_)id$|patient|subject|caseid|pid/i, EXPOSED: /expos|treat|drug/i, EVENTS: /event|count|nevent/i, INTERVAL: /interval|persontime|offset|length|days|time/i, CASE: /case|hazard|window|status/i };
+    const KW = { EVENT: /event|outcome|death|died|dead|case|status/i, PT: /person|_pt$|persontime|py|followup|fu_|duration|time|days/i, GROUP: /group|arm|stratum|site|cohort/i, AGE: /age/i, SEX: /sex|gender/i, TREAT: /treat|exposure|exposed|arm|drug|group/i, TIME: /time|fu|follow|days|duration|survtime/i, ID: /(^|_)id$|patient|subject|caseid|pid/i, EXPOSED: /expos|treat|drug/i, EVENTS: /event|count|nevent/i, INTERVAL: /interval|persontime|offset|length|days|time/i, CASE: /case|hazard|window|status/i, DISC: /disc|discont|switch|stop|cessation|deviat/i };
     const getDesign = () => { const r = document.querySelector('[name="design"]:checked'); return r ? r.value : ""; };
     let MAP = {}, COVS = [], MASTER = null, LAST = null;
 
@@ -503,7 +551,14 @@ const DESIGNS = [
       const used = new Set(spec.roles.map((r) => MAP[r.k]).filter(Boolean));
       $("covlist").innerHTML = DATA.columns.filter((c) => !used.has(c)).map((c) => '<label class="flex items-center gap-1.5"><input type="checkbox" data-cov="' + esc(c) + '"' + (COVS.includes(c) ? " checked" : "") + "/> " + esc(c) + "</label>").join("");
       $("covlist").querySelectorAll("input[data-cov]").forEach((cb) => cb.addEventListener("change", () => { const c = cb.getAttribute("data-cov"); if (cb.checked) { if (!COVS.includes(c)) COVS.push(c); } else COVS = COVS.filter((x) => x !== c); validateMap(); }));
+      $("acnuopts").classList.toggle("hidden", getDesign() !== "acnu");
     }
+    const availCovCols = () => { const spec = SPEC[getDesign()]; const used = new Set(spec.roles.map((r) => MAP[r.k]).filter(Boolean)); return DATA.columns.filter((c) => !used.has(c)); };
+    const COV_KW = /age|sex|gender|comorbid|cci|charlson|elix|diab|hyperten|renal|ckd|egfr|copd|asthma|cancer|malig|smok|alcohol|bmi|weight|obes|hba1c|ldl|hdl|chol|creatinin|statin|insulin|metformin|nsaid|ppi|anticoag|antiplatel|steroid|comed|med_|drug|dx_|hx_|prior|baseline|income|ses|deprivation|urban|region|frailty|score/i;
+    const COV_EXCL = /(^|_)id$|date|event|outcome|death|died|treat|expos|arm|time|fu_|followup|persontime|disc|switch/i;
+    $("cov_auto").addEventListener("click", () => { COVS = availCovCols().filter((c) => COV_KW.test(c) && !COV_EXCL.test(c)); renderCovs(SPEC[getDesign()]); validateMap(); });
+    $("cov_all").addEventListener("click", () => { COVS = availCovCols().slice(); renderCovs(SPEC[getDesign()]); validateMap(); });
+    $("cov_none").addEventListener("click", () => { COVS = []; renderCovs(SPEC[getDesign()]); validateMap(); });
     function validateMap() {
       const spec = SPEC[getDesign()]; if (!spec) return false;
       const missing = spec.roles.filter((r) => r.req && !MAP[r.k]).map((r) => r.label);
@@ -517,7 +572,7 @@ const DESIGNS = [
       return ok;
     }
 
-    const NUM_ROLES = ["PT", "TIME", "AGE", "INTERVAL", "EVENTS"];
+    const NUM_ROLES = ["PT", "TIME", "AGE", "INTERVAL", "EVENTS", "DISC"];
     const BIN_ROLES = ["EVENT", "TREAT", "EXPOSED", "CASE"];
     const stdSex = (v) => { const l = String(v == null ? "" : v).trim().toLowerCase(); return l === "male" || l === "m" ? "M" : (l === "female" || l === "f" ? "F" : v); };
     const toBin = (v) => { if (v == null || v === "") return null; const l = String(v).trim().toLowerCase(); if (["1", "yes", "y", "true", "t", "case", "event", "exposed", "positive"].includes(l)) return 1; if (["0", "no", "n", "false", "f", "control", "none", "unexposed", "negative"].includes(l)) return 0; const n = Number(l); return isNaN(n) ? null : (n > 0 ? 1 : 0); };
@@ -548,7 +603,19 @@ const DESIGNS = [
       const rows = (MASTER || []).map((r) => { const o = {}; outCols.forEach((cn) => { o[cn] = r[colFor[cn]]; }); return o; });
       return { csv: toCSV(outCols, rows), covNames };
     }
-    function buildScript() { const spec = SPEC[getDesign()]; const { covNames } = analysisCSV(); return spec.rscript(covNames); }
+    function acnuOpts() {
+      const methods = [];
+      if ($("m_match").checked) methods.push("matching");
+      if ($("m_iptw").checked) methods.push("iptw");
+      if ($("m_smrw").checked) methods.push("smrw");
+      if ($("m_overlap").checked) methods.push("overlap");
+      if ($("m_fine").checked) methods.push("finestrat");
+      const estimands = [];
+      if ($("est_itt").checked) estimands.push("ITT");
+      if ($("est_pp").checked) estimands.push("PP");
+      return { methods: methods, estimands: estimands.length ? estimands : ["ITT"], ratio: parseInt($("m_ratio").value) || 2, nstrata: parseInt($("m_nstrata").value) || 10 };
+    }
+    function buildScript() { const spec = SPEC[getDesign()]; const { covNames } = analysisCSV(); return getDesign() === "acnu" ? spec.rscript(covNames, acnuOpts()) : spec.rscript(covNames); }
 
     $("applyclean").addEventListener("click", buildMaster);
     document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; MASTER = null; $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden"); renderMap(); }));
@@ -558,16 +625,27 @@ const DESIGNS = [
       if (!MASTER) return;
       const { csv } = analysisCSV(); const script = buildScript();
       const setS = (m) => { $("anastatus").textContent = m; };
-      $("runanalysis").disabled = true; $("estimate").classList.add("hidden");
+      $("runanalysis").disabled = true; $("anaresults").classList.add("hidden"); $("table1").classList.add("hidden");
       try {
         const out = await window.RWEngine.run(script, csv, setS);
         setS("Done ✓");
-        let est = null;
-        out.split("\n").forEach((l) => { if (l.indexOf("RESULT_ESTIMATE|") === 0) { const p = l.split("|"); est = { label: p[1], value: p[2] }; } });
-        const display = out.replace(/^RESULT_ESTIMATE\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
-        if (est) { $("estimate").classList.remove("hidden"); $("estimate").innerHTML = '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold">' + esc(est.label) + '</div><div class="text-2xl font-bold text-slate-900 mt-0.5">' + esc(est.value) + "</div>"; }
+        const ests = [], t1 = [];
+        out.split("\n").forEach((l) => {
+          if (l.indexOf("RESULT_ESTIMATE|") === 0) { const p = l.split("|"); ests.push({ label: p[1], value: p.slice(2).join("|") }); }
+          else if (l.indexOf("TABLE1|") === 0) { t1.push(l.split("|").slice(1)); }
+        });
+        const display = out.replace(/^RESULT_ESTIMATE\|.*$/gm, "").replace(/^TABLE1\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+        if (ests.length) {
+          $("anaresults").classList.remove("hidden");
+          $("anaresults").innerHTML = '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-2">Effect estimates</div><div class="overflow-x-auto"><table class="w-full text-sm border-collapse"><thead><tr class="text-left text-slate-500 border-b border-slate-200"><th class="py-1.5 pr-4 font-semibold">Method / estimand</th><th class="py-1.5 font-semibold">Estimate (95% CI)</th></tr></thead><tbody>' + ests.map((e) => '<tr class="border-b border-slate-100"><td class="py-1.5 pr-4 text-slate-700">' + esc(e.label) + '</td><td class="py-1.5 font-bold text-slate-900">' + esc(e.value) + "</td></tr>").join("") + "</tbody></table></div>";
+        }
+        if (t1.length) {
+          $("table1").classList.remove("hidden");
+          const head = t1[0], body = t1.slice(1);
+          $("table1").innerHTML = '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-2">Patient characteristics (Table 1)</div><table class="w-full text-xs border-collapse"><thead><tr class="text-left text-slate-500 border-b border-slate-200">' + head.map((h) => '<th class="py-1.5 pr-4 font-semibold">' + esc(h) + "</th>").join("") + "</tr></thead><tbody>" + body.map((rr) => '<tr class="border-b border-slate-100">' + rr.map((c, i) => '<td class="py-1.5 pr-4 ' + (i === 0 ? "text-slate-700" : "text-slate-600") + '">' + esc(c) + "</td>").join("") + "</tr>").join("") + "</tbody></table>";
+        }
         $("routput").classList.remove("hidden"); $("routput").textContent = display || "(no output)";
-        LAST = { out: display, script: script, est: est };
+        LAST = { out: display, script: script, ests: ests, t1: t1 };
       } catch (e) { setS("Error"); $("routput").classList.remove("hidden"); $("routput").textContent = "Error: " + (e && e.message ? e.message : e); }
       finally { $("runanalysis").disabled = false; }
     });
@@ -576,14 +654,48 @@ const DESIGNS = [
     function buildReport(q) {
       const today = new Date().toISOString().slice(0, 10);
       const label = (SPEC[q.design] || {}).label || q.design || "(design)";
+      const ests = (LAST && LAST.ests) || [], t1 = (LAST && LAST.t1) || [];
+      const resTbl = ests.length ? ("| Method / estimand | Estimate (95% CI) |\n|---|---|\n" + ests.map((e) => "| " + e.label + " | " + e.value + " |").join("\n")) : "(run the analysis first)";
+      const t1Tbl = t1.length ? (t1.map((r, i) => "| " + r.join(" | ") + " |" + (i === 0 ? "\n|" + r.map(() => "---").join("|") + "|" : "")).join("\n")) : "";
       return "# RWE Studio analysis report\n\n_Generated " + today + " · analysis run locally in the browser via WebR (real R)_\n\n" +
         "## Question\n- Population: " + (q.pop || "(specify)") + "\n- Exposure: " + (q.exp || "(specify)") + "\n- Comparator: " + (q.comp || "—") + "\n- Outcome: " + (q.out || "(specify)") + "\n- Design: " + label + "\n\n" +
-        "## Result\n" + (LAST && LAST.est ? "**" + LAST.est.label + ":** " + LAST.est.value : "(run the analysis first)") + "\n\n" +
+        "## Effect estimates\n\n" + resTbl + "\n\n" +
+        (t1.length ? "## Patient characteristics (Table 1)\n\n" + t1Tbl + "\n\n" : "") +
         "## R output\n\n```\n" + (LAST ? LAST.out : "(run the analysis first)") + "\n```\n\n" +
         "## Reproducible R script\n\n```r\n" + (LAST ? LAST.script : buildScript()) + "\n```\n";
+    }
+    async function buildReportDocx(q) {
+      const D = window.docx; if (!D) return null;
+      const today = new Date().toISOString().slice(0, 10);
+      const label = (SPEC[q.design] || {}).label || q.design || "(design)";
+      const FONT = "Times New Roman";
+      const text = (t, o = {}) => new D.TextRun({ text: String(t == null ? "" : t), font: FONT, size: 22, ...o });
+      const p = (ch, o = {}) => new D.Paragraph({ children: Array.isArray(ch) ? ch : [ch], spacing: { before: 60, after: 60, ...(o.spacing || {}) }, ...o });
+      const h1 = (t) => new D.Paragraph({ children: [text(t, { bold: true, size: 28 })], spacing: { before: 200, after: 80 }, heading: D.HeadingLevel.HEADING_1 });
+      const mono = (l) => new D.Paragraph({ children: [new D.TextRun({ text: l, font: "Consolas", size: 16 })], spacing: { before: 0, after: 0 } });
+      const brd = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" }; const cbr = { top: brd, bottom: brd, left: brd, right: brd };
+      const tbl = (rows, hdr) => new D.Table({ width: { size: 9026, type: D.WidthType.DXA }, rows: rows.map((cells, ri) => new D.TableRow({ children: cells.map((c) => new D.TableCell({ borders: cbr, margins: { top: 60, bottom: 60, left: 100, right: 100 }, shading: (hdr && ri === 0) ? { fill: "F5F5F5", type: D.ShadingType.CLEAR } : undefined, children: [p([text(c, { bold: hdr && ri === 0 })])] })) })) });
+      let logo = null; try { const rr = await fetch("/images/networks/phdc.png"); if (rr.ok) logo = new Uint8Array(await rr.arrayBuffer()); } catch (e) {}
+      const ch = [];
+      if (logo) ch.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: logo, transformation: { width: 210, height: 51 } })] }));
+      ch.push(p([text("RWE Studio analysis report", { bold: true, size: 32 })], { spacing: { after: 40 } }));
+      ch.push(p([text("Generated " + today + " · analysis run locally in the browser via WebR (real R).", { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      ch.push(h1("Question"));
+      ch.push(tbl([["Population", q.pop || "(specify)"], ["Exposure", q.exp || "(specify)"], ["Comparator", q.comp || "—"], ["Outcome", q.out || "(specify)"], ["Design", label]], false));
+      const ests = (LAST && LAST.ests) || [], t1 = (LAST && LAST.t1) || [];
+      ch.push(h1("Effect estimates"));
+      if (ests.length) ch.push(tbl([["Method / estimand", "Estimate (95% CI)"]].concat(ests.map((e) => [e.label, e.value])), true)); else ch.push(p([text("(run the analysis first)")]));
+      if (t1.length) { ch.push(h1("Patient characteristics (Table 1)")); ch.push(tbl(t1, true)); }
+      ch.push(h1("R output"));
+      (LAST ? LAST.out : "(run the analysis first)").split("\n").forEach((l) => ch.push(mono(l)));
+      ch.push(h1("Reproducible R script"));
+      (LAST ? LAST.script : buildScript()).split("\n").forEach((l) => ch.push(mono(l)));
+      const doc = new D.Document({ creator: "RWE Studio", title: "RWE Studio report", styles: { default: { document: { run: { font: FONT, size: 22 } } }, paragraphStyles: [{ id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { size: 28, bold: true, font: FONT }, paragraph: { spacing: { before: 200, after: 80 }, outlineLevel: 0 } }] }, sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children: ch }] });
+      return await D.Packer.toBlob(doc);
     }
     $("dlmaster2").addEventListener("click", () => { if (!MASTER) buildMaster(); if (MASTER) dl(new Blob(["﻿" + toCSV(DATA.columns, MASTER)], { type: "text/csv;charset=utf-8" }), DATA.name + "-master.csv"); });
     $("dlscript").addEventListener("click", () => { const s = LAST ? LAST.script : buildScript(); dl(new Blob(["# Analysis script generated by RWE Studio — reads the master file as data.csv\n# Reproduces the on-screen result in desktop R.\n\n" + s + "\n"], { type: "text/plain;charset=utf-8" }), DATA.name + "-analysis.R"); });
     $("dlreport").addEventListener("click", () => { dl(new Blob([buildReport(readQ())], { type: "text/markdown;charset=utf-8" }), DATA.name + "-report.md"); });
+    $("dlreportword").addEventListener("click", async () => { const b = await buildReportDocx(readQ()); if (b) dl(b, DATA.name + "-report.docx"); });
   </script>
 </BaseLayout>
