@@ -192,7 +192,7 @@ const DESIGNS = [
           <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Duplicate patients / cases</span>
           <span id="dupcount" class="text-[11px] font-semibold"></span>
         </div>
-        <p class="text-[11px] text-slate-500">The same patient appearing in more than one row. For a one-row-per-person design (ACNU, descriptive) this is usually a data error to resolve; for interval/window formats (SCCS, case-crossover) repeats are expected — leave as "flag only".</p>
+        <p class="text-[11px] text-slate-500">In a new-user cohort (ACNU) each person should appear once, so a repeated ID is usually a data error to resolve. (Descriptive can be long/person-time, and SCCS / case-crossover repeat IDs by design — so this control is shown for ACNU only.)</p>
         <div class="mt-2 grid gap-2 sm:grid-cols-3 text-xs">
           <label class="block"><span class="text-slate-600">Patient / case ID column</span>
             <select id="dup_id" class="mt-1 w-full rounded border border-slate-300 p-1.5"></select></label>
@@ -473,6 +473,7 @@ const DESIGNS = [
         label: "Active-comparator new-user cohort",
         hint: "One row per new user. Map treatment (1=exposure, 0=comparator), follow-up time, and the outcome event; tick baseline covariates for the propensity score.",
         covariates: true,
+        onePerPerson: true,
         roles: [
           { k: "TREAT", label: "Treatment (1=exposure, 0=comparator)", types: ["binary", "number"], req: true },
           { k: "TIME", label: "Follow-up time (days)", types: ["number"], req: true },
@@ -579,12 +580,13 @@ const DESIGNS = [
     }
     function renderDupUI() {
       const spec = SPEC[getDesign()];
-      // Repeated IDs are the DESIGN for SCCS / case-crossover (long format), so
-      // duplicate-ID resolution only applies to one-row-per-person designs
-      // (ACNU, descriptive). Hide it otherwise.
-      const hasIdRole = spec && spec.roles.some((r) => r.k === "ID");
-      $("dupwrap").classList.toggle("hidden", !!hasIdRole);
-      if (hasIdRole || !DATA.columns.length) return;
+      // Duplicate-ID resolution only makes sense where each person is meant to
+      // appear ONCE — i.e. the ACNU new-user cohort. Descriptive can be long
+      // (person-time / utilisation records), and SCCS / case-crossover repeat
+      // IDs by design, so hide it for all of those.
+      const onePer = spec && spec.onePerPerson;
+      $("dupwrap").classList.toggle("hidden", !onePer);
+      if (!onePer || !DATA.columns.length) return;
       const idSel = $("dup_id"), dateSel = $("dup_date");
       const cur = idSel.value || detectIdCol();
       idSel.innerHTML = '<option value="">— none —</option>' + DATA.columns.map((c) => '<option value="' + esc(c) + '"' + (c === cur ? " selected" : "") + ">" + esc(c) + "</option>").join("");
@@ -651,10 +653,9 @@ const DESIGNS = [
       rows.forEach((r) => numCols.forEach((c) => { const n = Number(String(r[c] == null ? "" : r[c]).replace(/,/g, "")); if (!isNaN(n) && String(r[c]).trim() !== "") r[c] = n; }));
       const before = rows.length;
       if ($("c_dedupe").checked) { const seen = new Set(); rows = rows.filter((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) return false; seen.add(k); return true; }); }
-      // Duplicate patients/cases — one-row-per-person designs only (SCCS/CCO repeat IDs by design).
-      const idRoleDesign = spec.roles.some((r) => r.k === "ID");
+      // Duplicate patients/cases — ACNU (one-row-per-person cohort) only.
       const dupId = $("dup_id").value, dupStrat = $("dup_strategy").value;
-      if (!idRoleDesign && dupId && dupStrat !== "all") {
+      if (spec.onePerPerson && dupId && dupStrat !== "all") {
         const dcol = $("dup_date").value, groups = new Map();
         rows.forEach((r, i) => { const k = String(r[dupId] == null ? "" : r[dupId]).trim(); if (k === "") return; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); });
         const drop = new Set();
