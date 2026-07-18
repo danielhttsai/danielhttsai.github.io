@@ -369,6 +369,16 @@ const TIMELINE_PRESETS: Record<string, string> = {
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Baseline (control) period — definition / justification</span>
               <input type="text" name="baselinePeriod" value="All observation time NOT in pre-risk, risk, or post-risk windows" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
             </label>
+            <label class="flex flex-col gap-1 sm:col-span-2">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariate / eligibility look-back windows (measurement)</span>
+              <textarea name="covWindows" rows="2" placeholder="Comorbidity (CCI) | 365&#10;Prior enrolment (eligibility) | 365" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              <div class="flex gap-1 mt-1 flex-wrap">
+                {["Comorbidity (CCI)", "Comedications", "Prior enrolment (eligibility)", "Frailty", "Disease severity"].map((t) => (
+                  <button type="button" data-add-row data-target="covWindows" data-name={t} class="text-[10px] rounded-full border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-brand-400 hover:text-brand-700">+ {t}</button>
+                ))}
+              </div>
+              <span class="text-[11px] text-slate-500">Measure baseline covariates / eligibility <em>before exposure start</em> (day 0) — each is a draggable window, exactly like the cohort builder (<code>Name | days</code>). This is the <strong>measurement</strong> layer; the risk-vs-reference windows above are SCCS's within-person estimand, <strong>not</strong> a cohort follow-up.</span>
+            </label>
           </div>
         </details>
 
@@ -557,7 +567,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
     <!-- Study design diagram -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
-      <p class="mt-1 text-xs text-slate-500">Within-person timeline anchored on the exposure. Control (unexposed) person-time vs the risk window(s); schematic control lengths shown.</p>
+      <p class="mt-1 text-xs text-slate-500">Anchored on exposure start (day 0). <strong>Two layers:</strong> (1) covariate / eligibility <em>look-back</em> before day 0 — the same measurement windows as the cohort builder; (2) SCCS's within-person estimand — reference (baseline) unexposed time vs the pre-exposure / exposure / post-exposure risk windows. This is <strong>not</strong> a cohort follow-up. Drag the ● handles to adjust each.</p>
       <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
     </div>
@@ -809,6 +819,7 @@ ${sccsVariantText}
 | **Risk window** | ${riskWin} |
 | **Post-risk window** | ${s.postRisk || "14"} days after exposure end (washout) |
 | **Baseline (control) period** | ${orFb(s.baselinePeriod, "All observation time NOT in pre-risk, risk, or post-risk windows.")} |
+| **Covariate / eligibility look-back** | ${parseRows(s.covWindows).map((r) => r.name + " " + r.days + " d").join("; ") || "none (self-controlled design)"} |
 
 ## 7. Observation period
 
@@ -865,18 +876,29 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
 `;
       };
 
+      const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
+      const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
       const renderScheme = (s) => {
         const pre = Math.max(0, parseInt(s.preRisk) || 0);
         const post = Math.max(0, parseInt(s.postRisk) || 0);
         let dos = parseInt(s.daysOfSupply); if (!(dos > 0)) dos = 30;
         const ref = Math.max(0, parseInt(s.refWindow) || 0);
+        const covRows = parseRows(s.covWindows);
         const wins = [];
+        // Measurement layer — covariate / eligibility look-back(s) before exposure start; same mechanism as the cohort builder.
+        covRows.forEach((r, i) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }));
         if (ref > 0) wins.push({ label: "Reference (baseline) period", kind: "control", startDay: -(pre + ref), endDay: -pre, edit: { field: "refWindow", edge: "start" } });
         if (pre > 0) wins.push({ label: "Pre-exposure risk window", kind: "risk", startDay: -pre, endDay: 0, edit: { field: "preRisk", edge: "start" } });
         wins.push({ label: "Risk window (exposure)", kind: "exposure", startDay: 0, endDay: dos, edit: { field: "daysOfSupply", edge: "end" } });
         if (post > 0) wins.push({ label: "Post-exposure risk window", kind: "risk", startDay: dos, endDay: dos + post, edit: { field: "postRisk", edge: "end" } });
         if (ref > 0) wins.push({ label: "Reference (baseline) period", kind: "control", startDay: dos + post, endDay: dos + post + ref, edit: { field: "refWindow", edge: "end" } });
-        const onEdit = (field, day) => {
+        const onEdit = (field, day, meta) => {
+          if (field === "covWindows") {
+            const el = form.elements.covWindows; const rows = parseRows(el.value);
+            const idx = meta && meta.idx != null ? meta.idx : 0;
+            if (rows[idx]) { rows[idx].days = Math.max(1, Math.round(-day)); el.value = rowsJoin(rows); render(); }
+            return;
+          }
           const el = form.elements[field]; if (!el) return;
           let v;
           if (field === "preRisk") v = Math.max(0, -day);
@@ -905,6 +927,12 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       form.addEventListener("change", render);
 
       form.addEventListener("click", (e) => {
+        const addRow = e.target?.closest?.("[data-add-row]");
+        if (addRow) {
+          const el = form.elements[addRow.dataset.target], name = addRow.dataset.name;
+          if (el) { const rows = parseRows(el.value); if (!rows.some((r) => r.name === name)) { rows.push({ name: name, days: 365 }); el.value = rowsJoin(rows); render(); } }
+          return;
+        }
         const tl = e.target?.closest?.("[data-timeline-preset]");
         if (tl) {
           const ta = form.querySelector('[name="timeline"]');
@@ -1138,6 +1166,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           ["Risk window", riskWin],
           ["Post-risk window", (s.postRisk || "14") + " days after exposure end"],
           ["Baseline (control) period", s.baselinePeriod || "All observation time NOT in pre-risk, risk, or post-risk windows"],
+          ["Covariate / eligibility look-back", parseRows(s.covWindows).map((r) => r.name + " " + r.days + " d").join("; ") || "none (self-controlled design)"],
         ]));
 
         children.push(h1("7. Observation period"));
