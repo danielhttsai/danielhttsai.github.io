@@ -906,6 +906,16 @@ const TIMELINE_PRESETS: Record<string, string> = {
               </label>
             </div>
             <label class="flex flex-col gap-1">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Per-covariate look-back windows (optional)</span>
+              <textarea name="covWindows" rows="3" placeholder="Comorbidities (CCI) | 365&#10;Comedications | 180" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+              <div class="flex gap-1 mt-1 flex-wrap">
+                {["Demographics (age, sex)", "Comorbidities (CCI)", "Comedications", "Disease severity", "Prior healthcare use", "Labs / vitals", "Frailty"].map((t) => (
+                  <button type="button" data-add-row data-target="covWindows" data-name={t} class="text-[10px] rounded-full border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-brand-400 hover:text-brand-700">+ {t}</button>
+                ))}
+              </div>
+              <span class="text-[11px] text-slate-500">Give each covariate its own look-back (<code>Name | days</code>) — each becomes a draggable window in the diagram, like the clone-censor-weight builder. Leave empty to use the single look-back above for all covariates.</span>
+            </label>
+            <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Method operational details</span>
               <textarea name="psMethodDetails" rows="4" placeholder="Will be auto-filled when you pick from the library. Edit freely."
                         class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
@@ -1103,7 +1113,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
     <!-- Study design diagram -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
-      <p class="mt-1 text-xs text-slate-500">Covariate look-back, new-user washout, eligibility assessment, grace, and follow-up windows relative to the index date — updates with the form.</p>
+      <p class="mt-1 text-xs text-slate-500">Covariate look-back(s), new-user washout, and follow-up windows relative to the index date. <strong>Drag the ● handles</strong> to adjust; list per-covariate look-backs to get a separate draggable window for each, like the clone builder.</p>
       <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
     </div>
@@ -1439,7 +1449,7 @@ ${bullets(censoring)}
 ## 7. Confounding control
 
 - **Method:** ${psM}
-- **Covariate look-back window:** ${s.lookback || "365"} days prior to index date
+- **Covariate look-back window(s):** ${covLbText(s)}
 
 ${s.psMethodDetails ? `**Method operational details.** ${s.psMethodDetails}\n` : ""}
 **Baseline covariates**
@@ -1494,6 +1504,9 @@ _Drafted with the AsPEN protocol builder (${today})._
       };
 
       // ── Render preview from current form state ──────
+      const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
+      const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
+      const covLbText = (s) => { const r = parseRows(s.covWindows); return r.length ? r.map((x) => x.name + " " + x.days + " d").join("; ") : ((s.lookback || "365") + " days prior to index date"); };
       const renderScheme = (s) => {
         const wash = Math.max(0, parseInt(s.washout) || 0);
         const lb = Math.max(0, parseInt(s.lookback) || 0);
@@ -1502,11 +1515,20 @@ _Drafted with the AsPEN protocol builder (${today})._
         const mfc = (s.maxFollowupChoice || "") + " " + (s.maxFollowupCustom || "");
         const ym = mfc.match(/(\d+(?:\.\d+)?)\s*year/i), dm = mfc.match(/(\d+)\s*day/i);
         if (ym) fu = Math.round(parseFloat(ym[1]) * 365); else if (dm) fu = parseInt(dm[1]);
+        const covRows = parseRows(s.covWindows);
         const wins = [];
-        if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
+        // Per-covariate look-back windows if listed; else a single shared look-back — like the clone builder.
+        if (covRows.length) covRows.forEach((r, i) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }));
+        else if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
         if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
         wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "maxFollowup", edge: "end" } });
-        const onEdit = (field, day) => {
+        const onEdit = (field, day, meta) => {
+          if (field === "covWindows") {
+            const el = form.elements.covWindows; const rows = parseRows(el.value);
+            const idx = meta && meta.idx != null ? meta.idx : 0;
+            if (rows[idx]) { rows[idx].days = Math.max(1, Math.round(-day)); el.value = rowsJoin(rows); render(); }
+            return;
+          }
           if (field === "maxFollowup") {
             const yrs = day / 365;
             if (form.elements.maxFollowupChoice) form.elements.maxFollowupChoice.value = "custom";
@@ -1514,7 +1536,7 @@ _Drafted with the AsPEN protocol builder (${today})._
             render(); return;
           }
           const el = form.elements[field]; if (!el) return;
-          el.value = Math.round(field === "grace" ? Math.max(0, day) : Math.max(0, -day));
+          el.value = Math.round(Math.max(0, -day));
           render();
         };
         window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Index (day 0) — treatment start", onEdit: onEdit, snap: 5 });
@@ -1565,6 +1587,12 @@ _Drafted with the AsPEN protocol builder (${today})._
         if (tl) {
           const ta = form.querySelector('[name="timeline"]');
           if (ta) { ta.value = TIMELINE_PRESETS[tl.dataset.timelinePreset] || ta.value; render(); }
+          return;
+        }
+        const addRow = e.target?.closest?.("[data-add-row]");
+        if (addRow) {
+          const el = form.elements[addRow.dataset.target], name = addRow.dataset.name;
+          if (el) { const rows = parseRows(el.value); if (!rows.some((r) => r.name === name)) { rows.push({ name: name, days: parseInt(form.elements.lookback && form.elements.lookback.value) || 365 }); el.value = rowsJoin(rows); render(); } }
           return;
         }
         const chip = e.target?.closest?.("[data-set-input]");
@@ -1882,7 +1910,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         children.push(h1("7. Confounding control"));
         children.push(labelTable([
           ["Method", psM],
-          ["Covariate look-back", (s.lookback || "365") + " days prior to index date"],
+          ["Covariate look-back", covLbText(s)],
         ]));
         if (s.psMethodDetails && s.psMethodDetails.trim()) {
           children.push(p([text("Method operational details. ", { bold: true }), text(s.psMethodDetails)]));
@@ -2097,7 +2125,7 @@ _Drafted with the AsPEN protocol builder (${today})._
                  fe: "fixed-effects (inverse-variance) meta-analysis" })[s.metaMethod] || "random-effects meta-analysis" + "."),
             row7("g. Identifying assumptions",
               "Conditional exchangeability would hold by randomisation. No interference; consistency.",
-              "Conditional exchangeability assumed given baseline covariates listed below, addressed via " + psM + ". Covariate look-back: " + (s.lookback || "365") + " days. Sensitivity analyses for unmeasured confounding:\n" + bulletText(sensitivity.filter((l) => /negative control|trim|e-value|hdps|sensitivity/i.test(l))) + "\nBaseline covariates:\n" + bulletText(covariates.slice(0, 12)) + (covariates.length > 12 ? "\n…and " + (covariates.length - 12) + " more (see Section 7 of the protocol)." : "")),
+              "Conditional exchangeability assumed given baseline covariates listed below, addressed via " + psM + ". Covariate look-back: " + covLbText(s) + ". Sensitivity analyses for unmeasured confounding:\n" + bulletText(sensitivity.filter((l) => /negative control|trim|e-value|hdps|sensitivity/i.test(l))) + "\nBaseline covariates:\n" + bulletText(covariates.slice(0, 12)) + (covariates.length > 12 ? "\n…and " + (covariates.length - 12) + " more (see Section 7 of the protocol)." : "")),
             row7("h. Data analysis plan",
               "Statistical analysis estimates the causal contrasts under the identifying assumptions.",
               "Primary: " + psM + ".\n" +
