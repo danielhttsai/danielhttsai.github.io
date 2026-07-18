@@ -1505,7 +1505,6 @@ _Drafted with the AsPEN protocol builder (${today})._
         const wins = [];
         if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
         if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
-        if (grace > 0) wins.push({ label: "Grace period", kind: "grace", startDay: 0, endDay: grace, edit: { field: "grace", edge: "end" } });
         wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "maxFollowup", edge: "end" } });
         const onEdit = (field, day) => {
           if (field === "maxFollowup") {
