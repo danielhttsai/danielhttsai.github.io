@@ -340,13 +340,39 @@ const TIMELINE_PRESETS: Record<string, string> = {
         <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
           <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">7 · Risk windows</summary>
           <div class="px-5 pb-5 grid sm:grid-cols-2 gap-3">
-            <label class="flex flex-col gap-1">
-              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Pre-risk (pretreatment) window (days)</span>
-              <input type="number" name="preRisk" value="14" min="0" step="1" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
-              <span class="text-[11px] text-slate-500">A short window immediately before first exposure, separated out to (a) absorb event-dependent exposure where the outcome itself triggers prescribing and (b) benchmark the underlying-disease risk just before therapy. AsPEN antipsychotic-falls SCCS used 14 days (Wang GH, BMJ 2021;PMID 34503972) and found the pretreatment IRR was higher than treatment IRRs; confirming underlying disease, not the drugs, drove much of the early risk.</span>
+            <label class="flex flex-col gap-1 sm:col-span-2">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Timeline anchor</span>
+              <select name="sccsAnchor" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                <option value="exposure" selected>Exposure-anchored — day 0 = first exposure (relative, cohort-like)</option>
+                <option value="calendar">Calendar-anchored — common start date; baseline = prior calendar period</option>
+              </select>
             </label>
-            <label class="flex flex-col gap-1">
-              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Risk window definition</span>
+            <div data-cal class="hidden sm:col-span-2 grid sm:grid-cols-2 gap-3">
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Common follow-up start (calendar date)</span>
+                <input type="text" name="cohortStart" value="2012-01-01" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Baseline before start (years)</span>
+                <input type="number" name="baselineYears" value="1" min="0" step="1" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              </label>
+            </div>
+            <label class="flex flex-col gap-1 sm:col-span-2">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Risk / reference periods — one continuous strip (Type | days, in order)</span>
+              <textarea name="periods" rows="5" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Reference | 90
+Pre-exposure risk | 14
+Exposure risk | 30
+Post-exposure risk | 14
+Reference | 90</textarea>
+              <div class="flex gap-1 mt-1 flex-wrap">
+                {["Reference", "Pre-exposure risk", "Exposure risk", "Post-exposure risk", "Washout"].map((t) => (
+                  <button type="button" data-add-period data-name={t} class="text-[10px] rounded-full border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-brand-400 hover:text-brand-700">+ {t}</button>
+                ))}
+              </div>
+              <span class="text-[11px] text-slate-500">The case's observation time as <strong>one continuous strip</strong> of consecutive periods — each line is a segment (<code>Type | days</code>), in order. Add any period anywhere (chips append; edit the text to insert/reorder), or drag a segment's right edge in the diagram. Day 0 = the start of the first <em>Exposure risk</em> segment. Types are auto-coloured (reference / exposure / pre / post risk).</span>
+            </label>
+            <label class="flex flex-col gap-1 sm:col-span-2">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Risk window definition (justification)</span>
               <select name="riskWindowDef" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
                 <option value="entire" selected>Entire exposure episode</option>
                 <option value="0-30">Days 0-30 after exposure start</option>
@@ -354,16 +380,6 @@ const TIMELINE_PRESETS: Record<string, string> = {
                 <option value="0-180">Days 0-180 after exposure start</option>
                 <option value="early-late">Early (0-14 d) vs Late (15+ d) split</option>
               </select>
-            </label>
-            <label class="flex flex-col gap-1">
-              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Post-risk window (days)</span>
-              <input type="number" name="postRisk" value="14" min="0" step="1" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
-              <span class="text-[11px] text-slate-500">Washout after exposure end, not counted as exposed or baseline.</span>
-            </label>
-            <label class="flex flex-col gap-1">
-              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Reference (baseline) window shown (days)</span>
-              <input type="number" name="refWindow" value="90" min="0" step="1" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
-              <span class="text-[11px] text-slate-500">The unexposed reference time each case contributes on either side of the risk periods — drag the reference bars in the diagram to set/justify it.</span>
             </label>
             <label class="flex flex-col gap-1 sm:col-span-2">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Baseline (control) period — definition / justification</span>
@@ -567,7 +583,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
     <!-- Study design diagram -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
-      <p class="mt-1 text-xs text-slate-500">Anchored on exposure start (day 0). <strong>Two layers:</strong> (1) covariate / eligibility <em>look-back</em> before day 0 — the same measurement windows as the cohort builder; (2) SCCS's within-person estimand — reference (baseline) unexposed time vs the pre-exposure / exposure / post-exposure risk windows. This is <strong>not</strong> a cohort follow-up. Drag the ● handles to adjust each.</p>
+      <p class="mt-1 text-xs text-slate-500">Pick the <strong>timeline anchor</strong> above (exposure-anchored vs calendar-anchored). <strong>Two layers:</strong> (1) covariate / eligibility <em>look-back</em> before the anchor — the same measurement windows as the cohort builder; (2) the case's observation time as <strong>one continuous strip</strong> of consecutive periods (reference / pre-exposure risk / exposure / post-exposure), which you edit freely — add any period, reorder in the text, or drag a segment's ○ edge. This is a within-person time partition, <strong>not</strong> a cohort follow-up.</p>
       <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
     </div>
@@ -815,9 +831,9 @@ ${sccsVariantText}
 
 | | |
 |---|---|
-| **Pre-risk window** | ${s.preRisk || "14"} days immediately before first exposure; separated to absorb event-dependent exposure |
-| **Risk window** | ${riskWin} |
-| **Post-risk window** | ${s.postRisk || "14"} days after exposure end (washout) |
+| **Timeline anchor** | ${s.sccsAnchor === "calendar" ? "Calendar-anchored — common start " + orFb(s.cohortStart, "(date)") + "; baseline " + (s.baselineYears || "1") + " calendar year(s) before start" : "Exposure-anchored — day 0 = first exposure"} |
+| **Risk / reference periods** | ${parsePeriods(s.periods).map((p) => p.name + " " + p.days + " d").join(" → ") || "(define the period strip)"} |
+| **Risk window definition** | ${riskWin} |
 | **Baseline (control) period** | ${orFb(s.baselinePeriod, "All observation time NOT in pre-risk, risk, or post-risk windows.")} |
 | **Covariate / eligibility look-back** | ${parseRows(s.covWindows).map((r) => r.name + " " + r.days + " d").join("; ") || "none (self-controlled design)"} |
 
@@ -878,38 +894,69 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
 
       const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
       const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
+      const parsePeriods = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+        const p = l.split("|"); const name = (p[0] || "").trim(); const days = Math.max(1, parseInt(p[1]) || 1); const n = name.toLowerCase();
+        let kind = "custom";
+        if (/pre.*(risk|expos)/.test(n)) kind = "pre";
+        else if (/post.*(risk|expos)|washout/.test(n)) kind = "post";
+        else if (/exposure|risk\s*window|^risk\b/.test(n)) kind = "exposure";
+        else if (/reference|baseline|control|unexpos/.test(n)) kind = "reference";
+        return { name, days, kind };
+      }).filter((r) => r.name);
+      const periodsJoin = (ps) => ps.map((p) => p.name + " | " + p.days).join("\n");
+      const PKIND = { reference: { c: "#94a3b8", l: "Reference (baseline)" }, exposure: { c: "#14b8a6", l: "Exposure risk" }, pre: { c: "#f59e0b", l: "Pre-exposure risk" }, post: { c: "#fb923c", l: "Post-exposure risk" }, custom: { c: "#8b5cf6", l: "Custom period" } };
+      const fmtD = (d) => { const a = Math.abs(d), s = d < 0 ? "−" : "+"; if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return s + Math.round(a / 30) + "mo"; return s + a + "d"; };
+
       const renderScheme = (s) => {
-        const pre = Math.max(0, parseInt(s.preRisk) || 0);
-        const post = Math.max(0, parseInt(s.postRisk) || 0);
-        let dos = parseInt(s.daysOfSupply); if (!(dos > 0)) dos = 30;
-        const ref = Math.max(0, parseInt(s.refWindow) || 0);
+        const anchor = s.sccsAnchor === "calendar" ? "calendar" : "exposure";
         const covRows = parseRows(s.covWindows);
-        const wins = [];
-        // Measurement layer — covariate / eligibility look-back(s) before exposure start; same mechanism as the cohort builder.
-        covRows.forEach((r, i) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }));
-        if (ref > 0) wins.push({ label: "Reference (baseline) period", kind: "control", startDay: -(pre + ref), endDay: -pre, edit: { field: "refWindow", edge: "start" } });
-        if (pre > 0) wins.push({ label: "Pre-exposure risk window", kind: "risk", startDay: -pre, endDay: 0, edit: { field: "preRisk", edge: "start" } });
-        wins.push({ label: "Risk window (exposure)", kind: "exposure", startDay: 0, endDay: dos, edit: { field: "daysOfSupply", edge: "end" } });
-        if (post > 0) wins.push({ label: "Post-exposure risk window", kind: "risk", startDay: dos, endDay: dos + post, edit: { field: "postRisk", edge: "end" } });
-        if (ref > 0) wins.push({ label: "Reference (baseline) period", kind: "control", startDay: dos + post, endDay: dos + post + ref, edit: { field: "refWindow", edge: "end" } });
-        const onEdit = (field, day, meta) => {
-          if (field === "covWindows") {
-            const el = form.elements.covWindows; const rows = parseRows(el.value);
-            const idx = meta && meta.idx != null ? meta.idx : 0;
-            if (rows[idx]) { rows[idx].days = Math.max(1, Math.round(-day)); el.value = rowsJoin(rows); render(); }
-            return;
-          }
-          const el = form.elements[field]; if (!el) return;
-          let v;
-          if (field === "preRisk") v = Math.max(0, -day);
-          else if (field === "daysOfSupply") v = Math.max(1, day);
-          else if (field === "postRisk") v = Math.max(0, day - dos);   // window ends at dos + post
-          else if (field === "refWindow") v = day < 0 ? Math.max(0, (-day) - pre) : Math.max(0, day - (dos + post)); // baseline on either side
-          else return;
-          el.value = Math.round(v);
-          render();
-        };
-        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Exposure start (day 0)", onEdit: onEdit, snap: 5 });
+        const periods = parsePeriods(s.periods);
+        const baseY = Math.max(0, parseFloat(s.baselineYears) || 0), baseDays = Math.round(baseY * 365);
+        // consecutive segments; shift so day 0 = start of the first exposure segment
+        let cum = 0; const segs = periods.map((p) => { const seg = { name: p.name, days: p.days, kind: p.kind, start: cum, end: cum + p.days }; cum += p.days; return seg; });
+        const expIdx = segs.findIndex((x) => x.kind === "exposure");
+        const day0 = expIdx >= 0 ? segs[expIdx].start : 0;
+        segs.forEach((x) => { x.start -= day0; x.end -= day0; });
+        const covMax = covRows.reduce((m, r) => Math.max(m, r.days), 0);
+        const stripMin = segs.length ? segs[0].start : 0, stripMax = segs.length ? segs[segs.length - 1].end : 1;
+        let lo = Math.min(stripMin, -covMax, anchor === "calendar" ? -baseDays : 0), hi = Math.max(stripMax, 1);
+        const pad = (hi - lo) * 0.03 || 1; lo -= pad; hi += pad;
+        const W = 880, plotL = 74, plotR = W - 16, plotW = plotR - plotL;
+        const extraRow = anchor === "calendar" && baseDays > 0 ? 1 : 0;
+        const top = 52, rowH = 25, stripY = top + (covRows.length + extraRow) * rowH + 8, H = stripY + 30 + 26;
+        const xF = (d) => plotL + ((d - lo) / (hi - lo)) * plotW, x0 = xF(0);
+        let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:680px" xmlns="http://www.w3.org/2000/svg">';
+        svg += '<line x1="' + x0 + '" y1="26" x2="' + x0 + '" y2="' + (H - 16) + '" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4 3"/>';
+        svg += '<text x="' + x0 + '" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">' + esc(anchor === "calendar" ? ("Cohort entry" + (s.cohortStart ? " · " + s.cohortStart : "")) : "Exposure start (day 0)") + '</text>';
+        svg += '<line x1="' + plotL + '" y1="' + (H - 16) + '" x2="' + plotR + '" y2="' + (H - 16) + '" stroke="#cbd5e1"/>';
+        [Math.ceil(lo), 0, Math.floor(hi)].forEach((d) => { svg += '<text x="' + xF(d) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="10" fill="#94a3b8">' + (d === 0 ? "0" : fmtD(d)) + '</text>'; });
+        let row = 0;
+        if (extraRow) { const y = top + row * rowH, xa = xF(-baseDays); svg += '<text x="' + (plotL - 10) + '" y="' + (y + 13) + '" text-anchor="end" font-size="11" fill="#334155">Baseline (calendar ' + (baseY === 1 ? "1 y" : baseY + " y") + ')</text>'; svg += '<rect x="' + xa + '" y="' + (y + 2) + '" width="' + Math.max(3, x0 - xa) + '" height="16" rx="3" fill="#94a3b8" fill-opacity="0.35" stroke="#94a3b8" stroke-dasharray="4 3"/>'; row++; }
+        covRows.forEach((r, i) => { const y = top + row * rowH, xa = xF(-r.days); svg += '<text x="' + (plotL - 10) + '" y="' + (y + 13) + '" text-anchor="end" font-size="11" fill="#334155">' + esc(r.name) + '</text>'; svg += '<rect x="' + xa + '" y="' + (y + 2) + '" width="' + Math.max(3, x0 - xa) + '" height="16" rx="3" fill="#8b5cf6" fill-opacity="0.85"/>'; svg += '<circle cx="' + xa + '" cy="' + (y + 10) + '" r="4.5" fill="#fff" stroke="#8b5cf6" stroke-width="2" class="sccs-h" data-kind="cov" data-idx="' + i + '" style="cursor:ew-resize;touch-action:none"/>'; row++; });
+        svg += '<text x="' + (plotL - 10) + '" y="' + (stripY + 17) + '" text-anchor="end" font-size="11" fill="#334155" font-weight="600">Observation strip</text>';
+        segs.forEach((seg, i) => { const xa = xF(seg.start), xb = xF(seg.end), w = Math.max(2, xb - xa), meta = PKIND[seg.kind] || PKIND.custom; svg += '<rect x="' + xa + '" y="' + stripY + '" width="' + w + '" height="26" fill="' + meta.c + '" fill-opacity="0.9" stroke="#ffffff" stroke-width="1"/>'; if (w > 46) { svg += '<text x="' + (xa + w / 2) + '" y="' + (stripY + 12) + '" text-anchor="middle" font-size="8.5" fill="#fff" font-weight="600">' + esc(seg.name) + '</text><text x="' + (xa + w / 2) + '" y="' + (stripY + 22) + '" text-anchor="middle" font-size="8" fill="#fff">' + seg.days + 'd</text>'; } svg += '<circle cx="' + xb + '" cy="' + (stripY + 13) + '" r="4.5" fill="#fff" stroke="' + meta.c + '" stroke-width="2" class="sccs-h" data-kind="seg" data-idx="' + i + '" style="cursor:ew-resize;touch-action:none"/>'; });
+        const diag = document.getElementById("diagram"); diag.innerHTML = svg + "</svg>";
+        document.getElementById("dlegend").innerHTML = ["reference", "exposure", "pre", "post"].map((k) => '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + PKIND[k].c + '"></span>' + PKIND[k].l + '</span>').join("") + '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Covariate look-back</span>';
+
+        const svgXof = (cx) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = cx; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
+        diag.querySelectorAll(".sccs-h").forEach((h) => {
+          h.addEventListener("pointerdown", (ev) => {
+            ev.preventDefault(); ev.stopPropagation(); if (window.__diagDrag) window.__diagDrag.cleanup();
+            const hkind = h.getAttribute("data-kind"), idx = parseInt(h.getAttribute("data-idx")), segStart = hkind === "seg" ? segs[idx].start : 0;
+            const pid = ev.pointerId; try { diag.setPointerCapture(pid); } catch (e) {}
+            let pending = null, raf = 0;
+            const apply = () => { raf = 0; if (pending == null) return;
+              if (hkind === "cov") { const rows = parseRows(form.elements.covWindows.value); if (rows[idx]) { rows[idx].days = pending; form.elements.covWindows.value = rowsJoin(rows); } }
+              else { const ps = parsePeriods(form.elements.periods.value); if (ps[idx]) { ps[idx].days = pending; form.elements.periods.value = periodsJoin(ps); } }
+              render();
+            };
+            const move = (e) => { if (e.pointerId !== pid) return; const x = svgXof(e.clientX); if (x == null) return; const day = Math.round((lo + ((x - plotL) / plotW) * (hi - lo)) / 5) * 5;
+              pending = hkind === "cov" ? Math.max(1, -day) : Math.max(1, Math.round(day - segStart)); if (!raf) raf = requestAnimationFrame(apply); };
+            const end = (e) => { if (e && e.pointerId != null && e.pointerId !== pid) return; document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", end); document.removeEventListener("pointercancel", end); if (raf) { cancelAnimationFrame(raf); raf = 0; } apply(); try { diag.releasePointerCapture(pid); } catch (e2) {} window.__diagDrag = null; };
+            window.__diagDrag = { cleanup: end }; document.addEventListener("pointermove", move); document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);
+          });
+        });
+        const cal = form.querySelector("[data-cal]"); if (cal) cal.classList.toggle("hidden", anchor !== "calendar");
       };
 
       const render = () => {
@@ -931,6 +978,12 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         if (addRow) {
           const el = form.elements[addRow.dataset.target], name = addRow.dataset.name;
           if (el) { const rows = parseRows(el.value); if (!rows.some((r) => r.name === name)) { rows.push({ name: name, days: 365 }); el.value = rowsJoin(rows); render(); } }
+          return;
+        }
+        const addP = e.target?.closest?.("[data-add-period]");
+        if (addP) {
+          const el = form.elements.periods, name = addP.dataset.name;
+          if (el) { const ps = parsePeriods(el.value); ps.push({ name: name, days: /reference/i.test(name) ? 90 : 14 }); el.value = periodsJoin(ps); render(); }
           return;
         }
         const tl = e.target?.closest?.("[data-timeline-preset]");
@@ -1162,9 +1215,9 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
 
         children.push(h1("6. Risk windows"));
         children.push(labelTable([
-          ["Pre-risk window", (s.preRisk || "14") + " days before first exposure"],
-          ["Risk window", riskWin],
-          ["Post-risk window", (s.postRisk || "14") + " days after exposure end"],
+          ["Timeline anchor", s.sccsAnchor === "calendar" ? "Calendar-anchored — common start " + (s.cohortStart || "(date)") + "; baseline " + (s.baselineYears || "1") + " calendar year(s)" : "Exposure-anchored — day 0 = first exposure"],
+          ["Risk / reference periods", parsePeriods(s.periods).map((p) => p.name + " " + p.days + " d").join(" → ") || "(define the period strip)"],
+          ["Risk window definition", riskWin],
           ["Baseline (control) period", s.baselinePeriod || "All observation time NOT in pre-risk, risk, or post-risk windows"],
           ["Covariate / eligibility look-back", parseRows(s.covWindows).map((r) => r.name + " " + r.days + " d").join("; ") || "none (self-controlled design)"],
         ]));
