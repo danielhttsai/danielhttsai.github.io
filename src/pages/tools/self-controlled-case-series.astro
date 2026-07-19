@@ -730,6 +730,9 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           const name = el.name;
           if (!name) continue;
           if (el.type === "checkbox" && multi.has(name)) el.checked = (state[name] || []).includes(el.value);
+          // Radios carry the option value in .value — assigning to it would rewrite the option
+          // itself (collapsing the group), so restore by ticking the matching radio instead.
+          else if (el.type === "radio") { if (state[name] !== undefined) el.checked = String(state[name]) === el.value; }
           else if (state[name] !== undefined) el.value = state[name];
         }
       };
@@ -898,6 +901,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
 `;
       };
 
+      const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));   // declared here: renderScheme() runs on first paint, before the old position
       const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
       const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
       const parsePeriods = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
@@ -982,7 +986,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         preview.textContent = buildMarkdown(state);
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
         renderFeasibility(state);
-        try { renderScheme(state); } catch {}
+        try { renderScheme(state); } catch (e) { console.error("renderScheme failed", e); }
       };
       try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) writeForm(JSON.parse(saved)); } catch {}
       const timelineTa = form.querySelector('[name="timeline"]');
@@ -1301,7 +1305,6 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       const modalSearch = document.querySelector("[data-library-search]");
       let currentCategory = "outcomes";
       let currentTargets = {};
-      const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
       const renderLibrary = (filter = "") => {
         const items = PHENOTYPES[currentCategory] || [];
