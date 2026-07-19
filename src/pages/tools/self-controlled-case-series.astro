@@ -340,13 +340,19 @@ const TIMELINE_PRESETS: Record<string, string> = {
         <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
           <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">7 · Risk windows</summary>
           <div class="px-5 pb-5 grid sm:grid-cols-2 gap-3">
-            <label class="flex flex-col gap-1 sm:col-span-2">
-              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Timeline anchor</span>
-              <select name="sccsAnchor" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
-                <option value="exposure" selected>Exposure-anchored — day 0 = first exposure (relative, cohort-like)</option>
-                <option value="calendar">Calendar-anchored — common start date; baseline = prior calendar period</option>
-              </select>
-            </label>
+            <div class="flex flex-col gap-1 sm:col-span-2">
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Timeline anchor — how is time measured &amp; where does baseline come from?</span>
+              <div class="grid sm:grid-cols-2 gap-2 mt-1">
+                <label class="flex items-start gap-2 rounded-xl border border-slate-200 p-3 cursor-pointer hover:border-brand-400 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50/60">
+                  <input type="radio" name="sccsAnchor" value="exposure" checked class="mt-0.5" />
+                  <span><span class="text-sm font-semibold text-slate-800">Exposure-anchored <span class="font-normal text-slate-500">(per person)</span></span><br /><span class="text-xs text-slate-600 leading-snug">Day 0 = <strong>each case's own first exposure</strong>. Periods are counted in days before/after that day (baseline 90 d, risk 30 d…) — like a cohort look-back. Different cases sit at different calendar dates. Use when what matters is time <em>since exposure</em>.</span></span>
+                </label>
+                <label class="flex items-start gap-2 rounded-xl border border-slate-200 p-3 cursor-pointer hover:border-brand-400 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50/60">
+                  <input type="radio" name="sccsAnchor" value="calendar" class="mt-0.5" />
+                  <span><span class="text-sm font-semibold text-slate-800">Calendar-anchored <span class="font-normal text-slate-500">(shared dates)</span></span><br /><span class="text-xs text-slate-600 leading-snug"><strong>Everyone is followed from the same calendar date</strong> (e.g. 1 Jan 2012), and baseline is a <strong>fixed prior calendar period</strong> (e.g. all of 2011 = 1 year). Use when you want a common calendar reference window, not per-person exposure timing.</span></span>
+                </label>
+              </div>
+            </div>
             <div data-cal class="hidden sm:col-span-2 grid sm:grid-cols-2 gap-3">
               <label class="flex flex-col gap-1">
                 <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Common follow-up start (calendar date)</span>
