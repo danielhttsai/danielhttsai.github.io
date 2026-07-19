@@ -132,12 +132,23 @@ const SENSITIVITY = [
             </select></label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Follow-up window (per trial)</span>
             <input name="followup" placeholder="e.g. From each origin to outcome, death, disenrolment, or 8 years" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-3 gap-3">
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">New-user washout (days before origin)</span>
+              <input type="number" name="washout" value="365" min="0" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
             <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Covariate / eligibility look-back (days before origin)</span>
               <input type="number" name="covlookback" value="365" min="0" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
             <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Max follow-up per trial (days)</span>
               <input type="number" name="futrial" value="1825" min="1" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
           </div>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Per-covariate look-back windows (optional)</span>
+            <textarea name="covWindows" rows="3" placeholder="Comorbidities (CCI) | 365&#10;Comedications | 180" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"></textarea>
+            <div class="flex gap-1 mt-1 flex-wrap">
+              {["Demographics (age, sex)", "Comorbidities (CCI)", "Comedications", "Disease severity", "Prior healthcare use", "Labs / vitals", "Frailty"].map((t) => (
+                <button type="button" data-add-row data-target="covWindows" data-name={t} class="text-[10px] rounded-full border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-brand-400 hover:text-brand-700">+ {t}</button>
+              ))}
+            </div>
+            <span class="mt-1 block text-[11px] text-slate-500">Give each covariate its own look-back (<code>Name | days</code>), measured before <em>each trial's origin</em> — each becomes a draggable window in the diagram, exactly as in the active-comparator new-user builder. Leave empty to use the single look-back above for all covariates.</span>
+          </label>
           <div>
             <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Subgroup analyses (tick to perform)</span>
             <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
@@ -190,8 +201,11 @@ const SENSITIVITY = [
     <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
       <p id="dcap" class="mt-1 text-xs text-slate-500"></p>
-      <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
+      <p class="mt-4 text-xs font-semibold uppercase tracking-widest text-brand-700">Within one trial — anchored at its origin</p>
+      <div class="mt-2 overflow-x-auto"><div id="diagram"></div></div>
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
+      <p class="mt-6 text-xs font-semibold uppercase tracking-widest text-brand-700">Across trials — the same trial repeated at every origin</p>
+      <div class="mt-2 overflow-x-auto"><div id="diagram2"></div></div>
     </div>
 
     <PhenotypeLibrary />
@@ -213,20 +227,55 @@ const SENSITIVITY = [
       title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), comparator: V("comparator"),
       outcome: V("outcome"), first: V("first"), last: V("last"), interval: V("interval"), eligibility: V("eligibility"),
       assignment: V("assignment"), multiple: V("multiple"), confounding: V("confounding"), estimand: V("estimand"),
-      followup: V("followup"), covlookback: V("covlookback") || "365", futrial: V("futrial") || "1825",
+      followup: V("followup"), washout: V("washout") || "365", covlookback: V("covlookback") || "365", covWindows: V("covWindows"), futrial: V("futrial") || "1825",
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
+    const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
+    const covLbText = (s) => { const r = parseRows(s.covWindows); return r.length ? r.map((x) => x.name + " " + x.days + " d").join("; ") : ((s.covlookback || "365") + " days before each origin"); };
+    const fmtDays = (d) => { const a = Math.abs(d); if (a >= 365) { const y = a / 365; return (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return Math.round(a / 30) + "mo"; return a + "d"; };
+
     function renderScheme(s) {
       const interval = s.interval || "monthly";
       const lb = Math.max(0, parseInt(s.covlookback) || 0);
+      const wash = Math.max(0, parseInt(s.washout) || 0);
       const fu = Math.max(1, parseInt(s.futrial) || 1825);
-      const total = lb + fu || 1;
-      const fmt = (d) => { const a = Math.abs(d); if (a >= 365) { const y = a / 365; return (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return Math.round(a / 30) + "mo"; return a + "d"; };
+
+      // ── Part 1: within one trial. Uses the SAME shared renderer (and therefore the same
+      //    window kinds, colours, labels and drag behaviour) as the ACNU builder — the only
+      //    difference is that time zero is each trial's origin rather than a single index date.
+      const covRows = parseRows(s.covWindows);
+      const wins = [];
+      if (covRows.length) covRows.forEach((r, i) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }));
+      else if (lb > 0) wins.push({ label: "Covariate / eligibility look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "covlookback", edge: "start" } });
+      if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
+      wins.push({ label: "Follow-up (this trial)", kind: "followup", startDay: 0, endDay: fu, edit: { field: "futrial", edge: "end" } });
+      const onEdit = (field, day, meta) => {
+        if (field === "covWindows") {
+          const el = form.elements.covWindows, rows = parseRows(el.value), idx = meta && meta.idx != null ? meta.idx : 0;
+          if (rows[idx]) { rows[idx].days = Math.max(1, Math.round(-day)); el.value = rowsJoin(rows); render(); }
+          return;
+        }
+        const el = form.elements[field]; if (!el) return;
+        el.value = field === "futrial" ? Math.max(5, Math.round(day)) : Math.round(Math.max(0, -day));
+        render();
+      };
+      window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Trial origin (day 0) — eligibility, assignment & follow-up start", onEdit: onEdit, snap: 5 });
+
+      // ── Part 2: across trials — that same trial repeated at every origin along calendar time.
+      renderTrialStrip(s, interval, Math.max(lb, wash), fu);
+
+      document.getElementById("dcap").textContent =
+        "Top — what happens inside one trial, anchored at its origin (day 0): the same scheme as the active-comparator new-user design (washout and covariate look-back before time zero, follow-up after), because each nested trial IS a new-user trial started at that origin. Bottom — that trial is repeated at every origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "), staggered along calendar time; a patient enters every trial they stay eligible for, pooled with a patient-clustered robust variance. Drag the ○ handles in the top panel to edit the windows.";
+    }
+
+    function renderTrialStrip(s, interval, pre, fu) {
+      const total = pre + fu || 1;
       const W = 860, gutter = 104, plotL = gutter, plotR = W - 18, plotW = plotR - plotL;
-      const rowH = 36, top = 32, H = top + 4 * rowH + 32;
-      const perW = plotW * 0.46, lbW = perW * (lb / total), fuW = perW - lbW, gap = plotW * 0.085;
+      const rowH = 36, top = 26, H = top + 4 * rowH + 26;
+      const perW = plotW * 0.46, lbW = perW * (pre / total), fuW = perW - lbW, gap = plotW * 0.085;
       const baseOx = plotL + lbW + 4;
       const trials = [["Trial 1", 0], ["Trial 2", 1], ["Trial N (last)", 4]];
       const rowY = [top, top + rowH, top + 3 * rowH];
@@ -239,8 +288,8 @@ const SENSITIVITY = [
         svg += '<rect x="' + ox + '" y="' + (y + 5) + '" width="' + fuW + '" height="16" rx="3" fill="#10b981" fill-opacity="0.85"/>';
         svg += '<circle cx="' + ox + '" cy="' + (y + 13) + '" r="4" fill="#0f766e"/>';
         if (i === 0) {
-          if (lbW > 30) svg += '<text x="' + (ox - lbW / 2) + '" y="' + (y + 17) + '" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">−' + fmt(lb) + '</text>';
-          if (fuW > 44) svg += '<text x="' + (ox + fuW / 2) + '" y="' + (y + 17) + '" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">+' + fmt(fu) + '</text>';
+          if (lbW > 30) svg += '<text x="' + (ox - lbW / 2) + '" y="' + (y + 17) + '" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">−' + fmtDays(pre) + '</text>';
+          if (fuW > 44) svg += '<text x="' + (ox + fuW / 2) + '" y="' + (y + 17) + '" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">+' + fmtDays(fu) + '</text>';
         }
       });
       const dy = top + 2 * rowH + 14, dxA = baseOx + 1.7 * gap, dxB = baseOx + 3.3 * gap;
@@ -248,56 +297,7 @@ const SENSITIVITY = [
       svg += '<text x="' + ((dxA + dxB) / 2) + '" y="' + (dy - 8) + '" text-anchor="middle" font-size="9.5" fill="#94a3b8">…a new trial at each origin…</text>';
       svg += '<line x1="' + plotL + '" y1="' + (H - 22) + '" x2="' + plotR + '" y2="' + (H - 22) + '" stroke="#cbd5e1"/>';
       svg += '<text x="' + plotR + '" y="' + (H - 8) + '" text-anchor="end" font-size="10" fill="#94a3b8">calendar time → (a new trial each ' + esc(interval) + ')</text>';
-      // Draggable edges on Trial 1: look-back left edge (covlookback) and
-      // follow-up right edge (futrial). Grab dots double as the hit targets.
-      if (lbW > 2) svg += '<circle cx="' + (baseOx - lbW) + '" cy="' + (top + 13) + '" r="4.5" fill="#fff" stroke="#8b5cf6" stroke-width="2" class="st-handle" data-field="covlookback" style="cursor:ew-resize;touch-action:none"/>';
-      svg += '<circle cx="' + (baseOx + fuW) + '" cy="' + (top + 13) + '" r="4.5" fill="#fff" stroke="#10b981" stroke-width="2" class="st-handle" data-field="futrial" style="cursor:ew-resize;touch-action:none"/>';
-      const diag = document.getElementById("diagram");
-      diag.innerHTML = svg + "</svg>";
-
-      // ── Drag-to-edit (frozen px/day so the drag stays linear) ──
-      const svgXof = (clientX) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = clientX; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
-      diag.querySelectorAll(".st-handle").forEach((h) => {
-        h.addEventListener("pointerdown", (ev) => {
-          ev.preventDefault(); ev.stopPropagation();
-          if (window.__diagDrag) window.__diagDrag.cleanup();
-          const field = h.getAttribute("data-field");
-          const lb0 = Math.max(0, parseInt(s.covlookback) || 0), fu0 = Math.max(1, parseInt(s.futrial) || 1);
-          const p0 = perW / ((lb0 + fu0) || 1);      // px per day, frozen for this drag
-          const startVal = field === "covlookback" ? lb0 : fu0;
-          const pid = ev.pointerId, x0 = svgXof(ev.clientX);
-          try { diag.setPointerCapture(pid); } catch (e) {}
-          let pending = null, raf = 0;
-          const apply = () => { raf = 0; if (pending == null) return; const el = form.elements[field]; if (el) { el.value = pending; render(); } };
-          const move = (e) => {
-            if (e.pointerId !== pid) return;
-            const x = svgXof(e.clientX); if (x == null || x0 == null) return;
-            const dDays = (x - x0) / p0;
-            let v = field === "covlookback" ? (startVal - dDays) : (startVal + dDays);   // look-back edge sits left of origin
-            pending = Math.max(field === "futrial" ? 5 : 0, Math.round(v / 5) * 5);
-            if (!raf) raf = requestAnimationFrame(apply);
-          };
-          const end = (e) => {
-            if (e && e.pointerId != null && e.pointerId !== pid) return;
-            document.removeEventListener("pointermove", move);
-            document.removeEventListener("pointerup", end);
-            document.removeEventListener("pointercancel", end);
-            if (raf) { cancelAnimationFrame(raf); raf = 0; } apply();
-            try { diag.releasePointerCapture(pid); } catch (e2) {}
-            window.__diagDrag = null;
-          };
-          window.__diagDrag = { cleanup: end };
-          document.addEventListener("pointermove", move);
-          document.addEventListener("pointerup", end);
-          document.addEventListener("pointercancel", end);
-        });
-      });
-      document.getElementById("dlegend").innerHTML =
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full" style="background:#0f766e"></span>Trial origin (time zero)</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Look-back / eligibility (' + fmt(lb) + ')</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#10b981"></span>Per-trial follow-up (' + fmt(fu) + ')</span>';
-      document.getElementById("dcap").textContent =
-        "A new nested trial starts at each origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "): a " + fmt(lb) + " look-back / eligibility window → " + fmt(fu) + " follow-up, staggered along calendar time. Trials 1, 2, … through the last; a patient enters every trial they stay eligible for, pooled with a patient-clustered robust variance. Drag the ○ handles on Trial 1 to adjust the look-back and per-trial follow-up.";
+      const d2 = document.getElementById("diagram2"); if (d2) d2.innerHTML = svg + "</svg>";
     }
 
     const or = (s, d) => (s && s.length ? s : d);
@@ -380,7 +380,10 @@ ${window.PC.tailMd(pcOf(s))}
 
     const computeChecks = (s) => {
       const checks = [];
-      const lb = parseInt(s.covlookback) || 0, fu = parseInt(s.futrial) || 0;
+      const lb = parseRows(s.covWindows).length ? 1 : (parseInt(s.covlookback) || 0), fu = parseInt(s.futrial) || 0;
+      const wash = parseInt(s.washout) || 0;
+      if (wash <= 0) checks.push({ level: "warn", msg: "New-user washout is 0 — each nested trial is itself a new-user trial started at its origin, so prevalent users can be enrolled at every origin. Set a washout with no prior exposure or comparator before each origin." });
+      else if (wash < 180) checks.push({ level: "info", msg: "New-user washout < 180 days — consider a longer washout so that patients enrolled at each origin are truly new users." });
       if (!s.first || !s.last) checks.push({ level: "warn", msg: "Set the first and last trial origins so the sequence of nested trials is defined." });
       if (lb <= 0) checks.push({ level: "warn", msg: "No covariate / eligibility look-back — each trial assesses eligibility and covariates only at its origin. Set a look-back window before the origin." });
       if (fu <= 0) checks.push({ level: "warn", msg: "Set the per-trial follow-up window." });
@@ -423,6 +426,19 @@ ${window.PC.tailMd(pcOf(s))}
     const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
     const dl = (blob, name) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
 
+    // Chip row under the per-covariate look-back box (same convention as the ACNU builder).
+    form.addEventListener("click", (e) => {
+      const addRow = e.target && e.target.closest && e.target.closest("[data-add-row]");
+      if (!addRow) return;
+      const el = form.elements[addRow.dataset.target], name = addRow.dataset.name;
+      if (!el) return;
+      const rows = parseRows(el.value);
+      if (!rows.some((r) => r.name === name)) {
+        rows.push({ name: name, days: parseInt(form.elements.covlookback && form.elements.covlookback.value) || 365 });
+        el.value = rowsJoin(rows); render();
+      }
+    });
+
     document.querySelector("[data-action='download-md']").addEventListener("click", () =>
       dl(new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" }), fname("md")));
 
@@ -438,7 +454,7 @@ ${window.PC.tailMd(pcOf(s))}
       const item7 = [
         ["a. Eligibility criteria",
           "At each origin, patients meeting the population definition, outcome-free, and not previously enrolled as an index initiator.",
-          or(s.eligibility, "Meets the population definition, outcome-free, not already enrolled as an index-treatment initiator in an earlier trial.") + "\nRe-assessed at every origin; covariate / eligibility look-back " + s.covlookback + " days."],
+          or(s.eligibility, "Meets the population definition, outcome-free, not already enrolled as an index-treatment initiator in an earlier trial.") + "\nRe-assessed at every origin, which is that trial's time zero: new-user washout " + (parseInt(s.washout) || 0) + " days and covariate / eligibility look-back " + covLbText(s) + ", both measured before the origin (the same scheme as an active-comparator new-user design applied at every origin)."],
         ["b. Treatment strategies",
           "Initiate " + E + " vs " + C + ", assigned at each trial's origin.",
           E + " vs " + C + ".\n" + or(s.assignment, "Within each trial, index-treatment users form the treated arm; eligible comparator users form the control arm.")],
@@ -538,7 +554,8 @@ ${window.PC.tailMd(pcOf(s))}
         ["Treatment", E],
         ["Comparator", C],
         ["Trial origins", or(s.interval, "monthly") + " (" + or(s.first, "start") + "–" + or(s.last, "end") + ")"],
-        ["Eligibility / covariate look-back", s.covlookback + " days"],
+        ["New-user washout (before each origin)", (parseInt(s.washout) || 0) + " days"],
+        ["Eligibility / covariate look-back", covLbText(s)],
         ["Follow-up per trial", s.futrial + " days"],
         ["Outcome", or(s.outcome, "-")],
       ]));
