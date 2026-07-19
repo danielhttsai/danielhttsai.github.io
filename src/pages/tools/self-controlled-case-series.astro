@@ -921,7 +921,10 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // consecutive segments; shift so day 0 = start of the first exposure segment
         let cum = 0; const segs = periods.map((p) => { const seg = { name: p.name, days: p.days, kind: p.kind, start: cum, end: cum + p.days }; cum += p.days; return seg; });
         const expIdx = segs.findIndex((x) => x.kind === "exposure");
-        const day0 = expIdx >= 0 ? segs[expIdx].start : 0;
+        // Exposure-anchored: 0 = start of the exposure segment (per-person, time-since-exposure).
+        // Calendar-anchored: 0 = cohort entry = start of the follow-up strip; exposure sits later
+        //   inside follow-up and the baseline calendar block sits before entry (negative time).
+        const day0 = anchor === "calendar" ? (segs.length ? segs[0].start : 0) : (expIdx >= 0 ? segs[expIdx].start : 0);
         segs.forEach((x) => { x.start -= day0; x.end -= day0; });
         const covMax = covRows.reduce((m, r) => Math.max(m, r.days), 0);
         const stripMin = segs.length ? segs[0].start : 0, stripMax = segs.length ? segs[segs.length - 1].end : 1;
