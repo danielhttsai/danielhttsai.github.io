@@ -85,12 +85,20 @@ const tools = [
   <!-- Hero -->
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-20 pb-16">
     <div class="grid md:grid-cols-[1fr_auto] gap-8 md:gap-12 items-center">
-      <img
-        src={`${base}/images/daniel.jpeg`}
-        alt="Daniel Tsai"
-        width="240" height="240"
-        class="order-1 md:order-2 w-36 h-36 md:w-56 md:h-56 lg:w-64 lg:h-64 rounded-2xl object-cover shadow-md ring-1 ring-slate-200 justify-self-start md:justify-self-end"
-      />
+      <!-- Portrait: 4:5 editorial crop, seated on a soft brand-tinted halo so the
+           studio backdrop reads as intentional rather than a pasted-in rectangle. -->
+      <div class="order-1 md:order-2 relative justify-self-start md:justify-self-end">
+        <div
+          aria-hidden="true"
+          class="pointer-events-none absolute -inset-5 -z-10 rounded-[2.5rem] bg-gradient-to-br from-brand-100/70 via-brand-50/50 to-transparent blur-2xl"
+        ></div>
+        <img
+          src={`${base}/images/daniel.jpeg`}
+          alt="Daniel Tsai"
+          width="240" height="300"
+          class="relative w-36 md:w-52 lg:w-60 aspect-[4/5] rounded-[1.75rem] object-cover object-top ring-1 ring-white/70 shadow-[0_24px_50px_-20px_rgba(16,36,32,0.45)]"
+        />
+      </div>
       <div class="order-2 md:order-1">
         <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-3">
           Pharmacoepidemiology · Real-World Evidence
