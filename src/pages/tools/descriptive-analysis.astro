@@ -1156,7 +1156,7 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
         renderFeasibility(state);
         try { renderScheme(state); } catch {}
       };
-      try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) writeForm(JSON.parse(saved)); } catch {}
+      try { window.PC && PC.restore ? PC.restore(form, STORAGE_KEY, writeForm) : (localStorage.getItem(STORAGE_KEY) && writeForm(JSON.parse(localStorage.getItem(STORAGE_KEY)))); } catch {}
       const timelineTa = form.querySelector('[name="timeline"]');
       if (timelineTa && !timelineTa.value) timelineTa.value = TIMELINE_PRESETS["12-month"];
       render();

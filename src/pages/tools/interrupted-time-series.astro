@@ -426,7 +426,12 @@ ${window.PC.tailMd(pcOf(s))}
 
     (() => {
       try {
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        // A ?seed= link wins over the saved draft; PC.restore falls back to
+        // localStorage on its own and tells the user which one it used.
+        const seeded = (window.PC && PC.restore)
+          ? PC.restore(form, STORAGE_KEY, (s) => PC.applySeed(form, s)) === "seed"
+          : false;
+        const saved = seeded ? null : JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
         if (saved) for (const k in saved) {
           const els = form.elements[k]; if (!els) continue;
           const val = saved[k];

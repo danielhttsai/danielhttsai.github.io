@@ -117,6 +117,87 @@
       return out;
     }
 
-    window.PC = { abstractMd, tailMd, abstractDocx, tailDocx };
+    /* ── Seeding a builder from a link ───────────────────────────────────
+       A study proposal that already exists elsewhere — in the Hot Topic
+       platform, in an email, in a colleague's notes — should not have to be
+       retyped into these forms field by field. `?seed=` carries a state object
+       in the same shape the builder already saves to localStorage.
+
+       base64url, so the value survives being pasted into chat clients and
+       mail readers that mangle raw JSON in a query string.
+
+       Returns null when there is no seed, so callers keep their existing
+       localStorage restore as the fallback and behave exactly as before. */
+    function readSeed() {
+      try {
+        var raw = new URLSearchParams(location.search).get("seed");
+        if (!raw) return null;
+        var b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+        while (b64.length % 4) b64 += "=";
+        var json = decodeURIComponent(escape(atob(b64)));  // atob is byte-wise; undo UTF-8
+        var obj = JSON.parse(json);
+        return obj && typeof obj === "object" ? obj : null;
+      } catch (e) {
+        console.warn("[seed] ignoring unreadable seed:", e);
+        return null;
+      }
+    }
+
+    /* Write a flat {fieldName: value} object into a form. Mirrors what the
+       builders' own writeForm does, for the pages that restore inline. */
+    function applySeed(form, state) {
+      if (!form || !state) return false;
+      for (var k in state) {
+        var els = form.elements[k];
+        if (!els) continue;
+        var val = state[k];
+        if (Array.isArray(val)) {
+          form.querySelectorAll('[name="' + k + '"]').forEach(function (n) {
+            n.checked = val.indexOf(n.value) >= 0;
+          });
+        } else if (els.type === "checkbox") {
+          els.checked = !!val;
+        } else {
+          els.value = val == null ? "" : val;
+        }
+      }
+      return true;
+    }
+
+    /* One call for the common case: seed if present, else restore the saved
+       draft. Returns "seed" | "saved" | "none" so a page can tell the user. */
+    function restore(form, storageKey, writeForm) {
+      var seeded = readSeed();
+      var write = writeForm || function (s) { applySeed(form, s); };
+      if (seeded) {
+        write(seeded);
+        banner();
+        return "seed";
+      }
+      try {
+        var saved = localStorage.getItem(storageKey);
+        if (saved) { write(JSON.parse(saved)); return "saved"; }
+      } catch (e) {}
+      return "none";
+    }
+
+    /* Say where the values came from. Silently overwriting someone's saved
+       draft with values from a link would be the worse failure. */
+    function banner() {
+      if (document.getElementById("pc-seed-note")) return;
+      var d = document.createElement("div");
+      d.id = "pc-seed-note";
+      d.setAttribute("role", "status");
+      d.style.cssText =
+        "margin:0 0 1rem;padding:.6rem .85rem;border-radius:8px;font-size:.85rem;" +
+        "background:#E8F3EC;border:1px solid #9CC9AE;color:#1E5B3A;";
+      d.textContent =
+        "此表單由連結預先填入。你的上一份草稿仍留在瀏覽器中,重新整理(移除網址中的 seed 參數)即可取回。";
+      var f = document.querySelector("form");
+      if (f && f.parentNode) f.parentNode.insertBefore(d, f);
+    }
+
+    window.PC = { abstractMd, tailMd, abstractDocx, tailDocx,
+                  readSeed: readSeed, applySeed: applySeed, restore: restore };
   })();
 </script>
