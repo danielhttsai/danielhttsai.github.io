@@ -168,6 +168,13 @@ async function syncPublications() {
   const existing = all.filter((e) => !isSSRN(e.doi));
   if (existing.length !== all.length) console.log(`Publications: dropped ${all.length - existing.length} SSRN preprint(s).`);
   const exclude = new Set(JSON.parse(readFileSync(p("src/data/publications-exclude.json"), "utf8")).map((d) => d.toLowerCase()));
+  // The CV decides WHICH papers appear; ORCID is only used to discover them.
+  // Regenerate this list with `node scripts/cv-publications.mjs` after updating
+  // the CV. Empty/missing = fall back to accepting anything ORCID reports.
+  let cvDois = new Set();
+  try {
+    cvDois = new Set((JSON.parse(readFileSync(p("src/data/publications-cv.json"), "utf8")).dois || []).map((d) => d.toLowerCase()));
+  } catch { console.warn("  no CV whitelist found — appending whatever ORCID reports."); }
   const byDoi = new Map(existing.map((e) => [e.doi.toLowerCase(), e]));
 
   // All DOIs ORCID knows about.
@@ -187,12 +194,15 @@ async function syncPublications() {
     await sleep(150);
   }
 
-  // Append new papers (in ORCID, not already listed, not excluded, not a dataset,
-  // and never an SSRN preprint — those are working papers, not publications, and
-  // are filtered by DOI prefix so future ones stay out without further edits).
-  let added = 0;
+  // Append new papers: in ORCID, on the CV, not already listed, not excluded, not
+  // a dataset, and never an SSRN preprint (working papers, filtered by DOI prefix
+  // so future ones stay out without further edits).
+  let added = 0, notOnCv = [];
   for (const doi of orcidDois) {
     if (byDoi.has(doi) || exclude.has(doi) || isSSRN(doi) || /figshare|\/m9\./.test(doi)) continue;
+    // The CV is the source of truth — anything ORCID knows about but the CV does
+    // not is reported, never silently published.
+    if (cvDois.size && !cvDois.has(doi)) { notOnCv.push(doi); continue; }
     try {
       const m = await crossrefMessage(doi);
       const { citation, year } = formatCitation(m);
@@ -206,6 +216,10 @@ async function syncPublications() {
       console.log(`  + new publication ${year}: ${doi}`);
       await sleep(200);
     } catch (e) { console.warn(`  skip new ${doi}: ${e.message}`); }
+  }
+  if (notOnCv.length) {
+    console.log(`  ${notOnCv.length} ORCID work(s) held back — not in the CV: ${notOnCv.join(", ")}`);
+    console.log("    If one belongs on the site, add it to the CV and re-run: node scripts/cv-publications.mjs");
   }
 
   // Refresh full-text availability (PMCID) for everything in one batched call,
