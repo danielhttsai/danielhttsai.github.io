@@ -9,18 +9,72 @@ export interface Pub {
   pmid?: string;
   pmcid?: string;
   ris?: string;
-  cover?: string; // e.g. "papers/nhird.jpg" under public/images/
-  tag?: string;   // category label, e.g. "Data Infrastructure" / "Methodology"
+  cover?: string;   // e.g. "papers/nhird.jpg" under public/images/
+  tag?: string;     // category label, e.g. "Data Infrastructure" / "Methodology"
+  journal?: string; // overrides the name parsed from the RIS record
 }
 interface Props { pub: Pub; hideCover?: boolean }
 const { pub, hideCover } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const highlight = (citation: string) =>
-  esc(citation)
+const unesc = (s: string) =>
+  s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+   .replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+const rx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// The journal name, taken from the RIS record (JO, else T2) unless overridden.
+// Preprints carry no journal — those simply get no JCR link.
+const journalOf = (p: Pub): string | null => {
+  if (p.journal) return p.journal;
+  const m = (p.ris || "").match(/^JO  - (.+?)\r?$/m) || (p.ris || "").match(/^T2  - (.+?)\r?$/m);
+  return m ? unesc(m[1].trim()).replace(/^[\s.]+|[\s.]+$/g, "") : null;
+};
+
+// Journal Citation Reports deep link. This URL shape is the one JCR's own app
+// builds when you click a journal name (jcr-jp/journal-profile?journal=…); the
+// year is left off so the link always resolves to the latest JCR edition.
+// JCR needs a Web of Science subscription — off-campus visitors get a sign-in page.
+const JCR = (journal: string) =>
+  `https://jcr.clarivate.com/jcr-jp/journal-profile?journal=${encodeURIComponent(journal)}`;
+
+const STOP = new Set(["of", "and", "the", "for", "in", "on", "to", "a", "an"]);
+
+// How the journal may actually be written in the citation: the full name, with or
+// without a leading "The", or an acronym ("Canadian Medical Association Journal" → CMAJ).
+const nameVariants = (j: string): string[] => {
+  const out = [j, /^the /i.test(j) ? j.slice(4) : "The " + j];
+  const words = j.split(/[\s/]+/).filter(Boolean);
+  if (words.length >= 3) {
+    const acr = words.filter((w) => !STOP.has(w.toLowerCase())).map((w) => w[0].toUpperCase()).join("");
+    if (acr.length >= 3) out.push(acr);
+  }
+  return [...new Set(out)].filter(Boolean);
+};
+
+const highlight = (pub: Pub) => {
+  let html = esc(pub.citation)
     .replace(/Tsai DHT/g, "<strong class='text-slate-900'>Tsai DHT</strong>")
     .replace(/Tsai HT(?!<)/g, "<strong class='text-slate-900'>Tsai HT</strong>");
+
+  const journal = journalOf(pub);
+  if (!journal) return html;
+
+  // Only link the journal where it actually sits in the citation — between the
+  // title and the year (". Journal. 2025…"). Matching bare text would also hit a
+  // journal word that happens to appear in the article title.
+  for (const variant of nameVariants(journal)) {
+    const re = new RegExp(`(?<=\\.\\s)${rx(esc(variant))}(?=\\.\\s*\\d{4})`);
+    if (re.test(html)) {
+      return html.replace(re,
+        `<a href="${esc(JCR(journal))}" target="_blank" rel="noopener"` +
+        ` title="${esc(journal)} — Journal Impact Factor on Journal Citation Reports (Web of Science subscription required)"` +
+        ` class="text-slate-700 underline decoration-dotted decoration-slate-400 underline-offset-2 hover:text-brand-700 hover:decoration-brand-600">` +
+        `${esc(variant)}</a>`);
+    }
+  }
+  return html;
+};
 
 const risName = (p: Pub) =>
   `${(p.citation.split(/[\s,]/)[0] || "ref").replace(/[^A-Za-z]/g, "")}-${p.year}.ris`;
@@ -45,7 +99,7 @@ const pt = pub.pmcid
       {pub.tag && (
         <span class="inline-flex items-center mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 rounded-full px-2.5 py-0.5">{pub.tag}</span>
       )}
-      <p class="text-sm text-slate-700 leading-relaxed" set:html={highlight(pub.citation)} />
+      <p class="text-sm text-slate-700 leading-relaxed" set:html={highlight(pub)} />
       <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         {pt && (
           <a href={pt.href} target="_blank" rel="noopener" title={pt.title} class="font-semibold text-brand-700 hover:underline">{pt.label} ↗</a>
