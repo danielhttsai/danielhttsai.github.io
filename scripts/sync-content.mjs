@@ -158,8 +158,15 @@ async function pubmedId(doi) {
   return "";
 }
 
+// SSRN working papers are not publications and must never appear on the site.
+// Matching on the DOI prefix covers every SSRN item, present and future.
+const isSSRN = (doi) => /^10\.2139\/ssrn/.test(String(doi || "").toLowerCase());
+
 async function syncPublications() {
-  const existing = JSON.parse(readFileSync(p("src/data/publications.json"), "utf8"));
+  const all = JSON.parse(readFileSync(p("src/data/publications.json"), "utf8"));
+  // Self-healing: drop any SSRN entry that ever made it into the file.
+  const existing = all.filter((e) => !isSSRN(e.doi));
+  if (existing.length !== all.length) console.log(`Publications: dropped ${all.length - existing.length} SSRN preprint(s).`);
   const exclude = new Set(JSON.parse(readFileSync(p("src/data/publications-exclude.json"), "utf8")).map((d) => d.toLowerCase()));
   const byDoi = new Map(existing.map((e) => [e.doi.toLowerCase(), e]));
 
@@ -180,10 +187,12 @@ async function syncPublications() {
     await sleep(150);
   }
 
-  // Append new papers (in ORCID, not already listed, not excluded, not a dataset).
+  // Append new papers (in ORCID, not already listed, not excluded, not a dataset,
+  // and never an SSRN preprint — those are working papers, not publications, and
+  // are filtered by DOI prefix so future ones stay out without further edits).
   let added = 0;
   for (const doi of orcidDois) {
-    if (byDoi.has(doi) || exclude.has(doi) || /figshare|\/m9\./.test(doi)) continue;
+    if (byDoi.has(doi) || exclude.has(doi) || isSSRN(doi) || /figshare|\/m9\./.test(doi)) continue;
     try {
       const m = await crossrefMessage(doi);
       const { citation, year } = formatCitation(m);
