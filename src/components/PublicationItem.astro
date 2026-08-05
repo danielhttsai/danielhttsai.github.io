@@ -13,6 +13,7 @@ export interface Pub {
   tag?: string;     // category label, e.g. "Data Infrastructure" / "Methodology"
   journal?: string; // overrides the name parsed from the RIS record
 }
+import JCR_ABBREV from "../data/jcr-journals.json";
 interface Props { pub: Pub; hideCover?: boolean }
 const { pub, hideCover } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -34,14 +35,21 @@ const journalOf = (p: Pub): string | null => {
   return m ? unesc(m[1].trim()).replace(/^[\s.]+|[\s.]+$/g, "") : null;
 };
 
-// Journal Citation Reports — where the journal's impact factor lives. This URL
-// shape is the one JCR's own app builds when you click a journal name; the year
-// is left off so the link always resolves to the latest JCR edition.
+// Journal Citation Reports — where the journal's impact factor lives.
+// Two things this URL is fussy about, both confirmed against a live JCR session:
+//   * `journal` must be JCR's own abbreviation ("BRIT J PSYCHIAT"), never the
+//     full title — hence the lookup table in jcr-journals.json.
+//   * `year` is required. Without it JCR renders the profile shell with every
+//     metric as N/A, which looks like a working page but shows nothing.
+// Bump JCR_YEAR when the next edition lands (JCR publishes around June).
 // JCR needs a Web of Science subscription — off-campus visitors get a sign-in page.
-const JCR = (journal: string) =>
-  `https://jcr.clarivate.com/jcr-jp/journal-profile?journal=${encodeURIComponent(journal)}`;
+const JCR_YEAR = 2025;
+const jcrUrl = (abbrev: string) =>
+  `https://jcr.clarivate.com/jcr-jp/journal-profile?journal=${encodeURIComponent(abbrev)}&year=${JCR_YEAR}`;
 
 const journal = journalOf(pub);
+// No abbreviation on file → no link, rather than one that lands on an empty profile.
+const jcrAbbrev = journal ? (JCR_ABBREV as Record<string, string>)[journal] : undefined;
 
 const risName = (p: Pub) =>
   `${(p.citation.split(/[\s,]/)[0] || "ref").replace(/[^A-Za-z]/g, "")}-${p.year}.ris`;
@@ -75,8 +83,8 @@ const pt = pub.pmcid
         {pub.ris && (
           <button type="button" data-ris={pub.ris} data-filename={risName(pub)} title="Download RIS for EndNote / Zotero / Mendeley" class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ Cite</button>
         )}
-        {journal && (
-          <a href={JCR(journal)} target="_blank" rel="noopener" title={`${journal} — impact factor on Journal Citation Reports (needs Web of Science access)`} class="text-slate-500 hover:text-brand-700 hover:underline">JCR ↗</a>
+        {jcrAbbrev && (
+          <a href={jcrUrl(jcrAbbrev)} target="_blank" rel="noopener" title={`${journal} — impact factor on Journal Citation Reports (needs Web of Science access)`} class="text-slate-500 hover:text-brand-700 hover:underline">JCR ↗</a>
         )}
         {pub.pmcid && <span class="text-accent-500 font-medium">Open access</span>}
       </div>
