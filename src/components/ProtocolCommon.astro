@@ -164,11 +164,63 @@
       return true;
     }
 
+    /* `?seed=paste` — the payload was too large to travel in the URL.
+       A worked-up proposal carries 600-900 characters per operational
+       definition, which base64-encodes past 20,000 characters and is refused
+       as "URI Too Long", so the sender copies it and this offers somewhere to
+       put it. Keeping it off the query string also keeps an unpublished study
+       out of browser history. */
+    function pastePanel(form, write) {
+      if (document.getElementById("pc-paste")) return;
+      var box = document.createElement("div");
+      box.id = "pc-paste";
+      box.style.cssText =
+        "margin:0 0 1rem;padding:.9rem 1rem;border-radius:10px;" +
+        "background:#EAF3EE;border:1px solid #9CC9AE;";
+      box.innerHTML =
+        '<div style="font-weight:600;margin-bottom:.35rem">貼上 Hot Topic 複製的內容</div>' +
+        '<div style="font-size:.85rem;color:#3D5560;margin-bottom:.5rem">' +
+        '在下方按 Ctrl+V,表單就會自動填好。你目前的草稿在套用前不會被改動。</div>' +
+        '<textarea id="pc-paste-in" rows="3" style="width:100%;font-family:ui-monospace,monospace;' +
+        'font-size:.8rem;padding:.5rem;border:1px solid #9CC9AE;border-radius:6px"></textarea>' +
+        '<div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center">' +
+        '<button type="button" id="pc-paste-go" style="font:inherit;cursor:pointer;' +
+        'background:#3F8C6E;color:#fff;border:0;border-radius:6px;padding:.35rem .9rem">套用</button>' +
+        '<span id="pc-paste-msg" style="font-size:.85rem;color:#9E3A2C"></span></div>';
+      var f = document.querySelector("form");
+      if (f && f.parentNode) f.parentNode.insertBefore(box, f);
+
+      var ta = box.querySelector("#pc-paste-in");
+      var msg = box.querySelector("#pc-paste-msg");
+      var apply = function () {
+        var raw = (ta.value || "").trim();
+        if (!raw) { msg.textContent = "先貼上內容"; return; }
+        var obj;
+        try { obj = JSON.parse(raw); } catch (e) {
+          msg.textContent = "看不懂這段內容 — 請確認是從 Hot Topic 的「開啟 Protocol」複製的";
+          return;
+        }
+        write(obj);
+        box.remove();
+        banner();
+        form.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      box.querySelector("#pc-paste-go").addEventListener("click", apply);
+      // Applying on paste saves a click; the button stays for a manual retype.
+      ta.addEventListener("paste", function () { setTimeout(apply, 0); });
+      ta.focus();
+    }
+
     /* One call for the common case: seed if present, else restore the saved
-       draft. Returns "seed" | "saved" | "none" so a page can tell the user. */
+       draft. Returns "seed" | "paste" | "saved" | "none" so a page can tell
+       the user. */
     function restore(form, storageKey, writeForm) {
-      var seeded = readSeed();
       var write = writeForm || function (s) { applySeed(form, s); };
+      if (new URLSearchParams(location.search).get("seed") === "paste") {
+        pastePanel(form, write);
+        return "paste";
+      }
+      var seeded = readSeed();
       if (seeded) {
         write(seeded);
         banner();
