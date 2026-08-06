@@ -22,7 +22,7 @@
  * failure in one section logs a warning but never blocks the others or the
  * site. Uses only Node built-ins + global fetch (Node 18+).
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // Repo root (decoded — handles spaces in the path on Windows).
@@ -334,6 +334,13 @@ async function metricsFromScrape() {
   return { citations: nums[0], hIndex: nums[2], via: "scrape" };
 }
 
+// Whether Scholar was actually reachable this run. Note this is NOT the same as
+// "the numbers changed": metrics.json's `updated` only moves when a value
+// changes, so a genuine citation plateau leaves it old while everything works.
+// The workflow combines the two — old data AND unreachable — to decide if the
+// sync has silently stopped working.
+let scholarReachable = false;
+
 async function syncMetrics() {
   const file = p("src/data/metrics.json");
   const cur = JSON.parse(readFileSync(file, "utf8"));
@@ -348,6 +355,9 @@ async function syncMetrics() {
     console.warn(`  ${via} value implausible (citations=${citations}, h-index=${hIndex} vs current ${cur.citations}/${cur.hIndex}).`);
     return keep();
   }
+  // Read successfully and the value is sane — Scholar is reachable, whether or
+  // not the numbers moved.
+  scholarReachable = true;
   if (citations === cur.citations && hIndex === cur.hIndex) {
     console.log(`  Scholar unchanged (${via}): ${citations} citations, h-index ${hIndex}.`);
     return;
@@ -362,4 +372,15 @@ try { await syncPublications(); } catch (e) { console.warn("Publications section
 try { await syncTemplates(); } catch (e) { console.warn("Templates section failed:", e.message); }
 try { await syncLogos(); } catch (e) { console.warn("Logos section failed:", e.message); }
 try { await syncMetrics(); } catch (e) { console.warn("Metrics section failed:", e.message); }
+
+// Hand the workflow enough to tell "Scholar is blocking us" apart from "the
+// numbers simply haven't moved" — a silent scrape failure looks like success
+// otherwise, because the old metrics.json is deliberately kept.
+if (process.env.GITHUB_OUTPUT) {
+  const updated = (() => {
+    try { return JSON.parse(readFileSync(p("src/data/metrics.json"), "utf8")).updated || ""; } catch { return ""; }
+  })();
+  appendFileSync(process.env.GITHUB_OUTPUT, `scholar_ok=${scholarReachable}\nmetrics_updated=${updated}\n`);
+}
+
 console.log("Done.");

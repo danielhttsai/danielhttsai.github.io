@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.detect.outputs.changed }}
+      scholar_ok: ${{ steps.sync.outputs.scholar_ok }}
+      metrics_updated: ${{ steps.sync.outputs.metrics_updated }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,6 +33,7 @@ jobs:
       - run: npm ci
 
       - name: Sync external content
+        id: sync
         run: node scripts/sync-content.mjs
         env:
           # Optional: enables reliable Google Scholar citation/h-index sync from
@@ -67,6 +70,37 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
+
+  # Google blocks Actions' datacenter IPs from time to time, and the sync
+  # deliberately keeps the old metrics.json when that happens — so a scrape that
+  # has been failing for months still looks like a green run. This job is the
+  # alarm. It runs only when Scholar was unreachable, and fails (which is what
+  # actually sends an email; warning annotations do not) once the numbers have
+  # been frozen for over 4 weeks.
+  #
+  # It deliberately sits in its own job: `deploy` needs only `sync`, so raising
+  # this alarm never blocks the site from publishing real content changes.
+  scholar-freshness:
+    needs: sync
+    if: ${{ !cancelled() && needs.sync.outputs.scholar_ok == 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check how long the Scholar metrics have been frozen
+        env:
+          UPDATED: ${{ needs.sync.outputs.metrics_updated }}
+        run: |
+          set -euo pipefail
+          if [ -z "$UPDATED" ]; then
+            echo "::warning title=Scholar unreachable::Could not read the last-updated date from metrics.json."
+            exit 0
+          fi
+          age=$(( ( $(date -u +%s) - $(date -u -d "$UPDATED" +%s) ) / 86400 ))
+          echo "Scholar was unreachable this run; metrics last changed $UPDATED ($age days ago)."
+          if [ "$age" -gt 28 ]; then
+            echo "::error title=Scholar metrics stale::Google Scholar has been unreachable and the citation count has not moved since $UPDATED ($age days). Update src/data/metrics.json by hand, or add a SERPAPI_KEY secret so the sync stops depending on scraping."
+            exit 1
+          fi
+          echo "::warning title=Scholar unreachable this week::Kept the existing metrics (last changed $UPDATED, $age days ago). No action needed unless this keeps happening — this becomes a failure after 28 days."
 
   deploy:
     needs: sync
