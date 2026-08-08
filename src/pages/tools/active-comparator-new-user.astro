@@ -1038,21 +1038,32 @@ const TIMELINE_PRESETS: Record<string, string> = {
               <p class="text-[11px] text-slate-700 leading-relaxed">
                 Calibration only works if the claims-only score carries no information about the outcome beyond the gold-standard score.
                 Wan (<em>Am J Epidemiol</em> 2024) shows this holds only when the covariates' effects on the outcome are <strong>proportional</strong> to their effects
-                on treatment; otherwise the correction is biased and can be <em>worse than doing nothing</em>. If your validation dataset has outcomes you can test it
-                directly: fit <code>outcome ~ treatment + PS_gs + PS_ep</code> in the validation data and look at the PS_ep term (the R code below does this).
-                A coefficient distinguishable from zero means surrogacy fails.
+                on treatment; otherwise the correction is biased and can be <em>worse than doing nothing</em>. If your validation dataset has outcomes, measure it.
               </p>
-              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <p class="text-[11px] text-slate-700 leading-relaxed">
+                The measure to use is <strong>S</strong>, from Lunt et al. (<em>Am J Epidemiol</em> 2012, Table 2 footnote g): of the outcome variation explained by both
+                propensity scores together, the percentage attributable to the gold-standard score alone. 100% means perfect surrogacy. It is a ratio of two
+                likelihood-ratio statistics and the R code below computes it. <strong>Prefer it to a p-value</strong> — in a validation sample of any size the p-value
+                rejects on departures far too small to matter, and our own simulation found it rejecting at S = 96% where calibration still removed most of the bias.
+              </p>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">S, surrogacy % (0-100)</span>
+                  <input type="number" step="any" min="0" max="100" name="pscSurroS" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
                 <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">Coefficient on PS_ep</span>
                   <input type="number" step="any" name="pscSurroCoef" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
-                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">Its p-value</span>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">Its p-value (secondary)</span>
                   <input type="number" step="any" min="0" max="1" name="pscSurroP" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
                 <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">Validation outcomes available?</span>
                   <select name="pscSurroTestable" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none">
-                    <option value="yes" selected>Yes — surrogacy is testable</option>
-                    <option value="no">No — surrogacy is untestable here</option>
+                    <option value="yes" selected>Yes — surrogacy is measurable</option>
+                    <option value="no">No — surrogacy is unmeasurable here</option>
                   </select></label>
               </div>
+              <p class="text-[11px] text-slate-600 leading-relaxed">
+                Anchors, from Lunt's published Table 2: scenarios with S of 88-99% gave 75-114% bias reduction, while S of 6-14% gave bias reduction of
+                −132% to −189% — calibration made things substantially worse. In our own simulation PSC helped at S ≥ 92% (5/5 replicates) and hurt at S ≈ 82%
+                (0/5). The bands this tool uses are a reading of those two sources, not a published cut-off.
+              </p>
             </div>
 
             <div class="border border-slate-200 rounded-xl p-3 space-y-3">
@@ -1597,15 +1608,27 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         const measure = ({ HR: "HR", RR: "RR", RD: "RD", IRR: "IRR" })[s.effectMeasure] || "HR";
         const nonCollapsible = s.effectMeasure !== "RD";   // HR / RR-from-logistic / IRR: Wan bias source 1
         const scaleLabel = s.pscScale === "logit" ? "logit(PS)" : "PS (probability scale)";
+        // Surrogacy verdict. S (Lunt 2012, Table 2 footnote g) is the primary
+        // instrument and the p-value is demoted to a secondary one, because the
+        // p-value is a test of an exact null in a sample of arbitrary size: on
+        // our own angle sweep it rejected at p < 0.001 while S was 96% and
+        // calibration was still removing most of the bias. Bands below are a
+        // reading of Lunt's Table 2 plus our simulation, not a published cut-off.
         const surroP = pscNum(s.pscSurroP), surroCoef = pscNum(s.pscSurroCoef);
+        const surroS = pscNum(s.pscSurroS);
         const surroTestable = s.pscSurroTestable !== "no";
-        const surroVerdict = !surroTestable ? "untestable"
-          : (surroP === null ? "untested" : (surroP < 0.05 ? "violated" : "not-rejected"));
+        // A supplied S or p wins over the "no outcomes" dropdown: neither can be
+        // computed without outcomes, so their presence is the better evidence
+        // and a stale dropdown should not label a real measurement unmeasurable.
+        const surroVerdict = surroS !== null ? (surroS >= 90 ? "s-high" : surroS >= 50 ? "s-mid" : "s-low")
+          : surroP !== null ? (surroP < 0.05 ? "p-rejected" : "p-ok")
+          : !surroTestable ? "untestable"
+          : "untested";
         return {
           claims, clinical, excluded, a0, a1, a2, a1se, a2se, bT, bTse, bP,
           k, bC, naiveLo, naiveHi, bootLo, bootHi, hasBoot,
           ratio, measure, nonCollapsible, scaleLabel,
-          surroP, surroCoef, surroTestable, surroVerdict,
+          surroP, surroCoef, surroS, surroTestable, surroVerdict,
           bootB: (s.pscBootB || "").trim() || "1000",
           r2: pscNum(s.pscR2),
           claimsDb: (s.pscClaimsDb || "").trim() || "the claims database",
@@ -1624,12 +1647,12 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         const out = [];
         out.push(["1. Surrogacy, and the proportionality condition behind it",
           "PSC assumes the error-prone score is a surrogate for the gold-standard score: Y ⫫ PS_ep | (T, PS_gs). Wan (2024) shows what that really demands — \"confounders cannot directly impact the outcome and … their effects on the outcome are solely mediated through the propensity score\" — and proves PSC \"is generally biased unless the effects of confounders on the outcome and treatment are proportional to each other\". Proportional means the covariate coefficient vector in the outcome model is a scalar multiple of the one in the treatment model. Nothing guarantees that in a real cohort."]);
-        out.push([m.surroTestable ? "2. Test it — you can, because the validation data have outcomes" : "2. You cannot test it here, which is a reason not to proceed",
+        out.push([m.surroTestable ? "2. Measure it — you can, because the validation data have outcomes" : "2. You cannot measure it here, which is a reason not to proceed",
           m.surroTestable
-            ? "Fit outcome ~ treatment + PS_gs + PS_ep in the validation dataset and test whether the PS_ep coefficient is zero (Stürmer 2007 proposed exactly this). A non-zero coefficient means surrogacy fails. In our own simulation the test tracked the failure precisely: p = 0.36 when the coefficient vectors were proportional, and p < 0.001 at every departure from proportionality we tried."
-            : "Surrogacy is only checkable when the validation dataset contains the outcome. Without it, the correction rests on an assumption that cannot be examined, and Wan's analysis says the assumption is usually false. Either obtain outcomes in the validation data, or drop PSC in favour of a sensitivity analysis that does not require it."]);
+            ? "Use S, not a p-value. S (Lunt et al., Am J Epidemiol 2012, Table 2 footnote g) is the percentage of the outcome information carried by both propensity scores that is carried by the gold-standard score alone, computed as a ratio of likelihood-ratio statistics against a treatment-only model; 100% is perfect surrogacy. The p-value from the same model tests an exact null, so in a validation sample of any size it rejects on departures far too small to matter — in our own simulation it returned p < 0.001 while S was 96% and calibration was still removing most of the bias. Anchors: Lunt's published scenarios gave 75-114% bias reduction at S of 88-99% and −132% to −189% at S of 6-14%; our simulation had calibration helping in 5/5 replicates at S ≥ 92% and hurting in 5/5 at S ≈ 82%."
+            : "Neither S nor the p-value can be computed without outcomes in the validation dataset. This is precisely the cross-sectional-validation setting Lunt et al. (2012) address, and their conclusion is not to trust the point correction but to present PSC as a bias analysis over a plausible range for the unmeasured confounder's outcome association. Either obtain outcomes in the validation data, or take that route."]);
         out.push(["3. Failing the test is not a caveat — the correction reverses",
-          "When surrogacy fails, calibration does not merely lose power; it moves the estimate the wrong way. Our simulation (linear outcome, so no non-collapsibility involved) gave a naive bias of +0.53 and a calibrated bias of −0.83 on the log scale at a moderate departure from proportionality; at a larger departure the naive estimate was nearly unbiased (+0.09) while calibration introduced −1.02. Stürmer's own 2007 simulation reports the same direction of failure: \"If surrogacy is violated, PSC can lead to an increase in bias.\" If the test rejects, report the naive estimate and say why calibration was not applied."]);
+          "When surrogacy fails, calibration does not merely lose power; it moves the estimate the wrong way. Our simulation (linear outcome, so no non-collapsibility involved) gave a naive bias of +0.53 and a calibrated bias of −0.83 on the log scale at a moderate departure from proportionality; at a larger departure the naive estimate was nearly unbiased (+0.09) while calibration introduced −1.02. Stürmer's own 2007 simulation reports the same direction of failure: \"If surrogacy is violated, PSC can lead to an increase in bias.\" If S is low, report the naive estimate, report S, and follow the route under 'If surrogacy cannot be supported' rather than presenting a correction."]);
         if (m.nonCollapsible) {
           out.push(["4. Your effect measure is non-collapsible, so a residual gap remains even when surrogacy holds",
             "This protocol reports a " + m.measure + ". Wan identifies non-collapsibility of the odds and hazard ratio as an independent source of PSC bias: conditioning on a propensity score is not the same as conditioning on the covariates, and for a non-collapsible measure that changes the coefficient being estimated. So the calibrated " + m.measure + " is conditional on the gold-standard propensity score, not on baseline covariates — a subtly different estimand from the one the protocol otherwise describes. The gap shrinks as the outcome becomes rarer. In our simulation with proportional coefficients the calibrated log odds ratio still sat 0.13 below the truth, against a naive bias of +0.84. State the estimand you are reporting."]);
@@ -1684,22 +1707,32 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           'a0 <- coef(cal)[["(Intercept)"]]; a1 <- coef(cal)[["ps_ep"]]; a2 <- coef(cal)[["treat"]]',
           "c(a0 = a0, a1 = a1, a2 = a2, R2 = summary(cal)$r.squared)   # <- publish these",
           "",
-          "## ── STEP 1d — THE SURROGACY TEST. RUN THIS BEFORE TRUSTING ANYTHING ──",
+          "## ── STEP 1d — MEASURE SURROGACY. DO THIS BEFORE TRUSTING ANYTHING ──",
           "## Surrogacy says PS_ep tells you nothing about the outcome once you know",
-          "## treatment and PS_gs. Stürmer (2007) proposed testing exactly that, and",
-          "## it is only possible because the validation data have outcomes.",
-          "## Wan (Am J Epidemiol 2024;193:360-9) shows the assumption holds only when",
-          "## the covariates' effects on the OUTCOME are proportional to their effects",
-          "## on TREATMENT — so this test is the practical check on that condition.",
-          surv
-            ? "surro <- coxph(Surv(time, event) ~ treat + ps_gs + ps_ep, data = val)"
-            : "surro <- glm(event ~ treat + ps_gs + ps_ep, data = val, family = binomial)",
-          'summary(surro)$coefficients["ps_ep", ]      # <- publish this too',
-          "## If the ps_ep coefficient is distinguishable from zero, surrogacy FAILS.",
-          "## Do not report the calibrated estimate as a correction: when surrogacy",
-          "## fails, calibration moves the estimate the WRONG way. Report the naive",
-          "## estimate and say the test rejected. Lunt et al. (Am J Epidemiol",
-          "## 2012;175:1294-1302) give a bias formula for a sensitivity analysis instead.",
+          "## treatment and PS_gs. It is measurable only because the validation data",
+          "## have outcomes. Wan (Am J Epidemiol 2024;193:360-9) shows the assumption",
+          "## holds only when the covariates' effects on the OUTCOME are proportional",
+          "## to their effects on TREATMENT, so this is the practical check on that.",
+          "##",
+          "## S = of the outcome information carried by BOTH propensity scores, the",
+          "## percentage carried by the gold-standard score alone. 100% = surrogacy.",
+          "## Lunt et al., Am J Epidemiol 2012;175:1294-1302, Table 2 footnote (g).",
+          "m0 <- " + (surv ? "coxph(Surv(time, event) ~ treat, data = val)" : "glm(event ~ treat, data = val, family = binomial)"),
+          "m1 <- " + (surv ? "coxph(Surv(time, event) ~ treat + ps_gs, data = val)" : "glm(event ~ treat + ps_gs, data = val, family = binomial)"),
+          "m2 <- " + (surv ? "coxph(Surv(time, event) ~ treat + ps_gs + ps_ep, data = val)" : "glm(event ~ treat + ps_gs + ps_ep, data = val, family = binomial)"),
+          "ll <- function(m) if (inherits(m, \"coxph\")) m$loglik[length(m$loglik)] else as.numeric(logLik(m))",
+          "S <- 100 * (ll(m1) - ll(m0)) / (ll(m2) - ll(m0))",
+          "S                                            # <- publish this; enter it in Section 8b",
+          'summary(m2)$coefficients["ps_ep", ]          # secondary: the coefficient and its p-value',
+          "##",
+          "## Reading S. Lunt's published scenarios: S of 88-99% gave 75-114% bias",
+          "## reduction; S of 6-14% gave -132% to -189%, i.e. calibration roughly",
+          "## doubled the error. Our own simulation: PSC helped at S >= 92% (5/5",
+          "## replicates) and hurt at S ~ 82% (0/5). Judge on S, NOT on the p-value —",
+          "## the p-value tests an exact null and rejects on departures too small to",
+          "## matter (we saw p < 0.001 at S = 96%, where calibration still worked).",
+          "## If S is low, do not report the calibrated estimate as a correction;",
+          "## see 'If surrogacy cannot be supported' in the protocol section.",
           "",
           "## ── STEP 2 — claims study (this is all a later study needs to repeat) ─",
           'main$ps_ep <- predict(glm(f("treat", C), data = main, family = binomial), type = "' + link + '")',
@@ -1771,7 +1804,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         ["The PS must enter the outcome model linearly",
           "The correction is the inverse of a linear map between two coefficient vectors, so it applies to an outcome model of the form g(E[Y]) = β₀ + β_T·T + β_PS·PS_ep. PS matching, decile stratification and inverse-probability weighting do not produce a β_PS, and the algebra does not carry over to them. If the primary analysis uses one of those, fit this linear-adjustment model alongside it as the calibrated analysis and say so."],
         ["Same PS scale throughout, and the scale the original method uses",
-          "Stürmer's method treats the propensity score as a probability and fits a linear calibration model in it; that is the default here. This protocol uses " + m.scaleLabel + " in both the calibration model and the outcome model. α₁ and α₂ are not scale-free, so mixing PS in one model with logit(PS) in the other silently invalidates the correction."],
+          "The propensity score is treated as a probability and the calibration model is linear in it; that is the default here. Provenance, so you can check it: this follows the formal restatements of the method in Wan (2024) and in Lunt et al. (2012), whose equations use e(C) and ê(X) directly as probabilities with no logit or log transformation. It was NOT confirmed against the Methods section of Stürmer et al. (2005), which is paywalled — worth a two-minute check against the original via institutional access if you have it. This protocol uses " + m.scaleLabel + " in both the calibration model and the outcome model. α₁ and α₂ are not scale-free, so mixing PS in one model with logit(PS) in the other silently invalidates the correction."],
         ["Positivity and overlap",
           "Both propensity scores must have common support across treatment groups in both datasets. Report the overlap of PS_ep in the main study and of PS_ep and PS_gs in the validation dataset."],
         ["Variance",
@@ -1783,7 +1816,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
       const PSC_REFERENCES = [
         "Stürmer T, Schneeweiss S, Avorn J, Glynn RJ. Adjusting effect estimates for unmeasured confounding with validation data using propensity score calibration. Am J Epidemiol 2005;162(3):279-289. doi:10.1093/aje/kwi192. (The method.)",
         "Stürmer T, Schneeweiss S, Rothman KJ, Avorn J, Glynn RJ. Performance of propensity score calibration — a simulation study. Am J Epidemiol 2007;165(10):1110-1118. doi:10.1093/aje/kwm074. (Bias reduction of 32-106% when surrogacy holds; an increase in bias when it does not; proposes testing surrogacy using outcomes in the validation data.)",
-        "Lunt M, Glynn RJ, Rothman KJ, Avorn J, Stürmer T. Propensity score calibration in the absence of surrogacy. Am J Epidemiol 2012;175(12):1294-1302. doi:10.1093/aje/kwr463. PMID 22688682. (A bias formula that turns PSC into a sensitivity analysis when surrogacy is doubtful.)",
+        "Lunt M, Glynn RJ, Rothman KJ, Avorn J, Stürmer T. Propensity score calibration in the absence of surrogacy. Am J Epidemiol 2012;175(12):1294-1302. doi:10.1093/aje/kwr463. PMID 22688682. (Source of the graded surrogacy measure S used above, Table 2 footnote g; and of a path-analytic bias formula, equation 9, that turns PSC into a sensitivity analysis over a plausible range for the unmeasured confounder's outcome association. The formula is derived for one measured and one unmeasured confounder, assumed independent and linearly related; see the Web Appendices for the estimation of its terms.)",
         "Wan F. A cautionary note on using propensity score calibration to control for unmeasured confounding bias when the surrogacy assumption is absent. Am J Epidemiol 2024;193(2):360-369. doi:10.1093/aje/kwad189. PMID 37759344. (PSC is generally biased unless confounder effects on outcome and treatment are proportional; identifies non-collapsibility and residual confounding as the two bias sources.)",
         "Rosner B, Spiegelman D, Willett WC. Correction of logistic regression relative risk estimates and confidence intervals for measurement error: the case of multiple covariates measured with error. Am J Epidemiol 1990;132(4):734-745. (The regression-calibration machinery PSC applies to the propensity score.)",
       ];
@@ -1813,24 +1846,52 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
       };
 
       const PSC_SURRO_TEXT = {
-        violated: ["Surrogacy REJECTED — do not report the calibrated estimate as a correction",
-          "The PS_ep coefficient in the validation outcome model is distinguishable from zero, so the error-prone score carries outcome information the gold-standard score does not. This is the condition under which calibration moves the estimate the wrong way. Report the naive estimate, report this test, and use Lunt's bias formula for a sensitivity analysis instead."],
-        "not-rejected": ["Surrogacy not rejected — calibration may proceed, as a sensitivity analysis",
-          "The test did not detect outcome information in PS_ep beyond the gold-standard score. That is the best evidence available for the assumption, but it is a failure to reject, not proof: the test has limited power in a small validation sample. Report the test alongside the calibrated estimate."],
-        untested: ["Surrogacy NOT YET TESTED — run the test before using the correction",
-          "Your validation dataset has outcomes, so the assumption is checkable. Fit outcome ~ treatment + PS_gs + PS_ep in the validation data and enter the PS_ep coefficient and p-value in Section 8b. Until then the calibrated estimate rests on an untested assumption that Wan (2024) argues is usually false."],
-        untestable: ["Surrogacy UNTESTABLE here — the weakest position to be in",
-          "Without outcomes in the validation dataset the assumption cannot be examined at all. Wan (2024) shows PSC is generally biased unless confounder effects on outcome and treatment are proportional, so an untested assumption is not a neutral starting point. Prefer obtaining outcomes in the validation data, or a method that does not need surrogacy."],
+        "s-high": ["Surrogacy supported (S ≥ 90%) — calibration may proceed, as a sensitivity analysis",
+          "Almost all of the outcome information carried by the two propensity scores is carried by the gold-standard score, which is what surrogacy asserts. Lunt's published scenarios at S of 88-99% achieved 75-114% bias reduction, and our own simulation found calibration helping in 5 of 5 replicates at S ≥ 92%. This supports the assumption; it does not prove it. Report S alongside the calibrated estimate, and still report the naive estimate as primary."],
+        "s-mid": ["Partial surrogacy (50% ≤ S < 90%) — calibration is more likely to add bias than remove it",
+          "A material share of the outcome information sits in the error-prone score rather than the gold-standard one. This is the region where our simulation turned: at S ≈ 82% calibration was worse than doing nothing in 5 of 5 replicates, with the naive bias at +0.41 and the calibrated bias at −0.72. Do not present the calibrated estimate as a correction. Report the naive estimate, report S, and treat calibration at most as a bounding exercise in the direction it moves."],
+        "s-low": ["Surrogacy absent (S < 50%) — do not calibrate",
+          "The error-prone score carries most of the outcome information, which is the opposite of what the method requires. Lunt's scenarios at S of 6-14% produced bias reduction of −132% to −189%: calibration roughly doubled the error. Report the naive estimate and report S as the reason calibration was not applied."],
+        "p-rejected": ["The p-value rejects — but compute S before abandoning calibration",
+          "A significant PS_ep coefficient means some departure from surrogacy, not necessarily one that matters. The p-value tests an exact null, so in a validation sample of any size it rejects on departures too small to affect the estimate: in our own simulation it returned p < 0.001 while S was 96% and calibration still removed most of the bias. Compute S and judge on that."],
+        "p-ok": ["The p-value does not reject — now compute S, which is the better instrument",
+          "Failing to reject is weak evidence, especially in a small validation sample where the test has little power. Compute the graded measure S from the same models and judge on its magnitude rather than on a significance verdict."],
+        untested: ["Surrogacy NOT YET MEASURED — do this before using the correction",
+          "Your validation dataset has outcomes, so the assumption is measurable. Fit outcome ~ treatment + PS_gs and outcome ~ treatment + PS_gs + PS_ep in the validation data, take the ratio of their likelihood-ratio statistics against the treatment-only model, and enter S in Section 8b. The R code below does it. Until then the calibrated estimate rests on an unexamined assumption that Wan (2024) argues is usually false."],
+        untestable: ["Surrogacy UNMEASURABLE here — the weakest position to be in",
+          "Without outcomes in the validation dataset neither S nor the p-value can be computed. This is exactly the cross-sectional-validation setting Lunt et al. (2012) address, and their answer is not to trust the point correction: present PSC as a bias analysis over a plausible range for the unmeasured confounder's outcome association instead. See 'If surrogacy cannot be supported' below."],
       };
+
+      // What to do when the gate does not open. This is the constructive route
+      // and it is deliberately bounded by what could be read: Lunt's bias
+      // equation is quoted, but this tool does not compute it — see the note.
+      const pscNoSurrogacyRoute = (m) => ([
+        ["Report the naive estimate as the result, and say why",
+          "A claims-only estimate with its confounding honestly described is a publishable result. A calibrated estimate whose validity condition failed is not. State the covariates the claims database could not see, and report S (or that it could not be computed) as the reason calibration was not applied."],
+        ["Bound the direction, not the magnitude",
+          "Lunt et al. show the scenarios in which PSC worked shared one feature: the observed confounders X and the unobserved confounder C bias the exposure-outcome association in the SAME direction. Where your clinical variables plausibly push the estimate the same way as the claims variables already do, the naive estimate is likely conservative in a known direction. Where they push the other way, calibration is precisely what fails. That directional statement is defensible from the validation data alone."],
+        ["Use PSC as a bias analysis over a range, not as a point correction",
+          "Lunt et al. derive a formula (their equation 9) that predicts the PSC bias from parameters estimable in the main and validation studies plus one unidentifiable parameter — IRR_CY, the association of the unmeasured confounder with the outcome. Their recommendation is to substitute a plausible range for that parameter, or sample from a prior for it, and present an uncertainty interval rather than a single corrected number. In their simulations the formula predicted the observed bias almost exactly (correlation 0.998 across 24 scenarios)."],
+        ["Why this tool does not compute that formula for you",
+          "The bias term is r(λ2_PEP)·{r(λ3_PEP)·β3 − (β4 + λ5T·β3)/λ1T}. Two of its pieces map onto numbers you already have — from Lunt's equation 8, the calibration model's treatment coefficient IS r(λ2_PEP), i.e. α₂, and its PS_ep coefficient is r(λ4T)·λ1T, i.e. α₁ — so the entire bias is proportional to α₂, and a large α₂ means both a large correction and a large possible error in it. But the regressions that identify r(λ3_PEP), β4, λ1T and λ5T are specified in the paper's Web Appendices, which are paywalled and served behind a bot challenge; they could not be read, and implementing them from the main text alone would be guesswork. Get the paper and follow it directly."],
+        ["And note what the formula assumes even then",
+          "Lunt et al. derive it for the simplest possible setting — one measured confounder and one unmeasured confounder, assumed independent, with linear (path-analytic) associations throughout and a Poisson outcome model. They call this the major limitation of the work. A protocol with " + m.claims.length + " claims covariates and " + m.clinical.length + " clinical ones is a long way from that setting, so treat any number it produces as an order-of-magnitude bias analysis, not a correction."],
+        ["Alternatives that do not need surrogacy at all",
+          "Wan (2024) points to two: rigorous pre-design identification of the confounders with a conventional propensity-score analysis plus sensitivity analysis, and instrumental-variable methods. Lunt et al. add maximum likelihood or multiple imputation with the unidentified parameters fixed at a range of values, and Bayesian analysis with priors on them. An E-value on the naive estimate is the cheapest honest statement of how strong unmeasured confounding would have to be to explain the finding."],
+      ]);
       // Full literal class strings — Tailwind scans source text, so a class
       // name assembled at runtime ("border-" + colour + "-300") is never
       // generated and the box would render unstyled.
+      const PSC_ROSE  = { box: "rounded-xl border border-rose-300 bg-rose-50 p-4",       head: "text-xs uppercase tracking-widest font-bold text-rose-800" };
+      const PSC_AMBER = { box: "rounded-xl border border-amber-300 bg-amber-50 p-4",     head: "text-xs uppercase tracking-widest font-bold text-amber-800" };
+      const PSC_GREEN = { box: "rounded-xl border border-emerald-300 bg-emerald-50 p-4", head: "text-xs uppercase tracking-widest font-bold text-emerald-800" };
       const PSC_SURRO_CLS = {
-        violated:      { box: "rounded-xl border border-rose-300 bg-rose-50 p-4",       head: "text-xs uppercase tracking-widest font-bold text-rose-800" },
-        untestable:    { box: "rounded-xl border border-rose-300 bg-rose-50 p-4",       head: "text-xs uppercase tracking-widest font-bold text-rose-800" },
-        untested:      { box: "rounded-xl border border-amber-300 bg-amber-50 p-4",     head: "text-xs uppercase tracking-widest font-bold text-amber-800" },
-        "not-rejected":{ box: "rounded-xl border border-emerald-300 bg-emerald-50 p-4", head: "text-xs uppercase tracking-widest font-bold text-emerald-800" },
+        "s-low": PSC_ROSE, untestable: PSC_ROSE,
+        "s-mid": PSC_AMBER, untested: PSC_AMBER, "p-rejected": PSC_AMBER, "p-ok": PSC_AMBER,
+        "s-high": PSC_GREEN,
       };
+      // The constructive route is shown whenever the gate does not clearly open.
+      const pscNeedsRoute = (v) => v === "s-low" || v === "s-mid" || v === "untestable" || v === "p-rejected";
 
       // ── On-screen card + the classification grid ──────────────────────
       let pscVarsSig = "";
@@ -1894,8 +1955,19 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           '<div class="' + svc.box + '">' +
           '<p class="' + svc.head + '">' + pscEsc(sv[0]) + "</p>" +
           '<p class="mt-1 text-xs text-slate-700 leading-relaxed">' + pscEsc(sv[1]) + "</p>" +
-          (m.surroP !== null ? '<p class="mt-1 text-[11px] text-slate-600">Entered: coefficient on PS_ep = ' + pscEsc(m.surroCoef === null ? "(not given)" : pscFmt(m.surroCoef, 4)) + ", p = " + pscEsc(pscFmt(m.surroP, 4)) + ".</p>" : "") +
-          "</div>";
+          ((m.surroS !== null || m.surroP !== null)
+            ? '<p class="mt-1 text-[11px] text-slate-600">Entered: ' +
+              (m.surroS !== null ? "S = " + pscEsc(pscFmt(m.surroS, 1)) + "%" : "S not given") +
+              (m.surroCoef !== null ? "; coefficient on PS_ep = " + pscEsc(pscFmt(m.surroCoef, 4)) : "") +
+              (m.surroP !== null ? "; p = " + pscEsc(pscFmt(m.surroP, 4)) : "") + ".</p>"
+            : "") +
+          "</div>" +
+          (pscNeedsRoute(m.surroVerdict)
+            ? '<details open class="rounded-xl border border-slate-300 bg-white p-4"><summary class="cursor-pointer text-xs uppercase tracking-widest font-bold text-slate-800">If surrogacy cannot be supported — what to do instead</summary>' +
+              '<div class="mt-3 space-y-2">' + pscNoSurrogacyRoute(m).map((v) =>
+                '<p class="text-xs text-slate-700 leading-relaxed"><strong>' + pscEsc(v[0]) + ".</strong> " + pscEsc(v[1]) + "</p>").join("") +
+              "</div></details>"
+            : "");
         const validity =
           '<details class="rounded-xl border border-slate-200 bg-slate-50 p-4"><summary class="cursor-pointer text-xs uppercase tracking-widest font-bold text-slate-700">When this method is valid, and what to report — read before using the number</summary>' +
           '<div class="mt-3 space-y-2">' + pscValidity(m).map((v) =>
@@ -1947,9 +2019,10 @@ ${m.claimsDb} records diagnoses, procedures, dispensings, demographics and enrol
 | **Validation dataset** | ${m.valName}${m.valN ? ", n = " + m.valN : ""} (${m.valType}) |
 | **Treatment contrast** | ${m.treatLabel} |
 | **PS scale (both models)** | ${m.scaleLabel} |
-| **Surrogacy test** | ${sv[0]}${m.surroP !== null ? " (coefficient on PS_ep " + (m.surroCoef === null ? "not given" : pscFmt(m.surroCoef, 4)) + ", p = " + pscFmt(m.surroP, 4) + ")" : ""} |
+| **Surrogacy (S)** | ${sv[0]}${m.surroS !== null ? " — S = " + pscFmt(m.surroS, 1) + "%" : ""}${m.surroP !== null ? " (PS_ep coefficient " + (m.surroCoef === null ? "not given" : pscFmt(m.surroCoef, 4)) + ", p = " + pscFmt(m.surroP, 4) + ")" : ""} |
 
 > **Before the numbers: when this method is valid.** ${sv[1]}
+${pscNeedsRoute(m.surroVerdict) ? "\n#### If surrogacy cannot be supported\n\n" + pscNoSurrogacyRoute(m).map((v) => "- **" + v[0] + ".** " + v[1]).join("\n") + "\n" : ""}
 
 **Claims-available covariates C (${m.claims.length}) — enter PS_ep and PS_gs**
 
@@ -2026,9 +2099,16 @@ ${numbered(PSC_REFERENCES)}
           ["Validation dataset", m.valName + (m.valN ? ", n = " + m.valN : "") + " (" + m.valType + ")"],
           ["Treatment contrast", m.treatLabel],
           ["PS scale (both models)", m.scaleLabel],
-          ["Surrogacy test", PSC_SURRO_TEXT[m.surroVerdict][0] + (m.surroP !== null ? " (coefficient on PS_ep " + (m.surroCoef === null ? "not given" : pscFmt(m.surroCoef, 4)) + ", p = " + pscFmt(m.surroP, 4) + ")" : "")],
+          ["Surrogacy (S)", PSC_SURRO_TEXT[m.surroVerdict][0] + (m.surroS !== null ? " — S = " + pscFmt(m.surroS, 1) + "%" : "") + (m.surroP !== null ? " (PS_ep coefficient " + (m.surroCoef === null ? "not given" : pscFmt(m.surroCoef, 4)) + ", p = " + pscFmt(m.surroP, 4) + ")" : "")],
         ]));
         c.push(h.p([h.text("Before the numbers: when this method is valid. ", { bold: true }), h.text(PSC_SURRO_TEXT[m.surroVerdict][1])]));
+        if (pscNeedsRoute(m.surroVerdict)) {
+          c.push(h.h2("If surrogacy cannot be supported"));
+          pscNoSurrogacyRoute(m).forEach((v) => c.push(new D.Paragraph({
+            children: [h.text(v[0] + ". ", { bold: true }), h.text(v[1])],
+            bullet: { level: 0 }, spacing: { before: 40, after: 40 },
+          })));
+        }
         c.push(h.h2("Claims-available covariates C (" + m.claims.length + ") — enter PS_ep and PS_gs"));
         m.claims.length ? m.claims.forEach((x) => c.push(h.bullet(x))) : c.push(h.para("(none)"));
         c.push(h.h2("Clinical-only covariates U (" + m.clinical.length + ") — enter PS_gs only"));
@@ -2324,9 +2404,12 @@ _Drafted with the AsPEN protocol builder (${today})._
           if (m.claims.length === 0) checks.push({ level: "warn", msg: "PS calibration is switched on but no covariate is marked claims-available — there is no error-prone propensity score to calibrate." });
           if (!(s.pscValName || "").trim()) checks.push({ level: "info", msg: "Name the validation dataset that holds both the claims and the clinical variables (Section 8b)." });
           // Wan F, Am J Epidemiol 2024;193(2):360-9 — the two bias sources.
-          if (m.surroVerdict === "violated") checks.push({ level: "warn", msg: "Surrogacy is REJECTED (p = " + pscFmt(m.surroP, 4) + "): the error-prone PS carries outcome information the gold-standard PS does not. Do not report the calibrated estimate as a correction — this is exactly the setting where calibration moves the estimate the wrong way. Report the naive estimate and the test." });
-          if (m.surroVerdict === "untested") checks.push({ level: "warn", msg: "Surrogacy has not been tested. Your validation data have outcomes, so it is checkable: fit outcome ~ treatment + PS_gs + PS_ep in the validation sample and enter the PS_ep coefficient and p-value in Section 8b. Wan (2024) shows PS calibration is generally biased unless this holds." });
-          if (m.surroVerdict === "untestable") checks.push({ level: "warn", msg: "Surrogacy is untestable because the validation dataset has no outcomes. The correction then rests entirely on an assumption Wan (2024) argues is usually false — proportional confounder effects on outcome and on treatment. Consider obtaining outcomes in the validation data, or a method that does not require surrogacy." });
+          if (m.surroVerdict === "s-low") checks.push({ level: "warn", msg: "Surrogacy is absent (S = " + pscFmt(m.surroS, 1) + "%): the error-prone PS carries most of the outcome information. Lunt's scenarios at this level produced bias reduction of −132% to −189% — calibration roughly doubled the error. Report the naive estimate and report S as the reason calibration was not applied." });
+          if (m.surroVerdict === "s-mid") checks.push({ level: "warn", msg: "Partial surrogacy (S = " + pscFmt(m.surroS, 1) + "%). This is the region where our simulation turned: at S ≈ 82% calibration was worse than doing nothing in 5 of 5 replicates. Do not present the calibrated estimate as a correction — see 'If surrogacy cannot be supported' in Section 7b of the export." });
+          if (m.surroVerdict === "p-rejected") checks.push({ level: "info", msg: "The surrogacy p-value rejects, but that alone is not a reason to abandon calibration: the p-value tests an exact null and rejects on departures too small to matter. Compute S (the R code does it) and judge on its magnitude — we observed p < 0.001 at S = 96%, where calibration still removed most of the bias." });
+          if (m.surroVerdict === "p-ok") checks.push({ level: "info", msg: "The surrogacy p-value does not reject, which is weak evidence. Compute S from the same models and judge on its magnitude." });
+          if (m.surroVerdict === "untested") checks.push({ level: "warn", msg: "Surrogacy has not been measured. Your validation data have outcomes, so compute S — of the outcome information carried by both propensity scores, the percentage carried by the gold-standard score alone (Lunt 2012) — and enter it in Section 8b. Wan (2024) shows PS calibration is generally biased unless surrogacy holds." });
+          if (m.surroVerdict === "untestable") checks.push({ level: "warn", msg: "Surrogacy cannot be measured because the validation dataset has no outcomes. This is the cross-sectional-validation setting Lunt et al. (2012) address, and their answer is to present PS calibration as a bias analysis over a range for the unmeasured confounder's outcome association rather than as a point correction." });
           if (m.nonCollapsible) checks.push({ level: "info", msg: "You are reporting a " + m.measure + ", which is non-collapsible. Wan (2024) identifies this as an independent source of PS-calibration bias: the calibrated estimate is conditional on the gold-standard propensity score, not on baseline covariates, so it is a slightly different estimand. The gap narrows as the outcome becomes rarer — state which estimand you report." });
           if (m.bC !== null && !m.hasBoot) checks.push({ level: "info", msg: "The calibrated estimate has no interval. There is no reliable closed-form CI for a ratio of coefficients estimated across two samples — run the bootstrap in the generated R code and paste the percentile bounds into Section 8b." });
           if (m.a1 !== null && Math.abs(m.a1) < 0.05) checks.push({ level: "warn", msg: "α₁ is close to zero, so the correction factor α₂/α₁ explodes and the calibrated estimate is unstable. A near-zero α₁ means the error-prone PS carries almost no information about the gold-standard PS — calibration is not trustworthy here." });
