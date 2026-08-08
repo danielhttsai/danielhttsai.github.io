@@ -395,10 +395,16 @@ export default {
       const population = String(q.population || "").slice(0, 300).trim();
       const comparator = String(q.comparator || "").slice(0, 300).trim();
       const claimsDb = String(payload.claimsDb || "").slice(0, 200).trim() || "Taiwan's National Health Insurance Research Database (NHIRD)";
+      // Each variable carries a short caller-supplied id. Names are echoed back
+      // by the model and are unreliable as keys: it re-cases them, appends the
+      // note, and — for the long descriptive covariate names investigators
+      // actually write — gets a truncated copy in the first place. The id is
+      // what the client matches on.
       const vars = (Array.isArray(payload.variables) ? payload.variables : [])
         .slice(0, 200)
-        .map((v) => ({
-          name: String((v && v.name) || "").slice(0, 140),
+        .map((v, i) => ({
+          id: String((v && v.id) || ("v" + i)).slice(0, 24),
+          name: String((v && v.name) || "").slice(0, 240),
           note: String((v && v.note) || "").slice(0, 240),
         }))
         .filter((v) => v.name);
@@ -417,15 +423,16 @@ export default {
         "What such a database DOES NOT contain: laboratory RESULT VALUES (HbA1c, creatinine, eGFR, lipids, haemoglobin, albumin, INR, urine albumin, etc.), vital signs and anthropometry (height, weight, BMI, blood pressure, heart rate), imaging or test MEASUREMENTS and their readings (ejection fraction, spirometry, visual acuity, intraocular pressure, tumour stage/grade, biopsy findings), clinical severity scores (NYHA, GCS, NIHSS, Child-Pugh, MELD, ECOG, APACHE), lifestyle and behaviour (smoking, alcohol, betel quid, diet, exercise), symptoms, functional status, frailty measured clinically, socioeconomic detail beyond coarse insurance/region proxies, family history, and genetic data.",
         "Borderline judgements: a coded DIAGNOSIS of a condition (e.g. 'obesity diagnosed', 'CKD diagnosis') IS in claims even though the underlying measurement is not; a lab-derived STAGE or VALUE is not. Disease DURATION is only partly available in claims — it is left-truncated at the database start — treat it as clinical unless the note says otherwise, and say why.",
         "",
-        "For EACH variable name below, return:",
+        "Each variable is given as `id | name` (with `:: note` where the investigator supplied one). Return the id EXACTLY as given — it is how the caller matches your answer back. Return one entry per variable, for every variable.",
+        "For EACH variable below, return:",
         "- source: 'claims' if the variable is plausibly recorded in or derivable from " + claimsDb + "; 'clinical' if only a clinical/EMR/registry dataset would have it; 'unclear' if the name is too cryptic to judge.",
         "- confounding: how strongly the variable is likely to confound THIS exposure→outcome contrast — 'strong', 'moderate', 'weak', or 'none'. Use 'none' for identifiers, dates, follow-up bookkeeping, the treatment variable itself, and the outcome variables themselves.",
         "- role: 'baseline' (a pre-treatment covariate), 'treatment', 'outcome', 'identifier', or 'post-baseline' (measured after treatment start — must NOT enter either propensity score).",
         "- reason: max ~18 words, phrased clinically, saying WHY it is (or is not) in claims and why it does (or does not) confound.",
         "Be conservative and honest. Cryptic names are 'unclear', not guesses. Variable names may be in English, Chinese, or a mix; interpret both.",
       ].join("\n");
-      const userText = "VARIABLES (name :: investigator's note, if any):\n" +
-        vars.map((v) => v.name + (v.note ? " :: " + v.note : "")).join("\n");
+      const userText = "VARIABLES (id | name :: investigator's note, if any):\n" +
+        vars.map((v) => v.id + " | " + v.name + (v.note ? " :: " + v.note : "")).join("\n");
       const schema = {
         type: "OBJECT",
         properties: {
@@ -434,13 +441,18 @@ export default {
             items: {
               type: "OBJECT",
               properties: {
+                id: { type: "STRING" },
                 name: { type: "STRING" },
                 source: { type: "STRING", enum: ["claims", "clinical", "unclear"] },
                 confounding: { type: "STRING", enum: ["strong", "moderate", "weak", "none"] },
                 role: { type: "STRING", enum: ["baseline", "treatment", "outcome", "identifier", "post-baseline"] },
                 reason: { type: "STRING" },
               },
-              required: ["name", "source", "confounding", "role", "reason"],
+              // propertyOrdering is what actually makes Gemini emit `id`.
+              // With `required` alone it silently omitted the field on every
+              // item, which is how the id-matching fix failed its first test.
+              propertyOrdering: ["id", "name", "source", "confounding", "role", "reason"],
+              required: ["id", "name", "source", "confounding", "role", "reason"],
             },
           },
         },

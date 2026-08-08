@@ -2406,7 +2406,11 @@ _Drafted with the AsPEN protocol builder (${today})._
         const btn = ev.currentTarget;
         const s = readForm();
         const notes = pscNoteMap(s);
-        const vars = pscCandidates(s).map((n) => ({ name: n, note: notes[n] || "" }));
+        // Stable ids, because names are not usable as keys: the model re-cases
+        // them, appends the note, and long descriptive covariate names get
+        // truncated in transit. Found live — a real protocol whose covariates
+        // were written as full sentences had 9 of 19 rows come back unmatched.
+        const vars = pscCandidates(s).map((n, i) => ({ id: "v" + i, name: n, note: notes[n] || "" }));
         if (!vars.length) { setPscAiMsg("Tick some covariates in Section 8 first, or list validation-only variables.", true); return; }
         btn.disabled = true;
         setPscAiMsg("Asking the AI which of these " + vars.length + " variables a claims database can see (only names and your notes are sent — never data)…");
@@ -2426,18 +2430,29 @@ _Drafted with the AsPEN protocol builder (${today})._
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || !Array.isArray(data.items)) { setPscAiMsg(data.error || "The AI could not classify the variables.", true); return; }
-          // Match the reply back to our variables. The model occasionally
-          // echoes the name with the " :: note" suffix we sent, or changes the
-          // case, so exact-string matching alone silently drops rows.
+          // Match the reply back to our variables: by id first, then by name as
+          // a fallback for anything the model returns without one. Name
+          // matching alone silently drops rows — the model echoes the " :: note"
+          // suffix, changes the case, and only ever sees a truncated copy of a
+          // very long name.
+          const byId = new Map(vars.map((v) => [v.id, v.name]));
           const byName = new Map();
           vars.forEach((v) => { byName.set(v.name, v.name); byName.set(pscNorm(v.name).trim(), v.name); });
-          const resolve = (raw) => {
-            const t = String(raw || "").split("::")[0].trim();
-            return byName.get(t) || byName.get(pscNorm(t).trim()) || null;
+          const resolve = (it) => {
+            if (it.id && byId.has(String(it.id).trim())) return byId.get(String(it.id).trim());
+            const t = String(it.name || "").split("::")[0].trim();
+            if (byName.has(t)) return byName.get(t);
+            const n = pscNorm(t).trim();
+            if (byName.has(n)) return byName.get(n);
+            // Last resort: the model saw a truncated name, so match on prefix.
+            if (n.length >= 24) {
+              for (const v of vars) { if (pscNorm(v.name).trim().startsWith(n)) return v.name; }
+            }
+            return null;
           };
           let nClin = 0, nExcl = 0;
           data.items.forEach((it) => {
-            const name = it && resolve(it.name);
+            const name = it && resolve(it);
             if (!name) return;
             pscAi[name] = { source: it.source, confounding: it.confounding, role: it.role, reason: it.reason || "" };
             if (it.role && it.role !== "baseline") { pscClass[name] = "exclude"; nExcl++; }
