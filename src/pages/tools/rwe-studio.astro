@@ -105,8 +105,9 @@ const DESIGNS = [
         <input id="cbfile" type="file" accept=".csv,.xlsx,.xls,.tsv" class="hidden" />
       </label>
       <div class="mt-3 text-xs text-slate-500">
-        No data handy? <button id="demo" type="button" class="text-brand-700 font-semibold hover:underline">Load a tiny demo dataset</button> (synthetic, 24 monthly periods).
+        No data handy? <button id="demo" type="button" class="text-brand-700 font-semibold hover:underline">Load a demo dataset</button> — fabricated, 600 rows, deliberately confounded so you can check the tool recovers a known answer.
       </div>
+      <div id="demonote" class="hidden mt-3 rounded-xl border border-brand-200 bg-brand-50/60 p-3 text-xs text-slate-700"></div>
     </div>
 
     <!-- Summary + profile -->
@@ -162,6 +163,7 @@ const DESIGNS = [
             <button type="button" id="cov_auto" class="text-slate-500 hover:underline">Quick pick (offline)</button>
             <button type="button" id="cov_all" class="text-slate-500 hover:underline">Select all</button>
             <button type="button" id="cov_none" class="text-slate-500 hover:underline">Clear</button>
+            <label class="flex items-center gap-1 text-slate-500"><input type="checkbox" id="cov_collapse" checked /> Fold rare categories (&lt;10 rows) into “other”</label>
           </span>
         </div>
         <p class="text-[11px] text-slate-500"><strong>AI classify</strong> judges each column's causal role for <em>your specific exposure→outcome</em> — ticking genuine <strong>confounders</strong> and warning against adjusting for <strong>mediators / colliders / instruments</strong>. Only the <strong>column names + your question</strong> are sent to the AI — never any patient data. Always review and edit; you have the final clinical say.</p>
@@ -753,6 +755,7 @@ const DESIGNS = [
 
     async function ingest(file) {
       setMsg("Parsing " + file.name + "…");
+      $("demonote").classList.add("hidden");
       try {
         WB = await readWorkbook(file);
         SHEETS = WB.SheetNames.map((n) => scoreSheet(n, sheetAOA(WB.Sheets[n])));
@@ -784,37 +787,98 @@ const DESIGNS = [
     drop.addEventListener("dragleave", () => drop.classList.remove("border-brand-400", "bg-brand-50/40"));
     drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("border-brand-400", "bg-brand-50/40"); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) ingest(f); });
 
-    // Small synthetic demo (deliberately a bit messy) so the profiler has something
-    // to chew on. It spans 24 monthly index periods with a step up in the outcome
-    // from 2019-01, so the ITS design has a real series and a real interruption.
+    // ── Demo dataset ────────────────────────────────────────────────────────
+    // Fabricated patients, generated from a model written down below, with a
+    // treatment effect chosen in advance. The point is that it is CONFOUNDED: a
+    // text covariate (severity) drives both who gets the new drug and who has the
+    // event, so a crude analysis is wrong in a specific, checkable direction. A
+    // demo that is balanced by construction cannot show what this tool is for,
+    // and would hide a whole class of regression — a covariate silently dropped
+    // from the model makes crude and adjusted agree, which looks like a result.
+    const DEMO = {
+      // Seed chosen so this particular 600-patient draw realises the model's true
+      // effect closely (a finite sample need not, and saying "HR 0.70" about a
+      // draw that came out at 0.62 would be a small lie in a teaching example).
+      seed: 20192051,
+      months: 24, perMonth: 25,          // 600 rows, 2018-01 … 2019-12
+      sev: ["mild", "moderate", "severe"],
+      sevMix: [0.40, 0.35, 0.25],
+      pNew: [0.20, 0.50, 0.80],          // confounding by indication: sicker → new drug
+      sevLHR: [0, 0.70, 1.40],           // severity also raises the hazard
+      smokeLHR: 0.40,
+      stepLHR: 0.35,                     // a step change in the hazard from 2019-01
+      trueHR: 0.70,                      // ← what the tool should recover
+      baseRate: 0.0008,
+      sites: 26,
+    };
+    const DEMO_STORY =
+      "<strong>Fabricated data — not real patients.</strong> " + (DEMO.months * DEMO.perMonth) + " rows, " +
+      DEMO.months + " monthly index periods of " + DEMO.perMonth + ", one fixed seed, generated from this model:" +
+      "<ul class='mt-1 ml-4 list-disc space-y-0.5'>" +
+      "<li><code>severity</code> (mild / moderate / severe) raises the chance of getting the new drug to " +
+      DEMO.pNew.map((p) => Math.round(p * 100) + "%").join(" / ") + " <em>and</em> multiplies the event hazard by " +
+      DEMO.sevLHR.map((b) => "×" + Math.exp(b).toFixed(1)).join(" / ") + " — so it confounds.</li>" +
+      "<li>smoking (×" + Math.exp(DEMO.smokeLHR).toFixed(1) + ") and a step change from 2019-01 (×" + Math.exp(DEMO.stepLHR).toFixed(1) + ") also raise the hazard.</li>" +
+      "<li><code>sex</code> and <code>clinic_site</code> affect nothing — they are there to be messy.</li>" +
+      "<li>The <strong>true treatment effect is HR " + DEMO.trueHR.toFixed(2) + "</strong> — the new drug helps.</li></ul>" +
+      "<p class='mt-1'>Because the sicker patients were the ones given it, a <strong>crude</strong> comparison makes it look " +
+      "<em>harmful</em>. Tick <em>Quick pick</em> for the covariates and you should see roughly:</p>" +
+      "<table class='mt-1 w-full max-w-md text-[11px]'><tbody>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>Crude HR</td><td class='font-semibold'>≈ 1.14 (0.91–1.43)</td></tr>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>IPTW (ATE)</td><td class='font-semibold'>≈ 0.74 (0.57–0.96)</td></tr>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>2:1 PS matching</td><td class='font-semibold'>≈ 0.71 (0.51–0.99)</td></tr>" +
+      "</tbody></table>" +
+      "<p class='mt-1'><strong>If crude and adjusted come out the same, the tool is broken</strong> — a covariate that silently drops " +
+      "out of the model produces exactly that, and it reads like a reassuring null. That is what this demo is for.</p>" +
+      "<p class='mt-1 text-slate-500'>The adjusted figures will not land on 0.70 exactly and should not: 600 patients carry sampling " +
+      "error, and a marginal hazard ratio is not the same quantity as the conditional one. Fitting the correctly-specified model to " +
+      "this particular draw gives HR 0.686 (0.533–0.883), so both estimates above are where they should be. " +
+      "For an interrupted time series, map <code>index_date</code> and <code>outcome</code>, aggregate by month, and set the " +
+      "interruption to <strong>2019-01</strong> — the hazard steps up by ×" + Math.exp(DEMO.stepLHR).toFixed(1) + " there.</p>";
+
     $("demo").addEventListener("click", () => {
-      const sexes = ["M", "F", "m", "female ", "F"];
-      const rows = [];
-      const N = 480;
-      let seed = 20190101;                             // fixed seed → the demo is reproducible
+      let seed = DEMO.seed;                              // fixed seed → the demo is reproducible
       const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-      for (let i = 1; i <= N; i++) {
-        const mi = (i - 1) % 24;                       // 0..23 → 2018-01 … 2019-12
-        const yr = 2018 + Math.floor(mi / 12), mo = (mi % 12) + 1;
-        const post = mi >= 12 ? 1 : 0;                 // the interruption: 2019-01
-        const hit = rand() < (post ? 0.30 : 0.10) + mi * 0.002;  // a step up, on a mild rising trend
-        rows.push({
-          patient_id: 10000 + i,
-          index_date: yr + "-" + String(mo).padStart(2, "0") + "-15",
-          age: i % 13 === 0 ? null : 40 + (i % 45),
-          sex: sexes[i % sexes.length],
-          exposure: i % 2,
-          outcome: hit ? 1 : 0,
-          event_date: hit ? yr + "-" + String(mo).padStart(2, "0") + "-2" + (i % 9) : null,
-          cci: (i % 7) - 1,
-          followup_days: 90 + (i * 37) % 900,
-          disc_days: i % 3 === 0 ? Math.round((90 + (i * 37) % 900) * 0.55) : null,
-          at_risk: 1000 + (mi * 17),
-        });
+      const pick = (ws) => { let u = rand(), a = 0; for (let i = 0; i < ws.length; i++) { a += ws[i]; if (u < a) return i; } return ws.length - 1; };
+      const sexes = ["M", "F", "m", "female ", "F"];     // deliberately inconsistent, for the profiler
+      const rows = [];
+      let i = 0;
+      for (let m = 0; m < DEMO.months; m++) {
+        const yr = 2018 + Math.floor(m / 12), mo = (m % 12) + 1, post = m >= 12 ? 1 : 0;
+        for (let k = 0; k < DEMO.perMonth; k++) {
+          i++;
+          const sv = pick(DEMO.sevMix);
+          const nd = rand() < DEMO.pNew[sv] ? 1 : 0;
+          // Smoking depends on severity, never on treatment. If it depended on
+          // treatment it would be a mediator, and "the true effect is HR 0.70"
+          // would stop being true of the thing the tool estimates.
+          const smoker = rand() < 0.18 + 0.10 * sv ? "Y" : "N";
+          const age = Math.round((56 + 5 * sv + (rand() + rand() + rand() - 1.5) * 9) * 10) / 10;
+          const lhr = DEMO.sevLHR[sv] + DEMO.smokeLHR * (smoker === "Y") + DEMO.stepLHR * post + Math.log(DEMO.trueHR) * nd;
+          const t = -Math.log(rand() || 1e-9) / (DEMO.baseRate * Math.exp(lhr));
+          const ev = t <= 365 ? 1 : 0, fu = Math.round(Math.min(t, 365) * 10) / 10;
+          const idx = yr + "-" + String(mo).padStart(2, "0") + "-15";
+          rows.push({
+            patient_id: "D" + String(10000 + i),
+            index_date: idx,
+            age: i % 17 === 0 ? null : age,              // a little missingness
+            sex: sexes[i % sexes.length],
+            severity: DEMO.sev[sv],
+            smoker: smoker,
+            new_drug: nd,
+            clinic_site: "site-" + String(1 + Math.floor(rand() * DEMO.sites)).padStart(2, "0"),
+            followup_days: fu,
+            outcome: ev,
+            event_date: ev ? new Date(Date.parse(idx) + fu * 86400000).toISOString().slice(0, 10) : null,
+            disc_days: i % 3 === 0 ? Math.round(fu * 0.55 * 10) / 10 : null,
+          });
+        }
       }
       WB = null; SHEETS = []; SPLITINFO = null; STRUCT = Object.assign({}, STRUCT, { sheet: "", headerRow: 0, split: false, yes: {} });
-      setData(["patient_id", "index_date", "age", "sex", "exposure", "outcome", "event_date", "cci", "followup_days", "disc_days", "at_risk"], rows, "demo-dataset");
-      setMsg("Loaded the synthetic demo dataset (24 monthly periods, outcome steps up from 2019-01).");
+      setData(["patient_id", "index_date", "age", "sex", "severity", "smoker", "new_drug", "clinic_site", "followup_days", "outcome", "event_date", "disc_days"], rows, "demo-dataset");
+      setMsg("");
+      $("demonote").classList.remove("hidden");
+      $("demonote").innerHTML = DEMO_STORY;
     });
 
     // ── Exports ──
@@ -909,6 +973,8 @@ const DESIGNS = [
           r += "cat(sprintf('N = %d; exposure = %d; comparator = %d; events = %d\\n\\n', n, sum(tr), sum(!tr), sum(d$EVENT==1,na.rm=TRUE)))\n";
           r += "cat('RESULT_NOTE|Propensity model: ',sum(covkind=='numeric'),' continuous, ',sum(covkind=='binary'),' binary 0/1, ',sum(covkind=='factor'),' categorical entered as dummy-coded factors',if(any(covkind=='factor')) paste0(' (',paste(covsrc[covkind=='factor'],collapse=', '),')') else '','.\\n',sep='')\n";
           if (dropped.length) r += "cat(" + q("RESULT_NOTE|" + dropped.length + " ticked covariate(s) were left out of the model: " + dropped.map((x) => x.src + " — " + x.why).join("; ") + ".") + ",'\\n',sep='')\n";
+          const folded = covInfo.filter((c) => c.collapsed);
+          if (folded.length) r += "cat(" + q("RESULT_NOTE|Rare categories were folded into 'other' before modelling: " + folded.map((c) => c.src + " (" + c.rare.length + " of " + c.levels + " levels, each with fewer than " + COV_MIN_PER_LEVEL + " rows)").join("; ") + ".") + ",'\\n',sep='')\n";
           r += "wsmd<-function(x,g,w){ ok<-!is.na(x); a<-g&ok; b<-(!g)&ok; if(sum(a)<1||sum(b)<1) return(NA_real_); m1<-weighted.mean(x[a],w[a]); m0<-weighted.mean(x[b],w[b]); v1<-sum(w[a]*(x[a]-m1)^2)/sum(w[a]); v0<-sum(w[b]*(x[b]-m0)^2)/sum(w[b]); (m1-m0)/sqrt((v1+v0)/2) }\n";
           // Yang & Dalton (2012) multinomial standardised difference: a categorical
           // variable needs the Mahalanobis form, not the continuous one.
@@ -1168,14 +1234,17 @@ const DESIGNS = [
       const kw = KW[role.k];
       let best = "", score = 0;
       for (const p of DATA.profile) {
-        let sc = 0;
+        // A name match is not enough on its own. "clinic_site" matches the
+        // control-series keywords, but a 26-level text column cannot be a 0/1
+        // indicator, and offering it only sends the user to an error message.
+        if (!role.types.includes(p.type)) continue;
+        let sc = 1;
         if (kw && kw.test(p.name)) sc += 3;
         if (kw && p.def && kw.test(p.def)) sc += 2;
-        if (role.types.includes(p.type)) sc += 1;
         const b = ROLE_BOOST[role.k]; if (b) sc += b(p);
         if (sc > score) { score = sc; best = p.name; }
       }
-      return score >= 3 ? best : "";
+      return score >= 4 ? best : "";
     }
     function renderMap() {
       const spec = SPEC[getDesign()];
@@ -1260,18 +1329,23 @@ const DESIGNS = [
       const bits = [];
       if (nNum) bits.push(nNum + " continuous");
       if (nBin) bits.push(nBin + " binary (0/1)");
-      if (fac.length) bits.push(fac.length + " categorical → dummy-coded factor" + (fac.length > 1 ? "s" : "") + " (" + fac.map((c) => c.src + ", " + c.levels + " levels").join("; ") + ")");
+      if (fac.length) bits.push(fac.length + " categorical → dummy-coded factor" + (fac.length > 1 ? "s" : "") + " (" +
+        fac.map((c) => c.src + ", " + c.levels + " levels" + (c.collapsed ? " → " + c.effective + " after folding " + c.rare.length + " rare into “other”" : "")).join("; ") + ")");
       let html = plan.info.length ? "In the propensity model: " + bits.join(" · ") + "." : "";
+      const thin = fac.filter((c) => c.thinEvents && c.thinEvents.length);
+      if (thin.length) html += (html ? " " : "") + '<span class="text-amber-700">Fewer than ' + COV_MIN_EVENTS_PER_LEVEL + " events behind " +
+        thin.map((c) => c.thinEvents.length + " level(s) of " + esc(c.src)).join(" and ") + " — those coefficients will be unstable.</span>";
       if (plan.dropped.length) html += (html ? " " : "") + '<span class="text-rose-700 font-semibold">Left out: ' + plan.dropped.map((d) => esc(d.src) + " (" + esc(d.why) + ")").join("; ") + ".</span>";
       el.innerHTML = html;
-      el.className = "mt-1.5 text-[11px] " + (plan.dropped.length ? "text-rose-700" : "text-slate-500");
+      el.className = "mt-1.5 text-[11px] " + (plan.dropped.length ? "text-rose-700" : (thin.length ? "text-amber-700" : "text-slate-500"));
     }
     const availCovCols = () => { const spec = SPEC[getDesign()]; const used = new Set(spec.roles.map((r) => MAP[r.k]).filter(Boolean)); return DATA.columns.filter((c) => !used.has(c)); };
-    const COV_KW = /age|sex|gender|comorbid|cci|charlson|elix|diab|hyperten|renal|ckd|egfr|copd|asthma|cancer|malig|smok|alcohol|bmi|weight|obes|hba1c|ldl|hdl|chol|creatinin|statin|insulin|metformin|nsaid|ppi|anticoag|antiplatel|steroid|comed|med_|drug|dx_|hx_|prior|baseline|income|ses|deprivation|urban|region|frailty|score/i;
+    const COV_KW = /age|sex|gender|comorbid|cci|charlson|elix|diab|hyperten|renal|ckd|egfr|copd|asthma|cancer|malig|smok|alcohol|bmi|weight|obes|hba1c|ldl|hdl|chol|creatinin|statin|insulin|metformin|nsaid|ppi|anticoag|antiplatel|steroid|comed|med_|drug|dx_|hx_|prior|baseline|income|ses|deprivation|urban|region|frailty|score|sever|stage|grade|class/i;
     const COV_EXCL = /(^|_)id$|date|event|outcome|death|died|treat|expos|arm|time|fu_|followup|persontime|disc|switch/i;
     $("cov_auto").addEventListener("click", () => { COVS = availCovCols().filter((c) => COV_KW.test(c) && !COV_EXCL.test(c)); renderCovs(SPEC[getDesign()]); validateMap(); });
     $("cov_all").addEventListener("click", () => { COVS = availCovCols().slice(); renderCovs(SPEC[getDesign()]); validateMap(); });
     $("cov_none").addEventListener("click", () => { COVS = []; renderCovs(SPEC[getDesign()]); validateMap(); });
+    $("cov_collapse").addEventListener("change", () => { renderCovNote(); validateMap(); });
 
     // AI causal triage — metadata-only (column names + the clinical question).
     const WORKER_URL = "https://target-checker.danielhttsai.workers.dev";
@@ -1370,8 +1444,18 @@ const DESIGNS = [
     // What kind of variable is this, really? A covariate that is text must not be
     // coerced to a number — that is how a variable vanishes from a model without
     // anyone noticing. Anything that cannot be used is named, never dropped quietly.
-    const COV_MAX_LEVELS = 20;
-    function classifyCov(src, rows) {
+    // What actually breaks a categorical covariate is sparsity, not the number of
+    // categories: a level with a handful of rows behind it, or none of the events,
+    // is what makes a propensity model fail to converge or produce a wild
+    // coefficient. So judge on rows-per-level and events-per-level, offer the
+    // remedy (fold rare levels into "other"), and only refuse when even that
+    // cannot save it. A 26-site hospital variable is legitimate; a 600-level free
+    // text field is not, and the difference is not a round number of categories.
+    const COV_MIN_PER_LEVEL = 10;        // rows behind a level, below which it is "rare"
+    const COV_MIN_EVENTS_PER_LEVEL = 5;  // events behind a level, below which it is fragile
+    const covOpts = () => ({ collapse: !$("cov_collapse") || $("cov_collapse").checked, minPer: COV_MIN_PER_LEVEL });
+    function classifyCov(src, rows, o) {
+      o = o || covOpts();
       const nonNull = rows.map((r) => r[src]).filter((v) => !isBlank(v));
       if (!nonNull.length) return { kind: "unusable", why: "every value is missing" };
       const asNum = (v) => (v instanceof Date ? NaN : Number(String(v).replace(/,/g, "")));
@@ -1382,23 +1466,52 @@ const DESIGNS = [
         if (set.size === 2 && [...set].every((x) => x === 0 || x === 1)) return { kind: "binary", yes: "1" };
         return { kind: "numeric" };
       }
-      const levels = Array.from(new Set(nonNull.map((v) => String(v).trim())));
+      const counts = {};
+      nonNull.forEach((v) => { const k = String(v).trim(); counts[k] = (counts[k] || 0) + 1; });
+      const levels = Object.keys(counts);
       if (levels.length < 2) return { kind: "unusable", why: "constant — it carries no information" };
-      if (levels.length > COV_MAX_LEVELS) return { kind: "unusable", why: levels.length + " distinct text values — too many to dummy-code; group it into categories first" };
+      if (levels.length === nonNull.length) return { kind: "unusable", why: "every row has a different value — this is an identifier or free text, not a category" };
       if (levels.length === 2) {
         const ym = yesMap(), a = levels[0].toLowerCase(), b = levels[1].toLowerCase();
         if (a in ym && b in ym && ym[a] !== ym[b]) return { kind: "binary", yes: ym[a] === 1 ? levels[0] : levels[1] };
       }
-      return { kind: "factor", levels: levels.length };
+      const rare = levels.filter((l) => counts[l] < o.minPer);
+      const effective = o.collapse ? (levels.length - rare.length + (rare.length ? 1 : 0)) : levels.length;
+      const room = Math.floor(nonNull.length / o.minPer);
+      if (effective > room) {
+        return { kind: "unusable", why: levels.length + " categories across " + nonNull.length + " rows leaves fewer than " + o.minPer +
+          " rows per category" + (o.collapse && rare.length ? " even after folding the rare ones together" : "") +
+          " — group them into broader categories first" + (o.collapse ? "" : ", or tick “fold rare categories”") };
+      }
+      return { kind: "factor", levels: levels.length, counts: counts, rare: rare, effective: effective, collapsed: o.collapse && rare.length > 0 };
     }
-    function covPlan(rows) {
+    function covPlan(rows, o) {
+      o = o || covOpts();
       const info = [], dropped = [];
+      const evCol = MAP.EVENT && DATA.columns.indexOf(MAP.EVENT) >= 0 ? MAP.EVENT : "";
       let i = 0;
       COVS.forEach((src) => {
-        const cls = classifyCov(src, rows);
+        const cls = classifyCov(src, rows, o);
         if (cls.kind === "unusable") { dropped.push({ src: src, why: cls.why }); return; }
         i++;
-        info.push({ col: "COV" + i, src: src, kind: cls.kind, yes: cls.yes, levels: cls.levels, label: cls.kind === "binary" && cls.yes !== "1" ? src + " = " + cls.yes : src });
+        const rec = { col: "COV" + i, src: src, kind: cls.kind, yes: cls.yes, levels: cls.levels,
+          rare: cls.rare || [], collapsed: !!cls.collapsed, effective: cls.effective,
+          label: cls.kind === "binary" && cls.yes !== "1" ? src + " = " + cls.yes : src };
+        // Too few events behind a level is a warning, not a refusal — it is a rule
+        // of thumb, and the investigator may have good reason to keep the split.
+        if (cls.kind === "factor" && evCol) {
+          const evByLvl = {};
+          rows.forEach((r) => {
+            if (isBlank(r[src])) return;
+            let l = String(r[src]).trim();
+            if (rec.collapsed && rec.rare.indexOf(l) >= 0) l = "other";
+            const b = toBin(r[evCol]);
+            evByLvl[l] = (evByLvl[l] || 0) + (b === 1 ? 1 : 0);
+          });
+          const thin = Object.keys(evByLvl).filter((l) => evByLvl[l] < COV_MIN_EVENTS_PER_LEVEL);
+          if (thin.length) rec.thinEvents = thin;
+        }
+        info.push(rec);
       });
       return { info: info, dropped: dropped };
     }
@@ -1409,6 +1522,7 @@ const DESIGNS = [
       plan.info.forEach((c) => {
         outCols.push(c.col); colFor[c.col] = c.src;
         if (c.kind === "binary") tx[c.col] = (v) => (isBlank(v) ? null : toBin(v));   // ship 0/1, not "有"
+        else if (c.collapsed) { const rare = new Set(c.rare); tx[c.col] = (v) => (isBlank(v) ? null : (rare.has(String(v).trim()) ? "other" : String(v).trim())); }
       });
       const rows = (MASTER || []).map((r) => { const o = {}; outCols.forEach((cn) => { const v = r[colFor[cn]]; o[cn] = tx[cn] ? tx[cn](v) : v; }); return o; });
       return { csv: toCSV(outCols, rows), covNames: plan.info.map((c) => c.col), covInfo: plan.info, covDropped: plan.dropped };
