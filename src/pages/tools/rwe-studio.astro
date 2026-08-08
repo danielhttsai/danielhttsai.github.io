@@ -5,10 +5,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // The four in-scope designs the analysis can run (Phase 5).
 const DESIGNS = [
-  { v: "descriptive", t: "Descriptive analysis", d: "Characterise a population — incidence, prevalence, drug utilisation, mortality." },
   { v: "acnu", t: "Active-comparator new-user cohort", d: "Compare two treatments' effect on an outcome as users start therapy." },
   { v: "sccs", t: "Self-controlled case series", d: "Transient exposure + acute outcome; each case is its own control." },
   { v: "cco", t: "Case-crossover", d: "Acute, abrupt-onset event; compare exposure in a hazard window vs control windows." },
+  { v: "its", t: "Interrupted time series", d: "A policy or intervention with a clear start date; segmented regression on a rate over time." },
 ];
 ---
 
@@ -64,7 +64,7 @@ const DESIGNS = [
       <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <p class="text-xs font-semibold text-slate-700">Not sure which design? Tick what applies, then get a recommendation:</p>
         <div class="mt-2 grid gap-1 sm:grid-cols-2 text-xs text-slate-700">
-          <label class="flex items-start gap-2"><input type="checkbox" name="s_describe" class="mt-0.5" /> <span>Goal is to describe / quantify (not test a causal effect)</span></label>
+          <label class="flex items-start gap-2"><input type="checkbox" name="s_policy" class="mt-0.5" /> <span>A policy / intervention with a clear start date, measured on a population rate over time</span></label>
           <label class="flex items-start gap-2"><input type="checkbox" name="s_twodrugs" class="mt-0.5" /> <span>Comparing two active treatments from the same indication</span></label>
           <label class="flex items-start gap-2"><input type="checkbox" name="s_transient" class="mt-0.5" /> <span>Exposure is transient / intermittent (short course)</span></label>
           <label class="flex items-start gap-2"><input type="checkbox" name="s_acute" class="mt-0.5" /> <span>Outcome is acute / abrupt-onset</span></label>
@@ -175,6 +175,51 @@ const DESIGNS = [
           </div>
         </div>
       </div>
+
+      <div id="itsopts" class="hidden mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div class="grid gap-3 sm:grid-cols-3">
+          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Interruption point *</span>
+            <input id="its_cut" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. 2019-04-01, 2019-04, or 13" />
+            <span class="text-[11px] text-slate-500">The <strong>first period affected</strong> by the intervention — a date, a period label from your time column, or a 1-based period number.</span></label>
+          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Aggregate rows into periods by</span>
+            <select id="its_unit" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="none">Use the time column as-is (already one row per period)</option>
+              <option value="day">Day</option><option value="week">Week (Mon-start)</option>
+              <option value="month" selected>Month</option><option value="quarter">Quarter</option><option value="year">Year</option>
+            </select>
+            <span class="text-[11px] text-slate-500">Per-patient rows with a date column are collapsed into a series.</span></label>
+          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Combine rows in a period by</span>
+            <select id="its_comb" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="sum" selected>Sum (event counts)</option><option value="mean">Mean (a rate or level)</option>
+            </select></label>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Regression model</span>
+            <select id="its_model" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="auto" selected>Auto — Poisson for counts, linear otherwise</option>
+              <option value="poisson">Segmented Poisson (log link)</option>
+              <option value="linear">Segmented linear (OLS)</option>
+            </select>
+            <span class="text-[11px] text-slate-500">Poisson switches to negative-binomial (or quasi-Poisson) if overdispersed.</span></label>
+          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Seasonality</span>
+            <select id="its_season" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="none" selected>None</option>
+              <option value="dummies">Calendar-period dummies</option>
+              <option value="harmonic">Harmonic (Fourier) terms</option>
+            </select></label>
+          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Cycle length (periods)</span>
+            <input id="its_cycle" type="number" min="2" step="1" value="12" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+            <span class="text-[11px] text-slate-500">12 for monthly data, 4 for quarterly.</span></label>
+        </div>
+        <label class="block text-xs sm:w-2/3"><span class="uppercase tracking-widest text-brand-700 font-semibold">Autocorrelation</span>
+          <select id="its_ac" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+            <option value="auto" selected>Auto — Newey–West (HAC) SE only if Durbin–Watson flags serial correlation</option>
+            <option value="newey">Always use Newey–West (HAC) standard errors</option>
+            <option value="none">Model-based SE — report Durbin–Watson only</option>
+          </select>
+          <span class="text-[11px] text-slate-500">Whichever is used is stated with the results and in the exported report.</span></label>
+      </div>
+
       <p id="mapmsg" class="mt-3 text-xs"></p>
     </div>
 
@@ -184,7 +229,7 @@ const DESIGNS = [
       <p class="mt-1 text-sm text-slate-600">Apply the fixes you want; each is logged and re-emitted into the exported R script. The mapped variables are coerced to the types the analysis needs.</p>
       <div class="mt-3 grid gap-1.5 sm:grid-cols-2 text-sm text-slate-700">
         <label class="flex items-center gap-2"><input type="checkbox" id="c_trim" checked /> Trim leading/trailing whitespace</label>
-        <label class="flex items-center gap-2"><input type="checkbox" id="c_std" checked /> Standardise Yes/No &amp; sex codes; coerce mapped binaries to 0/1</label>
+        <label class="flex items-center gap-2"><input type="checkbox" id="c_std" checked /> Standardise coded flags (0/1, Y/N, 有/無…) to 0/1 for the mapped roles</label>
         <label class="flex items-center gap-2"><input type="checkbox" id="c_dedupe" checked /> Drop exact duplicate rows</label>
         <label class="flex items-center gap-2"><input type="checkbox" id="c_dropmiss" checked /> Drop rows missing a required mapped variable</label>
       </div>
@@ -194,7 +239,7 @@ const DESIGNS = [
           <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Duplicate patients / cases</span>
           <span id="dupcount" class="text-[11px] font-semibold"></span>
         </div>
-        <p class="text-[11px] text-slate-500">In a new-user cohort (ACNU) each person should appear once, so a repeated ID is usually a data error to resolve. (Descriptive can be long/person-time, and SCCS / case-crossover repeat IDs by design — so this control is shown for ACNU only.)</p>
+        <p class="text-[11px] text-slate-500">In a new-user cohort (ACNU) each person should appear once, so a repeated ID is usually a data error to resolve. (SCCS and case-crossover repeat IDs by design, and an interrupted time series aggregates rows into periods — so this control is shown for ACNU only.)</p>
         <div class="mt-2 grid gap-2 sm:grid-cols-3 text-xs">
           <label class="block"><span class="text-slate-600">Patient / case ID column</span>
             <select id="dup_id" class="mt-1 w-full rounded border border-slate-300 p-1.5"></select></label>
@@ -226,6 +271,7 @@ const DESIGNS = [
         <span id="anastatus" class="text-xs text-slate-600"></span>
       </div>
       <div id="anaresults" class="mt-4 hidden rounded-xl border border-brand-200 bg-brand-50/60 p-4"></div>
+      <div id="itschart" class="mt-4 hidden rounded-xl border border-slate-200 bg-white p-4 overflow-x-auto"></div>
       <div id="table1" class="mt-4 hidden rounded-xl border border-slate-200 bg-white p-4 overflow-x-auto"></div>
       <pre id="routput" class="mt-3 hidden rounded-lg bg-slate-900 text-slate-100 p-4 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[360px]"></pre>
     </div>
@@ -237,6 +283,7 @@ const DESIGNS = [
       <div class="mt-3 flex flex-wrap gap-2">
         <button id="dlmaster2" type="button" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ Master file (CSV)</button>
         <button id="dlscript" type="button" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ R script (.R)</button>
+        <button id="dlfitted" type="button" class="hidden bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ Fitted series (CSV)</button>
         <button id="dlreportword" type="button" class="bg-brand-700 text-white hover:bg-brand-800 font-semibold px-4 py-2 rounded-lg text-sm">⬇ Report (Word)</button>
         <button id="dlreport" type="button" class="bg-white border border-brand-700 text-brand-700 hover:bg-brand-50 font-semibold px-4 py-2 rounded-lg text-sm">⬇ Report (Markdown)</button>
       </div>
@@ -374,28 +421,38 @@ const DESIGNS = [
     drop.addEventListener("dragleave", () => drop.classList.remove("border-brand-400", "bg-brand-50/40"));
     drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("border-brand-400", "bg-brand-50/40"); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) ingest(f); });
 
-    // Tiny synthetic demo (deliberately a bit messy) so the profiler has something to chew on.
+    // Small synthetic demo (deliberately a bit messy) so the profiler has something
+    // to chew on. It spans 24 monthly index periods with a step up in the outcome
+    // from 2019-01, so the ITS design has a real series and a real interruption.
     $("demo").addEventListener("click", () => {
       const sexes = ["M", "F", "m", "female ", "F"];
       const rows = [];
-      for (let i = 1; i <= 60; i++) {
+      const N = 480;
+      let seed = 20190101;                             // fixed seed → the demo is reproducible
+      const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+      for (let i = 1; i <= N; i++) {
+        const mi = (i - 1) % 24;                       // 0..23 → 2018-01 … 2019-12
+        const yr = 2018 + Math.floor(mi / 12), mo = (mi % 12) + 1;
+        const post = mi >= 12 ? 1 : 0;                 // the interruption: 2019-01
+        const hit = rand() < (post ? 0.30 : 0.10) + mi * 0.002;  // a step up, on a mild rising trend
         rows.push({
           patient_id: 10000 + i,
-          index_date: "2019-0" + (1 + (i % 9)) + "-15",
+          index_date: yr + "-" + String(mo).padStart(2, "0") + "-15",
           age: i % 13 === 0 ? null : 40 + (i % 45),
           sex: sexes[i % sexes.length],
           exposure: i % 2,
-          outcome: i % 5 === 0 ? 1 : 0,
-          event_date: i % 5 === 0 ? "2020-03-1" + (i % 9) : null,
+          outcome: hit ? 1 : 0,
+          event_date: hit ? yr + "-" + String(mo).padStart(2, "0") + "-2" + (i % 9) : null,
           cci: (i % 7) - 1,
           followup_days: 90 + (i * 37) % 900,
           disc_days: i % 3 === 0 ? Math.round((90 + (i * 37) % 900) * 0.55) : null,
+          at_risk: 1000 + (mi * 17),
         });
       }
-      DATA = { rows, columns: ["patient_id", "index_date", "age", "sex", "exposure", "outcome", "event_date", "cci", "followup_days", "disc_days"], name: "demo-dataset" };
+      DATA = { rows, columns: ["patient_id", "index_date", "age", "sex", "exposure", "outcome", "event_date", "cci", "followup_days", "disc_days", "at_risk"], name: "demo-dataset" };
       DATA.profile = DATA.columns.map((c) => profileColumn(c, rows));
-      $("fileinfo").textContent = "demo-dataset · 60 rows × 8 cols";
-      setMsg("Loaded the synthetic demo dataset.");
+      $("fileinfo").textContent = "demo-dataset · " + N + " rows × " + DATA.columns.length + " cols";
+      setMsg("Loaded the synthetic demo dataset (24 monthly periods, outcome steps up from 2019-01).");
       render();
     });
 
@@ -433,11 +490,11 @@ const DESIGNS = [
     })();
     document.querySelectorAll('[name="q_pop"],[name="q_exp"],[name="q_comp"],[name="q_out"],[name="design"]').forEach((e) => e.addEventListener("input", saveQ));
 
-    const DESIGN_LABEL = { descriptive: "Descriptive analysis", acnu: "Active-comparator new-user cohort", sccs: "Self-controlled case series", cco: "Case-crossover" };
+    const DESIGN_LABEL = { acnu: "Active-comparator new-user cohort", sccs: "Self-controlled case series", cco: "Case-crossover", its: "Interrupted time series" };
     $("suggest").addEventListener("click", () => {
       const ck = (n) => { const e = document.querySelector('[name="' + n + '"]'); return !!(e && e.checked); };
       let v, why;
-      if (ck("s_describe")) { v = "descriptive"; why = "your goal is to describe / quantify rather than test a causal effect."; }
+      if (ck("s_policy")) { v = "its"; why = "a population-level intervention with a clear start date is evaluated by interrupted time series — the pre-intervention trend, projected forward, is the counterfactual."; }
       else if (ck("s_twodrugs")) { v = "acnu"; why = "you're comparing two active treatments — an active-comparator new-user cohort minimises confounding by indication."; }
       else if (ck("s_transient") && ck("s_acute")) { v = "sccs"; why = "a transient exposure with an acute outcome suits a self-controlled design (each case is its own control); a case-crossover is a good alternative."; }
       else if (ck("s_acute")) { v = "cco"; why = "for an acute, abrupt-onset event, a case-crossover contrasts exposure just before the event with earlier control windows."; }
@@ -448,29 +505,6 @@ const DESIGNS = [
 
     // ── Steps 3–6: map → clean → analyse (R) → export ──
     const SPEC = {
-      descriptive: {
-        label: "Descriptive analysis",
-        hint: "One row per person. Map the outcome event and the person-time each person contributes; group/age/sex are optional.",
-        covariates: false,
-        roles: [
-          { k: "EVENT", label: "Outcome event (0/1)", types: ["binary", "number"], req: true },
-          { k: "PT", label: "Person-time (days or years)", types: ["number"], req: true },
-          { k: "GROUP", label: "Group / stratum", types: ["categorical", "binary", "text", "id"], req: false },
-          { k: "AGE", label: "Age", types: ["number"], req: false },
-          { k: "SEX", label: "Sex", types: ["categorical", "binary", "text"], req: false },
-        ],
-        rscript: () =>
-          "d<-read.csv('/data.csv')\n" +
-          "ev<-sum(d$EVENT==1,na.rm=TRUE); pt<-sum(as.numeric(d$PT),na.rm=TRUE); r<-ev/pt*1000\n" +
-          "ci<-tryCatch(poisson.test(ev,pt)$conf.int*1000, error=function(e) c(NA,NA))\n" +
-          "cat(sprintf('Overall incidence rate: %.3f per 1000 person-time (95%% CI %.3f to %.3f)\\n', r, ci[1], ci[2]))\n" +
-          "cat(sprintf('Events: %d; person-time: %.1f; rows: %d\\n\\n', ev, pt, nrow(d)))\n" +
-          "if ('GROUP' %in% names(d)) { cat('By group:\\n'); for (g in sort(unique(d$GROUP))) { s<-d[d$GROUP==g,]; e<-sum(s$EVENT==1,na.rm=TRUE); p<-sum(as.numeric(s$PT),na.rm=TRUE); cat(sprintf('  %s: %.3f/1000 (%d events / %.1f pt)\\n', g, e/p*1000, e, p)) }; cat('\\n') }\n" +
-          "cat('Table 1:\\n'); cat(sprintf('  N = %d\\n', nrow(d)))\n" +
-          "if ('AGE' %in% names(d)) cat(sprintf('  Age: mean %.1f (SD %.1f)\\n', mean(as.numeric(d$AGE),na.rm=TRUE), sd(as.numeric(d$AGE),na.rm=TRUE)))\n" +
-          "if ('SEX' %in% names(d)) { t<-table(d$SEX); cat('  Sex: ', paste(names(t), as.integer(t), sep='=', collapse=', '), '\\n', sep='') }\n" +
-          "cat(sprintf('RESULT_ESTIMATE|Incidence rate|%.2f per 1000 (95%% CI %.2f-%.2f)\\n', r, ci[1], ci[2]))",
-      },
       acnu: {
         label: "Active-comparator new-user cohort",
         hint: "One row per new user. Map treatment (1=exposure, 0=comparator), follow-up time, and the outcome event; tick baseline covariates for the propensity score.",
@@ -544,9 +578,179 @@ const DESIGNS = [
           "cat(sprintf('Strata (cases): %d; rows: %d\\n', length(unique(d$ID)), nrow(d)))\n" +
           "cat(sprintf('RESULT_ESTIMATE|Odds ratio|%.2f (95%% CI %.2f-%.2f)\\n', or, lci, uci))",
       },
+      its: {
+        label: "Interrupted time series",
+        hint: "A series over time. Map the time column and the event count (or rate/level) per period; a denominator becomes a log offset. Per-patient rows are aggregated into periods for you — set the interruption point below.",
+        covariates: false,
+        roles: [
+          { k: "TIDX", label: "Time index / period (date or period label)", types: ["date", "number", "categorical", "text", "id"], req: true },
+          { k: "YCOUNT", label: "Event count, rate, or level", types: ["number", "binary"], req: true },
+          { k: "DENOM", label: "Population denominator / offset", types: ["number"], req: false },
+          { k: "SEAS", label: "Season / cycle position (e.g. calendar month)", types: ["number", "categorical", "binary"], req: false },
+          { k: "SERIES", label: "Control-series indicator (1=intervention, 0=control)", types: ["binary", "number"], req: false },
+        ],
+        // Segmented regression, written to run on base R only (stats::glm / lm).
+        // Newey–West HAC standard errors and the Durbin–Watson statistic are
+        // computed by hand so no package beyond base R is required; MASS is used
+        // for the negative binomial only if it happens to be available.
+        rscript: (cov, o) => {
+          o = o || {};
+          const q = (s) => "'" + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+          const L = [];
+          L.push("d<-read.csv('/data.csv', stringsAsFactors=FALSE)");
+          L.push("CUT<-" + q(o.cut) + "; UNIT<-" + q(o.unit || "month") + "; COMBF<-" + q(o.comb || "sum") + "; MODEL<-" + q(o.model || "auto") + "; SEASON<-" + q(o.season || "none") + "; CYC<-" + (o.cycle || 12) + "; AC<-" + q(o.ac || "auto"));
+          L.push("");
+          L.push("# --- parse the time column (ISO dates, slashes, datetimes, YYYY-MM) ---");
+          L.push("pdate<-function(x){ x<-trimws(as.character(x)); x[x=='' | x=='NA']<-NA; y<-gsub('/','-',x); y<-sub('[ T].*$','',y); ym<-!is.na(y) & grepl('^[0-9]{4}-[0-9]{1,2}$',y); y[ym]<-paste0(y[ym],'-01'); suppressWarnings(as.Date(y, format='%Y-%m-%d')) }");
+          L.push("floorp<-function(dt,u){ if(u=='day') return(dt); if(u=='week') return(dt-(as.integer(format(dt,'%u'))-1)); if(u=='month') return(as.Date(paste0(format(dt,'%Y-%m'),'-01'))); if(u=='quarter'){ m<-as.integer(format(dt,'%m')); return(as.Date(sprintf('%s-%02d-01',format(dt,'%Y'),(m-1)%/%3*3+1))) }; if(u=='year') return(as.Date(paste0(format(dt,'%Y'),'-01-01'))); dt }");
+          L.push("tid<-d$TIDX; dts<-pdate(tid); nz<-sum(!is.na(tid) & trimws(as.character(tid))!='')");
+          L.push("isdate<-nz>0 && sum(!is.na(dts))>=0.8*nz");
+          L.push("if(UNIT!='none' && !isdate){ cat('The time column does not parse as dates, so its literal values are used as the periods.\\n'); UNIT<-'none' }");
+          L.push("key<-if(UNIT!='none') format(floorp(dts,UNIT),'%Y-%m-%d') else trimws(as.character(tid))");
+          L.push("");
+          L.push("Y<-suppressWarnings(as.numeric(d$YCOUNT))");
+          L.push("HASN<-'DENOM' %in% names(d); HASG<-'SERIES' %in% names(d); HASS<-'SEAS' %in% names(d)");
+          L.push("N<-if(HASN) suppressWarnings(as.numeric(d$DENOM)) else rep(NA_real_,nrow(d))");
+          L.push("G<-if(HASG) suppressWarnings(as.numeric(d$SERIES)) else rep(0,nrow(d)); G[is.na(G)]<-0");
+          L.push("SS<-if(HASS) d$SEAS else rep(NA,nrow(d))");
+          L.push("ok<-!is.na(key) & key!='' & !is.na(Y); if(sum(!ok)>0) cat(sprintf('Dropped %d row(s) with a missing time or outcome value.\\n',sum(!ok)))");
+          L.push("key<-key[ok]; Y<-Y[ok]; N<-N[ok]; G<-G[ok]; SS<-SS[ok]");
+          L.push("if(length(Y)<6) stop('Fewer than 6 usable rows — an interrupted time series needs a series, not a handful of points.')");
+          L.push("");
+          L.push("# --- collapse rows into one row per period (and per series) ---");
+          L.push("cmb<-if(COMBF=='mean') function(z) mean(z,na.rm=TRUE) else function(z) sum(z,na.rm=TRUE)");
+          L.push("kk<-data.frame(g=G,key=key,stringsAsFactors=FALSE); a<-kk[!duplicated(kk),,drop=FALSE]; rownames(a)<-NULL");
+          L.push("gid<-match(paste0(G,'\\r',key), paste0(a$g,'\\r',a$key))");
+          L.push("a$nrows<-vapply(seq_len(nrow(a)),function(i) sum(gid==i),0)");
+          L.push("a$Y<-vapply(seq_len(nrow(a)),function(i) cmb(Y[gid==i]),0)");
+          L.push("if(HASN) a$N<-vapply(seq_len(nrow(a)),function(i) cmb(N[gid==i]),0)");
+          L.push("if(HASS) a$seas<-vapply(seq_len(nrow(a)),function(i){ z<-SS[gid==i]; as.character(z[1]) },'')");
+          L.push("if(max(a$nrows)>1) cat(sprintf('Aggregated %d row(s) into %d period-row(s) by %s (%s).\\n', length(Y), nrow(a), UNIT, COMBF))");
+          L.push("");
+          L.push("ukey<-unique(a$key); kd<-pdate(ukey); kn<-suppressWarnings(as.numeric(ukey))");
+          L.push("if(all(!is.na(kd))) ord<-order(kd) else if(all(!is.na(kn))) ord<-order(kn) else ord<-order(ukey)");
+          L.push("ukey<-ukey[ord]; a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey)");
+          L.push("");
+          L.push("# --- place the interruption: exact period label, then date, then index ---");
+          L.push("cut<-trimws(CUT); t0<-NA");
+          L.push("if(cut!=''){ m<-match(cut,ukey); if(!is.na(m)) t0<-m");
+          L.push("  if(is.na(t0)){ cd<-pdate(cut); if(!is.na(cd) && all(!is.na(kd))){ w<-which(kd[ord]>=cd); if(length(w)) t0<-min(w) } }");
+          L.push("  if(is.na(t0)){ ci<-suppressWarnings(as.integer(cut)); if(!is.na(ci) && ci>=2 && ci<=np) t0<-ci } }");
+          L.push("if(is.na(t0)) stop(paste0(\"Could not place the interruption '\",cut,\"' in this series. The \",np,\" periods run from \",ukey[1],\" to \",ukey[np],\". Give a date inside that range, one of those exact period labels, or a period number between 2 and \",np,\".\"))");
+          L.push("a$level<-as.integer(a$t>=t0); a$tsince<-pmax(0,a$t-t0+1)");
+          L.push("npre<-t0-1; npost<-np-t0+1");
+          L.push("");
+          L.push("# --- seasonality ---");
+          L.push("seasok<-FALSE");
+          L.push("if(SEASON!='none'){ if(!('seas' %in% names(a))){ kd2<-pdate(a$key); if(all(!is.na(kd2))) a$seas<-if(CYC==4) as.character((as.integer(format(kd2,'%m'))-1)%/%3+1) else as.character(as.integer(format(kd2,'%m'))) else a$seas<-as.character(((a$t-1)%%CYC)+1) }");
+          L.push("  seasok<-TRUE; if(SEASON=='dummies' && length(unique(a$seas))>max(2,nrow(a)-6)){ cat('Too few periods per season to fit calendar dummies — seasonality dropped.\\n'); seasok<-FALSE } }");
+          L.push("");
+          L.push("rhs<-if(HASG) 'g + t + level + tsince + g:t + g:level + g:tsince' else 't + level + tsince'");
+          L.push("if(seasok && SEASON=='dummies') rhs<-paste(rhs,'+ factor(seas)')");
+          L.push("if(seasok && SEASON=='harmonic') rhs<-paste0(rhs,' + sin(2*pi*t/',CYC,') + cos(2*pi*t/',CYC,')')");
+          L.push("if(HASN){ bad<-is.na(a$N)|a$N<=0; if(any(bad)){ cat(sprintf('Dropped %d period(s) with a missing or non-positive denominator.\\n',sum(bad))); a<-a[!bad,,drop=FALSE] } }");
+          L.push("counts<-all(abs(a$Y-round(a$Y))<1e-8) && all(a$Y>=0)");
+          L.push("fam<-if(MODEL=='linear') 'linear' else if(MODEL=='poisson') 'poisson' else if(counts) 'poisson' else 'linear'");
+          L.push("if(fam=='poisson' && !counts) cat('The outcome is not whole counts; a Poisson/quasi-Poisson fit is still reported as requested.\\n')");
+          L.push("# A log offset only makes sense on a log link. For a linear fit the denominator");
+          L.push("# is applied by modelling the rate itself rather than the count.");
+          L.push("useoff<-FALSE; ratemode<-FALSE");
+          L.push("if(HASN){ if(fam=='poisson'){ a$logN<-log(a$N); useoff<-TRUE } else { a$Y<-a$Y/a$N; ratemode<-TRUE; cat('Linear model with a denominator: the outcome is modelled as a rate (value divided by the denominator), not with a log offset.\\n') } }");
+          L.push("f<-as.formula(paste('Y ~',rhs, if(useoff) '+ offset(logN)' else ''))");
+          L.push("if(fam=='poisson'){");
+          L.push("  fit<-suppressWarnings(glm(f,family=poisson,data=a))");
+          L.push("  disp<-sum(residuals(fit,type='pearson')^2)/df.residual(fit)");
+          L.push("  famlab<-sprintf('Poisson (dispersion %.2f)',disp)");
+          L.push("  if(is.finite(disp) && disp>1.5){ nb<-NULL");
+          L.push("    if(requireNamespace('MASS',quietly=TRUE)) nb<-tryCatch(MASS::glm.nb(f,data=a),error=function(e) NULL)");
+          L.push("    if(!is.null(nb)){ fit<-nb; famlab<-sprintf('negative binomial (Poisson dispersion was %.2f)',disp) }");
+          L.push("    else { fit<-suppressWarnings(glm(f,family=quasipoisson,data=a)); famlab<-sprintf('quasi-Poisson (dispersion %.2f)',disp) } }");
+          L.push("  expo<-TRUE");
+          L.push("} else { fit<-lm(f,data=a); famlab<-'linear (ordinary least squares)'; expo<-FALSE }");
+          L.push("");
+          L.push("# --- Durbin-Watson on the residuals, within each series ---");
+          L.push("e<-residuals(fit,type=if(inherits(fit,'glm')) 'pearson' else 'response')");
+          L.push("num<-0; den<-0");
+          L.push("for(gg in unique(a$g)){ ee<-e[a$g==gg]; if(length(ee)>2){ num<-num+sum(diff(ee)^2); den<-den+sum(ee^2) } }");
+          L.push("dw<-if(den>0) num/den else NA_real_; r1<-if(is.na(dw)) NA_real_ else 1-dw/2");
+          L.push("");
+          L.push("# --- Newey-West HAC sandwich, base R only. Terms R could not estimate");
+          L.push("# (collinear with the rest of the model) are dropped everywhere, or the");
+          L.push("# bread matrix is singular and every variance comes back NA. ---");
+          L.push("cf<-coef(fit); alias<-names(cf)[is.na(cf)]; gdn<-names(cf)[!is.na(cf)]");
+          L.push("mmk<-function(fit) model.matrix(fit)[,gdn,drop=FALSE]");
+          L.push("brd<-function(fit){ X<-mmk(fit); w<-fit$weights; if(is.null(w)||length(w)!=nrow(X)) w<-rep(1,nrow(X)); solve(crossprod(X*sqrt(w))) }");
+          L.push("ef<-function(fit){ X<-mmk(fit); if(inherits(fit,'glm')){ mu<-fitted(fit); dm<-fit$family$mu.eta(fit$linear.predictors); V<-fit$family$variance(mu); r<-dm*(fit$y-mu)/V } else r<-residuals(fit); X*r }");
+          L.push("hacv<-function(fit,Lg,gv){ U<-ef(fit); n<-nrow(U); M<-crossprod(U); if(Lg>0) for(l in 1:Lg){ w<-1-l/(Lg+1); same<-as.numeric(gv[(l+1):n]==gv[1:(n-l)]); Gm<-crossprod(U[(l+1):n,,drop=FALSE]*same, U[1:(n-l),,drop=FALSE]); M<-M+w*(Gm+t(Gm)) }; B<-brd(fit); B%*%M%*%B }");
+          L.push("Lg<-max(1,floor(4*(nrow(a)/100)^(2/9)))");
+          L.push("Vm<-vcov(fit)[gdn,gdn,drop=FALSE]; Vh<-tryCatch(hacv(fit,Lg,a$g),error=function(e) NULL)");
+          L.push("useh<-(AC=='newey') || (AC=='auto' && !is.na(dw) && (dw<1.5 || dw>2.5))");
+          L.push("if(useh && is.null(Vh)) useh<-FALSE");
+          L.push("V<-if(useh) Vh else Vm; dimnames(V)<-dimnames(Vm)");
+          L.push("selab<-if(useh) sprintf('Newey-West HAC standard errors (Bartlett kernel, lag %d)',Lg) else 'model-based standard errors'");
+          L.push("");
+          L.push("nmv<-gdn; se<-sqrt(diag(V)); names(se)<-nmv");
+          L.push("# rates can be tiny, so fall back to significant digits rather than printing +0.000");
+          L.push("fmt<-function(x) if(!is.finite(x)) 'NA' else if(abs(x)>=0.01 || x==0) sprintf('%+.3f',x) else sprintf('%+.3g',x)");
+          L.push("rep1<-function(lab,nm){ if(!(nm %in% nmv) || is.na(cf[[nm]])) return(invisible()); b<-as.numeric(cf[[nm]]); s<-as.numeric(se[[nm]]); lo<-b-1.96*s; hi<-b+1.96*s");
+          L.push("  if(expo) cat(sprintf('RESULT_ESTIMATE|%s|%.3f (95%% CI %.3f-%.3f)\\n',lab,exp(b),exp(lo),exp(hi)))");
+          L.push("  else cat(sprintf('RESULT_ESTIMATE|%s|%s (95%% CI %s to %s)\\n',lab,fmt(b),fmt(lo),fmt(hi))) }");
+          L.push("sc<-if(expo) ' (rate ratio)' else ' (absolute change)'");
+          L.push("rep1(paste0('Pre-intervention slope, per period',sc),'t')");
+          L.push("if(HASG){ rep1(paste0('Level change, control series',sc),'level'); rep1(paste0('Slope change per period, control series',sc),'tsince')");
+          L.push("  rep1(paste0('Difference in level change, intervention vs control',sc),'g:level'); rep1(paste0('Difference in slope change per period, intervention vs control',sc),'g:tsince')");
+          L.push("} else { rep1(paste0('Level change, immediate step',sc),'level'); rep1(paste0('Slope change, per period',sc),'tsince') }");
+          L.push("");
+          L.push("# --- observed vs counterfactual at the end of follow-up ---");
+          L.push("gmax<-max(a$g); tn<-max(a$t[a$g==gmax]); tsn<-max(0,tn-t0+1)");
+          L.push("L0<-setNames(rep(0,length(nmv)),nmv)");
+          L.push("zn<-if(HASG) c('g:level','g:tsince') else c('level','tsince')");
+          L.push("if(zn[1] %in% nmv) L0[zn[1]]<-1; if(zn[2] %in% nmv) L0[zn[2]]<-tsn");
+          L.push("cfv<-cf[nmv]; cfv[is.na(cfv)]<-0");
+          L.push("ct<-sum(L0*cfv); vct<-as.numeric(t(L0)%*%V%*%L0); sct<-if(is.finite(vct) && vct>0) sqrt(vct) else NA_real_");
+          L.push("endlab<-ukey[tn]");
+          L.push("if(!is.na(sct)){ if(expo) cat(sprintf('RESULT_ESTIMATE|Observed vs counterfactual at %s (end of follow-up)|%.3f (95%% CI %.3f-%.3f)\\n',endlab,exp(ct),exp(ct-1.96*sct),exp(ct+1.96*sct)))");
+          L.push("  else cat(sprintf('RESULT_ESTIMATE|Observed minus counterfactual at %s (end of follow-up)|%s (95%% CI %s to %s)\\n',endlab,fmt(ct),fmt(ct-1.96*sct),fmt(ct+1.96*sct))) }");
+          L.push("");
+          L.push("# --- fitted and counterfactual series ---");
+          L.push("X<-model.matrix(fit); Xc<-X");
+          L.push("zc<-if(HASG) grepl('^g:(level|tsince)$',colnames(X)) else colnames(X) %in% c('level','tsince')");
+          L.push("Xc[,zc]<-0");
+          L.push("off<-fit$offset; if(is.null(off)) off<-rep(0,nrow(X))");
+          L.push("bb<-cfv[colnames(X)]; bb[is.na(bb)]<-0");
+          L.push("inv<-if(inherits(fit,'glm')) fit$family$linkinv else function(z) z");
+          L.push("fv<-inv(as.numeric(X%*%bb)+off); cv<-inv(as.numeric(Xc%*%bb)+off)");
+          L.push("cat('FITTED|series|period|t|observed|denominator|fitted|counterfactual\\n')");
+          L.push("for(i in seq_len(nrow(a))) cat(sprintf('FITTED|%s|%s|%d|%.6g|%s|%.6g|%.6g\\n', if(HASG) (if(a$g[i]>0) 'intervention' else 'control') else 'series', a$key[i], a$t[i], a$Y[i], if(useoff) sprintf('%.6g',a$N[i]) else '', fv[i], cv[i]))");
+          L.push("cat(sprintf('ITSMETA|t0=%d|cutlabel=%s|np=%d|pre=%d|post=%d|controlled=%s\\n',t0,ukey[t0],np,npre,npost,if(HASG) 'yes' else 'no'))");
+          L.push("");
+          L.push("dwt<-if(is.na(dw)) 'not computable' else sprintf('%.2f (lag-1 residual autocorrelation %+.2f)',dw,r1)");
+          L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s): %d before and %d from %s onward%s. Inference uses %s. Durbin-Watson %s.\\n', famlab, np, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, dwt))");
+          L.push("if(length(alias)>0) cat(sprintf('RESULT_NOTE|%d model term(s) could not be estimated because they are collinear with the rest of the model (%s), and were dropped. Over only a couple of complete cycles, calendar dummies and a linear time trend are not separately identifiable — shorten the seasonal terms, switch to harmonic terms, or lengthen the series.\\n', length(alias), paste(alias,collapse=', ')))");
+          L.push("if(ratemode) cat('RESULT_NOTE|A denominator was mapped with a linear model, so the outcome is the rate (value divided by the denominator); the level and slope changes are on that rate scale.\\n')");
+          L.push("if(npre<8) cat(sprintf('RESULT_NOTE|Only %d pre-intervention period(s) — the baseline trend, and therefore the counterfactual, is poorly estimated. Aim for at least 8 (ideally 12).\\n',npre))");
+          L.push("if(npost<8) cat(sprintf('RESULT_NOTE|Only %d post-intervention period(s) — a slope change is hard to detect. Aim for at least 8 (ideally 12).\\n',npost))");
+          L.push("if(!is.na(dw) && (dw<1.5||dw>2.5) && !useh) cat('RESULT_NOTE|Durbin-Watson indicates residual autocorrelation but model-based standard errors were requested, so the confidence intervals are likely too narrow.\\n')");
+          L.push("");
+          L.push("cat('\\n--- Segmented regression coefficients ---\\n'); print(summary(fit)$coefficients)");
+          L.push("cat(sprintf('\\nPeriods: %d (%s to %s); interruption at %s (period %d).\\n',np,ukey[1],ukey[np],ukey[t0],t0))");
+          L.push("cat(sprintf('Model: %s. Standard errors: %s. Durbin-Watson: %s.\\n',famlab,selab,dwt))");
+          return L.join("\n");
+        },
+      },
     };
 
-    const KW = { EVENT: /event|outcome|death|died|dead|case|status/i, PT: /person|_pt$|persontime|py|followup|fu_|duration|time|days/i, GROUP: /group|arm|stratum|site|cohort/i, AGE: /age/i, SEX: /sex|gender/i, TREAT: /treat|exposure|exposed|arm|drug|group/i, TIME: /time|fu|follow|days|duration|survtime/i, ID: /(^|_)id$|patient|subject|caseid|pid/i, EXPOSED: /expos|treat|drug/i, EVENTS: /event|count|nevent/i, INTERVAL: /interval|persontime|offset|length|days|time/i, CASE: /case|hazard|window|status/i, DISC: /disc|discont|switch|stop|cessation|deviat/i };
+    const KW = {
+      TREAT: /treat|exposure|exposed|arm|drug|group/i, TIME: /time|fu|follow|days|duration|survtime/i,
+      EVENT: /event|outcome|death|died|dead|case|status/i, DISC: /disc|discont|switch|stop|cessation|deviat/i,
+      ID: /(^|_)id$|patient|subject|caseid|pid/i, EXPOSED: /expos|treat|drug/i, EVENTS: /event|count|nevent/i,
+      INTERVAL: /interval|persontime|offset|length|days|time/i, CASE: /case|hazard|window|status/i,
+      TIDX: /date|time|period|month|quarter|week|year|index|日期|時間|月|年|季|期/i,
+      YCOUNT: /count|events|cases|rate|incid|outcome|n_|_n$|num|次數|人次|件數|率/i,
+      DENOM: /denom|popul|offset|persontime|person_time|at_?risk|exposed_pop|py$|人口|母數|分母/i,
+      SEAS: /season|month|quarter|cycle|月份|季節/i,
+      SERIES: /control|series|region|site|area|arm|group|對照|組別/i,
+    };
     const getDesign = () => { const r = document.querySelector('[name="design"]:checked'); return r ? r.value : ""; };
     let MAP = {}, COVS = [], MASTER = null, LAST = null, COVROLE = {};
 
@@ -568,6 +772,7 @@ const DESIGNS = [
         return '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">' + esc(r.label) + (r.req ? " *" : " (optional)") + '</span><select data-role="' + r.k + '" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">' + opts(MAP[r.k]) + "</select></label>";
       }).join("");
       $("maproles").querySelectorAll("select[data-role]").forEach((sel) => sel.addEventListener("change", () => { MAP[sel.getAttribute("data-role")] = sel.value; renderCovs(spec); validateMap(); }));
+      $("itsopts").classList.toggle("hidden", getDesign() !== "its");
       renderCovs(spec);
       try { renderDupUI(); } catch (e) {}
       validateMap();
@@ -583,9 +788,8 @@ const DESIGNS = [
     function renderDupUI() {
       const spec = SPEC[getDesign()];
       // Duplicate-ID resolution only makes sense where each person is meant to
-      // appear ONCE — i.e. the ACNU new-user cohort. Descriptive can be long
-      // (person-time / utilisation records), and SCCS / case-crossover repeat
-      // IDs by design, so hide it for all of those.
+      // appear ONCE — i.e. the ACNU new-user cohort. SCCS / case-crossover repeat
+      // IDs by design and ITS collapses rows into periods, so hide it for those.
       const onePer = spec && spec.onePerPerson;
       $("dupwrap").classList.toggle("hidden", !onePer);
       if (!onePer || !DATA.columns.length) return;
@@ -657,18 +861,19 @@ const DESIGNS = [
       const spec = SPEC[getDesign()]; if (!spec) return false;
       const missing = spec.roles.filter((r) => r.req && !MAP[r.k]).map((r) => r.label);
       const needCov = spec.covariates && COVS.length === 0;
-      const ok = missing.length === 0 && !needCov;
+      const needCut = getDesign() === "its" && !$("its_cut").value.trim();
+      const ok = missing.length === 0 && !needCov && !needCut;
       const m = $("mapmsg");
       if (missing.length) { m.textContent = "Map the required roles (*): " + missing.join(", "); m.className = "mt-3 text-xs text-amber-700"; }
+      else if (needCut) { m.textContent = "Give the interruption point — the first period affected by the intervention."; m.className = "mt-3 text-xs text-amber-700"; }
       else if (needCov) { m.textContent = "Tick at least one baseline covariate for the propensity score."; m.className = "mt-3 text-xs text-amber-700"; }
       else { m.textContent = "Mapping complete ✓ — build the master file below."; m.className = "mt-3 text-xs text-emerald-700"; }
       $("cleancard").classList.toggle("hidden", !ok);
       return ok;
     }
 
-    const NUM_ROLES = ["PT", "TIME", "AGE", "INTERVAL", "EVENTS", "DISC"];
-    const BIN_ROLES = ["EVENT", "TREAT", "EXPOSED", "CASE"];
-    const stdSex = (v) => { const l = String(v == null ? "" : v).trim().toLowerCase(); return l === "male" || l === "m" ? "M" : (l === "female" || l === "f" ? "F" : v); };
+    const NUM_ROLES = ["TIME", "INTERVAL", "EVENTS", "DISC", "YCOUNT", "DENOM"];
+    const BIN_ROLES = ["EVENT", "TREAT", "EXPOSED", "CASE", "SERIES"];
     const toBin = (v) => { if (v == null || v === "") return null; const l = String(v).trim().toLowerCase(); if (["1", "yes", "y", "true", "t", "case", "event", "exposed", "positive"].includes(l)) return 1; if (["0", "no", "n", "false", "f", "control", "none", "unexposed", "negative"].includes(l)) return 0; const n = Number(l); return isNaN(n) ? null : (n > 0 ? 1 : 0); };
 
     function buildMaster() {
@@ -677,7 +882,6 @@ const DESIGNS = [
       let rows = DATA.rows.map((r) => Object.assign({}, r));
       if ($("c_trim").checked) rows.forEach((r) => DATA.columns.forEach((c) => { if (typeof r[c] === "string") r[c] = r[c].trim(); }));
       if ($("c_std").checked) rows.forEach((r) => {
-        if (roleCol.SEX) r[roleCol.SEX] = stdSex(r[roleCol.SEX]);
         BIN_ROLES.forEach((rk) => { if (roleCol[rk]) { const b = toBin(r[roleCol[rk]]); if (b != null) r[roleCol[rk]] = b; } });
       });
       const numCols = NUM_ROLES.map((k) => roleCol[k]).filter(Boolean).concat(spec.covariates ? COVS : []);
@@ -728,37 +932,118 @@ const DESIGNS = [
       if ($("est_pp").checked) estimands.push("PP");
       return { methods: methods, estimands: estimands.length ? estimands : ["ITT"], ratio: parseInt($("m_ratio").value) || 2, nstrata: parseInt($("m_nstrata").value) || 10 };
     }
-    function buildScript() { const spec = SPEC[getDesign()]; const { covNames } = analysisCSV(); return getDesign() === "acnu" ? spec.rscript(covNames, acnuOpts()) : spec.rscript(covNames); }
+    function itsOpts() {
+      return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: parseInt($("its_cycle").value) || 12, ac: $("its_ac").value };
+    }
+    function buildScript() {
+      const spec = SPEC[getDesign()]; const { covNames } = analysisCSV();
+      if (getDesign() === "acnu") return spec.rscript(covNames, acnuOpts());
+      if (getDesign() === "its") return spec.rscript(covNames, itsOpts());
+      return spec.rscript(covNames);
+    }
+    ["its_cut", "its_unit", "its_comb", "its_model", "its_season", "its_cycle", "its_ac"].forEach((id) => $(id).addEventListener("input", () => { if (getDesign() === "its") validateMap(); }));
 
     $("applyclean").addEventListener("click", buildMaster);
-    document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; COVROLE = {}; MASTER = null; $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden"); renderMap(); }));
+    document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden"); $("itschart").classList.add("hidden"); $("dlfitted").classList.add("hidden"); renderMap(); }));
+
+    // The core ITS figure: observed points, the fitted pre/post segments, and the
+    // pre-trend extrapolated forward as the counterfactual.
+    const SERIES_COLOR = ["#0e7490", "#b45309", "#4338ca"];
+    function fittedRows(rows) {
+      const head = rows[0].map((h) => String(h).toLowerCase());
+      const ix = (n) => head.indexOf(n);
+      const iS = ix("series"), iP = ix("period"), iT = ix("t"), iO = ix("observed"), iD = ix("denominator"), iF = ix("fitted"), iC = ix("counterfactual");
+      return rows.slice(1).map((r) => ({ s: r[iS], p: r[iP], t: Number(r[iT]), o: Number(r[iO]), d: r[iD] === "" || r[iD] == null ? null : Number(r[iD]), f: Number(r[iF]), c: Number(r[iC]) }))
+        .filter((r) => isFinite(r.t) && isFinite(r.o));
+    }
+    function renderITSChart(rows, meta) {
+      const data = fittedRows(rows);
+      if (data.length < 2) return;
+      const hasD = data.every((r) => r.d != null && isFinite(r.d) && r.d > 0);
+      const v = (r, k) => (hasD ? (r[k] / r.d) * 1000 : r[k]);
+      const t0 = parseInt(meta.t0) || 0;
+      const W = 760, H = 320, ml = 56, mr = 14, mt = 14, mb = 40;
+      const ts = data.map((r) => r.t), all = [];
+      data.forEach((r) => { all.push(v(r, "o"), v(r, "f"), v(r, "c")); });
+      const finite = all.filter((x) => isFinite(x));
+      const tmin = Math.min(...ts), tmax = Math.max(...ts);
+      let ymin = Math.min(0, Math.min(...finite)), ymax = Math.max(...finite);
+      if (!(ymax > ymin)) ymax = ymin + 1;
+      const pad = (ymax - ymin) * 0.08; ymax += pad;
+      const X = (t) => ml + ((t - tmin) / Math.max(1, tmax - tmin)) * (W - ml - mr);
+      const Y = (y) => H - mb - ((y - ymin) / (ymax - ymin)) * (H - mt - mb);
+      const seriesNames = [];
+      data.forEach((r) => { if (seriesNames.indexOf(r.s) < 0) seriesNames.push(r.s); });
+      let g = "";
+      // axes + gridlines
+      for (let i = 0; i <= 4; i++) {
+        const y = ymin + ((ymax - ymin) * i) / 4;
+        g += '<line x1="' + ml + '" y1="' + Y(y).toFixed(1) + '" x2="' + (W - mr) + '" y2="' + Y(y).toFixed(1) + '" stroke="#e2e8f0" stroke-width="1"/>';
+        g += '<text x="' + (ml - 6) + '" y="' + (Y(y) + 3.5).toFixed(1) + '" font-size="10" fill="#64748b" text-anchor="end">' + (Math.abs(y) >= 100 ? y.toFixed(0) : y.toFixed(2)) + "</text>";
+      }
+      g += '<line x1="' + ml + '" y1="' + (H - mb) + '" x2="' + (W - mr) + '" y2="' + (H - mb) + '" stroke="#94a3b8" stroke-width="1"/>';
+      // interruption
+      if (t0 > tmin) {
+        const xc = X(t0 - 0.5);
+        g += '<line x1="' + xc.toFixed(1) + '" y1="' + mt + '" x2="' + xc.toFixed(1) + '" y2="' + (H - mb) + '" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5 3"/>';
+        g += '<text x="' + (xc + 4).toFixed(1) + '" y="' + (mt + 11) + '" font-size="10" fill="#dc2626" font-weight="600">interruption' + (meta.cutlabel ? " · " + esc(meta.cutlabel) : "") + "</text>";
+      }
+      seriesNames.forEach((sn, si) => {
+        const col = SERIES_COLOR[si % SERIES_COLOR.length];
+        const rs = data.filter((r) => r.s === sn).sort((a, b) => a.t - b.t);
+        const path = (arr, key) => arr.map((r, i) => (i ? "L" : "M") + X(r.t).toFixed(1) + " " + Y(v(r, key)).toFixed(1)).join(" ");
+        const pre = rs.filter((r) => r.t < t0), post = rs.filter((r) => r.t >= t0);
+        if (pre.length > 1) g += '<path d="' + path(pre, "f") + '" fill="none" stroke="' + col + '" stroke-width="2"/>';
+        if (post.length > 1) g += '<path d="' + path(post, "f") + '" fill="none" stroke="' + col + '" stroke-width="2"/>';
+        if (post.length > 1) g += '<path d="' + path(post, "c") + '" fill="none" stroke="' + col + '" stroke-width="1.6" stroke-dasharray="6 4" opacity="0.75"/>';
+        rs.forEach((r) => { g += '<circle cx="' + X(r.t).toFixed(1) + '" cy="' + Y(v(r, "o")).toFixed(1) + '" r="2.6" fill="' + col + '" opacity="0.55"/>'; });
+        g += '<text x="' + (ml + 4 + si * 190) + '" y="' + (H - 8) + '" font-size="10" fill="' + col + '" font-weight="600">' + esc(sn) + "</text>";
+      });
+      // x labels: first, interruption, last
+      const lab = (t) => { const r = data.find((x) => x.t === t); return r ? r.p : String(t); };
+      [[tmin, "start"], [tmax, "end"]].forEach(([t]) => {
+        g += '<text x="' + X(t).toFixed(1) + '" y="' + (H - mb + 14) + '" font-size="10" fill="#64748b" text-anchor="' + (t === tmin ? "start" : "end") + '">' + esc(lab(t)) + "</text>";
+      });
+      const ylab = hasD ? "rate per 1,000 denominator units" : "outcome per period";
+      $("itschart").classList.remove("hidden");
+      $("itschart").innerHTML =
+        '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-1">Observed series, fitted segments, and the counterfactual</div>' +
+        '<p class="text-[11px] text-slate-500 mb-2">Points are the observed ' + ylab + "; the solid line is the fitted segmented model; the dashed line extrapolates the pre-intervention trend forward as the counterfactual.</p>" +
+        '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Interrupted time series chart">' + g + "</svg>";
+    }
 
     $("runanalysis").addEventListener("click", async () => {
       if (!MASTER) buildMaster();
       if (!MASTER) return;
       const { csv } = analysisCSV(); const script = buildScript();
       const setS = (m) => { $("anastatus").textContent = m; };
-      $("runanalysis").disabled = true; $("anaresults").classList.add("hidden"); $("table1").classList.add("hidden");
+      $("runanalysis").disabled = true; $("anaresults").classList.add("hidden"); $("table1").classList.add("hidden"); $("itschart").classList.add("hidden"); $("dlfitted").classList.add("hidden");
       try {
         const out = await window.RWEngine.run(script, csv, setS);
         setS("Done ✓");
-        const ests = [], t1 = [];
+        const ests = [], t1 = [], notes = [], fitted = []; let meta = {};
         out.split("\n").forEach((l) => {
           if (l.indexOf("RESULT_ESTIMATE|") === 0) { const p = l.split("|"); ests.push({ label: p[1], value: p.slice(2).join("|") }); }
           else if (l.indexOf("TABLE1|") === 0) { t1.push(l.split("|").slice(1)); }
+          else if (l.indexOf("RESULT_NOTE|") === 0) { notes.push(l.split("|").slice(1).join("|")); }
+          else if (l.indexOf("FITTED|") === 0) { fitted.push(l.split("|").slice(1)); }
+          else if (l.indexOf("ITSMETA|") === 0) { l.split("|").slice(1).forEach((kv) => { const i = kv.indexOf("="); if (i > 0) meta[kv.slice(0, i)] = kv.slice(i + 1); }); }
         });
-        const display = out.replace(/^RESULT_ESTIMATE\|.*$/gm, "").replace(/^TABLE1\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
-        if (ests.length) {
+        const display = out.replace(/^(RESULT_ESTIMATE|RESULT_NOTE|TABLE1|FITTED|ITSMETA)\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+        if (ests.length || notes.length) {
           $("anaresults").classList.remove("hidden");
-          $("anaresults").innerHTML = '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-2">Effect estimates</div><div class="overflow-x-auto"><table class="w-full text-sm border-collapse"><thead><tr class="text-left text-slate-500 border-b border-slate-200"><th class="py-1.5 pr-4 font-semibold">Method / estimand</th><th class="py-1.5 font-semibold">Estimate (95% CI)</th></tr></thead><tbody>' + ests.map((e) => '<tr class="border-b border-slate-100"><td class="py-1.5 pr-4 text-slate-700">' + esc(e.label) + '</td><td class="py-1.5 font-bold text-slate-900">' + esc(e.value) + "</td></tr>").join("") + "</tbody></table></div>";
+          const noteHtml = notes.length ? '<div class="mt-3 space-y-1">' + notes.map((n) => '<p class="text-[11px] text-slate-600">' + esc(n) + "</p>").join("") + "</div>" : "";
+          const tblHtml = ests.length ? '<div class="overflow-x-auto"><table class="w-full text-sm border-collapse"><thead><tr class="text-left text-slate-500 border-b border-slate-200"><th class="py-1.5 pr-4 font-semibold">Method / estimand</th><th class="py-1.5 font-semibold">Estimate (95% CI)</th></tr></thead><tbody>' + ests.map((e) => '<tr class="border-b border-slate-100"><td class="py-1.5 pr-4 text-slate-700">' + esc(e.label) + '</td><td class="py-1.5 font-bold text-slate-900">' + esc(e.value) + "</td></tr>").join("") + "</tbody></table></div>" : "";
+          $("anaresults").innerHTML = '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-2">Effect estimates</div>' + tblHtml + noteHtml;
         }
+        if (fitted.length > 1) { renderITSChart(fitted, meta); $("dlfitted").classList.remove("hidden"); }
         if (t1.length) {
           $("table1").classList.remove("hidden");
           const head = t1[0], body = t1.slice(1);
           $("table1").innerHTML = '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-2">Patient characteristics (Table 1)</div><table class="w-full text-xs border-collapse"><thead><tr class="text-left text-slate-500 border-b border-slate-200">' + head.map((h) => '<th class="py-1.5 pr-4 font-semibold">' + esc(h) + "</th>").join("") + "</tr></thead><tbody>" + body.map((rr) => '<tr class="border-b border-slate-100">' + rr.map((c, i) => '<td class="py-1.5 pr-4 ' + (i === 0 ? "text-slate-700" : "text-slate-600") + '">' + esc(c) + "</td>").join("") + "</tr>").join("") + "</tbody></table>";
         }
         $("routput").classList.remove("hidden"); $("routput").textContent = display || "(no output)";
-        LAST = { out: display, script: script, ests: ests, t1: t1 };
+        LAST = { out: display, script: script, ests: ests, t1: t1, notes: notes, fitted: fitted, meta: meta };
       } catch (e) { setS("Error"); $("routput").classList.remove("hidden"); $("routput").textContent = "Error: " + (e && e.message ? e.message : e); }
       finally { $("runanalysis").disabled = false; }
     });
@@ -767,13 +1052,16 @@ const DESIGNS = [
     function buildReport(q) {
       const today = new Date().toISOString().slice(0, 10);
       const label = (SPEC[q.design] || {}).label || q.design || "(design)";
-      const ests = (LAST && LAST.ests) || [], t1 = (LAST && LAST.t1) || [];
+      const ests = (LAST && LAST.ests) || [], t1 = (LAST && LAST.t1) || [], notes = (LAST && LAST.notes) || [], fit = (LAST && LAST.fitted) || [];
       const resTbl = ests.length ? ("| Method / estimand | Estimate (95% CI) |\n|---|---|\n" + ests.map((e) => "| " + e.label + " | " + e.value + " |").join("\n")) : "(run the analysis first)";
       const t1Tbl = t1.length ? (t1.map((r, i) => "| " + r.join(" | ") + " |" + (i === 0 ? "\n|" + r.map(() => "---").join("|") + "|" : "")).join("\n")) : "";
+      const fitTbl = fit.length > 1 ? (fit.map((r, i) => "| " + r.join(" | ") + " |" + (i === 0 ? "\n|" + r.map(() => "---").join("|") + "|" : "")).join("\n")) : "";
       return "# RWE Studio analysis report\n\n_Generated " + today + " · analysis run locally in the browser via WebR (real R)_\n\n" +
         "## Question\n- Population: " + (q.pop || "(specify)") + "\n- Exposure: " + (q.exp || "(specify)") + "\n- Comparator: " + (q.comp || "—") + "\n- Outcome: " + (q.out || "(specify)") + "\n- Design: " + label + "\n\n" +
         "## Effect estimates\n\n" + resTbl + "\n\n" +
+        (notes.length ? "### How the model was fitted\n\n" + notes.map((n) => "- " + n).join("\n") + "\n\n" : "") +
         (t1.length ? "## Patient characteristics (Table 1)\n\n" + t1Tbl + "\n\n" : "") +
+        (fitTbl ? "## Fitted series — observed vs counterfactual\n\n" + fitTbl + "\n\n" : "") +
         "## R output\n\n```\n" + (LAST ? LAST.out : "(run the analysis first)") + "\n```\n\n" +
         "## Reproducible R script\n\n```r\n" + (LAST ? LAST.script : buildScript()) + "\n```\n";
     }
@@ -795,10 +1083,12 @@ const DESIGNS = [
       ch.push(p([text("Generated " + today + " · analysis run locally in the browser via WebR (real R).", { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
       ch.push(h1("Question"));
       ch.push(tbl([["Population", q.pop || "(specify)"], ["Exposure", q.exp || "(specify)"], ["Comparator", q.comp || "—"], ["Outcome", q.out || "(specify)"], ["Design", label]], false));
-      const ests = (LAST && LAST.ests) || [], t1 = (LAST && LAST.t1) || [];
+      const ests = (LAST && LAST.ests) || [], t1 = (LAST && LAST.t1) || [], notes = (LAST && LAST.notes) || [], fit = (LAST && LAST.fitted) || [];
       ch.push(h1("Effect estimates"));
       if (ests.length) ch.push(tbl([["Method / estimand", "Estimate (95% CI)"]].concat(ests.map((e) => [e.label, e.value])), true)); else ch.push(p([text("(run the analysis first)")]));
+      notes.forEach((n) => ch.push(p([text(n, { size: 18, color: "555555" })])));
       if (t1.length) { ch.push(h1("Patient characteristics (Table 1)")); ch.push(tbl(t1, true)); }
+      if (fit.length > 1) { ch.push(h1("Fitted series — observed vs counterfactual")); ch.push(tbl(fit, true)); }
       ch.push(h1("R output"));
       (LAST ? LAST.out : "(run the analysis first)").split("\n").forEach((l) => ch.push(mono(l)));
       ch.push(h1("Reproducible R script"));
@@ -808,6 +1098,10 @@ const DESIGNS = [
     }
     $("dlmaster2").addEventListener("click", () => { if (!MASTER) buildMaster(); if (MASTER) dl(new Blob(["﻿" + toCSV(DATA.columns, MASTER)], { type: "text/csv;charset=utf-8" }), DATA.name + "-master.csv"); });
     $("dlscript").addEventListener("click", () => { const s = LAST ? LAST.script : buildScript(); dl(new Blob(["# Analysis script generated by RWE Studio — reads the master file as data.csv\n# Reproduces the on-screen result in desktop R.\n\n" + s + "\n"], { type: "text/plain;charset=utf-8" }), DATA.name + "-analysis.R"); });
+    $("dlfitted").addEventListener("click", () => {
+      const f = LAST && LAST.fitted; if (!f || f.length < 2) return;
+      dl(new Blob(["﻿" + f.map((r) => r.map(csvCell).join(",")).join("\n")], { type: "text/csv;charset=utf-8" }), DATA.name + "-fitted-series.csv");
+    });
     $("dlreport").addEventListener("click", () => { dl(new Blob([buildReport(readQ())], { type: "text/markdown;charset=utf-8" }), DATA.name + "-report.md"); });
     $("dlreportword").addEventListener("click", async () => { const b = await buildReportDocx(readQ()); if (b) dl(b, DATA.name + "-report.docx"); });
   </script>
