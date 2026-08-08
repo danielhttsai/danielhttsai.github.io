@@ -167,6 +167,7 @@ const DESIGNS = [
         <p class="text-[11px] text-slate-500"><strong>AI classify</strong> judges each column's causal role for <em>your specific exposure→outcome</em> — ticking genuine <strong>confounders</strong> and warning against adjusting for <strong>mediators / colliders / instruments</strong>. Only the <strong>column names + your question</strong> are sent to the AI — never any patient data. Always review and edit; you have the final clinical say.</p>
         <p id="cov_ai_msg" class="text-[11px]"></p>
         <div id="covlist" class="mt-1.5 grid gap-1 sm:grid-cols-3 text-xs text-slate-700"></div>
+        <p id="covnote" class="mt-1.5 text-[11px]"></p>
 
         <div id="acnuopts" class="hidden mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div>
@@ -864,6 +865,12 @@ const DESIGNS = [
     });
 
     // ── Steps 3–6: map → clean → analyse (R) → export ──
+    // Shared R guards. A role that must be 0/1 has to actually be 0/1, and a role
+    // that must be numeric has to hold numbers. as.numeric() on text yields NA,
+    // and every design here would then carry on and print a number computed from
+    // a variable that silently left the model. Refuse instead, and say what to fix.
+    const R_CHK01 = "chk01<-function(v,nm){ x<-suppressWarnings(as.numeric(v)); u<-unique(x[!is.na(x)]); if(length(u)==0 || !all(u %in% c(0,1))) stop(sprintf('The column mapped to %s is not coded 0/1 (values seen: %s). Say which value means yes under \"Coded flags\" in the structure panel, or map a different column.', nm, paste(head(unique(as.character(v)),6),collapse=', '))); x }\n";
+    const R_CHKNUM = "chknum<-function(v,nm){ x<-suppressWarnings(as.numeric(v)); if(all(is.na(x))) stop(sprintf('The column mapped to %s holds no numeric values (values seen: %s).', nm, paste(head(unique(as.character(v)),6),collapse=', '))); x }\n";
     const SPEC = {
       acnu: {
         label: "Active-comparator new-user cohort",
@@ -876,18 +883,44 @@ const DESIGNS = [
           { k: "EVENT", label: "Outcome event (0/1)", types: ["binary", "number"], req: true },
           { k: "DISC", label: "Time to discontinuation / switch (days, for PP)", types: ["number"], req: false },
         ],
-        rscript: (cov, opts) => {
+        rscript: (covInfo, opts) => {
           opts = opts || {};
-          const covs = cov.map((c) => "'" + c + "'").join(",");
+          covInfo = covInfo || [];
+          const q = (s) => "'" + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
           const M = opts.methods || [], E = (opts.estimands && opts.estimands.length) ? opts.estimands : ["ITT"], ratio = opts.ratio || 2, ns = opts.nstrata || 10;
-          let r = "d<-read.csv('/data.csv'); library(survival)\n";
-          r += "covs<-c(" + covs + ")\n";
-          r += "ps<-predict(glm(as.formula(paste('TREAT ~', paste(covs, collapse=' + '))), data=d, family=binomial), type='response')\n";
+          const dropped = opts.dropped || [];
+          let r = "d<-read.csv('/data.csv', stringsAsFactors=FALSE); library(survival)\n";
+          // A covariate has to enter the model as what it is. as.numeric() on a text
+          // column yields all-NA, which drops it from the propensity model silently —
+          // the only symptom being crude and adjusted estimates that agree exactly.
+          r += R_CHK01 + R_CHKNUM;
+          r += "d$TREAT<-chk01(d$TREAT,'Treatment'); d$EVENT<-chk01(d$EVENT,'Outcome event'); d$TIME<-chknum(d$TIME,'Follow-up time')\n";
+          r += "covs<-c(" + covInfo.map((c) => q(c.col)).join(",") + "); covsrc<-c(" + covInfo.map((c) => q(c.label)).join(",") + "); covkind<-c(" + covInfo.map((c) => q(c.kind)).join(",") + ")\n";
+          r += "if(length(covs)==0) stop('None of the ticked covariates can be used in a propensity model — see the note under the covariate list.')\n";
+          r += "need<-c('TREAT','TIME','EVENT',covs)\n";
+          r += "for(cc in need) d[[cc]][trimws(as.character(d[[cc]]))=='']<-NA\n";
+          r += "okr<-complete.cases(d[,need,drop=FALSE]); if(sum(!okr)>0) cat('RESULT_NOTE|Dropped ',sum(!okr),' row(s) with a missing treatment, follow-up time, outcome, or covariate value.\\n',sep='')\n";
+          r += "d<-d[okr,,drop=FALSE]\n";
+          r += "for(i in seq_along(covs)){ if(covkind[i]=='factor') d[[covs[i]]]<-factor(trimws(as.character(d[[covs[i]]]))) else d[[covs[i]]]<-suppressWarnings(as.numeric(d[[covs[i]]])) }\n";
+          r += "psm<-suppressWarnings(glm(as.formula(paste('TREAT ~', paste(covs, collapse=' + '))), data=d, family=binomial))\n";
+          r += "alias<-names(coef(psm))[is.na(coef(psm))]; if(length(alias)) cat('RESULT_NOTE|',length(alias),' propensity-model term(s) were collinear with the rest and dropped: ',paste(alias,collapse=', '),'.\\n',sep='')\n";
+          r += "ps<-as.numeric(predict(psm, type='response'))\n";
           r += "ps<-pmin(pmax(ps,1e-6),1-1e-6); d$lp<-qlogis(ps); tr<-d$TREAT==1; n<-nrow(d)\n";
           r += "cat(sprintf('N = %d; exposure = %d; comparator = %d; events = %d\\n\\n', n, sum(tr), sum(!tr), sum(d$EVENT==1,na.rm=TRUE)))\n";
-          r += "wsmd<-function(x,g,w){ m1<-weighted.mean(x[g],w[g]); m0<-weighted.mean(x[!g],w[!g]); v1<-sum(w[g]*(x[g]-m1)^2)/sum(w[g]); v0<-sum(w[!g]*(x[!g]-m0)^2)/sum(w[!g]); (m1-m0)/sqrt((v1+v0)/2) }\n";
+          r += "cat('RESULT_NOTE|Propensity model: ',sum(covkind=='numeric'),' continuous, ',sum(covkind=='binary'),' binary 0/1, ',sum(covkind=='factor'),' categorical entered as dummy-coded factors',if(any(covkind=='factor')) paste0(' (',paste(covsrc[covkind=='factor'],collapse=', '),')') else '','.\\n',sep='')\n";
+          if (dropped.length) r += "cat(" + q("RESULT_NOTE|" + dropped.length + " ticked covariate(s) were left out of the model: " + dropped.map((x) => x.src + " — " + x.why).join("; ") + ".") + ",'\\n',sep='')\n";
+          r += "wsmd<-function(x,g,w){ ok<-!is.na(x); a<-g&ok; b<-(!g)&ok; if(sum(a)<1||sum(b)<1) return(NA_real_); m1<-weighted.mean(x[a],w[a]); m0<-weighted.mean(x[b],w[b]); v1<-sum(w[a]*(x[a]-m1)^2)/sum(w[a]); v0<-sum(w[b]*(x[b]-m0)^2)/sum(w[b]); (m1-m0)/sqrt((v1+v0)/2) }\n";
+          // Yang & Dalton (2012) multinomial standardised difference: a categorical
+          // variable needs the Mahalanobis form, not the continuous one.
+          r += "smdcat<-function(f,g,w){ lv<-levels(f); k<-length(lv); if(k<2) return(NA_real_); pr<-function(idx){ ww<-w[idx]; s<-sum(ww); vapply(lv,function(l) sum(ww[f[idx]==l])/s, 0) }; p1<-pr(g); p0<-pr(!g); if(k==2) return((p1[2]-p0[2])/sqrt((p1[2]*(1-p1[2])+p0[2]*(1-p0[2]))/2)); i<-2:k; mk<-function(p){ pv<-as.numeric(p[i]); m<-diag(pv*(1-pv), nrow=length(pv)); for(a in seq_along(pv)) for(b in seq_along(pv)) if(a!=b) m[a,b]<- -pv[a]*pv[b]; m }; S<-(mk(p1)+mk(p0))/2; dv<-as.numeric(p1[i]-p0[i]); tryCatch(as.numeric(sqrt(t(dv)%*%solve(S)%*%dv)), error=function(e) NA_real_) }\n";
           r += "cat('TABLE1|Characteristic|Comparator (n=',sum(!tr),')|Exposure (n=',sum(tr),')|SMD\\n',sep='')\n";
-          r += "for(c in covs){ x<-as.numeric(d[[c]]); cat(sprintf('TABLE1|%s, mean (SD)|%.2f (%.2f)|%.2f (%.2f)|%.3f\\n', c, mean(x[!tr]), sd(x[!tr]), mean(x[tr]), sd(x[tr]), wsmd(x,tr,rep(1,n)))) }\ncat('\\n')\n";
+          r += "for(i in seq_along(covs)){ cc<-covs[i]; lab<-covsrc[i]\n" +
+               "  if(covkind[i]=='factor'){ f<-d[[cc]]; lv<-levels(f)\n" +
+               "    cat(sprintf('TABLE1|%s, n (%%)|||%.3f\\n', lab, smdcat(f,tr,rep(1,n))))\n" +
+               "    for(l in lv){ a<-sum(f[!tr]==l); b<-sum(f[tr]==l); cat(sprintf('TABLE1|  %s|%d (%.1f%%)|%d (%.1f%%)|\\n', l, a, 100*a/sum(!tr), b, 100*b/sum(tr))) }\n" +
+               "  } else { x<-d[[cc]]\n" +
+               "    if(covkind[i]=='binary'){ a<-sum(x[!tr]==1,na.rm=TRUE); b<-sum(x[tr]==1,na.rm=TRUE); cat(sprintf('TABLE1|%s, n (%%)|%d (%.1f%%)|%d (%.1f%%)|%.3f\\n', lab, a, 100*a/sum(!tr), b, 100*b/sum(tr), wsmd(x,tr,rep(1,n))))\n" +
+               "    } else cat(sprintf('TABLE1|%s, mean (SD)|%.2f (%.2f)|%.2f (%.2f)|%.3f\\n', lab, mean(x[!tr],na.rm=TRUE), sd(x[!tr],na.rm=TRUE), mean(x[tr],na.rm=TRUE), sd(x[tr],na.rm=TRUE), wsmd(x,tr,rep(1,n)))) } }\ncat('\\n')\n";
           r += "ET<-list(); EE<-list(); ET[['ITT']]<-d$TIME; EE[['ITT']]<-d$EVENT\n";
           if (E.indexOf("PP") >= 0) r += "if('DISC' %in% names(d)){ disc<-ifelse(is.na(d$DISC), Inf, as.numeric(d$DISC)); ET[['PP']]<-pmin(d$TIME, disc); EE[['PP']]<-d$EVENT*(d$TIME<=disc) }\n";
           r += "fitw<-function(t,e,w,idx,label){ dd<-data.frame(t=t[idx],e=e[idx],TREAT=d$TREAT[idx],w=w[idx]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd,weights=w,robust=TRUE),error=function(x)NULL); if(is.null(fit)){cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label));return(invisible())}; s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', label, s$conf.int[1,'exp(coef)'], s$conf.int[1,'lower .95'], s$conf.int[1,'upper .95'])) }\n";
@@ -914,7 +947,8 @@ const DESIGNS = [
           { k: "INTERVAL", label: "Interval length (person-time)", types: ["number"], req: true },
         ],
         rscript: () =>
-          "d<-read.csv('/data.csv')\n" +
+          "d<-read.csv('/data.csv', stringsAsFactors=FALSE)\n" + R_CHK01 + R_CHKNUM +
+          "d$EXPOSED<-chk01(d$EXPOSED,'Exposed indicator'); d$EVENTS<-chknum(d$EVENTS,'Event count'); d$INTERVAL<-chknum(d$INTERVAL,'Interval length')\n" +
           "fit<-glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=d)\n" +
           "b<-coef(fit)['EXPOSED']; se<-sqrt(diag(vcov(fit)))['EXPOSED']; irr<-exp(b)\n" +
           "cat(sprintf('Conditional Poisson incidence-rate ratio (exposed vs unexposed): %.3f (95%% CI %.3f to %.3f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))\n" +
@@ -931,7 +965,8 @@ const DESIGNS = [
           { k: "EXPOSED", label: "Exposed (0/1)", types: ["binary", "number"], req: true },
         ],
         rscript: () =>
-          "d<-read.csv('/data.csv'); library(survival)\n" +
+          "d<-read.csv('/data.csv', stringsAsFactors=FALSE); library(survival)\n" + R_CHK01 +
+          "d$CASE<-chk01(d$CASE,'Case indicator'); d$EXPOSED<-chk01(d$EXPOSED,'Exposed indicator')\n" +
           "fit<-clogit(CASE ~ EXPOSED + strata(ID), data=d); s<-summary(fit)\n" +
           "or<-s$conf.int['EXPOSED','exp(coef)']; lci<-s$conf.int['EXPOSED','lower .95']; uci<-s$conf.int['EXPOSED','upper .95']\n" +
           "cat(sprintf('Conditional logistic odds ratio (case vs control windows): %.3f (95%% CI %.3f to %.3f)\\n', or, lci, uci))\n" +
@@ -958,6 +993,8 @@ const DESIGNS = [
           const q = (s) => "'" + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
           const L = [];
           L.push("d<-read.csv('/data.csv', stringsAsFactors=FALSE)");
+          L.push(R_CHK01.trim());
+          L.push(R_CHKNUM.trim());
           L.push("CUT<-" + q(o.cut) + "; UNIT<-" + q(o.unit || "month") + "; COMBF<-" + q(o.comb || "sum") + "; MODEL<-" + q(o.model || "auto") + "; SEASON<-" + q(o.season || "none") + "; CYC<-" + (o.cycle || 12) + "; AC<-" + q(o.ac || "auto"));
           L.push("");
           L.push("# --- parse the time column (ISO dates, slashes, datetimes, YYYY-MM) ---");
@@ -968,10 +1005,12 @@ const DESIGNS = [
           L.push("if(UNIT!='none' && !isdate){ cat('The time column does not parse as dates, so its literal values are used as the periods.\\n'); UNIT<-'none' }");
           L.push("key<-if(UNIT!='none') format(floorp(dts,UNIT),'%Y-%m-%d') else trimws(as.character(tid))");
           L.push("");
-          L.push("Y<-suppressWarnings(as.numeric(d$YCOUNT))");
+          L.push("Y<-chknum(d$YCOUNT,'Event count / rate / level')");
           L.push("HASN<-'DENOM' %in% names(d); HASG<-'SERIES' %in% names(d); HASS<-'SEAS' %in% names(d)");
-          L.push("N<-if(HASN) suppressWarnings(as.numeric(d$DENOM)) else rep(NA_real_,nrow(d))");
-          L.push("G<-if(HASG) suppressWarnings(as.numeric(d$SERIES)) else rep(0,nrow(d)); G[is.na(G)]<-0");
+          L.push("N<-if(HASN) chknum(d$DENOM,'Population denominator') else rep(NA_real_,nrow(d))");
+          // A text control-series indicator used to become NA and then 0, quietly
+          // collapsing both series into one. Refuse rather than merge them.
+          L.push("G<-if(HASG) chk01(d$SERIES,'the control-series indicator (1=intervention, 0=control)') else rep(0,nrow(d))");
           L.push("SS<-if(HASS) d$SEAS else rep(NA,nrow(d))");
           L.push("ok<-!is.na(key) & key!='' & !is.na(Y); if(sum(!ok)>0) cat(sprintf('Dropped %d row(s) with a missing time or outcome value.\\n',sum(!ok)))");
           L.push("key<-key[ok]; Y<-Y[ok]; N<-N[ok]; G<-G[ok]; SS<-SS[ok]");
@@ -1091,6 +1130,8 @@ const DESIGNS = [
           L.push("if(npre<8) cat(sprintf('RESULT_NOTE|Only %d pre-intervention period(s) — the baseline trend, and therefore the counterfactual, is poorly estimated. Aim for at least 8 (ideally 12).\\n',npre))");
           L.push("if(npost<8) cat(sprintf('RESULT_NOTE|Only %d post-intervention period(s) — a slope change is hard to detect. Aim for at least 8 (ideally 12).\\n',npost))");
           L.push("if(!is.na(dw) && (dw<1.5||dw>2.5) && !useh) cat('RESULT_NOTE|Durbin-Watson indicates residual autocorrelation but model-based standard errors were requested, so the confidence intervals are likely too narrow.\\n')");
+          // Say where the HAC correction stops, next to the numbers it produced.
+          L.push("if(HASG && useh) cat('RESULT_NOTE|With a control series the HAC correction is applied within each series: lag products that cross the two series are excluded, so serial correlation is handled but any contemporaneous correlation between the intervention and control series at the same time point is assumed to be zero. If the two series move together period by period, these standard errors are too narrow.\\n')");
           L.push("");
           L.push("cat('\\n--- Segmented regression coefficients ---\\n'); print(summary(fit)$coefficients)");
           L.push("cat(sprintf('\\nPeriods: %d (%s to %s); interruption at %s (period %d).\\n',np,ukey[1],ukey[np],ukey[t0],t0))");
@@ -1202,8 +1243,28 @@ const DESIGNS = [
         const badge = rc ? ' <span class="rounded px-1 py-0.5 text-[9px] font-semibold ' + ROLE_CLS(rc.role) + '">' + esc(rc.role) + "</span>" : "";
         return '<label class="flex items-start gap-1.5" title="' + (rc ? esc(rc.reason) : "") + '"><input type="checkbox" data-cov="' + esc(c) + '"' + (COVS.includes(c) ? " checked" : "") + ' class="mt-0.5"/> <span>' + esc(c) + badge + "</span></label>";
       }).join("");
-      $("covlist").querySelectorAll("input[data-cov]").forEach((cb) => cb.addEventListener("change", () => { const c = cb.getAttribute("data-cov"); if (cb.checked) { if (!COVS.includes(c)) COVS.push(c); } else COVS = COVS.filter((x) => x !== c); validateMap(); }));
+      $("covlist").querySelectorAll("input[data-cov]").forEach((cb) => cb.addEventListener("change", () => { const c = cb.getAttribute("data-cov"); if (cb.checked) { if (!COVS.includes(c)) COVS.push(c); } else COVS = COVS.filter((x) => x !== c); renderCovNote(); validateMap(); }));
       $("acnuopts").classList.toggle("hidden", getDesign() !== "acnu");
+      renderCovNote();
+    }
+    // Say up front how each ticked covariate will enter the model, and name any
+    // that cannot be used. A variable must never leave the model in silence.
+    function renderCovNote() {
+      const el = $("covnote"); if (!el) return;
+      const spec = SPEC[getDesign()];
+      if (!spec || !spec.covariates || !COVS.length || !DATA.rows.length) { el.textContent = ""; return; }
+      const plan = covPlan(MASTER || DATA.rows);
+      const nNum = plan.info.filter((c) => c.kind === "numeric").length;
+      const nBin = plan.info.filter((c) => c.kind === "binary").length;
+      const fac = plan.info.filter((c) => c.kind === "factor");
+      const bits = [];
+      if (nNum) bits.push(nNum + " continuous");
+      if (nBin) bits.push(nBin + " binary (0/1)");
+      if (fac.length) bits.push(fac.length + " categorical → dummy-coded factor" + (fac.length > 1 ? "s" : "") + " (" + fac.map((c) => c.src + ", " + c.levels + " levels").join("; ") + ")");
+      let html = plan.info.length ? "In the propensity model: " + bits.join(" · ") + "." : "";
+      if (plan.dropped.length) html += (html ? " " : "") + '<span class="text-rose-700 font-semibold">Left out: ' + plan.dropped.map((d) => esc(d.src) + " (" + esc(d.why) + ")").join("; ") + ".</span>";
+      el.innerHTML = html;
+      el.className = "mt-1.5 text-[11px] " + (plan.dropped.length ? "text-rose-700" : "text-slate-500");
     }
     const availCovCols = () => { const spec = SPEC[getDesign()]; const used = new Set(spec.roles.map((r) => MAP[r.k]).filter(Boolean)); return DATA.columns.filter((c) => !used.has(c)); };
     const COV_KW = /age|sex|gender|comorbid|cci|charlson|elix|diab|hyperten|renal|ckd|egfr|copd|asthma|cancer|malig|smok|alcohol|bmi|weight|obes|hba1c|ldl|hdl|chol|creatinin|statin|insulin|metformin|nsaid|ppi|anticoag|antiplatel|steroid|comed|med_|drug|dx_|hx_|prior|baseline|income|ses|deprivation|urban|region|frailty|score/i;
@@ -1240,12 +1301,14 @@ const DESIGNS = [
       const spec = SPEC[getDesign()]; if (!spec) return false;
       const missing = spec.roles.filter((r) => r.req && !MAP[r.k]).map((r) => r.label);
       const needCov = spec.covariates && COVS.length === 0;
+      const noUsable = spec.covariates && COVS.length > 0 && DATA.rows.length > 0 && covPlan(MASTER || DATA.rows).info.length === 0;
       const needCut = getDesign() === "its" && !$("its_cut").value.trim();
-      const ok = missing.length === 0 && !needCov && !needCut;
+      const ok = missing.length === 0 && !needCov && !needCut && !noUsable;
       const m = $("mapmsg");
       if (missing.length) { m.textContent = "Map the required roles (*): " + missing.join(", "); m.className = "mt-3 text-xs text-amber-700"; }
       else if (needCut) { m.textContent = "Give the interruption point — the first period affected by the intervention."; m.className = "mt-3 text-xs text-amber-700"; }
       else if (needCov) { m.textContent = "Tick at least one baseline covariate for the propensity score."; m.className = "mt-3 text-xs text-amber-700"; }
+      else if (noUsable) { m.textContent = "None of the ticked covariates can be used — see the note under the list."; m.className = "mt-3 text-xs text-rose-700"; }
       else { m.textContent = "Mapping complete ✓ — build the master file below."; m.className = "mt-3 text-xs text-emerald-700"; }
       $("cleancard").classList.toggle("hidden", !ok);
       return ok;
@@ -1304,12 +1367,51 @@ const DESIGNS = [
       $("anacard").classList.remove("hidden"); $("expcard").classList.remove("hidden");
     }
 
+    // What kind of variable is this, really? A covariate that is text must not be
+    // coerced to a number — that is how a variable vanishes from a model without
+    // anyone noticing. Anything that cannot be used is named, never dropped quietly.
+    const COV_MAX_LEVELS = 20;
+    function classifyCov(src, rows) {
+      const nonNull = rows.map((r) => r[src]).filter((v) => !isBlank(v));
+      if (!nonNull.length) return { kind: "unusable", why: "every value is missing" };
+      const asNum = (v) => (v instanceof Date ? NaN : Number(String(v).replace(/,/g, "")));
+      const allNum = nonNull.every((v) => typeof v === "number" || (typeof v === "string" && v.trim() !== "" && !isNaN(asNum(v))));
+      if (allNum) {
+        const set = new Set(nonNull.map(asNum));
+        if (set.size < 2) return { kind: "unusable", why: "constant — it carries no information" };
+        if (set.size === 2 && [...set].every((x) => x === 0 || x === 1)) return { kind: "binary", yes: "1" };
+        return { kind: "numeric" };
+      }
+      const levels = Array.from(new Set(nonNull.map((v) => String(v).trim())));
+      if (levels.length < 2) return { kind: "unusable", why: "constant — it carries no information" };
+      if (levels.length > COV_MAX_LEVELS) return { kind: "unusable", why: levels.length + " distinct text values — too many to dummy-code; group it into categories first" };
+      if (levels.length === 2) {
+        const ym = yesMap(), a = levels[0].toLowerCase(), b = levels[1].toLowerCase();
+        if (a in ym && b in ym && ym[a] !== ym[b]) return { kind: "binary", yes: ym[a] === 1 ? levels[0] : levels[1] };
+      }
+      return { kind: "factor", levels: levels.length };
+    }
+    function covPlan(rows) {
+      const info = [], dropped = [];
+      let i = 0;
+      COVS.forEach((src) => {
+        const cls = classifyCov(src, rows);
+        if (cls.kind === "unusable") { dropped.push({ src: src, why: cls.why }); return; }
+        i++;
+        info.push({ col: "COV" + i, src: src, kind: cls.kind, yes: cls.yes, levels: cls.levels, label: cls.kind === "binary" && cls.yes !== "1" ? src + " = " + cls.yes : src });
+      });
+      return { info: info, dropped: dropped };
+    }
     function analysisCSV() {
-      const spec = SPEC[getDesign()]; const outCols = [], colFor = {}, covNames = [];
+      const spec = SPEC[getDesign()]; const outCols = [], colFor = {}, tx = {};
       spec.roles.forEach((r) => { if (MAP[r.k]) { outCols.push(r.k); colFor[r.k] = MAP[r.k]; } });
-      if (spec.covariates) COVS.forEach((src, i) => { const cn = "COV" + (i + 1); outCols.push(cn); colFor[cn] = src; covNames.push(cn); });
-      const rows = (MASTER || []).map((r) => { const o = {}; outCols.forEach((cn) => { o[cn] = r[colFor[cn]]; }); return o; });
-      return { csv: toCSV(outCols, rows), covNames };
+      const plan = spec.covariates ? covPlan(MASTER || DATA.rows) : { info: [], dropped: [] };
+      plan.info.forEach((c) => {
+        outCols.push(c.col); colFor[c.col] = c.src;
+        if (c.kind === "binary") tx[c.col] = (v) => (isBlank(v) ? null : toBin(v));   // ship 0/1, not "有"
+      });
+      const rows = (MASTER || []).map((r) => { const o = {}; outCols.forEach((cn) => { const v = r[colFor[cn]]; o[cn] = tx[cn] ? tx[cn](v) : v; }); return o; });
+      return { csv: toCSV(outCols, rows), covNames: plan.info.map((c) => c.col), covInfo: plan.info, covDropped: plan.dropped };
     }
     function acnuOpts() {
       const methods = [];
@@ -1327,8 +1429,8 @@ const DESIGNS = [
       return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: parseInt($("its_cycle").value) || 12, ac: $("its_ac").value };
     }
     function buildScript() {
-      const spec = SPEC[getDesign()]; const { covNames } = analysisCSV();
-      if (getDesign() === "acnu") return spec.rscript(covNames, acnuOpts());
+      const spec = SPEC[getDesign()]; const { covNames, covInfo, covDropped } = analysisCSV();
+      if (getDesign() === "acnu") return spec.rscript(covInfo, Object.assign(acnuOpts(), { dropped: covDropped }));
       if (getDesign() === "its") return spec.rscript(covNames, itsOpts());
       return spec.rscript(covNames);
     }
@@ -1390,10 +1492,23 @@ const DESIGNS = [
         rs.forEach((r) => { g += '<circle cx="' + X(r.t).toFixed(1) + '" cy="' + Y(v(r, "o")).toFixed(1) + '" r="2.6" fill="' + col + '" opacity="0.55"/>'; });
         g += '<text x="' + (ml + 4 + si * 190) + '" y="' + (H - 8) + '" font-size="10" fill="' + col + '" font-weight="600">' + esc(sn) + "</text>";
       });
-      // x labels: first, interruption, last
+      // x ticks: about six evenly spaced periods, always including the first, the
+      // last, and the interruption — a long series with only two labels is unreadable.
       const lab = (t) => { const r = data.find((x) => x.t === t); return r ? r.p : String(t); };
-      [[tmin, "start"], [tmax, "end"]].forEach(([t]) => {
-        g += '<text x="' + X(t).toFixed(1) + '" y="' + (H - mb + 14) + '" font-size="10" fill="#64748b" text-anchor="' + (t === tmin ? "start" : "end") + '">' + esc(lab(t)) + "</text>";
+      const span = tmax - tmin;
+      const want = Math.min(6, span + 1);
+      const ticks = [];
+      for (let i = 0; i < want; i++) ticks.push(tmin + Math.round((span * i) / Math.max(1, want - 1)));
+      if (t0 > tmin && t0 <= tmax) ticks.push(t0);
+      const uniq = Array.from(new Set(ticks)).sort((a, b) => a - b);
+      // drop labels that would collide (~64px of room per label)
+      const kept = [];
+      uniq.forEach((t) => { if (!kept.length || X(t) - X(kept[kept.length - 1]) >= 64 || t === tmax) kept.push(t); });
+      if (kept.length > 1 && X(kept[kept.length - 1]) - X(kept[kept.length - 2]) < 64) kept.splice(kept.length - 2, 1);
+      kept.forEach((t) => {
+        const anchor = t === tmin ? "start" : (t === tmax ? "end" : "middle");
+        g += '<line x1="' + X(t).toFixed(1) + '" y1="' + (H - mb) + '" x2="' + X(t).toFixed(1) + '" y2="' + (H - mb + 4) + '" stroke="#94a3b8" stroke-width="1"/>';
+        g += '<text x="' + X(t).toFixed(1) + '" y="' + (H - mb + 15) + '" font-size="10" fill="' + (t === t0 ? "#dc2626" : "#64748b") + '" text-anchor="' + anchor + '">' + esc(lab(t)) + "</text>";
       });
       const ylab = hasD ? "rate per 1,000 denominator units" : "outcome per period";
       $("itschart").classList.remove("hidden");
