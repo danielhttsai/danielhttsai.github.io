@@ -1014,7 +1014,17 @@ const TIMELINE_PRESETS: Record<string, string> = {
               <p class="text-[11px] text-slate-500 leading-relaxed">
                 Every covariate ticked in Section 8, plus anything you add below. Click a chip to move a variable between the two propensity scores.
                 <strong>Claims</strong> variables go into both scores; <strong>clinical-only</strong> variables go into the gold-standard score alone; <strong>exclude</strong> drops
-                identifiers, outcomes and post-baseline measurements from both. A keyword rule sets the starting position — the AI (names and your notes only, never data) will refine it.
+                identifiers, outcomes and post-baseline measurements from both.
+              </p>
+              <p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 leading-relaxed">
+                <strong>The keyword rule is only a starting position, and it is wrong often enough to matter.</strong> It reads variable names, so it cannot tell a
+                measurement from a billing code, and it misses instruments it has never seen. Run <em>Let AI classify</em> and check every row it marks <em>AI changed</em> —
+                a clinical variable left in the claims list quietly collapses the correction to zero, which looks exactly like "no unmeasured confounding".
+              </p>
+              <p class="text-[11px] text-slate-600 bg-white border border-slate-200 rounded px-2 py-1.5 leading-relaxed">
+                <strong>What the AI button sends.</strong> Variable names from Section 8 and from the two boxes below, your codebook notes, the name of the claims
+                database, and the four research-question fields (population, exposure, comparator, outcome) — all of it verbatim. Nothing else leaves the browser:
+                no patient data, no rows, no values. Keep patient-identifiable text out of every one of those fields.
               </p>
               <div data-psc-vars class="grid gap-1"></div>
               <p data-psc-ai-msg class="text-[11px]"></p>
@@ -1028,7 +1038,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
                   <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Codebook notes for the AI (<code>Variable | definition</code>)</span>
                   <textarea name="pscNotes" rows="4" placeholder="HbA1c_first | most recent value before the first injection&#10;DM duration | index date minus earliest diabetes diagnosis (years)"
                             class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
-                  <span class="text-[11px] text-slate-500">Metadata only. Never paste patient data here; only variable names and definitions are sent.</span>
+                  <span class="text-[11px] text-slate-500">Definitions only — see the note above on what is sent.</span>
                 </label>
               </div>
             </div>
@@ -1044,7 +1054,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
                 The measure to use is <strong>S</strong>, from Lunt et al. (<em>Am J Epidemiol</em> 2012, Table 2 footnote g): of the outcome variation explained by both
                 propensity scores together, the percentage attributable to the gold-standard score alone. 100% means perfect surrogacy. It is a ratio of two
                 likelihood-ratio statistics and the R code below computes it. <strong>Prefer it to a p-value</strong> — in a validation sample of any size the p-value
-                rejects on departures far too small to matter, and our own simulation found it rejecting at S = 96% where calibration still removed most of the bias.
+                rejects on departures far too small to matter, and our own simulation found it rejecting at S = 92.5% where calibration still removed most of the bias.
               </p>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">S, surrogacy % (0-100)</span>
@@ -1541,7 +1551,19 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
       // space FIRST. Real column names are written HbA1c_first / eGFR_last /
       // IOP-post, and \b does not fire against an underscore (it is a word
       // character), so testing the raw name silently misses them.
-      const pscNorm = (n) => String(n).toLowerCase().replace(/[^a-z0-9㐀-鿿]+/g, " ");
+      // Normalise before matching. Three things bite here, all found by testing
+      // names from other specialties and languages:
+      //   * \b never fires against "_", so HbA1c_first / eGFR_last were missed;
+      //   * the CJK range alone drops Hangul and kana entirely, so every Korean
+      //     and Japanese name was stripped to spaces and fell through to claims;
+      //   * accented Latin ("Créatinine") did not match its unaccented pattern.
+      // NFD + combining-mark removal fixes the third.
+      // The NFC at the end is load-bearing: NFD decomposes Hangul syllables into
+      // conjoining jamo (U+1100 block), which fall outside the kept ranges, so
+      // without recomposing, every Korean name was stripped to an empty string
+      // and classified claims by fallthrough.
+      const pscNorm = (n) => String(n).normalize("NFD").replace(/[̀-ͯ]/g, "").normalize("NFC")
+        .toLowerCase().replace(/[^a-z0-9぀-ヿ㐀-鿿가-힯]+/g, " ").trim();
       const PSC_CLINICAL_RX = new RegExp([
         "hba1c|glycated|glycosylated|creatinine|\\begfr\\b|\\bgfr\\b|\\bldl\\b|\\bhdl\\b|cholesterol|triglycerid|albumin|h[ae]moglobin|\\bplatelet|\\bwbc\\b|leu[ck]ocyte|neutrophil|lymphocyte|\\binr\\b|\\btsh\\b|\\bft4\\b|blood glucose|fasting glucose|\\bast\\b|\\balt\\b|\\bggt\\b|bilirubin|ferritin|\\bcrp\\b|\\besr\\b|uric acid|proteinuria|albuminuria|lab result|laborator",
         "\\bbmi\\b|body mass|\\bheight\\b|\\bweight\\b|waist|blood pressure|systolic|diastolic|\\bsbp\\b|\\bdbp\\b|heart rate|\\bpulse\\b|respiratory rate|body temperature|\\bspo2\\b|oxygen satur|vital sign",
@@ -1549,13 +1571,66 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         "\\bnyha\\b|\\bgcs\\b|glasgow|\\bnihss\\b|child ?pugh|\\bmeld\\b|\\becog\\b|karnofsky|apache|\\bsofa\\b|severity score|disease severity|performance status",
         "smok|tobacco|cigarette|alcohol|drinking|betel|\\bdiet\\b|physical activity|exercise habit|lifestyle|\\badl\\b|\\biadl\\b|\\bmmse\\b|cognitive score|frailty (?:index|scale|score)",
         "\\b(?:dm|diabet\\w*|disease|illness|hypertension) duration|duration of (?:dm|diabet|disease|illness)",
-        "收縮壓|舒張壓|血壓|身高|體重|視力|眼壓|抽菸|吸菸|飲酒|檳榔|血糖|糖化",
+        // Rating scales, indices and stage/grade readings — clinical instruments,
+        // never billed. Whole specialties fell through without these.
+        "\\bpanss\\b|\\bbprs\\b|ham ?[ad]\\b|\\bhamd\\b|\\bhama\\b|\\bmadrs\\b|\\bymrs\\b|\\bphq ?9\\b|\\bgad ?7\\b|\\bcdr\\b|\\badas\\b|\\bupdrs\\b|\\bmoca\\b|\\bmmse\\b|\\bdas28\\b|\\bhaq\\b|\\bodi\\b|\\beq ?5d\\b|\\bsf ?36\\b|\\bvas\\b|\\bnrs\\b|\\basa (?:class|status|grade)|\\bfrs\\b|risk score",
+        "\\bki ?67\\b|pd ?l1|\\btps\\b|\\bcps\\b|recist|gleason|\\bbreslow\\b|\\bnottingham\\b|allred|mitotic|\\bher2\\b|\\bmsi\\b|\\btmb\\b|tumou?r burden|lesion (?:size|count)|\\bejection\\b",
+        "\\bkt ?v\\b|\\burr\\b|dialysis adequacy|\\bktv\\b",
+        "gestational age|\\bapgar\\b|birth ?weight|\\bcrown rump\\b|\\bfundal\\b|cervical length",
+        "\\bsodium\\b|\\bpotassium\\b|\\bchloride\\b|bicarbonate|\\bmagnesium\\b|\\bphosphate\\b|troponin|\\bbnp\\b|nt ?pro ?bnp|\\bd ?dimer\\b|\\blactate\\b|\\bprocalcitonin\\b|\\bcpk\\b|\\bck ?mb\\b|\\bamylase\\b|\\blipase\\b|\\btitre\\b|\\btiter\\b|serum \\w+|plasma \\w+|urine \\w+",
+        "family history|\\bpolygenic\\b|genetic risk|\\bgenotype\\b|\\bgwas\\b|\\bsnp\\b|functional status|\\bkarnofsky\\b|quality of life",
+        // Traditional Chinese, Japanese and Korean equivalents of the above.
+        "收縮壓|舒張壓|血壓|身高|體重|視力|眼壓|抽菸|吸菸|飲酒|檳榔|血糖|糖化|腰圍|心跳|體溫|檢驗|檢查值",
+        "身長|体重|血圧|喫煙|飲酒|眼圧|血糖|体温|脈拍|検査値|検査結果|腹囲",
+        "혈압|체중|신장|키|흡연|음주|안압|혈당|크레아티닌|체온|맥박|검사|검사결과|허리둘레",
+        // Other European languages, after diacritics are stripped.
+        "tension arterielle|pression arterielle|presion arterial|blutdruck|korpergewicht|korpergrosse|glycemie|glucemia|tabagisme|tabaquismo|rauchen",
+      ].join("|"), "i");
+      // Tested BEFORE the clinical rule. A coded diagnosis, procedure, dispensing
+      // or encounter IS in claims even when the underlying measurement is not —
+      // "weight loss diagnosis" and "smoking cessation counselling visit" are
+      // billable, "weight" and "smoking" are not. The Worker prompt has always
+      // said this; the keyword seed did not.
+      const PSC_CLAIMS_OVERRIDE_RX = new RegExp([
+        "\\bdiagnos\\w*|\\bdx\\b|\\bicd\\b|\\bicd ?9\\b|\\bicd ?10\\b|\\bcoded\\b|\\bcode\\b|\\bcodes\\b|code list",
+        "\\bprocedure\\w*|\\bproc\\b|\\bsurger\\w*|\\boperation\\b|\\bcpt\\b|\\bhcpcs\\b|\\batc\\b|\\bndc\\b",
+        "\\bdispens\\w*|\\bprescri\\w*|\\brefill\\w*|\\bdays supply\\b|\\bdefined daily dose\\b|\\bddd\\b",
+        // NB: no bare "claim" token — investigators write "absent from claims"
+        // inside a clinical variable's own description, and it flipped those.
+        "\\bbilled\\b|\\bbilling\\b|\\breimburse\\w*|\\bcopay\\w*|\\bexpenditure\\b",
+        "\\bvisit\\w*|\\bencounter\\w*|\\badmission\\w*|\\bhospitali[sz]\\w*|\\binpatient\\b|\\boutpatient\\b|\\bemergency\\b|\\breferral\\b|\\bcounsel\\w*|\\bscreening (?:visit|programme|program)\\b",
+        "\\bcount\\b|\\bcounts\\b|\\bnumber of\\b|\\bfrequency of\\b|\\butilis\\w*|\\butiliz\\w*|\\bepisodes?\\b",
+        "\\bhistory of\\b|\\bhistory_\\w*|\\bprior\\b|\\bprevious\\b|\\bcomorbid\\w*|charlson|elixhauser|\\bcci\\b",
+        "就診|就醫|處方|健保|申報|門診|住院|診斷|受診|外来|入院|処方|診断|진료|처방|외래|입원|진단",
       ].join("|"), "i");
       // Things that belong in neither propensity score.
-      const PSC_EXCLUDE_RX = /\b(?:id|ids|identifier|uid|mrn|serial)\b|\b(?:patient|chart|record|case) (?:no|number|id)\b|^outcome\b|\boutcome \w|^index date\b|^end ?point\b|病歷號|身分證|去識別/i;
+      const PSC_EXCLUDE_RX = new RegExp([
+        "\\b(?:id|ids|identifier|uid|mrn|serial|ref)\\b|\\bsubject ?(?:ref|id|no|number)\\b",
+        "\\b(?:patient|chart|record|case|enrol\\w*|enroll\\w*|registration|study) ?(?:no|number|id|ref)\\b",
+        "^outcome\\b|\\boutcome \\w|^index date\\b|^end ?point\\b",
+        "病歷號|病案號|身分證|去識別|案例編號|編號",
+        "登録番号|患者番号|症例番号",
+        "환자번호|등록번호|대상자번호",
+      ].join("|"), "i");
+      // Never claims however it is worded — no billing code carries these.
+      const PSC_CLINICAL_ALWAYS_RX = /family history|polygenic|genetic risk|\bgenotype\b|\bgwas\b|\bbiobank\b/i;
       const pscHeuristic = (name) => {
         const n = pscNorm(name);
         if (PSC_EXCLUDE_RX.test(n)) return "exclude";
+        if (PSC_CLINICAL_ALWAYS_RX.test(n)) return "clinical";
+        // Investigators write covariates as whole sentences, and the coded/billed
+        // words often live in the explanation rather than in the concept ("...
+        // absent from claims but proxiable by opioid dispensing"). The head of
+        // the name is the concept, so a clinical head with no coded word in it
+        // wins; otherwise the coded reading wins anywhere in the name.
+        const head = n.slice(0, 40);
+        if (PSC_CLINICAL_RX.test(head) && !PSC_CLAIMS_OVERRIDE_RX.test(head)) return "clinical";
+        // A coded diagnosis, procedure, dispensing or encounter IS in claims
+        // even when the underlying measurement is not. Getting this backwards
+        // is the dangerous direction: a clinical variable wrongly placed in C
+        // enters PS_ep, drives PS_gs toward PS_ep, and collapses the correction
+        // to a no-op that reads as "no unmeasured confounding".
+        if (PSC_CLAIMS_OVERRIDE_RX.test(n)) return "claims";
         return PSC_CLINICAL_RX.test(n) ? "clinical" : "claims";
       };
       const pscClassOf = (name) => pscClass[name] || pscHeuristic(name);
@@ -1582,6 +1657,34 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
       const pscFmt = (x, d) => (x === null || x === undefined || !isFinite(x)) ? "" : (Math.abs(x) >= 1e4 || (x !== 0 && Math.abs(x) < 1e-4) ? x.toExponential(3) : String(Math.round(x * Math.pow(10, d === undefined ? 4 : d)) / Math.pow(10, d === undefined ? 4 : d)));
       const pscSigned = (x, d) => (x === null ? "" : (x < 0 ? "− " + pscFmt(-x, d) : "+ " + pscFmt(x, d)));
 
+      // Whether the calibrated number may be shown at all. A page that prints
+      // "do not report this as a correction" and then prints the correction is
+      // how the method gets misapplied by someone who read the warning.
+      //   "ok"          — surrogacy supported; show it, allow the reuse claim.
+      //   "provisional" — surrogacy not yet established; show it, labelled, no reuse.
+      //   "withheld"    — surrogacy absent, partial, or unmeasurable; do not show it.
+      const pscRelease = (v) =>
+        (v === "s-low" || v === "s-mid" || v === "untestable") ? "withheld"
+        : v === "s-high" ? "ok" : "provisional";
+
+      // Reconcile the declared variable split against the entered coefficients.
+      // If no covariate is marked clinical-only then U is empty, PS_gs is the
+      // same model as PS_ep, and the calibration model can only return α₁ = 1,
+      // α₂ = 0 — a correction of exactly zero. Coefficients saying otherwise
+      // mean the split and the numbers came from different analyses.
+      const pscContradiction = (clinical, claims, a1, a2) => {
+        if (!clinical.length && (a1 !== null || a2 !== null)) {
+          const identity = (a1 === null || Math.abs(a1 - 1) < 0.02) && (a2 === null || Math.abs(a2) < 0.02);
+          if (!identity) {
+            return "No covariate is marked clinical-only, so the gold-standard score is fitted from exactly the same variables as the error-prone score. PS_gs and PS_ep are then the same quantity, the calibration model can only return α₁ = 1 and α₂ = 0, and the correction is identically zero. The coefficients entered (α₁ = " + pscFmt(a1, 4) + ", α₂ = " + pscFmt(a2, 4) + ") cannot have come from this variable split. Either mark the variables the claims database cannot see, or re-enter coefficients from the analysis that matches this split.";
+          }
+        }
+        if (!claims.length && (a1 !== null || a2 !== null)) {
+          return "No covariate is marked claims-available, so there is no error-prone propensity score to calibrate and PS_ep is undefined. The coefficients entered cannot have come from this variable split.";
+        }
+        return null;
+      };
+
       // Everything the exports and the on-screen card need, derived once.
       const pscModel = (s) => {
         const claims = [], clinical = [], excluded = [];
@@ -1599,7 +1702,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         // interval only from the bootstrap the researcher actually ran: it is a
         // ratio of estimated coefficients across two models in two samples, and
         // a first-order delta method understates its width (measured here at
-        // SE 0.014 against an empirical SD of 0.022), so no closed form is shown.
+        // SE 0.014 against an empirical SD of 0.024), so no closed form is shown.
         const naiveLo = (bT !== null && bTse !== null) ? bT - 1.959964 * bTse : null;
         const naiveHi = (bT !== null && bTse !== null) ? bT + 1.959964 * bTse : null;
         const bootLo = pscNum(s.pscBootLo), bootHi = pscNum(s.pscBootHi);
@@ -1611,7 +1714,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         // Surrogacy verdict. S (Lunt 2012, Table 2 footnote g) is the primary
         // instrument and the p-value is demoted to a secondary one, because the
         // p-value is a test of an exact null in a sample of arbitrary size: on
-        // our own angle sweep it rejected at p < 0.001 while S was 96% and
+        // our own angle sweep it rejected at p < 0.001 while S was 92.5% and
         // calibration was still removing most of the bias. Bands below are a
         // reading of Lunt's Table 2 plus our simulation, not a published cut-off.
         const surroP = pscNum(s.pscSurroP), surroCoef = pscNum(s.pscSurroCoef);
@@ -1629,6 +1732,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           k, bC, naiveLo, naiveHi, bootLo, bootHi, hasBoot,
           ratio, measure, nonCollapsible, scaleLabel,
           surroP, surroCoef, surroS, surroTestable, surroVerdict,
+          releaseLevel: pscRelease(surroVerdict), contradiction: pscContradiction(clinical, claims, a1, a2),
           bootB: (s.pscBootB || "").trim() || "1000",
           r2: pscNum(s.pscR2),
           claimsDb: (s.pscClaimsDb || "").trim() || "the claims database",
@@ -1649,7 +1753,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           "PSC assumes the error-prone score is a surrogate for the gold-standard score: Y ⫫ PS_ep | (T, PS_gs). Wan (2024) shows what that really demands — \"confounders cannot directly impact the outcome and … their effects on the outcome are solely mediated through the propensity score\" — and proves PSC \"is generally biased unless the effects of confounders on the outcome and treatment are proportional to each other\". Proportional means the covariate coefficient vector in the outcome model is a scalar multiple of the one in the treatment model. Nothing guarantees that in a real cohort."]);
         out.push([m.surroTestable ? "2. Measure it — you can, because the validation data have outcomes" : "2. You cannot measure it here, which is a reason not to proceed",
           m.surroTestable
-            ? "Use S, not a p-value. S (Lunt et al., Am J Epidemiol 2012, Table 2 footnote g) is the percentage of the outcome information carried by both propensity scores that is carried by the gold-standard score alone, computed as a ratio of likelihood-ratio statistics against a treatment-only model; 100% is perfect surrogacy. The p-value from the same model tests an exact null, so in a validation sample of any size it rejects on departures far too small to matter — in our own simulation it returned p < 0.001 while S was 96% and calibration was still removing most of the bias. Anchors: Lunt's published scenarios gave 75-114% bias reduction at S of 88-99% and −132% to −189% at S of 6-14%; our simulation had calibration helping in 5/5 replicates at S ≥ 92% and hurting in 5/5 at S ≈ 82%."
+            ? "Use S, not a p-value. S (Lunt et al., Am J Epidemiol 2012, Table 2 footnote g) is the percentage of the outcome information carried by both propensity scores that is carried by the gold-standard score alone, computed as a ratio of likelihood-ratio statistics against a treatment-only model; 100% is perfect surrogacy. The p-value from the same model tests an exact null, so in a validation sample of any size it rejects on departures far too small to matter — in our own simulation it returned p < 0.001 while S was 92.5% and calibration was still removing most of the bias. Anchors: Lunt's published scenarios gave 75-114% bias reduction at S of 88-99% and −132% to −189% at S of 6-14%; our simulation had calibration helping in 5/5 replicates at S ≥ 92% and hurting in 5/5 at S ≈ 82% (reproducible: scripts/psc-simulations.py in this tool's repository)."
             : "Neither S nor the p-value can be computed without outcomes in the validation dataset. This is precisely the cross-sectional-validation setting Lunt et al. (2012) address, and their conclusion is not to trust the point correction but to present PSC as a bias analysis over a plausible range for the unmeasured confounder's outcome association. Either obtain outcomes in the validation data, or take that route."]);
         out.push(["3. Failing the test is not a caveat — the correction reverses",
           "When surrogacy fails, calibration does not merely lose power; it moves the estimate the wrong way. Our simulation (linear outcome, so no non-collapsibility involved) gave a naive bias of +0.53 and a calibrated bias of −0.83 on the log scale at a moderate departure from proportionality; at a larger departure the naive estimate was nearly unbiased (+0.09) while calibration introduced −1.02. Stürmer's own 2007 simulation reports the same direction of failure: \"If surrogacy is violated, PSC can lead to an increase in bias.\" If S is low, report the naive estimate, report S, and follow the route under 'If surrogacy cannot be supported' rather than presenting a correction."]);
@@ -1730,7 +1834,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           "## doubled the error. Our own simulation: PSC helped at S >= 92% (5/5",
           "## replicates) and hurt at S ~ 82% (0/5). Judge on S, NOT on the p-value —",
           "## the p-value tests an exact null and rejects on departures too small to",
-          "## matter (we saw p < 0.001 at S = 96%, where calibration still worked).",
+          "## matter (we saw p < 0.001 at S = 92.5%, where calibration still worked).",
           "## If S is low, do not report the calibrated estimate as a correction;",
           "## see 'If surrogacy cannot be supported' in the protocol section.",
           "",
@@ -1754,7 +1858,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           "## ── STEP 4 — the interval. Bootstrap; there is no usable closed form ─",
           "## The correction is a ratio of estimated coefficients from two models",
           "## fitted in two samples. A first-order delta method understates its",
-          "## width — measured at SE 0.014 against an empirical SD of 0.022 in our",
+          "## width — measured at SE 0.014 against an empirical SD of 0.024 in our",
           "## own simulation — so this tool deliberately reports no closed-form CI.",
           "## Run this, then paste the two bounds back into Section 8b.",
           "set.seed(20260808); B <- " + m.bootB,
@@ -1808,7 +1912,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         ["Positivity and overlap",
           "Both propensity scores must have common support across treatment groups in both datasets. Report the overlap of PS_ep in the main study and of PS_ep and PS_gs in the validation dataset."],
         ["Variance",
-          "α and β are estimated, so the corrected estimate carries the uncertainty of both. Bootstrap the entire two-stage procedure — resampling the validation and main data as their design requires — rather than reporting the naive standard error, which is always too small. No closed-form interval is offered here, deliberately: a first-order delta method measured SE 0.014 against an empirical SD of 0.022 in our own simulation, so it would understate the width by roughly a third."],
+          "α and β are estimated, so the corrected estimate carries the uncertainty of both. Bootstrap the entire two-stage procedure — resampling the validation and main data as their design requires — rather than reporting the naive standard error, which is always too small. No closed-form interval is offered here, deliberately: a first-order delta method measured SE 0.014 against an empirical SD of 0.024 in our own simulation, so it would understate the width by roughly a third."],
       ]);
 
       // Full citations for everything the section relies on, appended to the
@@ -1819,6 +1923,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         "Lunt M, Glynn RJ, Rothman KJ, Avorn J, Stürmer T. Propensity score calibration in the absence of surrogacy. Am J Epidemiol 2012;175(12):1294-1302. doi:10.1093/aje/kwr463. PMID 22688682. (Source of the graded surrogacy measure S used above, Table 2 footnote g; and of a path-analytic bias formula, equation 9, that turns PSC into a sensitivity analysis over a plausible range for the unmeasured confounder's outcome association. The formula is derived for one measured and one unmeasured confounder, assumed independent and linearly related; see the Web Appendices for the estimation of its terms.)",
         "Wan F. A cautionary note on using propensity score calibration to control for unmeasured confounding bias when the surrogacy assumption is absent. Am J Epidemiol 2024;193(2):360-369. doi:10.1093/aje/kwad189. PMID 37759344. (PSC is generally biased unless confounder effects on outcome and treatment are proportional; identifies non-collapsibility and residual confounding as the two bias sources.)",
         "Rosner B, Spiegelman D, Willett WC. Correction of logistic regression relative risk estimates and confidence intervals for measurement error: the case of multiple covariates measured with error. Am J Epidemiol 1990;132(4):734-745. (The regression-calibration machinery PSC applies to the propensity score.)",
+        "Figures in this section attributed to \"our own simulation\" are unpublished in-house simulations, not published results. The script that produces every one of them is scripts/psc-simulations.py in the source repository of this tool (github.com/danielhttsai/danielhttsai.github.io); it is seeded, so the numbers reproduce run to run. Cite it as such, or re-run it, rather than treating these figures as literature.",
       ];
 
       const pscCannotFix = [
@@ -1832,17 +1937,46 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
       // Shared result formatting: the naive estimate carries the interval from
       // its own fitted model; the calibrated estimate only ever carries the
       // bootstrap interval the researcher pasted back in.
+      // The reuse claim is the most dangerous sentence in the section — it tells
+      // a future study it may apply these coefficients without validation data
+      // of its own. It is only true when surrogacy was actually established.
+      const pscReuseText = (m) =>
+        m.contradiction
+          ? "These coefficients must NOT be reused: they are inconsistent with the variable split declared above, so it is not clear what analysis produced them."
+          : m.releaseLevel === "ok"
+            ? "A later " + m.claimsDb + "-only study of the same contrast can cite this protocol, fit PS_ep from the same covariate list C, and apply the correction directly — no validation data of its own required, provided surrogacy is as well supported in its population as it is here (S = " + pscFmt(m.surroS, 1) + "%) and the assumptions below still hold."
+            : m.releaseLevel === "provisional"
+              ? "These coefficients are NOT yet reusable. Surrogacy has not been established with S in this study, so a later claims-only study applying them would inherit an unexamined assumption. Compute S first, then this paragraph becomes a reuse licence."
+              : "These coefficients must NOT be reused. " + PSC_SURRO_TEXT[m.surroVerdict][0] + " — the correction they encode is not supported in this study, so it cannot be lent to another.";
+
       const pscResultLines = (m) => {
-        if (m.bC === null) return null;
+        if (m.bT === null) return null;
         const show = (b) => m.ratio ? pscFmt(Math.exp(b), 3) : pscFmt(b, 4);
         const naive = m.measure + " " + show(m.bT) +
           (m.naiveLo !== null ? " (95% CI " + show(m.naiveLo) + " to " + show(m.naiveHi) + ")" : "");
-        const calibrated = m.measure + " " + show(m.bC) +
+        // The variable split contradicting the coefficients outranks everything
+        // else: the number is not merely unsupported, it is not reproducible.
+        if (m.contradiction) {
+          return { naive, withheld: true,
+            calibrated: "not shown — the variable split and the entered coefficients are inconsistent",
+            note: m.contradiction };
+        }
+        if (m.bC === null) return { naive, withheld: true,
+          calibrated: "not yet computed — enter α₁, α₂ and the naive coefficients",
+          note: "The calibration coefficients from the validation analysis are needed before a calibrated estimate exists." };
+        if (m.releaseLevel === "withheld") {
+          return { naive, withheld: true,
+            calibrated: "withheld — " + PSC_SURRO_TEXT[m.surroVerdict][0].replace(/ —.*$/, ""),
+            note: "The calibrated estimate is deliberately not shown. " + PSC_SURRO_TEXT[m.surroVerdict][1] + " Showing the number here, under a panel saying it should not be reported as a correction, is how the method gets misapplied. Establish surrogacy with S and it will appear." };
+        }
+        const calibrated = (m.releaseLevel === "provisional" ? "PROVISIONAL — " : "") + m.measure + " " + show(m.bC) +
           (m.hasBoot ? " (95% bootstrap CI " + show(m.bootLo) + " to " + show(m.bootHi) + ", " + m.bootB + " replicates)" : "");
-        const note = m.hasBoot
+        const note = (m.releaseLevel === "provisional"
+          ? "Marked provisional because surrogacy has not been established with S — compute it before this number leaves the protocol. "
+          : "") + (m.hasBoot
           ? "The calibrated interval is the bootstrap percentile interval you supplied. Report the naive estimate as primary and this as a pre-specified sensitivity analysis."
-          : "No interval is shown for the calibrated estimate on purpose: the correction is a ratio of estimated coefficients across two models in two samples, and no closed form is reliable. Run the bootstrap in the R code below and paste the bounds into Section 8b.";
-        return { naive, calibrated, note };
+          : "No interval is shown for the calibrated estimate on purpose: the correction is a ratio of estimated coefficients across two models in two samples, and no closed form is reliable. Run the bootstrap in the R code below and paste the bounds into Section 8b.");
+        return { naive, calibrated, note, withheld: false };
       };
 
       const PSC_SURRO_TEXT = {
@@ -1853,7 +1987,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         "s-low": ["Surrogacy absent (S < 50%) — do not calibrate",
           "The error-prone score carries most of the outcome information, which is the opposite of what the method requires. Lunt's scenarios at S of 6-14% produced bias reduction of −132% to −189%: calibration roughly doubled the error. Report the naive estimate and report S as the reason calibration was not applied."],
         "p-rejected": ["The p-value rejects — but compute S before abandoning calibration",
-          "A significant PS_ep coefficient means some departure from surrogacy, not necessarily one that matters. The p-value tests an exact null, so in a validation sample of any size it rejects on departures too small to affect the estimate: in our own simulation it returned p < 0.001 while S was 96% and calibration still removed most of the bias. Compute S and judge on that."],
+          "A significant PS_ep coefficient means some departure from surrogacy, not necessarily one that matters. The p-value tests an exact null, so in a validation sample of any size it rejects on departures too small to affect the estimate: in our own simulation it returned p < 0.001 while S was 92.5% and calibration still removed most of the bias. Compute S and judge on that."],
         "p-ok": ["The p-value does not reject — now compute S, which is the better instrument",
           "Failing to reject is weak evidence, especially in a small validation sample where the test has little power. Compute the graded measure S from the same models and judge on its magnitude rather than on a significance verdict."],
         untested: ["Surrogacy NOT YET MEASURED — do this before using the correction",
@@ -1902,6 +2036,8 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         if (!host) return;
         const cands = pscCandidates(s);
         const sig = cands.map((n) => n + ":" + pscClassOf(n) + ":" + (pscAi[n] ? pscAi[n].confounding + pscAi[n].source : "")).join("|");
+        // Where the AI overruled the keyword rule is the most informative thing
+        // on this panel — those are the rows the rule would have got wrong.
         if (sig === pscVarsSig) return;
         pscVarsSig = sig;
         if (!cands.length) {
@@ -1911,9 +2047,11 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         host.innerHTML = cands.map((n) => {
           const cls = pscClassOf(n);
           const ai = pscAi[n];
+          const changed = ai && cls !== pscHeuristic(n);
           const badge = ai
             ? '<span class="ml-1 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded ' + (PSC_STRENGTH[ai.confounding] || "bg-slate-100 text-slate-500") + '">' + pscEsc(ai.confounding) + '</span>'
               + (ai.role && ai.role !== "baseline" ? '<span class="ml-1 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-violet-100 text-violet-800">' + pscEsc(ai.role) + '</span>' : "")
+              + (changed ? '<span class="ml-1 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800" title="The AI overruled the keyword rule here">AI changed · rule said ' + pscEsc(pscHeuristic(n)) + "</span>" : "")
             : "";
           const btn = (val, label) =>
             '<button type="button" data-psc-set="' + pscEsc(val) + '" data-psc-var="' + pscEsc(n) + '" class="text-[10px] font-semibold px-2 py-0.5 rounded border transition ' +
@@ -1940,8 +2078,8 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           : "β_T(calibrated) = β_T(naive) − (α₂ / α₁) × β_PS(naive)";
         const r = pscResultLines(m);
         const result = r
-          ? '<div class="rounded-xl border border-brand-200 bg-brand-50/60 p-4">' +
-            '<p class="text-xs uppercase tracking-widest text-brand-700 font-bold">Estimates</p>' +
+          ? '<div class="' + (r.withheld ? "rounded-xl border border-rose-300 bg-rose-50 p-4" : "rounded-xl border border-brand-200 bg-brand-50/60 p-4") + '">' +
+            '<p class="text-xs uppercase tracking-widest font-bold ' + (r.withheld ? "text-rose-800" : "text-brand-700") + '">Estimates</p>' +
             '<p class="mt-1 text-sm text-slate-800">Naive (claims only) — <em>report this as primary</em>: <strong>' + pscEsc(r.naive) + "</strong></p>" +
             '<p class="text-sm text-slate-800">Calibrated — <em>sensitivity analysis</em>: <strong>' + pscEsc(r.calibrated) + "</strong></p>" +
             '<p class="mt-1 text-[11px] text-slate-600">' + pscEsc(r.note) + "</p></div>"
@@ -2054,7 +2192,7 @@ ${m.excluded.length ? "\n**Excluded from both scores** (identifiers, outcomes, p
 
 ### Calibration equation${eqNum ? "" : " (to be filled once the validation analysis has run)"}
 
-${eqNum ? "> **" + eqNum + "**\n\n> Correction factor α₂ / α₁ = **" + pscFmt(m.k, 4) + "**" + (m.r2 !== null ? "\n\n> Calibration-model R² = " + pscFmt(m.r2, 3) : "") + "\n\nA later " + m.claimsDb + "-only study of the same contrast can cite this protocol, fit PS_ep from the same covariate list C, and apply the correction directly — no validation data of its own required, provided the assumptions below still hold." : "> PS_gs = α₀ + α₁ · PS_ep + α₂ · T\n\nOnce fitted, report α₀, α₁, α₂ with their standard errors and the calibration-model R². Those three numbers plus the covariate list C are the reusable artefact: a later " + m.claimsDb + "-only study applies them without repeating the validation work."}
+${eqNum ? "> **" + eqNum + "**\n\n> Correction factor α₂ / α₁ = **" + pscFmt(m.k, 4) + "**" + (m.r2 !== null ? "\n\n> Calibration-model R² = " + pscFmt(m.r2, 3) : "") + "\n\n" + pscReuseText(m) : "> PS_gs = α₀ + α₁ · PS_ep + α₂ · T\n\nOnce fitted, report α₀, α₁, α₂ with their standard errors and the calibration-model R². Those three numbers plus the covariate list C are the reusable artefact: a later " + m.claimsDb + "-only study applies them without repeating the validation work — but only once surrogacy has been established with S, and this protocol must say so before anyone reuses it."}
 ${res ? "\n**Result**\n\n" + res + "\n" : ""}
 ### When this method is valid, and what to report
 
@@ -2127,10 +2265,10 @@ ${numbered(PSC_REFERENCES)}
         if (m.a0 !== null && m.a1 !== null && m.a2 !== null) {
           c.push(mono("PS_gs = " + pscFmt(m.a0, 4) + " " + pscSigned(m.a1, 4) + " * PS_ep " + pscSigned(m.a2, 4) + " * T"));
           c.push(h.para("Correction factor a2 / a1 = " + pscFmt(m.k, 4) + (m.r2 !== null ? "; calibration-model R2 = " + pscFmt(m.r2, 3) : "") + "."));
-          c.push(h.para("A later " + m.claimsDb + "-only study of the same contrast can cite this protocol, fit PS_ep from the same covariate list C, and apply the correction directly — no validation data of its own required, provided the assumptions below still hold."));
+          c.push(h.para(pscReuseText(m)));
         } else {
           c.push(mono("PS_gs = a0 + a1 * PS_ep + a2 * T"));
-          c.push(h.para("Once fitted, report a0, a1, a2 with their standard errors and the calibration-model R2. Those three numbers plus the covariate list C are the reusable artefact: a later " + m.claimsDb + "-only study applies them without repeating the validation work."));
+          c.push(h.para("Once fitted, report a0, a1, a2 with their standard errors and the calibration-model R2. Those three numbers plus the covariate list C are the reusable artefact: a later " + m.claimsDb + "-only study applies them without repeating the validation work — but only once surrogacy has been established with S, and this protocol must say so before anyone reuses it."));
         }
         const rr = pscResultLines(m);
         if (rr) {
@@ -2406,12 +2544,15 @@ _Drafted with the AsPEN protocol builder (${today})._
           // Wan F, Am J Epidemiol 2024;193(2):360-9 — the two bias sources.
           if (m.surroVerdict === "s-low") checks.push({ level: "warn", msg: "Surrogacy is absent (S = " + pscFmt(m.surroS, 1) + "%): the error-prone PS carries most of the outcome information. Lunt's scenarios at this level produced bias reduction of −132% to −189% — calibration roughly doubled the error. Report the naive estimate and report S as the reason calibration was not applied." });
           if (m.surroVerdict === "s-mid") checks.push({ level: "warn", msg: "Partial surrogacy (S = " + pscFmt(m.surroS, 1) + "%). This is the region where our simulation turned: at S ≈ 82% calibration was worse than doing nothing in 5 of 5 replicates. Do not present the calibrated estimate as a correction — see 'If surrogacy cannot be supported' in Section 7b of the export." });
-          if (m.surroVerdict === "p-rejected") checks.push({ level: "info", msg: "The surrogacy p-value rejects, but that alone is not a reason to abandon calibration: the p-value tests an exact null and rejects on departures too small to matter. Compute S (the R code does it) and judge on its magnitude — we observed p < 0.001 at S = 96%, where calibration still removed most of the bias." });
+          if (m.surroVerdict === "p-rejected") checks.push({ level: "info", msg: "The surrogacy p-value rejects, but that alone is not a reason to abandon calibration: the p-value tests an exact null and rejects on departures too small to matter. Compute S (the R code does it) and judge on its magnitude — we observed p < 0.001 at S = 92.5%, where calibration still removed most of the bias." });
           if (m.surroVerdict === "p-ok") checks.push({ level: "info", msg: "The surrogacy p-value does not reject, which is weak evidence. Compute S from the same models and judge on its magnitude." });
           if (m.surroVerdict === "untested") checks.push({ level: "warn", msg: "Surrogacy has not been measured. Your validation data have outcomes, so compute S — of the outcome information carried by both propensity scores, the percentage carried by the gold-standard score alone (Lunt 2012) — and enter it in Section 8b. Wan (2024) shows PS calibration is generally biased unless surrogacy holds." });
           if (m.surroVerdict === "untestable") checks.push({ level: "warn", msg: "Surrogacy cannot be measured because the validation dataset has no outcomes. This is the cross-sectional-validation setting Lunt et al. (2012) address, and their answer is to present PS calibration as a bias analysis over a range for the unmeasured confounder's outcome association rather than as a point correction." });
           if (m.nonCollapsible) checks.push({ level: "info", msg: "You are reporting a " + m.measure + ", which is non-collapsible. Wan (2024) identifies this as an independent source of PS-calibration bias: the calibrated estimate is conditional on the gold-standard propensity score, not on baseline covariates, so it is a slightly different estimand. The gap narrows as the outcome becomes rarer — state which estimand you report." });
-          if (m.bC !== null && !m.hasBoot) checks.push({ level: "info", msg: "The calibrated estimate has no interval. There is no reliable closed-form CI for a ratio of coefficients estimated across two samples — run the bootstrap in the generated R code and paste the percentile bounds into Section 8b." });
+          if (!Object.keys(pscAi).length && (m.claims.length + m.clinical.length) > 0) checks.push({ level: "info", msg: "The claims/clinical split is still the keyword rule's guess. It reads names only, so it cannot distinguish a measurement from a billing code and it misses unfamiliar instruments — run 'Let AI classify' in Section 8b and check the rows it changes. A clinical variable left in the claims list collapses the correction toward zero, which reads as 'no unmeasured confounding'." });
+          if (m.contradiction) checks.push({ level: "warn", msg: "The variable split and the entered calibration coefficients are inconsistent, so the calibrated estimate is not shown. " + m.contradiction });
+          if (m.releaseLevel === "withheld" && m.bC !== null) checks.push({ level: "warn", msg: "A calibrated estimate is computable from the coefficients you entered but is deliberately withheld from the protocol, because surrogacy is not supported. Establish surrogacy with S and it will be released." });
+          if (m.bC !== null && !m.hasBoot && m.releaseLevel !== "withheld") checks.push({ level: "info", msg: "The calibrated estimate has no interval. There is no reliable closed-form CI for a ratio of coefficients estimated across two samples — run the bootstrap in the generated R code and paste the percentile bounds into Section 8b." });
           if (m.a1 !== null && Math.abs(m.a1) < 0.05) checks.push({ level: "warn", msg: "α₁ is close to zero, so the correction factor α₂/α₁ explodes and the calibrated estimate is unstable. A near-zero α₁ means the error-prone PS carries almost no information about the gold-standard PS — calibration is not trustworthy here." });
           if (m.a1 !== null && m.a1 < 0) checks.push({ level: "warn", msg: "α₁ is negative — the error-prone PS moves opposite to the gold-standard PS. Check the two PS models use the same treatment coding and the same scale before applying the correction." });
           if (/match|strat|iptw|overlap|weight/i.test(String(s.psMethod || ""))) checks.push({ level: "info", msg: "Your primary confounding-control method is matching/stratification/weighting, which produces no β_PS coefficient. PS calibration needs an outcome model that adjusts for the PS as a linear term — fit that model alongside the primary one as the calibrated analysis." });
@@ -2470,7 +2611,14 @@ _Drafted with the AsPEN protocol builder (${today})._
         if (pscBulk) {
           const mode = pscBulk.dataset.pscBulk;
           if (mode === "reset") { pscClass = {}; pscAi = {}; }
-          else pscCandidates(readForm()).forEach((n) => { pscClass[n] = mode; });
+          // "All claims"/"All clinical" must not sweep identifiers, outcomes and
+          // post-baseline measurements back into a propensity score — those are
+          // never a C-vs-U question, and the AI's judgement on them stands.
+          else pscCandidates(readForm()).forEach((n) => {
+            if (pscAi[n] && pscAi[n].role && pscAi[n].role !== "baseline") return;
+            if (!pscAi[n] && pscHeuristic(n) === "exclude") return;
+            pscClass[n] = mode;
+          });
           savePscClass(); render();
           return;
         }
@@ -2545,9 +2693,14 @@ _Drafted with the AsPEN protocol builder (${today})._
           });
           savePscClass(); render();
           const unseen = vars.filter((v) => !pscAi[v.name]).length;
-          setPscAiMsg("Marked " + nClin + " variable(s) clinical-only and excluded " + nExcl + " non-baseline variable(s)."
-            + (unseen ? " " + unseen + " variable(s) came back unmatched and keep their keyword-rule position — check those rows." : "")
-            + " Badges show how strongly each is judged to confound; hover a row for the reason. Review every one — the AI is working from names alone and the clinical call is yours.", unseen > 0);
+          const changed = vars.filter((v) => pscAi[v.name] && pscClassOf(v.name) !== pscHeuristic(v.name));
+          setPscAiMsg(
+            (changed.length
+              ? "The AI overruled the keyword rule on " + changed.length + " of " + (vars.length - unseen) + " variable(s) — those rows carry an 'AI changed' badge and are the ones worth checking first: " + changed.slice(0, 6).map((v) => v.name.slice(0, 28)).join(", ") + (changed.length > 6 ? ", …" : "") + ". "
+              : "The AI agreed with the keyword rule on every variable it could read. ")
+            + nClin + " marked clinical-only, " + nExcl + " excluded as non-baseline."
+            + (unseen ? " " + unseen + " came back unmatched and keep their rule position — check those rows." : "")
+            + " Review every one: the AI is working from names alone and the clinical call is yours.", unseen > 0);
         } catch (e) {
           setPscAiMsg("Couldn't reach the AI: " + (e && e.message ? e.message : e), true);
         } finally { btn.disabled = false; }
