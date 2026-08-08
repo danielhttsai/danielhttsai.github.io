@@ -89,7 +89,7 @@ const DESIGNS = [
     <!-- Upload -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-lg font-bold text-slate-900">2 · Upload a dataset</h2>
-      <p class="mt-1 text-sm text-slate-600">CSV or Excel (.xlsx). One row per record; a header row with column names. Small extracts work best.</p>
+      <p class="mt-1 text-sm text-slate-600">CSV or Excel (.xlsx), in any layout and any language. The tool works out the sheet, the header row, and what a row represents, then asks you to confirm — nothing about the shape is assumed.</p>
       <label id="drop" class="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 transition">
         <span class="text-3xl">📄</span>
         <span class="text-sm font-semibold text-slate-700">Drop a CSV / XLSX here, or click to choose</span>
@@ -97,13 +97,29 @@ const DESIGNS = [
         <input id="file" type="file" accept=".csv,.xlsx,.xls,.tsv" class="hidden" />
       </label>
       <p id="msg" class="mt-2 text-xs"></p>
+      <label id="cbdrop" class="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-xs cursor-pointer hover:border-brand-400 hover:bg-brand-50/30 transition">
+        <span class="text-base">📘</span>
+        <span class="font-semibold text-slate-700">Codebook / data dictionary (optional)</span>
+        <span class="text-slate-500">— a sheet listing each column and what it means. Used to label columns and to propose roles.</span>
+        <span id="cbinfo" class="text-slate-500"></span>
+        <input id="cbfile" type="file" accept=".csv,.xlsx,.xls,.tsv" class="hidden" />
+      </label>
       <div class="mt-3 text-xs text-slate-500">
-        No data handy? <button id="demo" type="button" class="text-brand-700 font-semibold hover:underline">Load a tiny demo dataset</button> (synthetic, 60 rows).
+        No data handy? <button id="demo" type="button" class="text-brand-700 font-semibold hover:underline">Load a tiny demo dataset</button> (synthetic, 24 monthly periods).
       </div>
     </div>
 
     <!-- Summary + profile -->
     <div id="results" class="hidden space-y-6">
+      <details id="structcard" class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" open>
+        <summary class="cursor-pointer list-none">
+          <span class="text-lg font-bold text-slate-900">What this dataset looks like</span>
+          <span id="structsum" class="ml-2 text-sm text-slate-500"></span>
+          <span class="ml-2 text-xs text-brand-700 font-semibold">(click to collapse)</span>
+        </summary>
+        <p class="mt-1 text-sm text-slate-600">Everything below is <strong>inferred, then yours to override</strong>. Skip it entirely if the guesses look right — the defaults are what the profiler and the role suggester will use.</p>
+        <div id="structbody" class="mt-4 space-y-4"></div>
+      </details>
       <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h2 class="text-lg font-bold text-slate-900">Data profile &amp; dictionary</h2>
@@ -230,6 +246,7 @@ const DESIGNS = [
       <div class="mt-3 grid gap-1.5 sm:grid-cols-2 text-sm text-slate-700">
         <label class="flex items-center gap-2"><input type="checkbox" id="c_trim" checked /> Trim leading/trailing whitespace</label>
         <label class="flex items-center gap-2"><input type="checkbox" id="c_std" checked /> Standardise coded flags (0/1, Y/N, 有/無…) to 0/1 for the mapped roles</label>
+        <label class="flex items-center gap-2"><input type="checkbox" id="c_dates" checked /> Normalise date columns to YYYY-MM-DD (using the day-first answer above)</label>
         <label class="flex items-center gap-2"><input type="checkbox" id="c_dedupe" checked /> Drop exact duplicate rows</label>
         <label class="flex items-center gap-2"><input type="checkbox" id="c_dropmiss" checked /> Drop rows missing a required mapped variable</label>
       </div>
@@ -299,24 +316,125 @@ const DESIGNS = [
     const setMsg = (t, bad) => { const el = $("msg"); el.textContent = t || ""; el.className = "mt-2 text-xs " + (bad ? "text-rose-600" : "text-slate-500"); };
 
     let DATA = { rows: [], columns: [], profile: [], name: "dataset" };
+    // Everything discovered about the file's shape. Nothing here is assumed: each
+    // field is inferred from the data (or the codebook) and can be overridden in
+    // the "What this dataset looks like" panel.
+    let WB = null;          // the parsed workbook, kept so the sheet can be re-picked
+    let SHEETS = [];        // every sheet in the workbook, with a score and any flags
+    let SPLITINFO = null;   // result of repairing a delimited dump, if that was asked for
+    let CODEBOOK = {};      // normalised column name → definition text
+    let CBWB = null, CBNAME = "";
+    let CBINFO = null;      // { name, matched, sheet }
+    let STRUCT = { sheet: "", headerRow: 0, split: false, unit: "", unitConf: "low", idCol: "", idConf: "low", repeats: 0, repeatKind: "none", dateCols: [], dayFirst: false, vocabs: [], yes: {} };
 
     const loadScript = (src) => new Promise((res, rej) => {
       if (document.querySelector('script[src="' + src + '"]')) return res();
       const s = document.createElement("script"); s.src = src; s.onload = () => res(); s.onerror = () => rej(new Error("load " + src)); document.head.appendChild(s);
     });
+    const XLSX_URL = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    async function readWorkbook(file) {
+      await loadScript(XLSX_URL);
+      return window.XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+    }
+    const sheetAOA = (ws) => window.XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null, raw: true });
 
-    async function parseFile(file) {
-      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
-      const buf = await file.arrayBuffer();
-      const wb = window.XLSX.read(buf, { type: "array", cellDates: true });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const header = (window.XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false })[0] || []).map((h) => String(h).trim());
-      const rows = window.XLSX.utils.sheet_to_json(ws, { defval: null, raw: true, blankrows: false });
-      return { rows, columns: header.filter(Boolean) };
+    // Which sheet holds the data? A workbook often carries notes, a pivot, or a
+    // mangled export alongside the real table — picking sheet 1 blindly is how a
+    // tool silently analyses the wrong thing.
+    function scoreSheet(name, aoa) {
+      const rows = aoa.length;
+      const cols = aoa.reduce((m, r) => Math.max(m, r ? r.length : 0), 0);
+      let cells = 0, filled = 0, tabby = 0, strs = 0;
+      aoa.slice(0, 200).forEach((r) => (r || []).forEach((c) => { cells++; if (!isBlank(c)) { filled++; if (typeof c === "string") { strs++; if (c.indexOf("\t") >= 0) tabby++; } } }));
+      const fill = cells ? filled / cells : 0;
+      const notes = [];
+      let score = cols * Math.log(1 + rows) * (0.4 + 0.6 * fill);
+      const delim = strs > 0 && tabby / strs > 0.5;
+      if (delim) notes.push("looks like a delimited text dump pasted into one column — the columns were never split");
+      if (cols <= 1) { score *= 0.05; notes.push("only one column"); }
+      else if (cols <= 2 && delim) score *= 0.05;
+      if (rows <= 2) { score *= 0.2; notes.push("almost no rows"); }
+      return { name: name, rows: rows, cols: cols, fill: fill, score: score, delim: delim, notes: notes };
+    }
+    // Repair for the case above: rebuild a table by splitting each row on the delimiter.
+    function splitDelimited(aoa) {
+      const lines = aoa.map((r) => (r || []).map((c) => (c == null ? "" : String(c))).join(""));
+      const sep = lines.filter((l) => l.indexOf("\t") >= 0).length > lines.length / 2 ? "\t" : ",";
+      const out = lines.map((l) => l.split(sep).map((s) => s.replace(/^"|"$/g, "")));
+      const counts = {}; out.forEach((r) => { counts[r.length] = (counts[r.length] || 0) + 1; });
+      const modal = Number(Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]);
+      const ragged = out.filter((r) => r.length !== modal).length;
+      return { aoa: out, modal: modal, ragged: ragged };
+    }
+    // The header is not always row 1 (title rows, blank spacers, merged banners).
+    function detectHeaderRow(aoa) {
+      let best = 0, bestScore = -1;
+      for (let r = 0; r < Math.min(10, aoa.length - 1); r++) {
+        const cells = (aoa[r] || []).filter((c) => !isBlank(c));
+        if (cells.length < 2) continue;
+        const width = (aoa[r] || []).length || 1;
+        const strs = cells.filter((c) => typeof c === "string").length;
+        const distinct = new Set(cells.map((c) => String(c).trim().toLowerCase())).size;
+        const nextFilled = ((aoa[r + 1] || []).filter((c) => !isBlank(c)) || []).length;
+        const sc = (cells.length / width) + (strs / cells.length) + (distinct === cells.length ? 0.6 : 0) + (nextFilled >= cells.length * 0.6 ? 0.6 : 0) - r * 0.05;
+        if (sc > bestScore) { bestScore = sc; best = r; }
+      }
+      return best;
+    }
+    function tableFromAOA(aoa, headerRow) {
+      const raw = aoa[headerRow] || [];
+      const width = aoa.reduce((m, r) => Math.max(m, r ? r.length : 0), 0);
+      const seen = {}, columns = [];
+      for (let i = 0; i < width; i++) {
+        let h = raw[i] == null ? "" : String(raw[i]).trim();
+        if (!h) h = "column_" + (i + 1);
+        if (seen[h]) { seen[h]++; h = h + "_" + seen[h]; } else seen[h] = 1;
+        columns.push(h);
+      }
+      const body = aoa.slice(headerRow + 1).filter((r) => (r || []).some((c) => !isBlank(c)));
+      const rows = body.map((r) => { const o = {}; columns.forEach((c, i) => { o[c] = r && r[i] !== undefined ? r[i] : null; }); return o; });
+      // drop trailing columns that are entirely empty and unnamed
+      const keep = columns.filter((c, i) => !(/^column_\d+$/.test(c) && rows.every((r) => isBlank(r[c]))));
+      return { columns: keep, rows: rows };
     }
 
     const isBlank = (v) => v === null || v === undefined || (typeof v === "string" && v.trim() === "");
-    const isLikelyDate = (v) => v instanceof Date || (typeof v === "string" && /^\d{4}[-/](0?[1-9]|1[0-2])([-/](0?[1-9]|[12]\d|3[01]))?$/.test(v.trim()));
+    // Dates arrive as Excel serials (already Date objects), ISO strings, ISO
+    // datetimes ("2014-10-28 00:00:00"), slash forms ("2014/10/28"), and
+    // day-or-month-first forms that only a human can disambiguate.
+    const RE_YMD = /^\d{4}[-/.]\d{1,2}([-/.]\d{1,2})?([ T]\d{1,2}:\d{2}(:\d{2})?)?$/;
+    const RE_DMY = /^\d{1,2}[-/.]\d{1,2}[-/.]\d{4}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/;
+    const isLikelyDate = (v) => v instanceof Date || (typeof v === "string" && (RE_YMD.test(v.trim()) || RE_DMY.test(v.trim())));
+    // Rewrite any recognised date to YYYY-MM-DD. Where the value itself settles
+    // day-vs-month (a part above 12) that wins; otherwise the user's answer does.
+    function toISO(v, dayFirst) {
+      if (v instanceof Date) return isNaN(v.getTime()) ? v : v.toISOString().slice(0, 10);
+      const s = String(v == null ? "" : v).trim(); if (!s) return v;
+      let m = s.match(/^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?/);
+      if (m) return m[1] + "-" + String(+m[2]).padStart(2, "0") + "-" + String(+(m[3] || 1)).padStart(2, "0");
+      m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+      if (m) {
+        const a = +m[1], b = +m[2];
+        let d, mo;
+        if (a > 12) { d = a; mo = b; } else if (b > 12) { d = b; mo = a; } else if (dayFirst) { d = a; mo = b; } else { d = b; mo = a; }
+        return m[3] + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+      }
+      return v;
+    }
+    function dateStyle(vals) {
+      const s = vals.filter((v) => typeof v === "string").map((v) => v.trim());
+      if (!s.length) return { label: "spreadsheet date values", ambiguous: false };
+      const dmy = s.filter((v) => RE_DMY.test(v));
+      const hasTime = s.some((v) => /[ T]\d{1,2}:\d{2}/.test(v));
+      if (dmy.length > s.length / 2) {
+        let first = 0, second = 0;
+        dmy.forEach((v) => { const p = v.split(/[-/.]/); if (+p[0] > 12) first++; if (+p[1] > 12) second++; });
+        if (first) return { label: "day-first (DD/MM/YYYY)", ambiguous: false, dayFirst: true };
+        if (second) return { label: "month-first (MM/DD/YYYY)", ambiguous: false, dayFirst: false };
+        return { label: "DD/MM or MM/DD — ambiguous", ambiguous: true };
+      }
+      return { label: "year-first (YYYY-MM-DD" + (hasTime ? ", with a time part" : "") + ")", ambiguous: false };
+    }
     const asStr = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v));
     const topCats = (arr, k) => {
       const m = {}; arr.forEach((v) => { m[v] = (m[v] || 0) + 1; });
@@ -364,7 +482,203 @@ const DESIGNS = [
       } else if (type !== "empty") {
         range = topCats(strs, 3);
       }
-      return { name, type, missing, missingPct: n ? (100 * missing) / n : 0, distinct, flags, range };
+      const levels = distinct <= 6 ? Array.from(new Set(strs.map((v) => v.trim()))).sort() : [];
+      return { name, type, missing, missingPct: n ? (100 * missing) / n : 0, distinct, flags, range, levels, def: CODEBOOK[normName(name)] || "" };
+    }
+
+    // ── Codebook / data dictionary ──────────────────────────────────────────
+    const normName = (s) => String(s == null ? "" : s).trim().toLowerCase().replace(/\s+/g, " ").replace(/^["']|["']$/g, "");
+    // Find, in any sheet, the column whose values look like this dataset's column
+    // names; everything else on that row is the definition.
+    function parseCodebook(wb, dataCols) {
+      const want = new Set((dataCols || []).map(normName));
+      let best = null;
+      wb.SheetNames.forEach((sn) => {
+        const aoa = sheetAOA(wb.Sheets[sn]);
+        const width = aoa.reduce((m, r) => Math.max(m, r ? r.length : 0), 0);
+        for (let c = 0; c < width; c++) {
+          const vals = aoa.map((r) => (r && r[c] != null ? String(r[c]) : "")).filter((v) => v.trim() !== "");
+          if (vals.length < 2) continue;
+          const hits = want.size ? vals.filter((v) => want.has(normName(v))).length : 0;
+          const uniq = new Set(vals.map(normName)).size;
+          const sc = want.size ? hits : uniq;      // no data yet? fall back to the most name-like column
+          if (!best || sc > best.sc) best = { sc: sc, sheet: sn, col: c, aoa: aoa, width: width, hits: hits, total: vals.length };
+        }
+      });
+      if (!best) return null;
+      const pairs = {};
+      best.aoa.forEach((r) => {
+        if (!r) return;
+        const term = r[best.col] == null ? "" : String(r[best.col]).trim();
+        if (!term) return;
+        const rest = [];
+        for (let c = 0; c < best.width; c++) { if (c === best.col) continue; const v = r[c]; if (!isBlank(v)) rest.push(String(v).trim()); }
+        if (rest.length) pairs[normName(term)] = rest.join(" · ").replace(/\s*\n\s*/g, " / ");
+      });
+      return { pairs: pairs, matched: best.hits, total: best.total, sheet: best.sheet };
+    }
+
+    // ── Structure inference ─────────────────────────────────────────────────
+    // Deterministic guesses at the things a tool normally just assumes: which
+    // column is the person, whether a row is a person or a visit, how dates are
+    // written, and what a coded flag means. Each guess carries a confidence and
+    // is overridable.
+    const YES_TOKENS = ["1", "y", "yes", "true", "t", "有", "是", "有病史", "陽性", "positive", "present", "case", "event", "exposed"];
+    const NO_TOKENS = ["0", "n", "no", "false", "f", "無", "否", "陰性", "negative", "absent", "control", "none", "unexposed"];
+    const SEX_SETS = [["m", "f"], ["male", "female"], ["男", "女"], ["男性", "女性"]];
+    const ID_RE = /(^|[_\s])id$|^id[_\s]|patient|subject|person|pid|chart|mrn|病歷|病例|身分|身份|編號|序號|案號/i;
+    const UNIT_LABEL = { patient: "one row per patient", visit: "one row per visit / episode", period: "one row per period (an aggregated series)", interval: "one row per patient-interval", other: "something else", unknown: "not sure" };
+    const CONF_CLS = { high: "bg-emerald-100 text-emerald-800", medium: "bg-amber-100 text-amber-800", low: "bg-slate-200 text-slate-600" };
+    const confBadge = (c) => '<span class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ' + (CONF_CLS[c] || CONF_CLS.low) + '">' + c + " confidence</span>";
+
+    function inferStructure() {
+      const n = DATA.rows.length, prof = DATA.profile;
+      let idCol = "", idScore = 0;
+      prof.forEach((p) => {
+        let sc = 0;
+        if (ID_RE.test(p.name)) sc += 3;
+        if (p.def && (ID_RE.test(p.def) || /識別|唯一|unique/i.test(p.def))) sc += 2;
+        if (p.type === "id") sc += 2;
+        if (p.type === "date") sc -= 5;
+        const ratio = n ? p.distinct / n : 0;
+        if (ratio > 0.9) sc += 1; else if (ratio < 0.05) sc -= 2;
+        if (sc > idScore) { idScore = sc; idCol = p.name; }
+      });
+      if (idScore < 3) idCol = "";
+      let repeats = 0, identical = 0, distinctIds = 0;
+      if (idCol) {
+        const groups = new Map();
+        DATA.rows.forEach((r, i) => { const k = String(r[idCol] == null ? "" : r[idCol]).trim(); if (!k) return; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); });
+        distinctIds = groups.size;
+        const rowKey = (i) => DATA.columns.map((c) => asStr(DATA.rows[i][c] == null ? "" : DATA.rows[i][c])).join("|");
+        groups.forEach((idxs) => { if (idxs.length > 1) { repeats++; const k0 = rowKey(idxs[0]); if (idxs.every((i) => rowKey(i) === k0)) identical++; } });
+      }
+      const uniqRatio = idCol && n ? distinctIds / n : 1;
+      const dateCols = prof.filter((p) => p.type === "date").map((p) => p.name);
+      let unit = "unknown", unitConf = "low";
+      if (!idCol) { unit = dateCols.length ? "period" : "unknown"; unitConf = "low"; }
+      else if (uniqRatio > 0.995) { unit = "patient"; unitConf = uniqRatio === 1 ? "high" : "medium"; }
+      else if (repeats && identical === repeats) { unit = "patient"; unitConf = "medium"; }
+      else if (dateCols.length >= 2 && uniqRatio > 0.5) { unit = "interval"; unitConf = "medium"; }
+      else { unit = "visit"; unitConf = uniqRatio < 0.6 ? "high" : "medium"; }
+      const repeatKind = !repeats ? "none" : (identical === repeats ? "dup" : (identical ? "mixed" : "measures"));
+
+      const byKey = {};
+      prof.forEach((p) => {
+        if (!p.levels || p.levels.length !== 2) return;
+        const key = p.levels.map((v) => v.toLowerCase()).sort().join(" / ");
+        if (!byKey[key]) byKey[key] = { key: key, values: p.levels.slice(), columns: [] };
+        byKey[key].columns.push(p.name);
+      });
+      const vocabs = Object.keys(byKey).map((k) => {
+        const v = byKey[k], lo = v.values.map((x) => x.toLowerCase());
+        const yi = lo.findIndex((x) => YES_TOKENS.indexOf(x) >= 0), ni = lo.findIndex((x) => NO_TOKENS.indexOf(x) >= 0);
+        let yes = "", kind = "flag", conf = "low";
+        if (SEX_SETS.some((s) => (s[0] === lo[0] && s[1] === lo[1]) || (s[0] === lo[1] && s[1] === lo[0]))) { kind = "sex"; conf = "high"; }
+        else if (yi >= 0 && ni >= 0 && yi !== ni) { yes = v.values[yi]; conf = "high"; }
+        else if (lo.indexOf("1") >= 0 && lo.indexOf("2") >= 0) { yes = v.values[lo.indexOf("1")]; conf = "low"; }
+        return { key: k, values: v.values, columns: v.columns, yes: yes, kind: kind, conf: conf };
+      });
+      const dates = dateCols.map((c) => { const st = dateStyle(DATA.rows.map((r) => r[c])); return { col: c, label: st.label, ambiguous: !!st.ambiguous, dayFirst: !!st.dayFirst }; });
+
+      const prev = STRUCT;
+      STRUCT = {
+        sheet: prev.sheet, headerRow: prev.headerRow, split: prev.split,
+        unit: unit, unitConf: unitConf, idCol: idCol, idConf: idScore >= 5 ? "high" : (idScore >= 3 ? "medium" : "low"),
+        repeats: repeats, repeatKind: repeatKind, uniqRatio: uniqRatio, distinctIds: distinctIds,
+        dateCols: dates, dayFirst: prev.dayFirst || dates.some((d) => d.dayFirst), vocabs: vocabs, yes: {},
+      };
+      vocabs.forEach((v) => { STRUCT.yes[v.key] = (prev.yes && prev.yes[v.key] != null) ? prev.yes[v.key] : (v.kind === "sex" ? "" : v.yes); });
+      YMCACHE = null;
+      return STRUCT;
+    }
+
+    // toBin consults the vocabulary the user confirmed, so 有/無 or Y/N or 1/2
+    // are coerced the way this dataset means them — not the way English data does.
+    let YMCACHE = null;
+    function yesMap() {
+      if (YMCACHE) return YMCACHE;
+      const m = {};
+      (STRUCT.vocabs || []).forEach((v) => {
+        const y = STRUCT.yes[v.key];
+        if (!y) return;
+        v.values.forEach((val) => { m[String(val).trim().toLowerCase()] = String(val) === String(y) ? 1 : 0; });
+      });
+      YMCACHE = m;
+      return m;
+    }
+
+    function renderStructure() {
+      const box = $("structbody"); if (!box) return;
+      const s = STRUCT, cols = DATA.columns;
+      const sel = (id, opts, cur) => '<select data-s="' + id + '" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">' + opts.map((o) => '<option value="' + esc(o[0]) + '"' + (String(cur) === String(o[0]) ? " selected" : "") + ">" + esc(o[1]) + "</option>").join("") + "</select>";
+      const parts = [];
+
+      if (SHEETS.length) {
+        const other = SHEETS.filter((x) => x.name !== s.sheet);
+        parts.push('<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">' +
+          '<div class="grid gap-3 sm:grid-cols-3">' +
+          '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Sheet</span>' + sel("sheet", SHEETS.map((x) => [x.name, x.name + " · " + x.rows + "×" + x.cols + (x.notes.length ? " ⚠" : "")]), s.sheet) + "</label>" +
+          '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Header row</span><input data-s="headerRow" type="number" min="1" step="1" value="' + (s.headerRow + 1) + '" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /><span class="text-[11px] text-slate-500">Row holding the column names.</span></label>' +
+          '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Delimited dump</span><label class="mt-2 flex items-center gap-2 text-sm"><input data-s="split" type="checkbox"' + (s.split ? " checked" : "") + ' /> Split this sheet on tabs / commas</label></label>' +
+          "</div>" +
+          (other.length ? '<p class="mt-2 text-[11px] text-slate-500">Other sheets: ' + other.map((x) => "<strong>" + esc(x.name) + "</strong> (" + x.rows + "×" + x.cols + (x.notes.length ? " — " + esc(x.notes.join("; ")) : "") + ")").join("; ") + "</p>" : "") +
+          "</div>");
+      }
+
+      const idOpts = [["", "— none / not a person-level file —"]].concat(cols.map((c) => [c, c]));
+      parts.push('<div class="grid gap-3 sm:grid-cols-3">' +
+        '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">A row is</span>' + confBadge(s.unitConf) + sel("unit", [["patient", UNIT_LABEL.patient], ["visit", UNIT_LABEL.visit], ["period", UNIT_LABEL.period], ["interval", UNIT_LABEL.interval], ["other", UNIT_LABEL.other], ["unknown", UNIT_LABEL.unknown]], s.unit) + "</label>" +
+        '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Patient / subject ID</span>' + confBadge(s.idConf) + sel("idCol", idOpts, s.idCol) + "</label>" +
+        '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Repeated IDs mean</span>' + sel("repeatKind", [["none", s.repeats ? "— pick one —" : "no ID repeats ✓"], ["measures", "real repeat measures (keep them all)"], ["dup", "duplicates to resolve"], ["mixed", "a mix — needs review"]], s.repeatKind) + "</label>" +
+        "</div>" +
+        '<p class="text-[11px] text-slate-500">' + (s.idCol
+          ? esc(s.distinctIds + " distinct ID(s) across " + DATA.rows.length + " rows" + (s.repeats ? "; " + s.repeats + " ID(s) repeat, of which " + (s.repeatKind === "dup" ? "all" : s.repeatKind === "measures" ? "none" : "some") + " are exact copies of another row." : " — every ID is unique."))
+          : "No column looks like a person identifier — that is normal for an already-aggregated series.") + "</p>");
+
+      if (s.dateCols.length) {
+        const amb = s.dateCols.some((d) => d.ambiguous);
+        parts.push('<div><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Date columns</span>' +
+          '<div class="mt-1 grid gap-1 sm:grid-cols-2 text-xs text-slate-700">' + s.dateCols.map((d) => "<div><strong>" + esc(d.col) + "</strong> — " + esc(d.label) + "</div>").join("") + "</div>" +
+          (amb ? '<label class="mt-1.5 flex items-center gap-2 text-xs text-amber-800"><input data-s="dayFirst" type="checkbox"' + (s.dayFirst ? " checked" : "") + ' /> These are day-first (DD/MM/YYYY), not month-first — no value in the file settles it.</label>' : "") +
+          "</div>");
+      }
+
+      const flags = s.vocabs.filter((v) => v.kind !== "sex");
+      if (flags.length) {
+        parts.push('<div><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Coded flags — which value means “yes / event present”?</span>' +
+          '<div class="mt-1 grid gap-2 sm:grid-cols-2">' + flags.map((v) =>
+            '<label class="block text-xs"><span class="text-slate-600">' + esc(v.key) + " · " + v.columns.length + " column(s)" + confBadge(v.conf) + "</span>" +
+            sel("yes:" + v.key, [["", "— not a yes/no flag —"]].concat(v.values.map((x) => [x, x + " means yes"])), s.yes[v.key] || "") +
+            '<span class="block text-[11px] text-slate-400 truncate" title="' + esc(v.columns.join(", ")) + '">' + esc(v.columns.slice(0, 4).join(", ")) + (v.columns.length > 4 ? " …" : "") + "</span></label>").join("") + "</div></div>");
+      }
+
+      parts.push('<p class="text-[11px] text-slate-500">' + (CBINFO
+        ? "Codebook <strong>" + esc(CBINFO.name) + "</strong>: " + CBINFO.matched + " of " + cols.length + " column(s) matched, " + Object.keys(CODEBOOK).length + " definition(s) loaded. Definitions appear under each column below and steer the role suggestions."
+        : "No codebook loaded. If you have a data dictionary, adding it above lets the tool label columns and propose roles in your own vocabulary.") + "</p>");
+
+      box.innerHTML = parts.join("");
+      box.querySelectorAll("[data-s]").forEach((el) => el.addEventListener("change", () => onStructChange(el)));
+      const c = { high: "text-emerald-700", medium: "text-amber-700", low: "text-slate-500" }[s.unitConf] || "text-slate-500";
+      $("structsum").innerHTML = "— " + DATA.rows.length + " rows · <span class='" + c + "'>" + esc(UNIT_LABEL[s.unit] || s.unit) + "</span>" + (s.idCol ? " · ID <strong>" + esc(s.idCol) + "</strong>" : "") + (s.dateCols.length ? " · " + s.dateCols.length + " date column(s)" : "");
+    }
+
+    function onStructChange(el) {
+      const k = el.getAttribute("data-s");
+      if (k === "sheet" || k === "split" || k === "headerRow") {
+        if (k === "sheet") { STRUCT.sheet = el.value; STRUCT.split = false; STRUCT.headerRow = -1; }
+        if (k === "split") STRUCT.split = el.checked;
+        if (k === "headerRow") STRUCT.headerRow = Math.max(0, (parseInt(el.value) || 1) - 1);
+        rebuildFromSheet(k !== "headerRow");
+        return;
+      }
+      YMCACHE = null;
+      if (k.indexOf("yes:") === 0) STRUCT.yes[k.slice(4)] = el.value;
+      else if (k === "dayFirst") STRUCT.dayFirst = el.checked;
+      else STRUCT[k] = el.value;
+      if (k === "idCol") { try { renderDupUI(); } catch (e) {} }
+      try { renderMap(); } catch (e) {}
+      renderStructure();
     }
 
     function dupRowCount(rows, columns) {
@@ -379,6 +693,8 @@ const DESIGNS = [
     function render() {
       const { rows, columns, profile } = DATA;
       $("results").classList.remove("hidden");
+      inferStructure();
+      renderStructure();
       const dups = dupRowCount(rows, columns);
       const flagged = profile.filter((p) => p.flags.some((f) => f.level === "warn")).length;
       $("summary").innerHTML = "<strong>" + rows.length + "</strong> rows · <strong>" + columns.length + "</strong> columns · " +
@@ -388,12 +704,15 @@ const DESIGNS = [
       const issues = [];
       if (dups) issues.push({ level: "warn", msg: dups + " fully-duplicated row(s) — likely to be de-duplicated during cleaning." });
       if (!columns.length) issues.push({ level: "error", msg: "No columns detected — is there a header row?" });
+      if (SPLITINFO && SPLITINFO.ragged) issues.push({ level: "warn", msg: "Splitting this sheet produced " + SPLITINFO.ragged + " row(s) with a field count other than " + SPLITINFO.modal + " — a delimited dump inside a spreadsheet cell is usually truncated, so some values will be wrong. Prefer the properly-tabulated sheet if the workbook has one." });
+      const badSheet = SHEETS.find((x) => x.name === STRUCT.sheet && x.notes.length);
+      if (badSheet && !STRUCT.split) issues.push({ level: "warn", msg: "The sheet in use (“" + badSheet.name + "”) " + badSheet.notes.join("; ") + "." });
       $("issues").innerHTML = issues.map((i) => "<div class='flex items-start gap-2 rounded-lg border px-3 py-2 text-xs " + (i.level === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-amber-200 bg-amber-50 text-amber-800") + "'><span class='font-bold'>" + (i.level === "error" ? "✕" : "!") + "</span><span>" + esc(i.msg) + "</span></div>").join("");
 
       $("proftable").innerHTML = profile.map((p) => {
         const badges = p.flags.map((f) => "<span class='inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold " + (f.level === "warn" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600") + "'>" + esc(f.msg) + "</span>").join(" ") || "<span class='text-emerald-600'>✓ clean</span>";
         return "<tr class='border-b border-slate-100 align-top'>" +
-          "<td class='py-2 pr-3 font-semibold text-slate-800'>" + esc(p.name) + "</td>" +
+          "<td class='py-2 pr-3 font-semibold text-slate-800'>" + esc(p.name) + (p.def ? "<div class='font-normal text-[10px] text-slate-500 max-w-[220px]'>" + esc(p.def) + "</div>" : "") + "</td>" +
           "<td class='py-2 pr-3'><span class='inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold " + (TYPE_BADGE[p.type] || TYPE_BADGE.text) + "'>" + p.type + "</span></td>" +
           "<td class='py-2 pr-3 " + (p.missingPct > 20 ? "text-amber-700 font-semibold" : "text-slate-600") + "'>" + Math.round(p.missingPct) + "%</td>" +
           "<td class='py-2 pr-3 text-slate-600'>" + p.distinct + "</td>" +
@@ -404,19 +723,62 @@ const DESIGNS = [
       try { renderMap(); } catch (e) {}
     }
 
+    function applyCodebook() {
+      if (!CBWB || !DATA.columns.length) return;
+      const r = parseCodebook(CBWB, DATA.columns);
+      if (!r) { CBINFO = null; return; }
+      CODEBOOK = r.pairs; CBINFO = { name: CBNAME, matched: r.matched, sheet: r.sheet };
+      DATA.profile.forEach((p) => { p.def = CODEBOOK[normName(p.name)] || ""; });
+      $("cbinfo").textContent = "· " + CBNAME + " — " + r.matched + " of " + DATA.columns.length + " columns matched";
+    }
+    function setData(columns, rows, name) {
+      DATA = { rows: rows, columns: columns, profile: columns.map((c) => profileColumn(c, rows)), name: name || DATA.name || "dataset" };
+      applyCodebook();
+      MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null;
+      $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden");
+      $("fileinfo").textContent = DATA.name + " · " + rows.length + " rows × " + columns.length + " cols" + (STRUCT.sheet ? " · sheet “" + STRUCT.sheet + "”" : "");
+      render();
+    }
+    function rebuildFromSheet(redetectHeader) {
+      if (!WB) return;
+      const ws = WB.Sheets[STRUCT.sheet]; if (!ws) return;
+      let aoa = sheetAOA(ws);
+      SPLITINFO = null;
+      if (STRUCT.split) { SPLITINFO = splitDelimited(aoa); aoa = SPLITINFO.aoa; }
+      if (redetectHeader || STRUCT.headerRow < 0 || STRUCT.headerRow >= aoa.length) STRUCT.headerRow = detectHeaderRow(aoa);
+      const t = tableFromAOA(aoa, STRUCT.headerRow);
+      setData(t.columns, t.rows, DATA.name);
+    }
+
     async function ingest(file) {
       setMsg("Parsing " + file.name + "…");
       try {
-        const { rows, columns } = await parseFile(file);
-        if (!rows.length || !columns.length) { setMsg("Couldn't read any rows/columns. Check the file has a header and data.", true); return; }
-        DATA = { rows, columns, profile: columns.map((c) => profileColumn(c, rows)), name: file.name.replace(/\.[^.]+$/, "") || "dataset" };
-        $("fileinfo").textContent = file.name + " · " + rows.length + " rows × " + columns.length + " cols";
-        setMsg("");
-        render();
+        WB = await readWorkbook(file);
+        SHEETS = WB.SheetNames.map((n) => scoreSheet(n, sheetAOA(WB.Sheets[n])));
+        const best = SHEETS.slice().sort((a, b) => b.score - a.score)[0];
+        if (!best) { setMsg("That workbook has no sheets.", true); return; }
+        STRUCT = Object.assign({}, STRUCT, { sheet: best.name, headerRow: -1, split: false, yes: {} });
+        DATA.name = file.name.replace(/\.[^.]+$/, "") || "dataset";
+        rebuildFromSheet(true);
+        if (!DATA.rows.length || !DATA.columns.length) { setMsg("Couldn't read any rows/columns from “" + best.name + "”. Try another sheet or header row in the panel below.", true); return; }
+        const notes = [];
+        if (SHEETS.length > 1) notes.push("Chose sheet “" + best.name + "” of " + SHEETS.length + " — the widest, fullest table.");
+        SHEETS.filter((x) => x.name !== best.name && x.notes.length).forEach((x) => notes.push("Left “" + x.name + "” alone: " + x.notes.join("; ") + "."));
+        if (STRUCT.headerRow > 0) notes.push("Treated row " + (STRUCT.headerRow + 1) + " as the header.");
+        setMsg(notes.join(" "));
       } catch (e) { setMsg("Error reading file: " + (e && e.message ? e.message : e), true); }
     }
 
     fileInput.addEventListener("change", (e) => { const f = e.target.files && e.target.files[0]; if (f) ingest(f); });
+    $("cbfile").addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      $("cbinfo").textContent = "· reading " + f.name + "…";
+      try {
+        CBWB = await readWorkbook(f); CBNAME = f.name;
+        if (DATA.columns.length) { applyCodebook(); render(); }
+        else $("cbinfo").textContent = "· " + f.name + " — will be matched to the columns when the data loads";
+      } catch (err) { $("cbinfo").textContent = "· could not read " + f.name; }
+    });
     drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("border-brand-400", "bg-brand-50/40"); });
     drop.addEventListener("dragleave", () => drop.classList.remove("border-brand-400", "bg-brand-50/40"));
     drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("border-brand-400", "bg-brand-50/40"); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) ingest(f); });
@@ -449,11 +811,9 @@ const DESIGNS = [
           at_risk: 1000 + (mi * 17),
         });
       }
-      DATA = { rows, columns: ["patient_id", "index_date", "age", "sex", "exposure", "outcome", "event_date", "cci", "followup_days", "disc_days", "at_risk"], name: "demo-dataset" };
-      DATA.profile = DATA.columns.map((c) => profileColumn(c, rows));
-      $("fileinfo").textContent = "demo-dataset · " + N + " rows × " + DATA.columns.length + " cols";
+      WB = null; SHEETS = []; SPLITINFO = null; STRUCT = Object.assign({}, STRUCT, { sheet: "", headerRow: 0, split: false, yes: {} });
+      setData(["patient_id", "index_date", "age", "sex", "exposure", "outcome", "event_date", "cci", "followup_days", "disc_days", "at_risk"], rows, "demo-dataset");
       setMsg("Loaded the synthetic demo dataset (24 monthly periods, outcome steps up from 2019-01).");
-      render();
     });
 
     // ── Exports ──
@@ -467,8 +827,8 @@ const DESIGNS = [
     });
     $("dldict").addEventListener("click", () => {
       if (!DATA.profile.length) return;
-      const cols = ["column", "inferred_type", "missing_pct", "distinct", "range_or_top", "flags"];
-      const rows = DATA.profile.map((p) => ({ column: p.name, inferred_type: p.type, missing_pct: Math.round(p.missingPct), distinct: p.distinct, range_or_top: p.range, flags: p.flags.map((f) => f.msg).join("; ") }));
+      const cols = ["column", "codebook_definition", "inferred_type", "missing_pct", "distinct", "range_or_top", "flags"];
+      const rows = DATA.profile.map((p) => ({ column: p.name, codebook_definition: p.def || "", inferred_type: p.type, missing_pct: Math.round(p.missingPct), distinct: p.distinct, range_or_top: p.range, flags: p.flags.map((f) => f.msg).join("; ") }));
       dl(new Blob(["﻿" + toCSV(cols, rows)], { type: "text/csv;charset=utf-8" }), DATA.name + "-dictionary.csv");
     });
 
@@ -754,10 +1114,26 @@ const DESIGNS = [
     const getDesign = () => { const r = document.querySelector('[name="design"]:checked'); return r ? r.value : ""; };
     let MAP = {}, COVS = [], MASTER = null, LAST = null, COVROLE = {};
 
+    // Role suggestions lean on three sources, in this order: the column name, the
+    // codebook definition (which carries the meaning when the name is opaque or in
+    // another language), and what the structure panel established about the file.
+    const ROLE_BOOST = {
+      ID: (p) => (p.name === STRUCT.idCol ? 4 : 0),
+      TIDX: (p) => (p.type === "date" ? 2 : 0),
+      DENOM: (p) => (/pop|risk|denom|母數|人口|人數/i.test(p.name) ? 1 : 0),
+      SERIES: (p) => (p.type === "binary" ? 1 : 0),
+    };
     function suggestCol(role) {
       const kw = KW[role.k];
       let best = "", score = 0;
-      for (const p of DATA.profile) { let sc = 0; if (kw && kw.test(p.name)) sc += 3; if (role.types.includes(p.type)) sc += 1; if (sc > score) { score = sc; best = p.name; } }
+      for (const p of DATA.profile) {
+        let sc = 0;
+        if (kw && kw.test(p.name)) sc += 3;
+        if (kw && p.def && kw.test(p.def)) sc += 2;
+        if (role.types.includes(p.type)) sc += 1;
+        const b = ROLE_BOOST[role.k]; if (b) sc += b(p);
+        if (sc > score) { score = sc; best = p.name; }
+      }
       return score >= 3 ? best : "";
     }
     function renderMap() {
@@ -780,6 +1156,7 @@ const DESIGNS = [
     function detectIdCol() {
       const spec = SPEC[getDesign()];
       if (spec && spec.roles.some((r) => r.k === "ID") && MAP.ID) return MAP.ID;
+      if (STRUCT.idCol && DATA.columns.indexOf(STRUCT.idCol) >= 0) return STRUCT.idCol;
       const byType = DATA.profile.find((p) => p.type === "id");
       if (byType) return byType.name;
       const byName = DATA.columns.find((c) => /(^|_)id$|patient|subject|pid|caseid/i.test(c));
@@ -799,7 +1176,9 @@ const DESIGNS = [
       const dcur = dateSel.value;
       const dateCols = DATA.profile.filter((p) => p.type === "date").map((p) => p.name);
       dateSel.innerHTML = '<option value="">— none —</option>' + dateCols.map((c) => '<option value="' + esc(c) + '"' + (c === dcur ? " selected" : "") + ">" + esc(c) + "</option>").join("");
-      if (!$("dup_strategy").dataset.touched) $("dup_strategy").value = "first";
+      // Default to what the structure panel concluded: repeats that are exact
+      // copies are duplicates to drop; repeats that differ are real records.
+      if (!$("dup_strategy").dataset.touched) $("dup_strategy").value = STRUCT.repeatKind === "measures" || STRUCT.repeatKind === "mixed" ? "all" : "first";
       updateDupCount();
     }
     function updateDupCount() {
@@ -874,13 +1253,25 @@ const DESIGNS = [
 
     const NUM_ROLES = ["TIME", "INTERVAL", "EVENTS", "DISC", "YCOUNT", "DENOM"];
     const BIN_ROLES = ["EVENT", "TREAT", "EXPOSED", "CASE", "SERIES"];
-    const toBin = (v) => { if (v == null || v === "") return null; const l = String(v).trim().toLowerCase(); if (["1", "yes", "y", "true", "t", "case", "event", "exposed", "positive"].includes(l)) return 1; if (["0", "no", "n", "false", "f", "control", "none", "unexposed", "negative"].includes(l)) return 0; const n = Number(l); return isNaN(n) ? null : (n > 0 ? 1 : 0); };
+    const toBin = (v) => {
+      if (v == null || v === "") return null;
+      const l = String(v).trim().toLowerCase();
+      const ym = yesMap();                                   // this dataset's own vocabulary wins
+      if (l in ym) return ym[l];
+      if (YES_TOKENS.indexOf(l) >= 0) return 1;
+      if (NO_TOKENS.indexOf(l) >= 0) return 0;
+      const n = Number(l); return isNaN(n) ? null : (n > 0 ? 1 : 0);
+    };
 
     function buildMaster() {
       const spec = SPEC[getDesign()]; if (!spec || !validateMap()) return;
       const roleCol = {}; spec.roles.forEach((r) => { if (MAP[r.k]) roleCol[r.k] = MAP[r.k]; });
       let rows = DATA.rows.map((r) => Object.assign({}, r));
       if ($("c_trim").checked) rows.forEach((r) => DATA.columns.forEach((c) => { if (typeof r[c] === "string") r[c] = r[c].trim(); }));
+      if ($("c_dates").checked) {
+        const dcols = (STRUCT.dateCols || []).map((d) => d.col).filter((c) => DATA.columns.indexOf(c) >= 0);
+        rows.forEach((r) => dcols.forEach((c) => { r[c] = toISO(r[c], STRUCT.dayFirst); }));
+      }
       if ($("c_std").checked) rows.forEach((r) => {
         BIN_ROLES.forEach((rk) => { if (roleCol[rk]) { const b = toBin(r[roleCol[rk]]); if (b != null) r[roleCol[rk]] = b; } });
       });
