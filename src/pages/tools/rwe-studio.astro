@@ -105,7 +105,15 @@ const DESIGNS = [
         <input id="cbfile" type="file" accept=".csv,.xlsx,.xls,.tsv" class="hidden" />
       </label>
       <div class="mt-3 text-xs text-slate-500">
-        No data handy? <button id="demo" type="button" class="text-brand-700 font-semibold hover:underline">Load a demo dataset</button> — fabricated, 600 rows, deliberately confounded so you can check the tool recovers a known answer.
+        No data handy? Load a demo — every one is fabricated, generated from a model printed on screen, and carries a
+        <strong>known true effect</strong> so you can check the tool recovers it:
+        <span class="mt-1 block">
+          <button id="demo" data-demo="cohort" type="button" class="text-brand-700 font-semibold hover:underline">cohort (ACNU · ITS)</button>
+          <span class="mx-1 text-slate-300">·</span>
+          <button data-demo="sccs" type="button" class="text-brand-700 font-semibold hover:underline">self-controlled case series</button>
+          <span class="mx-1 text-slate-300">·</span>
+          <button data-demo="cco" type="button" class="text-brand-700 font-semibold hover:underline">case-crossover</button>
+        </span>
       </div>
       <div id="demonote" class="hidden mt-3 rounded-xl border border-brand-200 bg-brand-50/60 p-3 text-xs text-slate-700"></div>
     </div>
@@ -207,10 +215,27 @@ const DESIGNS = [
               <option value="month" selected>Month</option><option value="quarter">Quarter</option><option value="year">Year</option>
             </select>
             <span class="text-[11px] text-slate-500">Per-patient rows with a date column are collapsed into a series.</span></label>
-          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Combine rows in a period by</span>
+          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Combine the outcome by</span>
             <select id="its_comb" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
               <option value="sum" selected>Sum (event counts)</option><option value="mean">Mean (a rate or level)</option>
             </select></label>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Period order</span>
+            <select id="its_order" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="auto" selected>Work it out from the labels — stop if it can't</option>
+              <option value="file">The order the periods first appear in the file</option>
+              <option value="alpha">Alphabetical (only if you know that is chronological)</option>
+            </select>
+            <span class="text-[11px] text-slate-500">Periods analysed in the wrong order can <strong>reverse</strong> the estimated effect, so this is never guessed.</span></label>
+          <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Combine the denominator by</span>
+            <select id="its_denomcomb" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              <option value="auto" selected>Auto — first value if it repeats within a period, else sum</option>
+              <option value="first">First value in the period (a population figure)</option>
+              <option value="sum">Sum (person-time carried per row)</option>
+              <option value="mean">Mean</option>
+            </select>
+            <span class="text-[11px] text-slate-500">Summing a population repeated on every patient row multiplies it by the row count.</span></label>
         </div>
         <div class="grid gap-3 sm:grid-cols-3">
           <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Regression model</span>
@@ -457,6 +482,10 @@ const DESIGNS = [
       if (nonNull.length === 0) type = "empty";
       else if (numeric.length === nonNull.length) type = distinct <= 2 ? "binary" : (distinct === nonNull.length && nonNull.length > 10 ? "id" : "number");
       else if (dates.length === nonNull.length) type = "date";
+      // Two distinct text values is a binary variable, whatever the tokens are.
+      // Calling Y/N or 有/無 "categorical" hid them from every role that needs a
+      // 0/1 indicator, since a role only accepts columns of a declared type.
+      else if (distinct === 2) type = "binary";
       else if (distinct === nonNull.length && nonNull.length > 5) type = "id";
       else if (distinct <= Math.max(20, nonNull.length * 0.1)) type = "categorical";
       else type = "text";
@@ -490,7 +519,10 @@ const DESIGNS = [
     }
 
     // ── Codebook / data dictionary ──────────────────────────────────────────
-    const normName = (s) => String(s == null ? "" : s).trim().toLowerCase().replace(/\s+/g, " ").replace(/^["']|["']$/g, "");
+    // NFC first: a codebook written on macOS stores "Créatinine" decomposed, a
+    // Windows export stores it composed. They render identically and compare
+    // unequal, so without this the codebook silently matches nothing.
+    const normName = (s) => String(s == null ? "" : s).normalize("NFC").trim().toLowerCase().replace(/\s+/g, " ").replace(/^["']|["']$/g, "");
     // Find, in any sheet, the column whose values look like this dataset's column
     // names; everything else on that row is the definition.
     function parseCodebook(wb, dataCols) {
@@ -518,7 +550,9 @@ const DESIGNS = [
         for (let c = 0; c < best.width; c++) { if (c === best.col) continue; const v = r[c]; if (!isBlank(v)) rest.push(String(v).trim()); }
         if (rest.length) pairs[normName(term)] = rest.join(" · ").replace(/\s*\n\s*/g, " / ");
       });
-      return { pairs: pairs, matched: best.hits, total: best.total, sheet: best.sheet };
+      const have = new Set((dataCols || []).map(normName));
+      const unmatched = Object.keys(pairs).filter((k) => !have.has(k)).length;
+      return { pairs: pairs, matched: best.hits, total: best.total, sheet: best.sheet, unmatched: unmatched };
     }
 
     // ── Structure inference ─────────────────────────────────────────────────
@@ -529,7 +563,7 @@ const DESIGNS = [
     const YES_TOKENS = ["1", "y", "yes", "true", "t", "有", "是", "有病史", "陽性", "positive", "present", "case", "event", "exposed"];
     const NO_TOKENS = ["0", "n", "no", "false", "f", "無", "否", "陰性", "negative", "absent", "control", "none", "unexposed"];
     const SEX_SETS = [["m", "f"], ["male", "female"], ["男", "女"], ["男性", "女性"]];
-    const ID_RE = /(^|[_\s])id$|^id[_\s]|patient|subject|person|pid|chart|mrn|病歷|病例|身分|身份|編號|序號|案號/i;
+    const ID_RE = /(^|[_\s])id$|^id[_\s]|patient|subject|person|pid|chart|mrn|病歷|病例|身分|身份|編號|序號|案號|患者|受診者|환자|번호|fallnummer|patientennummer|dossier|matricule|numero|número|nummer/i;
     const UNIT_LABEL = { patient: "one row per patient", visit: "one row per visit / episode", period: "one row per period (an aggregated series)", interval: "one row per patient-interval", other: "something else", unknown: "not sure" };
     const CONF_CLS = { high: "bg-emerald-100 text-emerald-800", medium: "bg-amber-100 text-amber-800", low: "bg-slate-200 text-slate-600" };
     const confBadge = (c) => '<span class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ' + (CONF_CLS[c] || CONF_CLS.low) + '">' + c + " confidence</span>";
@@ -559,7 +593,14 @@ const DESIGNS = [
       const uniqRatio = idCol && n ? distinctIds / n : 1;
       const dateCols = prof.filter((p) => p.type === "date").map((p) => p.name);
       let unit = "unknown", unitConf = "low";
-      if (!idCol) { unit = dateCols.length ? "period" : "unknown"; unitConf = "low"; }
+      // "One row per period" is only asserted with evidence for it — a date column
+      // that is unique per row. Without an ID column and without that, the honest
+      // answer is "not sure", not a confident guess about a per-patient extract.
+      if (!idCol) {
+        const seriesLike = dateCols.some((c) => { const p = prof.find((x) => x.name === c); return p && n > 0 && p.distinct === n - p.missing; });
+        unit = seriesLike ? "period" : "unknown";
+        unitConf = seriesLike ? "medium" : "low";
+      }
       else if (uniqRatio > 0.995) { unit = "patient"; unitConf = uniqRatio === 1 ? "high" : "medium"; }
       else if (repeats && identical === repeats) { unit = "patient"; unitConf = "medium"; }
       else if (dateCols.length >= 2 && uniqRatio > 0.5) { unit = "interval"; unitConf = "medium"; }
@@ -730,9 +771,9 @@ const DESIGNS = [
       if (!CBWB || !DATA.columns.length) return;
       const r = parseCodebook(CBWB, DATA.columns);
       if (!r) { CBINFO = null; return; }
-      CODEBOOK = r.pairs; CBINFO = { name: CBNAME, matched: r.matched, sheet: r.sheet };
+      CODEBOOK = r.pairs; CBINFO = { name: CBNAME, matched: r.matched, sheet: r.sheet, unmatched: r.unmatched };
       DATA.profile.forEach((p) => { p.def = CODEBOOK[normName(p.name)] || ""; });
-      $("cbinfo").textContent = "· " + CBNAME + " — " + r.matched + " of " + DATA.columns.length + " columns matched";
+      $("cbinfo").textContent = "· " + CBNAME + " — " + r.matched + " of " + DATA.columns.length + " columns matched" + (r.unmatched ? ", " + r.unmatched + " codebook term(s) matched nothing" : "");
     }
     function setData(columns, rows, name) {
       DATA = { rows: rows, columns: columns, profile: columns.map((c) => profileColumn(c, rows)), name: name || DATA.name || "dataset" };
@@ -832,11 +873,86 @@ const DESIGNS = [
       "out of the model produces exactly that, and it reads like a reassuring null. That is what this demo is for.</p>" +
       "<p class='mt-1 text-slate-500'>The adjusted figures will not land on 0.70 exactly and should not: 600 patients carry sampling " +
       "error, and a marginal hazard ratio is not the same quantity as the conditional one. Fitting the correctly-specified model to " +
-      "this particular draw gives HR 0.686 (0.533–0.883), so both estimates above are where they should be. " +
-      "For an interrupted time series, map <code>index_date</code> and <code>outcome</code>, aggregate by month, and set the " +
-      "interruption to <strong>2019-01</strong> — the hazard steps up by ×" + Math.exp(DEMO.stepLHR).toFixed(1) + " there.</p>";
+      "this particular draw gives HR 0.686 (0.533–0.883), so both estimates above are where they should be.</p>" +
+      "<p class='mt-1'>The same file also runs as an <strong>interrupted time series</strong>: map <code>index_date</code> and " +
+      "<code>outcome</code>, aggregate by month, interruption <strong>2019-01</strong>. Expect a level change of " +
+      "<strong>≈ 1.35 (0.98–1.85)</strong>. Note that is <em>not</em> the ×" + Math.exp(DEMO.stepLHR).toFixed(1) + " that was put into the hazard, and " +
+      "should not be: <code>outcome</code> is a 365-day risk rather than a rate, so the step is compressed, and with only 12 " +
+      "periods either side the interval crosses 1. The ITS here is a working example, not a second estimate of the same quantity.</p>";
 
-    $("demo").addEventListener("click", () => {
+    // Shared helpers for every demo generator.
+    const lcg = (s0) => { let s = s0; return () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648; };
+    const rpois = (lam, rand) => { if (lam <= 0) return 0; const L = Math.exp(-lam); let k = 0, p = 1; do { k++; p *= rand(); } while (p > L); return k - 1; };
+    const dayStr = (base, d) => new Date(Date.parse(base) + d * 86400000).toISOString().slice(0, 10);
+
+    // ── Self-controlled case series ─────────────────────────────────────────
+    // Long format, one row per person-interval. Only people who had an event
+    // appear — that is what "case series" means. Each person's own unexposed time
+    // is the comparison for their own exposed time, so anything fixed about the
+    // person (frailty, genetics, chronic disease) cannot confound the estimate.
+    const SCCS = {
+      seed: 20201883, people: 1000, obsDays: 365, trueIRR: 3.0, start: "2019-01-01",
+      mix: [0.45, 0.35, 0.20],
+      tiers: [
+        { n: "low", rate: 0.00018, pExp: 0.25, riskDays: 30 },
+        { n: "medium", rate: 0.0010, pExp: 0.60, riskDays: 60 },
+        { n: "high", rate: 0.0050, pExp: 0.92, riskDays: 120 },
+      ],
+    };
+    function buildSccs() {
+      const rand = lcg(SCCS.seed);
+      const pick = (ws) => { let u = rand(), a = 0; for (let i = 0; i < ws.length; i++) { a += ws[i]; if (u < a) return i; } return ws.length - 1; };
+      const rows = [];
+      for (let i = 1; i <= SCCS.people; i++) {
+        const t = SCCS.tiers[pick(SCCS.mix)];
+        const exposed = rand() < t.pExp, rd = t.riskDays;
+        const s0 = exposed ? Math.floor(20 + rand() * (SCCS.obsDays - rd - 40)) : -1;
+        const segs = exposed
+          ? [{ on: 0, a: 0, d: s0 }, { on: 1, a: s0, d: rd }, { on: 0, a: s0 + rd, d: SCCS.obsDays - s0 - rd }]
+          : [{ on: 0, a: 0, d: SCCS.obsDays }];
+        const withEv = segs.filter((s) => s.d > 0).map((s) => Object.assign({}, s, { ev: rpois(t.rate * (s.on ? SCCS.trueIRR : 1) * s.d, rand) }));
+        if (!withEv.reduce((a, s) => a + s.ev, 0)) continue;      // cases only
+        withEv.forEach((s) => rows.push({
+          case_id: "C" + String(10000 + i),
+          interval_start: dayStr(SCCS.start, s.a),
+          interval_end: dayStr(SCCS.start, s.a + s.d),
+          on_drug: s.on,
+          n_events: s.ev,
+          days_at_risk: s.d,
+          frailty_tier: t.n,
+        }));
+      }
+      return { cols: ["case_id", "interval_start", "interval_end", "on_drug", "n_events", "days_at_risk", "frailty_tier"], rows: rows, name: "demo-sccs" };
+    }
+
+    // ── Case-crossover ──────────────────────────────────────────────────────
+    // Long format, one row per window. Each case supplies one hazard window (just
+    // before the event) and three earlier control windows. Exposure prevalence
+    // differs a lot between people; the matched analysis never compares across them.
+    const CCO = {
+      seed: 20200414, cases: 500, controls: 3, trueOR: 2.5, hazardDays: 7, gapDays: 30, start: "2019-06-01",
+      tiers: [0.10, 0.25, 0.45], tierNames: ["occasional", "regular", "frequent"], mix: [0.40, 0.35, 0.25],
+    };
+    function buildCco() {
+      const rand = lcg(CCO.seed);
+      const pick = (ws) => { let u = rand(), a = 0; for (let i = 0; i < ws.length; i++) { a += ws[i]; if (u < a) return i; } return ws.length - 1; };
+      const rows = [];
+      for (let i = 1; i <= CCO.cases; i++) {
+        const ti = pick(CCO.mix), p = CCO.tiers[ti];
+        const q = (CCO.trueOR * p) / (1 - p + CCO.trueOR * p);   // makes the conditional OR exactly trueOR
+        const evDay = 120 + Math.floor(rand() * 200);
+        const mk = (label, hz, off, ex) => ({
+          case_id: "X" + String(2000 + i), window: label, is_hazard_window: hz,
+          window_start: dayStr(CCO.start, evDay - off - CCO.hazardDays), window_end: dayStr(CCO.start, evDay - off),
+          drug_taken: ex ? "Y" : "N", usage_tier: CCO.tierNames[ti],
+        });
+        rows.push(mk("hazard", 1, 0, rand() < q));
+        for (let k = 1; k <= CCO.controls; k++) rows.push(mk("control " + k, 0, k * CCO.gapDays, rand() < p));
+      }
+      return { cols: ["case_id", "window", "is_hazard_window", "window_start", "window_end", "drug_taken", "usage_tier"], rows: rows, name: "demo-case-crossover" };
+    }
+
+    function buildCohort() {
       let seed = DEMO.seed;                              // fixed seed → the demo is reproducible
       const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
       const pick = (ws) => { let u = rand(), a = 0; for (let i = 0; i < ws.length; i++) { a += ws[i]; if (u < a) return i; } return ws.length - 1; };
@@ -874,12 +990,59 @@ const DESIGNS = [
           });
         }
       }
-      WB = null; SHEETS = []; SPLITINFO = null; STRUCT = Object.assign({}, STRUCT, { sheet: "", headerRow: 0, split: false, yes: {} });
-      setData(["patient_id", "index_date", "age", "sex", "severity", "smoker", "new_drug", "clinic_site", "followup_days", "outcome", "event_date", "disc_days"], rows, "demo-dataset");
+      return { cols: ["patient_id", "index_date", "age", "sex", "severity", "smoker", "new_drug", "clinic_site", "followup_days", "outcome", "event_date", "disc_days"], rows: rows, name: "demo-cohort" };
+    }
+
+    const SCCS_STORY =
+      "<strong>Fabricated data — not real patients.</strong> Long format: one row per person-interval, " +
+      "and only people who actually had an event, which is what a <em>case series</em> means. One fixed seed, from this model:" +
+      "<ul class='mt-1 ml-4 list-disc space-y-0.5'>" +
+      "<li>Each person is observed for " + SCCS.obsDays + " days and has a <code>frailty_tier</code> setting their baseline event rate — the frequent-event tier is about <strong>28×</strong> the rare one.</li>" +
+      "<li>The frailer a person is, the more likely they are to be given the drug (" + SCCS.tiers.map((t) => Math.round(t.pExp * 100) + "%").join(" / ") + ") and the longer they stay on it (" + SCCS.tiers.map((t) => t.riskDays + "d").join(" / ") + "). So drug time is heavily concentrated in the people who were going to have events anyway.</li>" +
+      "<li>While on the drug, the event rate is multiplied by the <strong>true IRR of " + SCCS.trueIRR.toFixed(1) + "</strong>. Nothing else changes.</li></ul>" +
+      "<p class='mt-1'>Map <code>case_id</code>, <code>on_drug</code>, <code>n_events</code> and <code>days_at_risk</code>. You should see:</p>" +
+      "<table class='mt-1 w-full max-w-lg text-[11px]'><tbody>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>Self-controlled IRR (each person vs themselves)</td><td class='font-semibold'>≈ 2.99 (2.57–3.49)</td></tr>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>Pooled across people (shown as a contrast)</td><td class='font-semibold'>≈ 3.46 (3.01–3.97) — biased</td></tr>" +
+      "</tbody></table>" +
+      "<p class='mt-1'>The pooled row is what you get by forgetting whose interval is whose. It is too high because drug time " +
+      "belongs disproportionately to frail people. <code>frailty_tier</code> is in the file, but the self-controlled estimate " +
+      "<strong>never needs it</strong> — each person is their own control, so anything fixed about them cancels. That is the whole point of the design.</p>";
+
+    const CCO_STORY =
+      "<strong>Fabricated data — not real patients.</strong> Long format: " + (CCO.controls + 1) + " rows per case — one " +
+      CCO.hazardDays + "-day <em>hazard</em> window ending at the event, and " + CCO.controls + " earlier " + CCO.hazardDays +
+      "-day <em>control</em> windows " + CCO.gapDays + " days apart. One fixed seed, from this model:" +
+      "<ul class='mt-1 ml-4 list-disc space-y-0.5'>" +
+      "<li>Each case has a personal <code>usage_tier</code> — background chance of having taken the drug in any given window of " +
+      CCO.tiers.map((p) => Math.round(p * 100) + "%").join(" / ") + ". People differ enormously.</li>" +
+      "<li>In the hazard window the odds of exposure are multiplied by the <strong>true odds ratio of " + CCO.trueOR.toFixed(1) + "</strong>, applied to that person's own background odds.</li></ul>" +
+      "<p class='mt-1'>Map <code>case_id</code>, <code>is_hazard_window</code> and <code>drug_taken</code> — note the last is coded <strong>Y/N</strong>, so the structure panel has to work out which value means yes. You should see:</p>" +
+      "<table class='mt-1 w-full max-w-lg text-[11px]'><tbody>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>Matched OR (each case vs their own earlier windows)</td><td class='font-semibold'>≈ 2.55 (2.03–3.21)</td></tr>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>Unmatched (shown as a contrast)</td><td class='font-semibold'>≈ 2.33 (1.88–2.88)</td></tr>" +
+      "</tbody></table>" +
+      "<p class='mt-1'>Throwing away the pairing pulls the odds ratio towards 1 — an odds ratio is not collapsible, so the " +
+      "population-average number is not the within-person one, and it is the within-person one the design is built to estimate. " +
+      "<code>usage_tier</code> cannot confound the matched estimate no matter how strong it is, because it never varies within a case. " +
+      "One caveat this demo does <em>not</em> contain: if drug use had been trending over calendar time, control windows taken " +
+      "earlier would understate exposure and the matched OR would be biased upward. Exposure here is flat over time.</p>";
+
+    const DEMOS = {
+      cohort: { build: buildCohort, story: () => DEMO_STORY },
+      sccs: { build: buildSccs, story: () => SCCS_STORY },
+      cco: { build: buildCco, story: () => CCO_STORY },
+    };
+    document.querySelectorAll("[data-demo]").forEach((b) => b.addEventListener("click", () => {
+      const d = DEMOS[b.getAttribute("data-demo")]; if (!d) return;
+      const { cols, rows, name } = d.build();
+      WB = null; SHEETS = []; SPLITINFO = null; CBWB = null; CODEBOOK = {}; CBINFO = null;
+      STRUCT = Object.assign({}, STRUCT, { sheet: "", headerRow: 0, split: false, yes: {} });
+      setData(cols, rows, name);
       setMsg("");
       $("demonote").classList.remove("hidden");
-      $("demonote").innerHTML = DEMO_STORY;
-    });
+      $("demonote").innerHTML = d.story();
+    }));
 
     // ── Exports ──
     const dl = (blob, nm) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = nm; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
@@ -1019,7 +1182,15 @@ const DESIGNS = [
           "b<-coef(fit)['EXPOSED']; se<-sqrt(diag(vcov(fit)))['EXPOSED']; irr<-exp(b)\n" +
           "cat(sprintf('Conditional Poisson incidence-rate ratio (exposed vs unexposed): %.3f (95%% CI %.3f to %.3f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))\n" +
           "cat(sprintf('Cases (strata): %d; interval-rows: %d; events: %d\\n', length(unique(d$ID)), nrow(d), sum(d$EVENTS)))\n" +
-          "cat(sprintf('RESULT_ESTIMATE|Incidence-rate ratio|%.2f (95%% CI %.2f-%.2f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))",
+          "cat(sprintf('RESULT_ESTIMATE|Self-controlled incidence-rate ratio (within person)|%.2f (95%% CI %.2f-%.2f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))\n" +
+          // The same data analysed as if the person did not matter. Showing it next
+          // to the self-controlled estimate is what makes the design's value visible.
+          "p0<-glm(EVENTS ~ EXPOSED, family=poisson, offset=log(INTERVAL), data=d)\n" +
+          "bp<-coef(p0)['EXPOSED']; sp<-sqrt(diag(vcov(p0)))['EXPOSED']\n" +
+          "cat(sprintf('RESULT_ESTIMATE|Pooled across people, NOT self-controlled (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bp), exp(bp-1.96*sp), exp(bp+1.96*sp)))\n" +
+          "nb<-sum(tapply(d$EXPOSED, d$ID, function(z) length(unique(z))>1))\n" +
+          "cat(sprintf('RESULT_NOTE|%d of %d case(s) contribute exposed and unexposed time and so carry the estimate; the rest are informative only about their own baseline.\\n', nb, length(unique(d$ID))))\n" +
+          "cat('RESULT_NOTE|The pooled row ignores which person each interval belongs to. It is shown only as a contrast: it is confounded by anything that differs between people, which is exactly what the self-controlled design removes. Report the self-controlled row.\\n')",
       },
       cco: {
         label: "Case-crossover",
@@ -1037,7 +1208,13 @@ const DESIGNS = [
           "or<-s$conf.int['EXPOSED','exp(coef)']; lci<-s$conf.int['EXPOSED','lower .95']; uci<-s$conf.int['EXPOSED','upper .95']\n" +
           "cat(sprintf('Conditional logistic odds ratio (case vs control windows): %.3f (95%% CI %.3f to %.3f)\\n', or, lci, uci))\n" +
           "cat(sprintf('Strata (cases): %d; rows: %d\\n', length(unique(d$ID)), nrow(d)))\n" +
-          "cat(sprintf('RESULT_ESTIMATE|Odds ratio|%.2f (95%% CI %.2f-%.2f)\\n', or, lci, uci))",
+          "cat(sprintf('RESULT_ESTIMATE|Matched odds ratio (each case vs its own control windows)|%.2f (95%% CI %.2f-%.2f)\\n', or, lci, uci))\n" +
+          // The same windows analysed as one pool, so the value of the matching shows.
+          "u<-glm(CASE ~ EXPOSED, family=binomial, data=d); bu<-coef(u)['EXPOSED']; su<-sqrt(diag(vcov(u)))['EXPOSED']\n" +
+          "cat(sprintf('RESULT_ESTIMATE|Unmatched, pairing discarded (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bu), exp(bu-1.96*su), exp(bu+1.96*su)))\n" +
+          "disc<-sum(tapply(seq_len(nrow(d)), d$ID, function(i) length(unique(d$EXPOSED[i]))>1))\n" +
+          "cat(sprintf('RESULT_NOTE|%d of %d case(s) are discordant on exposure and so carry the estimate; concordant cases contribute nothing to a matched analysis.\\n', disc, length(unique(d$ID))))\n" +
+          "cat('RESULT_NOTE|The unmatched row throws the pairing away and is shown only as a contrast. It differs from the matched row both because an odds ratio is not collapsible and because it reintroduces between-person differences. Report the matched row.\\n')",
       },
       its: {
         label: "Interrupted time series",
@@ -1061,10 +1238,29 @@ const DESIGNS = [
           L.push("d<-read.csv('/data.csv', stringsAsFactors=FALSE)");
           L.push(R_CHK01.trim());
           L.push(R_CHKNUM.trim());
-          L.push("CUT<-" + q(o.cut) + "; UNIT<-" + q(o.unit || "month") + "; COMBF<-" + q(o.comb || "sum") + "; MODEL<-" + q(o.model || "auto") + "; SEASON<-" + q(o.season || "none") + "; CYC<-" + (o.cycle || 12) + "; AC<-" + q(o.ac || "auto"));
+          L.push("CUT<-" + q(o.cut) + "; UNIT<-" + q(o.unit || "month") + "; COMBF<-" + q(o.comb || "sum") + "; MODEL<-" + q(o.model || "auto") + "; SEASON<-" + q(o.season || "none") + "; CYC<-" + (o.cycle || 12) + "; AC<-" + q(o.ac || "auto") + "; ORDER<-" + q(o.order || "auto") + "; DCOMB<-" + q(o.denomcomb || "auto"));
           L.push("");
           L.push("# --- parse the time column (ISO dates, slashes, datetimes, YYYY-MM) ---");
-          L.push("pdate<-function(x){ x<-trimws(as.character(x)); x[x=='' | x=='NA']<-NA; y<-gsub('/','-',x); y<-sub('[ T].*$','',y); ym<-!is.na(y) & grepl('^[0-9]{4}-[0-9]{1,2}$',y); y[ym]<-paste0(y[ym],'-01'); suppressWarnings(as.Date(y, format='%Y-%m-%d')) }");
+          // Period labels arrive in more shapes than ISO. Every shape this fails to
+          // parse falls through to a fallback that must NOT quietly sort text.
+          L.push("MONNM<-c(jan=1,feb=2,mar=3,apr=4,may=5,jun=6,jul=7,aug=8,sep=9,oct=10,nov=11,dec=12)");
+          L.push("pdate<-function(x){");
+          L.push("  x<-trimws(as.character(x)); x[x=='' | x=='NA' | x=='NaN']<-NA; y<-x");
+          L.push("  cj<-!is.na(y) & grepl('^[0-9]{4}\\u5e74',y)");                       // 2019年3月15日
+          L.push("  if(any(cj)){ z<-gsub('\\u5e74','-',y[cj]); z<-gsub('\\u6708','-',z); z<-gsub('\\u65e5','',z); z<-sub('-+$','',z); y[cj]<-z }");
+          L.push("  y<-gsub('[./]','-',y); y<-sub('[ T].*$','',y)");
+          L.push("  q<-!is.na(y) & grepl('^[0-9]{4}-?[Qq][1-4]$',y)");                   // 2019Q1 / 2019-Q3
+          L.push("  if(any(q)) y[q]<-sprintf('%s-%02d-01', substr(y[q],1,4), (as.integer(sub('^.*[Qq]','',y[q]))-1)*3+1)");
+          L.push("  mn<-!is.na(y) & grepl('^[A-Za-z]{3,9}-[0-9]{2,4}$',y)");             // Mar-19 / March-2019
+          L.push("  if(any(mn)) y[mn]<-vapply(strsplit(y[mn],'-'), function(p){ m<-MONNM[substr(tolower(p[1]),1,3)]; yy<-suppressWarnings(as.integer(p[2])); if(is.na(m)||is.na(yy)) return(NA_character_); if(yy<100) yy<-2000+yy; sprintf('%04d-%02d-01',yy,m) }, '')");
+          L.push("  nm<-!is.na(y) & grepl('^[0-9]{4}-[A-Za-z]{3,9}$',y)");               // 2019-Mar
+          L.push("  if(any(nm)) y[nm]<-vapply(strsplit(y[nm],'-'), function(p){ m<-MONNM[substr(tolower(p[2]),1,3)]; if(is.na(m)) return(NA_character_); sprintf('%s-%02d-01',p[1],m) }, '')");
+          L.push("  c8<-!is.na(y) & grepl('^[0-9]{8}$',y)");                             // 20190315
+          L.push("  if(any(c8)) y[c8]<-paste0(substr(y[c8],1,4),'-',substr(y[c8],5,6),'-',substr(y[c8],7,8))");
+          L.push("  my<-!is.na(y) & grepl('^[0-9]{1,2}-[0-9]{4}$',y)");                  // 3-2019 (month-year)
+          L.push("  if(any(my)) y[my]<-vapply(strsplit(y[my],'-'), function(p) sprintf('%s-%02d-01',p[2],as.integer(p[1])), '')");
+          L.push("  ym<-!is.na(y) & grepl('^[0-9]{4}-[0-9]{1,2}$',y); y[ym]<-paste0(y[ym],'-01')");
+          L.push("  suppressWarnings(as.Date(y, format='%Y-%m-%d')) }");
           L.push("floorp<-function(dt,u){ if(u=='day') return(dt); if(u=='week') return(dt-(as.integer(format(dt,'%u'))-1)); if(u=='month') return(as.Date(paste0(format(dt,'%Y-%m'),'-01'))); if(u=='quarter'){ m<-as.integer(format(dt,'%m')); return(as.Date(sprintf('%s-%02d-01',format(dt,'%Y'),(m-1)%/%3*3+1))) }; if(u=='year') return(as.Date(paste0(format(dt,'%Y'),'-01-01'))); dt }");
           L.push("tid<-d$TIDX; dts<-pdate(tid); nz<-sum(!is.na(tid) & trimws(as.character(tid))!='')");
           L.push("isdate<-nz>0 && sum(!is.na(dts))>=0.8*nz");
@@ -1088,12 +1284,26 @@ const DESIGNS = [
           L.push("gid<-match(paste0(G,'\\r',key), paste0(a$g,'\\r',a$key))");
           L.push("a$nrows<-vapply(seq_len(nrow(a)),function(i) sum(gid==i),0)");
           L.push("a$Y<-vapply(seq_len(nrow(a)),function(i) cmb(Y[gid==i]),0)");
-          L.push("if(HASN) a$N<-vapply(seq_len(nrow(a)),function(i) cmb(N[gid==i]),0)");
+          // The denominator must NOT inherit the outcome's rule. A population figure
+          // repeated on every patient row gets multiplied by the row count if summed,
+          // so log(rows per period) leaks into the offset and bends both the step and
+          // the trend. Default to "first" when it is constant within a period.
+          L.push("dmode<-DCOMB");
+          L.push("if(HASN){ dconst<-all(vapply(seq_len(nrow(a)), function(i){ z<-N[gid==i]; z<-z[!is.na(z)]; length(z)<2 || all(abs(z-z[1])<1e-9) }, TRUE))");
+          L.push("  if(dmode=='auto') dmode<-if(dconst) 'first' else 'sum'");
+          L.push("  dfun<-if(dmode=='first') function(z){ z<-z[!is.na(z)]; if(length(z)) z[1] else NA_real_ } else if(dmode=='mean') function(z) mean(z,na.rm=TRUE) else function(z) sum(z,na.rm=TRUE)");
+          L.push("  a$N<-vapply(seq_len(nrow(a)),function(i) as.numeric(dfun(N[gid==i])),0) }");
           L.push("if(HASS) a$seas<-vapply(seq_len(nrow(a)),function(i){ z<-SS[gid==i]; as.character(z[1]) },'')");
           L.push("if(max(a$nrows)>1) cat(sprintf('Aggregated %d row(s) into %d period-row(s) by %s (%s).\\n', length(Y), nrow(a), UNIT, COMBF))");
           L.push("");
-          L.push("ukey<-unique(a$key); kd<-pdate(ukey); kn<-suppressWarnings(as.numeric(ukey))");
-          L.push("if(all(!is.na(kd))) ord<-order(kd) else if(all(!is.na(kn))) ord<-order(kn) else ord<-order(ukey)");
+          // Getting the order of the periods wrong does not blur the answer, it
+          // reverses it: alphabetical "Apr-18, Apr-19, Aug-18 ..." turns a rise into
+          // a fall. So the order must be ESTABLISHED, never assumed. If nothing here
+          // establishes it, the run stops and asks, rather than sorting text.
+          L.push("ukey<-unique(a$key); kd<-pdate(ukey); kn<-suppressWarnings(as.numeric(ukey)); ordmode<-''");
+          // Kept on one line: in R a top-level `else` beginning a new line is a parse error.
+          L.push("if(ORDER=='file'){ ord<-seq_along(ukey); ordmode<-'the order the periods first appear in the file (you confirmed it is chronological)' } else if(ORDER=='alpha'){ ord<-order(ukey); ordmode<-'alphabetical order of the labels (you confirmed that is chronological)' } else if(all(!is.na(kd))){ ord<-order(kd); ordmode<-'dates parsed from the period labels' } else if(all(!is.na(kn))){ ord<-order(kn); ordmode<-'the numeric value of each label' } else { stub<-gsub('[0-9]+','#',ukey); num<-suppressWarnings(as.numeric(gsub('[^0-9]','',ukey))); if(length(unique(stub))==1 && !any(is.na(num)) && !any(duplicated(num))){ ord<-order(num); ordmode<-'the number inside each label' } }");
+          L.push("if(ordmode==''){ stop(paste0('Cannot work out the chronological order of the period labels: they do not parse as dates, they are not numbers, and they do not share a single numbered pattern. Sorting them as text would give ', paste(head(sort(ukey),5),collapse=' -> '), ' ... which is very unlikely to be chronological, and analysing periods in the wrong order can reverse the direction of the estimate. Set \"Period order\" to \"the order they appear in the file\" if the file is already sorted, or map a numeric period index instead.')) }");
           L.push("ukey<-ukey[ord]; a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey)");
           L.push("");
           L.push("# --- place the interruption: exact period label, then date, then index ---");
@@ -1102,8 +1312,11 @@ const DESIGNS = [
           L.push("  if(is.na(t0)){ cd<-pdate(cut); if(!is.na(cd) && all(!is.na(kd))){ w<-which(kd[ord]>=cd); if(length(w)) t0<-min(w) } }");
           L.push("  if(is.na(t0)){ ci<-suppressWarnings(as.integer(cut)); if(!is.na(ci) && ci>=2 && ci<=np) t0<-ci } }");
           L.push("if(is.na(t0)) stop(paste0(\"Could not place the interruption '\",cut,\"' in this series. The \",np,\" periods run from \",ukey[1],\" to \",ukey[np],\". Give a date inside that range, one of those exact period labels, or a period number between 2 and \",np,\".\"))");
-          L.push("a$level<-as.integer(a$t>=t0); a$tsince<-pmax(0,a$t-t0+1)");
-          L.push("npre<-t0-1; npost<-np-t0+1");
+          // Wagner (2002) convention: time-since-intervention is 0 at the first
+          // affected period, so the "level change" coefficient IS the immediate step
+          // and the slope change accrues from the period after. Both conventions are
+          // in use, which is why the note below says which one this is.
+          L.push("a$level<-as.integer(a$t>=t0); a$tsince<-pmax(0,a$t-t0)");
           L.push("");
           L.push("# --- seasonality ---");
           L.push("seasok<-FALSE");
@@ -1114,6 +1327,11 @@ const DESIGNS = [
           L.push("if(seasok && SEASON=='dummies') rhs<-paste(rhs,'+ factor(seas)')");
           L.push("if(seasok && SEASON=='harmonic') rhs<-paste0(rhs,' + sin(2*pi*t/',CYC,') + cos(2*pi*t/',CYC,')')");
           L.push("if(HASN){ bad<-is.na(a$N)|a$N<=0; if(any(bad)){ cat(sprintf('Dropped %d period(s) with a missing or non-positive denominator.\\n',sum(bad))); a<-a[!bad,,drop=FALSE] } }");
+          // Counted after the drop above, so the summary describes what was fitted
+          // rather than what was collected.
+          L.push("gref<-if(HASG) max(a$g) else 0; tt<-sort(unique(a$t[a$g==gref]))");
+          L.push("npre<-sum(tt<t0); npost<-sum(tt>=t0); nfit<-length(tt)");
+          L.push("if(npre<2 || npost<2) stop(sprintf('After aggregation there are only %d period(s) before and %d from the interruption onward. Segmented regression needs at least 2 of each, and really wants 8.', npre, npost))");
           L.push("counts<-all(abs(a$Y-round(a$Y))<1e-8) && all(a$Y>=0)");
           L.push("fam<-if(MODEL=='linear') 'linear' else if(MODEL=='poisson') 'poisson' else if(counts) 'poisson' else 'linear'");
           L.push("if(fam=='poisson' && !counts) cat('The outcome is not whole counts; a Poisson/quasi-Poisson fit is still reported as requested.\\n')");
@@ -1146,11 +1364,23 @@ const DESIGNS = [
           L.push("mmk<-function(fit) model.matrix(fit)[,gdn,drop=FALSE]");
           L.push("brd<-function(fit){ X<-mmk(fit); w<-fit$weights; if(is.null(w)||length(w)!=nrow(X)) w<-rep(1,nrow(X)); solve(crossprod(X*sqrt(w))) }");
           L.push("ef<-function(fit){ X<-mmk(fit); if(inherits(fit,'glm')){ mu<-fitted(fit); dm<-fit$family$mu.eta(fit$linear.predictors); V<-fit$family$variance(mu); r<-dm*(fit$y-mu)/V } else r<-residuals(fit); X*r }");
-          L.push("hacv<-function(fit,Lg,gv){ U<-ef(fit); n<-nrow(U); M<-crossprod(U); if(Lg>0) for(l in 1:Lg){ w<-1-l/(Lg+1); same<-as.numeric(gv[(l+1):n]==gv[1:(n-l)]); Gm<-crossprod(U[(l+1):n,,drop=FALSE]*same, U[1:(n-l),,drop=FALSE]); M<-M+w*(Gm+t(Gm)) }; B<-brd(fit); B%*%M%*%B }");
+          // Lag is measured in PERIODS, not in rows. A missing month, or a period
+          // dropped for a bad denominator, leaves neighbouring rows several periods
+          // apart; treating them as lag 1 mis-weights the correction.
+          L.push("hacv<-function(fit,Lg,gv,tv){ U<-ef(fit); n<-nrow(U); M<-crossprod(U); if(Lg>0) for(l in 1:Lg){ w<-1-l/(Lg+1); same<-as.numeric(gv[(l+1):n]==gv[1:(n-l)] & (tv[(l+1):n]-tv[1:(n-l)])==l); Gm<-crossprod(U[(l+1):n,,drop=FALSE]*same, U[1:(n-l),,drop=FALSE]); M<-M+w*(Gm+t(Gm)) }; B<-brd(fit); B%*%M%*%B }");
           L.push("Lg<-max(1,floor(4*(nrow(a)/100)^(2/9)))");
-          L.push("Vm<-vcov(fit)[gdn,gdn,drop=FALSE]; Vh<-tryCatch(hacv(fit,Lg,a$g),error=function(e) NULL)");
-          L.push("useh<-(AC=='newey') || (AC=='auto' && !is.na(dw) && (dw<1.5 || dw>2.5))");
+          L.push("Vm<-vcov(fit)[gdn,gdn,drop=FALSE]; Vh<-tryCatch(hacv(fit,Lg,a$g,a$t),error=function(e) NULL)");
+          // Durbin-Watson on GLM Pearson residuals has no standard null distribution,
+          // and over 24-36 periods it has little power anyway, so it is far too weak
+          // to decide whether the correction is applied. HAC is consistent either
+          // way and costs nothing here, so "auto" now means "use it", and DW is
+          // reported for information rather than used as a gate.
+          L.push("useh<-(AC=='newey') || (AC=='auto' && nrow(a)>=12)");
           L.push("if(useh && is.null(Vh)) useh<-FALSE");
+          // A (near-)perfect fit makes every score contribution zero, so the sandwich
+          // meat vanishes and the intervals come out zero-width. Never report that.
+          L.push("hacdeg<-FALSE");
+          L.push("if(useh){ dg<-diag(Vh); dm<-diag(Vm); if(any(!is.finite(dg)) || any(dg<=0) || any(dg < 1e-6*dm)){ useh<-FALSE; hacdeg<-TRUE } }");
           L.push("V<-if(useh) Vh else Vm; dimnames(V)<-dimnames(Vm)");
           L.push("selab<-if(useh) sprintf('Newey-West HAC standard errors (Bartlett kernel, lag %d)',Lg) else 'model-based standard errors'");
           L.push("");
@@ -1167,7 +1397,7 @@ const DESIGNS = [
           L.push("} else { rep1(paste0('Level change, immediate step',sc),'level'); rep1(paste0('Slope change, per period',sc),'tsince') }");
           L.push("");
           L.push("# --- observed vs counterfactual at the end of follow-up ---");
-          L.push("gmax<-max(a$g); tn<-max(a$t[a$g==gmax]); tsn<-max(0,tn-t0+1)");
+          L.push("gmax<-max(a$g); tn<-max(a$t[a$g==gmax]); tsn<-max(0,tn-t0)");
           L.push("L0<-setNames(rep(0,length(nmv)),nmv)");
           L.push("zn<-if(HASG) c('g:level','g:tsince') else c('level','tsince')");
           L.push("if(zn[1] %in% nmv) L0[zn[1]]<-1; if(zn[2] %in% nmv) L0[zn[2]]<-tsn");
@@ -1190,7 +1420,12 @@ const DESIGNS = [
           L.push("cat(sprintf('ITSMETA|t0=%d|cutlabel=%s|np=%d|pre=%d|post=%d|controlled=%s\\n',t0,ukey[t0],np,npre,npost,if(HASG) 'yes' else 'no'))");
           L.push("");
           L.push("dwt<-if(is.na(dw)) 'not computable' else sprintf('%.2f (lag-1 residual autocorrelation %+.2f)',dw,r1)");
-          L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s): %d before and %d from %s onward%s. Inference uses %s. Durbin-Watson %s.\\n', famlab, np, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, dwt))");
+          L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s) fitted: %d before and %d from %s onward%s. Inference uses %s. Durbin-Watson %s (descriptive only - on GLM Pearson residuals it has no standard null distribution).\\n', famlab, nfit, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, dwt))");
+          L.push("cat(sprintf('RESULT_NOTE|Periods were ordered by %s. Level change is the immediate step at %s; slope change accrues from the period after it (Wagner 2002 convention, time-since-intervention = 0 at the first affected period).\\n', ordmode, ukey[t0]))");
+          L.push("if(HASN) cat(sprintf('RESULT_NOTE|The denominator was combined within each period by taking the %s of the rows in that period%s.\\n', dmode, if(DCOMB=='auto' && dmode=='first') ' (chosen automatically because it is constant within every period)' else ''))");
+          // A count model with no offset silently assumes a constant population.
+          L.push("if(hacdeg) cat('RESULT_NOTE|The Newey-West correction was skipped: the model fits the series so closely that the sandwich estimator degenerates to zero variance, which would print impossibly narrow intervals. Model-based standard errors are reported instead.\\n')");
+          L.push("if(expo && !useoff) cat('RESULT_NOTE|No denominator was mapped, so this models the count per period and assumes the population at risk is the same in every period. If your outcome is already a rate, map its denominator or choose the linear model - otherwise a changing population will be read as a trend.\\n')");
           L.push("if(length(alias)>0) cat(sprintf('RESULT_NOTE|%d model term(s) could not be estimated because they are collinear with the rest of the model (%s), and were dropped. Over only a couple of complete cycles, calendar dummies and a linear time trend are not separately identifiable — shorten the seasonal terms, switch to harmonic terms, or lengthen the series.\\n', length(alias), paste(alias,collapse=', ')))");
           L.push("if(ratemode) cat('RESULT_NOTE|A denominator was mapped with a linear model, so the outcome is the rate (value divided by the denominator); the level and slope changes are on that rate scale.\\n')");
           L.push("if(npre<8) cat(sprintf('RESULT_NOTE|Only %d pre-intervention period(s) — the baseline trend, and therefore the counterfactual, is poorly estimated. Aim for at least 8 (ideally 12).\\n',npre))");
@@ -1540,7 +1775,7 @@ const DESIGNS = [
       return { methods: methods, estimands: estimands.length ? estimands : ["ITT"], ratio: parseInt($("m_ratio").value) || 2, nstrata: parseInt($("m_nstrata").value) || 10 };
     }
     function itsOpts() {
-      return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: parseInt($("its_cycle").value) || 12, ac: $("its_ac").value };
+      return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: parseInt($("its_cycle").value) || 12, ac: $("its_ac").value, order: $("its_order").value, denomcomb: $("its_denomcomb").value };
     }
     function buildScript() {
       const spec = SPEC[getDesign()]; const { covNames, covInfo, covDropped } = analysisCSV();
@@ -1548,7 +1783,7 @@ const DESIGNS = [
       if (getDesign() === "its") return spec.rscript(covNames, itsOpts());
       return spec.rscript(covNames);
     }
-    ["its_cut", "its_unit", "its_comb", "its_model", "its_season", "its_cycle", "its_ac"].forEach((id) => $(id).addEventListener("input", () => { if (getDesign() === "its") validateMap(); }));
+    ["its_cut", "its_unit", "its_comb", "its_model", "its_season", "its_cycle", "its_ac", "its_order", "its_denomcomb"].forEach((id) => $(id).addEventListener("input", () => { if (getDesign() === "its") validateMap(); }));
 
     $("applyclean").addEventListener("click", buildMaster);
     document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden"); $("itschart").classList.add("hidden"); $("dlfitted").classList.add("hidden"); renderMap(); }));
