@@ -948,6 +948,125 @@ const TIMELINE_PRESETS: Record<string, string> = {
 
         <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
           <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
+            8b · Propensity-score calibration <span class="text-xs font-normal text-slate-400">· correcting a claims study with a richer validation sample</span>
+          </summary>
+          <div class="px-5 pb-5 space-y-4">
+            <p class="text-xs text-slate-600 leading-relaxed">
+              A claims database records diagnoses, procedures, dispensings and demographics; it does not record lab values, vitals,
+              imaging measurements, severity scores or lifestyle. A propensity score fitted there is therefore <em>error-prone</em>.
+              If you also have a smaller dataset holding <strong>both</strong> the claims variables and the missing clinical ones, you can
+              fit a <em>gold-standard</em> propensity score in it, learn how the two relate, and correct the large study's effect estimate.
+              That is propensity-score calibration — regression calibration with the propensity score as the mismeasured covariate
+              (Stürmer T, Schneeweiss S, Avorn J, Glynn RJ. <em>Am J Epidemiol</em> 2005;162(3):279-89).
+              The fitted equation is the deliverable: a later claims-only study can cite it and apply it without repeating the validation work.
+            </p>
+            <label class="flex items-start gap-2 text-sm border border-brand-200 bg-brand-50/50 rounded px-3 py-2 cursor-pointer">
+              <input type="checkbox" name="pscEnable" value="yes" class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+              <span><strong>Include a propensity-score-calibration validation sub-study in this protocol.</strong>
+                <span class="block text-[11px] text-slate-500">Adds Section 7b (variable split, calibration equation, assumptions, R code) to the Word and Markdown exports.</span></span>
+            </label>
+
+            <div class="grid sm:grid-cols-2 gap-3">
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Main (error-prone) data source</span>
+                <input type="text" name="pscClaimsDb" value="Taiwan NHIRD" placeholder="e.g. Taiwan NHIRD"
+                       class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                <span class="text-[11px] text-slate-500">The large claims database the main analysis runs in.</span>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Validation dataset</span>
+                <input type="text" name="pscValName" placeholder="e.g. Chang Gung Research Database; hospital EMR cohort"
+                       class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                <span class="text-[11px] text-slate-500">Holds the claims variables <em>and</em> the clinical ones.</span>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Validation sample size</span>
+                <input type="number" name="pscValN" min="0" step="1" placeholder="e.g. 654"
+                       class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Validation sample type</span>
+                <select name="pscValType" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  <option value="internal" selected>Internal (a subset of the main study cohort)</option>
+                  <option value="external">External (a separate but comparable population)</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">PS scale (must match the outcome model)</span>
+                <select name="pscScale" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  <option value="ps" selected>Propensity score, probability scale (0-1)</option>
+                  <option value="logit">logit(PS), linear predictor</option>
+                </select>
+                <span class="text-[11px] text-slate-500">The correction is scale-dependent: fit the calibration model and the outcome model on the <em>same</em> scale.</span>
+              </label>
+            </div>
+
+            <div class="border border-slate-200 rounded-xl p-3 bg-slate-50/60 space-y-3">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Which covariates does the claims database actually have?</p>
+                <div class="flex gap-1.5 flex-wrap">
+                  <button type="button" data-psc-ai class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">🤖 Let AI classify</button>
+                  <button type="button" data-psc-bulk="reset" class="text-[10px] uppercase tracking-widest font-bold text-slate-600 border border-slate-300 hover:bg-white px-2 py-1 rounded transition">Reset to rules</button>
+                  <button type="button" data-psc-bulk="claims" class="text-[10px] uppercase tracking-widest font-bold text-slate-600 border border-slate-300 hover:bg-white px-2 py-1 rounded transition">All claims</button>
+                  <button type="button" data-psc-bulk="clinical" class="text-[10px] uppercase tracking-widest font-bold text-slate-600 border border-slate-300 hover:bg-white px-2 py-1 rounded transition">All clinical</button>
+                </div>
+              </div>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                Every covariate ticked in Section 8, plus anything you add below. Click a chip to move a variable between the two propensity scores.
+                <strong>Claims</strong> variables go into both scores; <strong>clinical-only</strong> variables go into the gold-standard score alone; <strong>exclude</strong> drops
+                identifiers, outcomes and post-baseline measurements from both. A keyword rule sets the starting position — the AI (names and your notes only, never data) will refine it.
+              </p>
+              <div data-psc-vars class="grid gap-1"></div>
+              <p data-psc-ai-msg class="text-[11px]"></p>
+              <div class="grid sm:grid-cols-2 gap-3">
+                <label class="flex flex-col gap-1">
+                  <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Variables only the validation dataset has (one per line)</span>
+                  <textarea name="pscVarsExtra" rows="4" placeholder="HbA1c (first &amp; last)&#10;Serum creatinine / eGFR&#10;BMI, height, weight&#10;Corrected visual acuity&#10;Duration of diabetes"
+                            class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+                </label>
+                <label class="flex flex-col gap-1">
+                  <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">Codebook notes for the AI (<code>Variable | definition</code>)</span>
+                  <textarea name="pscNotes" rows="4" placeholder="HbA1c_first | most recent value before the first injection&#10;DM duration | index date minus earliest diabetes diagnosis (years)"
+                            class="w-full border border-slate-300 rounded px-3 py-2 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"></textarea>
+                  <span class="text-[11px] text-slate-500">Metadata only. Never paste patient data here; only variable names and definitions are sent.</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="border border-slate-200 rounded-xl p-3 space-y-3">
+              <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Fitted coefficients (fill in once the validation analysis has run)</p>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                From the calibration model <code>PS_gs ~ PS_ep + treatment</code> in the validation dataset, and from the claims outcome model
+                <code>outcome ~ treatment + PS_ep</code>. Leave blank at the protocol stage — the section still exports with the equation in symbolic form.
+              </p>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">α₀ intercept</span>
+                  <input type="number" step="any" name="pscA0" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">α₁ on PS_ep</span>
+                  <input type="number" step="any" name="pscA1" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">SE(α₁)</span>
+                  <input type="number" step="any" name="pscA1se" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">α₂ on treatment</span>
+                  <input type="number" step="any" name="pscA2" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">SE(α₂)</span>
+                  <input type="number" step="any" name="pscA2se" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">Validation R²</span>
+                  <input type="number" step="any" name="pscR2" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">β̂ treatment (claims, naive)</span>
+                  <input type="number" step="any" name="pscBt" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">SE(β̂ treatment)</span>
+                  <input type="number" step="any" name="pscBtse" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">β̂ PS_ep (claims, naive)</span>
+                  <input type="number" step="any" name="pscBp" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+                <label class="flex flex-col gap-1"><span class="text-[11px] font-semibold text-slate-700">SE(β̂ PS_ep)</span>
+                  <input type="number" step="any" name="pscBpse" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none" /></label>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
             9 · Statistical analysis
           </summary>
           <div class="px-5 pb-5 space-y-4">
@@ -1117,6 +1236,24 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
       <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
     </div>
+    <!-- PS calibration: the reusable artefact -->
+    <div data-psc-card class="hidden rounded-2xl border border-brand-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">Propensity-score calibration formula</h2>
+      <p class="mt-1 text-xs text-slate-500">
+        Stürmer T, Schneeweiss S, Avorn J, Glynn RJ. Adjusting effect estimates for unmeasured confounding with validation data using
+        propensity score calibration. <em>Am J Epidemiol</em> 2005;162(3):279-89. Everything below is generated from Section 8b and is
+        included in the Word / Markdown protocol.
+      </p>
+      <div data-psc-out class="mt-4 space-y-4"></div>
+      <div class="mt-5">
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">R code</p>
+          <button type="button" data-psc-copy-r class="text-[10px] uppercase tracking-widest font-bold text-brand-700 border border-brand-200 bg-brand-50 hover:bg-brand-100 px-2 py-1 rounded transition">📋 Copy R</button>
+        </div>
+        <pre data-psc-r class="mt-2 text-[11px] leading-relaxed bg-slate-900 text-slate-100 rounded-xl p-4 overflow-x-auto whitespace-pre font-mono"></pre>
+      </div>
+    </div>
+
     <DesignDiagram />
     <ProtocolCommon />
 
@@ -1272,6 +1409,11 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           if (!name) continue;
           if (el.type === "checkbox" && multi.has(name)) {
             el.checked = (state[name] || []).includes(el.value);
+          } else if (el.type === "checkbox") {
+            // Single (non-list) checkbox, e.g. pscEnable. FormData omits it
+            // entirely when unchecked, so an absent key means unchecked —
+            // assigning to .value here would silently do nothing.
+            el.checked = state[name] === el.value;
           } else if (state[name] !== undefined) {
             el.value = state[name];
           }
@@ -1315,6 +1457,455 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           out += others.map((o) => "- " + o).join("\n");
         }
         return out;
+      };
+
+      // ══ Propensity-score calibration ══════════════════════════════════
+      // Stürmer T, Schneeweiss S, Avorn J, Glynn RJ. Adjusting effect estimates
+      // for unmeasured confounding with validation data using propensity score
+      // calibration. Am J Epidemiol 2005;162(3):279-89.
+      //
+      // The algebra, so the code below is checkable. Write C for the covariates
+      // the claims database records and U for the clinical ones only the
+      // validation dataset has. PS_ep = P(T=1 | C); PS_gs = P(T=1 | C, U).
+      // The outcome model we WANT (and cannot fit in claims) is
+      //     g(E[Y | T, PS_gs]) = b0 + bT·T + bP·PS_gs
+      // and the calibration model, fitted in the validation dataset, is
+      //     E[PS_gs | PS_ep, T] = a0 + a1·PS_ep + a2·T.
+      // Substituting and taking the expectation over PS_gs given (T, PS_ep) —
+      // which is legitimate only under SURROGACY, Y ⫫ PS_ep | (T, PS_gs) —
+      //     g(E[Y | T, PS_ep]) = (b0 + bP·a0) + (bT + bP·a2)·T + (bP·a1)·PS_ep
+      // so the naive claims-only coefficients are bT* = bT + bP·a2 and
+      // bP* = bP·a1, and inverting gives the correction used here:
+      //     bT = bT* − (a2/a1)·bP*        bP = bP*/a1
+      // This is Rosner/Spiegelman regression calibration with the PS as the
+      // mismeasured covariate; it assumes the outcome model adjusts for the PS
+      // as a LINEAR term, not by matching, stratification or weighting.
+      const PSC_STORAGE_KEY = "aspen.protocol-builder.acnu.psc";
+      let pscClass = {};
+      try { pscClass = JSON.parse(localStorage.getItem(PSC_STORAGE_KEY) || "{}") || {}; } catch {}
+      let pscAi = {};      // { name: {source, confounding, role, reason} } from the Worker
+      const savePscClass = () => { try { localStorage.setItem(PSC_STORAGE_KEY, JSON.stringify(pscClass)); } catch {} };
+      const pscEsc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+      // Deterministic first guess. Claims hold codes, not measurements: lab
+      // RESULTS, vitals/anthropometry, imaging and test readings, severity
+      // scores and lifestyle are the things a claims database cannot see.
+      // Anything else defaults to claims, because the rest of this builder's
+      // covariate vocabulary (diagnoses, comedications, utilisation) is claims.
+      //
+      // Names are normalised to lower case with every separator turned into a
+      // space FIRST. Real column names are written HbA1c_first / eGFR_last /
+      // IOP-post, and \b does not fire against an underscore (it is a word
+      // character), so testing the raw name silently misses them.
+      const pscNorm = (n) => String(n).toLowerCase().replace(/[^a-z0-9㐀-鿿]+/g, " ");
+      const PSC_CLINICAL_RX = new RegExp([
+        "hba1c|glycated|glycosylated|creatinine|\\begfr\\b|\\bgfr\\b|\\bldl\\b|\\bhdl\\b|cholesterol|triglycerid|albumin|h[ae]moglobin|\\bplatelet|\\bwbc\\b|leu[ck]ocyte|neutrophil|lymphocyte|\\binr\\b|\\btsh\\b|\\bft4\\b|blood glucose|fasting glucose|\\bast\\b|\\balt\\b|\\bggt\\b|bilirubin|ferritin|\\bcrp\\b|\\besr\\b|uric acid|proteinuria|albuminuria|lab result|laborator",
+        "\\bbmi\\b|body mass|\\bheight\\b|\\bweight\\b|waist|blood pressure|systolic|diastolic|\\bsbp\\b|\\bdbp\\b|heart rate|\\bpulse\\b|respiratory rate|body temperature|\\bspo2\\b|oxygen satur|vital sign",
+        "visual acuity|intraocular|\\biop\\b|ejection fraction|\\blvef\\b|\\bfev1\\b|\\bfvc\\b|spiromet|macular thickness|retinal thickness|\\boct\\b|tumou?r (?:size|stage|grade)|\\btnm\\b|biops|histolog|patholog|imaging|\\bmri\\b|ct scan|echocardiogra|ultrasound",
+        "\\bnyha\\b|\\bgcs\\b|glasgow|\\bnihss\\b|child ?pugh|\\bmeld\\b|\\becog\\b|karnofsky|apache|\\bsofa\\b|severity score|disease severity|performance status",
+        "smok|tobacco|cigarette|alcohol|drinking|betel|\\bdiet\\b|physical activity|exercise habit|lifestyle|\\badl\\b|\\biadl\\b|\\bmmse\\b|cognitive score|frailty (?:index|scale|score)",
+        "\\b(?:dm|diabet\\w*|disease|illness|hypertension) duration|duration of (?:dm|diabet|disease|illness)",
+        "收縮壓|舒張壓|血壓|身高|體重|視力|眼壓|抽菸|吸菸|飲酒|檳榔|血糖|糖化",
+      ].join("|"), "i");
+      // Things that belong in neither propensity score.
+      const PSC_EXCLUDE_RX = /\b(?:id|ids|identifier|uid|mrn|serial)\b|\b(?:patient|chart|record|case) (?:no|number|id)\b|^outcome\b|\boutcome \w|^index date\b|^end ?point\b|病歷號|身分證|去識別/i;
+      const pscHeuristic = (name) => {
+        const n = pscNorm(name);
+        if (PSC_EXCLUDE_RX.test(n)) return "exclude";
+        return PSC_CLINICAL_RX.test(n) ? "clinical" : "claims";
+      };
+      const pscClassOf = (name) => pscClass[name] || pscHeuristic(name);
+
+      // Candidate variables = every covariate ticked in Section 8 (plus custom
+      // ones), then anything typed as validation-only. Order preserved, deduped.
+      const pscCandidates = (s) => {
+        const seen = new Set(); const out = [];
+        const push = (n) => { const t = String(n || "").trim(); if (!t || seen.has(t)) return; seen.add(t); out.push(t); };
+        mergeList(s.covariatesPick, s.covariatesCustom).forEach(push);
+        (s.pscVarsExtra || "").split(/\r?\n/).forEach(push);
+        return out;
+      };
+      const pscNoteMap = (s) => {
+        const m = {};
+        (s.pscNotes || "").split(/\r?\n/).forEach((l) => {
+          const i = l.indexOf("|");
+          if (i > 0) m[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+        });
+        return m;
+      };
+
+      const pscNum = (v) => { const x = parseFloat(v); return isFinite(x) ? x : null; };
+      const pscFmt = (x, d) => (x === null || x === undefined || !isFinite(x)) ? "" : (Math.abs(x) >= 1e4 || (x !== 0 && Math.abs(x) < 1e-4) ? x.toExponential(3) : String(Math.round(x * Math.pow(10, d === undefined ? 4 : d)) / Math.pow(10, d === undefined ? 4 : d)));
+      const pscSigned = (x, d) => (x === null ? "" : (x < 0 ? "− " + pscFmt(-x, d) : "+ " + pscFmt(x, d)));
+
+      // Everything the exports and the on-screen card need, derived once.
+      const pscModel = (s) => {
+        const claims = [], clinical = [], excluded = [];
+        pscCandidates(s).forEach((n) => {
+          const c = pscClassOf(n);
+          (c === "clinical" ? clinical : c === "exclude" ? excluded : claims).push(n);
+        });
+        const a0 = pscNum(s.pscA0), a1 = pscNum(s.pscA1), a2 = pscNum(s.pscA2);
+        const a1se = pscNum(s.pscA1se), a2se = pscNum(s.pscA2se);
+        const bT = pscNum(s.pscBt), bTse = pscNum(s.pscBtse), bP = pscNum(s.pscBp), bPse = pscNum(s.pscBpse);
+        const k = (a1 !== null && a2 !== null && a1 !== 0) ? a2 / a1 : null;
+        let bC = null, se = null, lo = null, hi = null;
+        if (k !== null && bT !== null && bP !== null) {
+          bC = bT - k * bP;
+          if (a1se !== null && a2se !== null && bTse !== null && bPse !== null) {
+            // First-order delta method, treating the validation and main
+            // samples as independent and dropping Cov(bT*,bP*) and Cov(a1,a2),
+            // which are not recoverable from summary numbers. Approximate on
+            // purpose — the bootstrap in the R code is the honest version.
+            const varK = (a2se * a2se) / (a1 * a1) + (a2 * a2 * a1se * a1se) / Math.pow(a1, 4);
+            se = Math.sqrt(bTse * bTse + k * k * bPse * bPse + bP * bP * varK);
+            lo = bC - 1.959964 * se; hi = bC + 1.959964 * se;
+          }
+        }
+        const ratio = s.effectMeasure !== "RD";
+        const measure = ({ HR: "HR", RR: "RR", RD: "RD", IRR: "IRR" })[s.effectMeasure] || "HR";
+        const scaleLabel = s.pscScale === "logit" ? "logit(PS)" : "PS (probability scale)";
+        return {
+          claims, clinical, excluded, a0, a1, a2, a1se, a2se, bT, bTse, bP, bPse,
+          k, bC, se, lo, hi, ratio, measure, scaleLabel,
+          r2: pscNum(s.pscR2),
+          claimsDb: (s.pscClaimsDb || "").trim() || "the claims database",
+          valName: (s.pscValName || "").trim() || "(validation dataset not named)",
+          valN: (s.pscValN || "").trim(),
+          valType: s.pscValType === "external" ? "external" : "internal",
+          treatLabel: (s.exposureName || s.picoI || "the exposure").trim() + " vs " + ((s.comparatorName || s.picoC || "the active comparator").trim()),
+        };
+      };
+
+      const pscRCode = (s, m) => {
+        const rv = (a) => a.length ? a.map((x) => '  "' + String(x).replace(/["\\]/g, "") + '"').join(",\n") : '  # (none listed yet)';
+        const link = s.pscScale === "logit" ? "link" : "response";
+        const surv = m.ratio && (s.effectMeasure === "HR" || !s.effectMeasure);
+        return [
+          "## Propensity-score calibration — Stürmer et al., Am J Epidemiol 2005;162:279-89",
+          "## Study      : " + (s.title || "(untitled)"),
+          "## Main study : " + m.claimsDb + " (error-prone PS: claims covariates only)",
+          "## Validation : " + m.valName + (m.valN ? ", n = " + m.valN : "") + " (" + m.valType + ")",
+          "## PS scale   : " + m.scaleLabel + "   <- calibration and outcome models MUST agree",
+          "",
+          "library(survival)",
+          "",
+          "## Covariates the claims database records — these build BOTH scores.",
+          "C <- c(",
+          rv(m.claims),
+          ")",
+          "## Covariates only the validation dataset has — these are the unmeasured",
+          "## confounding the claims study suffers, and the whole point of the exercise.",
+          "U <- c(",
+          rv(m.clinical),
+          ")",
+          "",
+          'f <- function(y, v) as.formula(paste(y, "~", paste(sprintf("`%s`", v), collapse = " + ")))',
+          '## Rename to your columns: treat = 1 for ' + (s.exposureName || s.picoI || "exposure") + ', 0 for ' + (s.comparatorName || s.picoC || "comparator") + '.',
+          "",
+          "## ── STEP 1 — validation dataset ────────────────────────────────────",
+          "## 1a. The error-prone PS: EXACTLY the model the claims study will fit.",
+          'ep_fit <- glm(f("treat", C),        data = val, family = binomial)',
+          "## 1b. The gold-standard PS: the same covariates PLUS the clinical ones.",
+          'gs_fit <- glm(f("treat", c(C, U)),  data = val, family = binomial)',
+          'val$ps_ep <- predict(ep_fit, type = "' + link + '")',
+          'val$ps_gs <- predict(gs_fit, type = "' + link + '")',
+          "",
+          "## 1c. THE CALIBRATION MODEL. Regress the gold-standard PS on the",
+          "##     error-prone PS AND on treatment. Treatment belongs in this model:",
+          "##     it is in the outcome model and is measured without error, so",
+          "##     omitting it biases the correction.",
+          "cal <- lm(ps_gs ~ ps_ep + treat, data = val)",
+          'a0 <- coef(cal)[["(Intercept)"]]; a1 <- coef(cal)[["ps_ep"]]; a2 <- coef(cal)[["treat"]]',
+          "c(a0 = a0, a1 = a1, a2 = a2, R2 = summary(cal)$r.squared)   # <- publish these",
+          "",
+          "## ── STEP 2 — claims study (this is all a later study needs to repeat) ─",
+          'main$ps_ep <- predict(glm(f("treat", C), data = main, family = binomial), type = "' + link + '")',
+          surv
+            ? "naive <- coxph(Surv(time, event) ~ treat + ps_ep, data = main)"
+            : (s.effectMeasure === "RD"
+              ? "naive <- glm(event ~ treat + ps_ep, data = main, family = gaussian)"
+              : "naive <- glm(event ~ treat + ps_ep + offset(log(pt)), data = main, family = poisson)"),
+          "## NOTE: the PS must enter LINEARLY. Matching, decile stratification or",
+          "## IPT weighting do not give the b_ps this correction needs.",
+          'b_t <- coef(naive)[["treat"]]; b_ps <- coef(naive)[["ps_ep"]]',
+          "",
+          "## ── STEP 3 — the correction ───────────────────────────────────────",
+          "b_corrected <- b_t - (a2 / a1) * b_ps",
+          m.ratio
+            ? "exp(c(naive = b_t, calibrated = b_corrected))    # " + m.measure
+            : "c(naive = b_t, calibrated = b_corrected)         # risk difference",
+          "",
+          "## ── STEP 4 — variance by bootstrap (preferred over the delta method) ─",
+          "set.seed(20260808); B <- 1000",
+          "boot <- replicate(B, {",
+          "  v <- val[sample(nrow(val),  replace = TRUE), ]",
+          "  m <- main[sample(nrow(main), replace = TRUE), ]",
+          '  v$ps_ep <- predict(glm(f("treat", C),       data = v, family = binomial), type = "' + link + '")',
+          '  v$ps_gs <- predict(glm(f("treat", c(C, U)), data = v, family = binomial), type = "' + link + '")',
+          "  cc <- coef(lm(ps_gs ~ ps_ep + treat, data = v))",
+          '  m$ps_ep <- predict(glm(f("treat", C), data = m, family = binomial), type = "' + link + '")',
+          "  bb <- coef(" + (surv ? "coxph(Surv(time, event) ~ treat + ps_ep, data = m)" : "glm(event ~ treat + ps_ep, data = m, family = binomial)") + ")",
+          '  bb[["treat"]] - (cc[["treat"]] / cc[["ps_ep"]]) * bb[["ps_ep"]]',
+          "})",
+          "quantile(boot, c(0.025, 0.975))",
+          (m.valType === "internal"
+            ? "## The validation sample is INTERNAL: resample the main study first and\n## take the validation rows from that resample, so the shared patients are\n## not treated as two independent samples."
+            : "## The validation sample is EXTERNAL: resampling the two datasets\n## independently, as above, is correct."),
+          "",
+          "## ── REUSE — a later claims-only study skips steps 1 and 4 ─────────",
+          "## Take the published calibration coefficients and apply them:",
+          "## a1 <- " + (m.a1 !== null ? pscFmt(m.a1, 4) : "<published>") + "; a2 <- " + (m.a2 !== null ? pscFmt(m.a2, 4) : "<published>"),
+          "## b_corrected <- b_t - (a2 / a1) * b_ps",
+          "## Valid only if that study's PS_ep uses the SAME covariates C, the same",
+          "## PS scale, and a population in which the calibration model transports.",
+        ].join("\n");
+      };
+
+      const pscAssumptions = (m) => ([
+        ["Surrogacy — the assumption the whole method rests on",
+          "Conditional on treatment and the gold-standard PS, the error-prone PS carries no further information about the outcome: Y ⫫ PS_ep | (T, PS_gs). Only under this can E[Y | T, PS_ep] be obtained by averaging the gold-standard outcome model over PS_gs, which is the step that produces the correction. It is not guaranteed here, because PS_ep is built from a subset of the covariates in PS_gs rather than being a noisy measurement of it; if a claims covariate predicts the outcome beyond what the gold-standard PS captures, surrogacy fails. When it fails, calibration can move the estimate further from the truth than the naive estimate was (Stürmer T, Schneeweiss S, Rothman KJ, Avorn J, Glynn RJ. Performance of propensity score calibration — a simulation study. Am J Epidemiol 2007;165(10):1110-8). Report the naive and calibrated estimates side by side; never the calibrated one alone."],
+        ["Transportability of the calibration coefficients",
+          "α₁ and α₂ are estimated in " + m.valName + " and applied in " + m.claimsDb + ". This requires the relationship between the two propensity scores — and hence the joint distribution of the claims and clinical covariates given treatment — to be the same in both. An " + m.valType + " validation sample" + (m.valType === "internal" ? " makes this credible by construction, but the shared patients must be carried through the variance calculation." : " makes this an empirical claim: compare the distributions of the claims covariates and of PS_ep between the two datasets and report the comparison."),
+        ],
+        ["The PS must enter the outcome model linearly",
+          "The correction is the inverse of a linear map between two coefficient vectors, so it applies to an outcome model of the form g(E[Y]) = β₀ + β_T·T + β_PS·PS_ep. PS matching, decile stratification and inverse-probability weighting do not produce a β_PS, and the algebra does not carry over to them. If the primary analysis uses one of those, fit this linear-adjustment model alongside it as the calibrated analysis and say so."],
+        ["Same PS scale throughout",
+          "The calibration model and the outcome model must both use " + m.scaleLabel + ". α₁ and α₂ are not scale-free; mixing PS in one model with logit(PS) in the other silently invalidates the correction."],
+        ["Non-collapsibility and the outcome model",
+          "For a hazard ratio or odds ratio the substitution step is exact only in the linear case; with a Cox or logistic model it is an approximation that is good when the outcome is rare and the treatment effect is not large. Regression calibration is a first-order method — treat the corrected estimate as an adjustment, not an exact answer."],
+        ["Positivity and overlap",
+          "Both propensity scores must have common support across treatment groups in both datasets. Report the overlap of PS_ep in the main study and of PS_ep and PS_gs in the validation dataset."],
+        ["Variance",
+          "α and β are estimated, so the corrected estimate carries the uncertainty of both. Bootstrap the entire two-stage procedure (resampling the validation and main data as their design requires) rather than reporting the naive standard error, which is always too small."],
+      ]);
+
+      const pscCannotFix = [
+        "Confounding by variables absent from BOTH datasets. Calibration transfers the information in the validation dataset's extra variables; it invents nothing. Anything neither database records stays unmeasured, and the corrected estimate is no more protected against it than the naive one.",
+        "Measurement error in the clinical variables themselves. PS_gs is called gold-standard by convention; if the validation dataset's HbA1c or blood pressure is measured with error, or missing non-randomly, that error propagates into α₁ and α₂ unadjusted.",
+        "Selection into the validation dataset. A hospital cohort is not a random sample of a national claims population; if selection depends on the clinical variables, α₁ and α₂ are estimated in the wrong population.",
+        "Bias from post-baseline variables. Anything measured after treatment start belongs in neither propensity score. Excluding it is a design decision, not something calibration repairs.",
+        "Immortal-time, prevalent-user and outcome-misclassification bias. These are design and measurement problems; calibration touches only confounding by the specific covariates the validation dataset adds.",
+      ];
+
+      // ── On-screen card + the classification grid ──────────────────────
+      let pscVarsSig = "";
+      const PSC_CHIP = { claims: "bg-emerald-100 text-emerald-800 border-emerald-300", clinical: "bg-amber-100 text-amber-800 border-amber-300", exclude: "bg-slate-100 text-slate-500 border-slate-300" };
+      const PSC_STRENGTH = { strong: "bg-rose-100 text-rose-800", moderate: "bg-amber-100 text-amber-800", weak: "bg-slate-100 text-slate-600", none: "bg-slate-100 text-slate-400" };
+      const renderPscVars = (s) => {
+        const host = document.querySelector("[data-psc-vars]");
+        if (!host) return;
+        const cands = pscCandidates(s);
+        const sig = cands.map((n) => n + ":" + pscClassOf(n) + ":" + (pscAi[n] ? pscAi[n].confounding + pscAi[n].source : "")).join("|");
+        if (sig === pscVarsSig) return;
+        pscVarsSig = sig;
+        if (!cands.length) {
+          host.innerHTML = '<p class="text-[11px] text-slate-500 italic">Tick some baseline covariates in Section 8, or list validation-only variables below, and they will appear here.</p>';
+          return;
+        }
+        host.innerHTML = cands.map((n) => {
+          const cls = pscClassOf(n);
+          const ai = pscAi[n];
+          const badge = ai
+            ? '<span class="ml-1 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded ' + (PSC_STRENGTH[ai.confounding] || "bg-slate-100 text-slate-500") + '">' + pscEsc(ai.confounding) + '</span>'
+              + (ai.role && ai.role !== "baseline" ? '<span class="ml-1 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-violet-100 text-violet-800">' + pscEsc(ai.role) + '</span>' : "")
+            : "";
+          const btn = (val, label) =>
+            '<button type="button" data-psc-set="' + pscEsc(val) + '" data-psc-var="' + pscEsc(n) + '" class="text-[10px] font-semibold px-2 py-0.5 rounded border transition ' +
+            (cls === val ? PSC_CHIP[val] : "bg-white text-slate-500 border-slate-200 hover:border-slate-400") + '">' + label + "</button>";
+          return '<div class="flex items-center gap-2 text-xs bg-white border border-slate-200 rounded px-2 py-1" title="' + pscEsc(ai ? ai.reason : "") + '">' +
+            '<span class="flex-1 min-w-0 truncate">' + pscEsc(n) + badge + "</span>" +
+            '<span class="flex gap-1 shrink-0">' + btn("claims", "Claims") + btn("clinical", "Clinical-only") + btn("exclude", "Exclude") + "</span></div>";
+        }).join("");
+      };
+
+      const renderPscCard = (s) => {
+        const card = document.querySelector("[data-psc-card]");
+        const out  = document.querySelector("[data-psc-out]");
+        const rpre = document.querySelector("[data-psc-r]");
+        if (!card || !out || !rpre) return;
+        if (s.pscEnable !== "yes") { card.classList.add("hidden"); return; }
+        card.classList.remove("hidden");
+        const m = pscModel(s);
+        const eq = (m.a1 !== null && m.a2 !== null && m.a0 !== null)
+          ? "PS_gs = " + pscFmt(m.a0, 4) + " " + pscSigned(m.a1, 4) + " × PS_ep " + pscSigned(m.a2, 4) + " × T"
+          : "PS_gs = α₀ + α₁ × PS_ep + α₂ × T";
+        const corr = (m.k !== null)
+          ? "β_T(calibrated) = β_T(naive) − (" + pscFmt(m.a2, 4) + " / " + pscFmt(m.a1, 4) + ") × β_PS(naive) = β_T(naive) − " + pscFmt(m.k, 4) + " × β_PS(naive)"
+          : "β_T(calibrated) = β_T(naive) − (α₂ / α₁) × β_PS(naive)";
+        let result = "";
+        if (m.bC !== null) {
+          const shown = m.ratio
+            ? m.measure + " " + pscFmt(Math.exp(m.bC), 3) + (m.se !== null ? " (95% CI " + pscFmt(Math.exp(m.lo), 3) + " to " + pscFmt(Math.exp(m.hi), 3) + ")" : "")
+            : m.measure + " " + pscFmt(m.bC, 4) + (m.se !== null ? " (95% CI " + pscFmt(m.lo, 4) + " to " + pscFmt(m.hi, 4) + ")" : "");
+          const naive = m.ratio ? m.measure + " " + pscFmt(Math.exp(m.bT), 3) : m.measure + " " + pscFmt(m.bT, 4);
+          result =
+            '<div class="rounded-xl border border-brand-200 bg-brand-50/60 p-4">' +
+            '<p class="text-xs uppercase tracking-widest text-brand-700 font-bold">Calibrated estimate</p>' +
+            '<p class="mt-1 text-sm text-slate-800">Naive (claims only): <strong>' + pscEsc(naive) + "</strong></p>" +
+            '<p class="text-sm text-slate-800">Calibrated: <strong>' + pscEsc(shown) + "</strong></p>" +
+            '<p class="mt-1 text-[11px] text-slate-600">' +
+            (m.se !== null
+              ? "Interval from a first-order delta method that assumes the validation and main samples are independent and drops Cov(β_T, β_PS) and Cov(α₁, α₂) — it is approximate and generally too narrow. Use the bootstrap in the R code for the reported interval."
+              : "Enter the four standard errors to get an approximate interval; the bootstrap in the R code is the version to report.") +
+            "</p></div>";
+        }
+        const list = (arr, empty) => arr.length
+          ? '<ul class="mt-1 grid sm:grid-cols-2 gap-x-4 text-xs text-slate-700 list-disc pl-5">' + arr.map((x) => "<li>" + pscEsc(x) + "</li>").join("") + "</ul>"
+          : '<p class="mt-1 text-xs text-slate-400 italic">' + empty + "</p>";
+        out.innerHTML =
+          '<div class="rounded-xl bg-slate-900 text-slate-100 p-4 font-mono text-xs sm:text-sm overflow-x-auto">' +
+          '<p class="text-slate-400 text-[10px] uppercase tracking-widest">Calibration model (fitted in ' + pscEsc(m.valName) + ')</p>' +
+          "<p class=\"mt-1\">" + pscEsc(eq) + "</p>" +
+          '<p class="mt-3 text-slate-400 text-[10px] uppercase tracking-widest">Correction applied to the ' + pscEsc(m.claimsDb) + " estimate</p>" +
+          "<p class=\"mt-1\">" + pscEsc(corr) + "</p>" +
+          "</div>" +
+          result +
+          '<div class="grid sm:grid-cols-2 gap-4">' +
+          '<div><p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Claims-available (C) — error-prone PS · ' + m.claims.length + "</p>" + list(m.claims, "(none)") + "</div>" +
+          '<div><p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Clinical-only (U) — added for the gold-standard PS · ' + m.clinical.length + "</p>" + list(m.clinical, "(none — with no extra variables there is nothing to calibrate against)") + "</div>" +
+          "</div>" +
+          (m.excluded.length ? '<p class="text-[11px] text-slate-500">Excluded from both scores: ' + pscEsc(m.excluded.join("; ")) + "</p>" : "");
+        rpre.textContent = pscRCode(s, m);
+      };
+
+      // ── Markdown / Word sections ──────────────────────────────────────
+      const pscMarkdownSection = (s) => {
+        if (s.pscEnable !== "yes") return "";
+        const m = pscModel(s);
+        const eqNum = (m.a1 !== null && m.a2 !== null && m.a0 !== null)
+          ? "PS_gs = " + pscFmt(m.a0, 4) + " " + pscSigned(m.a1, 4) + " × PS_ep " + pscSigned(m.a2, 4) + " × T"
+          : "";
+        let res = "";
+        if (m.bC !== null) {
+          res = m.ratio
+            ? "- **Naive (claims only):** " + m.measure + " " + pscFmt(Math.exp(m.bT), 3) + "\n- **Calibrated:** " + m.measure + " " + pscFmt(Math.exp(m.bC), 3) +
+              (m.se !== null ? " (95% CI " + pscFmt(Math.exp(m.lo), 3) + " to " + pscFmt(Math.exp(m.hi), 3) + "; approximate delta-method interval — report the bootstrap interval)" : "")
+            : "- **Naive (claims only):** " + m.measure + " " + pscFmt(m.bT, 4) + "\n- **Calibrated:** " + m.measure + " " + pscFmt(m.bC, 4) +
+              (m.se !== null ? " (95% CI " + pscFmt(m.lo, 4) + " to " + pscFmt(m.hi, 4) + ")" : "");
+        }
+        return `## 7b. Propensity-score calibration for unmeasured confounding
+
+${m.claimsDb} records diagnoses, procedures, dispensings, demographics and enrolment. It does not record laboratory values, vital signs, imaging or test measurements, clinical severity scores, or lifestyle. The propensity score fitted there is therefore built from a strict subset of the confounders and is *error-prone* (PS_ep). ${m.valName}${m.valN ? " (n = " + m.valN + ")" : ""} holds the same claims covariates **and** the clinical ones, so a *gold-standard* propensity score (PS_gs) can be fitted in it. Propensity-score calibration uses the relationship between the two scores, estimated in the validation dataset, to correct the treatment-effect estimate from the claims-only study for the confounding it could not see. It is regression calibration with the propensity score as the mismeasured covariate (Stürmer T, Schneeweiss S, Avorn J, Glynn RJ. Adjusting effect estimates for unmeasured confounding with validation data using propensity score calibration. Am J Epidemiol 2005;162(3):279-89).
+
+| | |
+|---|---|
+| **Main (error-prone) data source** | ${m.claimsDb} |
+| **Validation dataset** | ${m.valName}${m.valN ? ", n = " + m.valN : ""} (${m.valType}) |
+| **Treatment contrast** | ${m.treatLabel} |
+| **PS scale (both models)** | ${m.scaleLabel} |
+
+**Claims-available covariates C (${m.claims.length}) — enter PS_ep and PS_gs**
+
+${bullets(m.claims)}
+
+**Clinical-only covariates U (${m.clinical.length}) — enter PS_gs only; the unmeasured confounding of the claims study**
+
+${bullets(m.clinical)}
+${m.excluded.length ? "\n**Excluded from both scores** (identifiers, outcomes, post-baseline measurements)\n\n" + bullets(m.excluded) + "\n" : ""}
+### Estimation
+
+1. In ${m.valName}, fit PS_ep = P(T = 1 | C) and PS_gs = P(T = 1 | C, U) by logistic regression. PS_ep must use exactly the model the claims study will fit.
+2. Fit the **calibration model** in the same dataset, on the ${m.scaleLabel}:
+
+   > PS_gs = α₀ + α₁ · PS_ep + α₂ · T + ε
+
+   Treatment enters this model because it is in the outcome model and is measured without error; omitting it biases the correction.
+3. In ${m.claimsDb}, fit the outcome model adjusting for PS_ep **as a linear term**:
+
+   > g(E[Y | T, PS_ep]) = β₀\\* + β_T\\* · T + β_PS\\* · PS_ep
+
+4. Correct the treatment coefficient:
+
+   > **β_T(calibrated) = β_T\\* − (α₂ / α₁) · β_PS\\***${m.k !== null ? "  =  β_T\\* − " + pscFmt(m.k, 4) + " · β_PS\\*" : ""}
+
+   and, if wanted, β_PS(calibrated) = β_PS\\* / α₁. For a ratio measure the calibrated ${m.measure} is exp(β_T(calibrated)).
+
+**Where the correction comes from.** The outcome model we want but cannot fit in claims is g(E[Y | T, PS_gs]) = β₀ + β_T·T + β_PS·PS_gs. Averaging it over PS_gs given (T, PS_ep), and substituting the calibration model, gives g(E[Y | T, PS_ep]) = (β₀ + β_PS·α₀) + (β_T + β_PS·α₂)·T + (β_PS·α₁)·PS_ep. So the claims-only coefficients are β_T\\* = β_T + β_PS·α₂ and β_PS\\* = β_PS·α₁; inverting those two equations gives the correction above. The averaging step is valid only under surrogacy.
+
+### Calibration equation${eqNum ? "" : " (to be filled once the validation analysis has run)"}
+
+${eqNum ? "> **" + eqNum + "**\n\n> Correction factor α₂ / α₁ = **" + pscFmt(m.k, 4) + "**" + (m.r2 !== null ? "\n\n> Calibration-model R² = " + pscFmt(m.r2, 3) : "") + "\n\nA later " + m.claimsDb + "-only study of the same contrast can cite this protocol, fit PS_ep from the same covariate list C, and apply the correction directly — no validation data of its own required, provided the assumptions below still hold." : "> PS_gs = α₀ + α₁ · PS_ep + α₂ · T\n\nOnce fitted, report α₀, α₁, α₂ with their standard errors and the calibration-model R². Those three numbers plus the covariate list C are the reusable artefact: a later " + m.claimsDb + "-only study applies them without repeating the validation work."}
+${res ? "\n**Result**\n\n" + res + "\n" : ""}
+### Assumptions
+
+${pscAssumptions(m).map((a) => "- **" + a[0] + ".** " + a[1]).join("\n")}
+
+### What calibration cannot fix
+
+${bullets(pscCannotFix)}
+
+### Analysis code
+
+\`\`\`r
+${pscRCode(s, m)}
+\`\`\`
+`;
+      };
+
+      // Word rendering of the same section. `h` carries the style helpers that
+      // live inside buildDocx (text/p/h1/h2/para/bullet/labelTable).
+      const pscDocxSection = (D, h, s) => {
+        if (s.pscEnable !== "yes") return [];
+        const m = pscModel(s);
+        const c = [];
+        const mono = (str) => new D.Paragraph({
+          children: String(str).split("\n").flatMap((line, i) => (i ? [new D.TextRun({ break: 1 })] : []).concat([
+            new D.TextRun({ text: line, font: "Courier New", size: 16 }),
+          ])),
+          spacing: { before: 40, after: 40 },
+        });
+        c.push(h.h1("7b. Propensity-score calibration for unmeasured confounding"));
+        c.push(h.para(m.claimsDb + " records diagnoses, procedures, dispensings, demographics and enrolment. It does not record laboratory values, vital signs, imaging or test measurements, clinical severity scores, or lifestyle. The propensity score fitted there is therefore built from a strict subset of the confounders and is error-prone (PS_ep). " + m.valName + (m.valN ? " (n = " + m.valN + ")" : "") + " holds the same claims covariates AND the clinical ones, so a gold-standard propensity score (PS_gs) can be fitted in it. Propensity-score calibration uses the relationship between the two scores, estimated in the validation dataset, to correct the treatment-effect estimate from the claims-only study for the confounding it could not see. It is regression calibration with the propensity score as the mismeasured covariate (Stürmer T, Schneeweiss S, Avorn J, Glynn RJ. Adjusting effect estimates for unmeasured confounding with validation data using propensity score calibration. Am J Epidemiol 2005;162(3):279-89)."));
+        c.push(h.labelTable([
+          ["Main (error-prone) data source", m.claimsDb],
+          ["Validation dataset", m.valName + (m.valN ? ", n = " + m.valN : "") + " (" + m.valType + ")"],
+          ["Treatment contrast", m.treatLabel],
+          ["PS scale (both models)", m.scaleLabel],
+        ]));
+        c.push(h.h2("Claims-available covariates C (" + m.claims.length + ") — enter PS_ep and PS_gs"));
+        m.claims.length ? m.claims.forEach((x) => c.push(h.bullet(x))) : c.push(h.para("(none)"));
+        c.push(h.h2("Clinical-only covariates U (" + m.clinical.length + ") — enter PS_gs only"));
+        m.clinical.length ? m.clinical.forEach((x) => c.push(h.bullet(x))) : c.push(h.para("(none — with no extra variables there is nothing to calibrate against)"));
+        if (m.excluded.length) {
+          c.push(h.h2("Excluded from both scores"));
+          m.excluded.forEach((x) => c.push(h.bullet(x)));
+        }
+        c.push(h.h2("Estimation"));
+        c.push(h.bullet("1. In " + m.valName + ", fit PS_ep = P(T = 1 | C) and PS_gs = P(T = 1 | C, U) by logistic regression. PS_ep must use exactly the model the claims study will fit."));
+        c.push(h.bullet("2. Fit the calibration model in the same dataset, on the " + m.scaleLabel + ":  PS_gs = a0 + a1 · PS_ep + a2 · T + e.  Treatment enters this model because it is in the outcome model and is measured without error; omitting it biases the correction."));
+        c.push(h.bullet("3. In " + m.claimsDb + ", fit the outcome model adjusting for PS_ep as a LINEAR term:  g(E[Y | T, PS_ep]) = b0* + bT* · T + bPS* · PS_ep."));
+        c.push(h.bullet("4. Correct the treatment coefficient:  bT(calibrated) = bT* − (a2 / a1) · bPS*" + (m.k !== null ? "  =  bT* − " + pscFmt(m.k, 4) + " · bPS*" : "") + ".  Also bPS(calibrated) = bPS* / a1. For a ratio measure the calibrated " + m.measure + " is exp(bT(calibrated))."));
+        c.push(h.p([h.text("Where the correction comes from. ", { bold: true }), h.text("The outcome model we want but cannot fit in claims is g(E[Y | T, PS_gs]) = b0 + bT·T + bPS·PS_gs. Averaging it over PS_gs given (T, PS_ep), and substituting the calibration model, gives g(E[Y | T, PS_ep]) = (b0 + bPS·a0) + (bT + bPS·a2)·T + (bPS·a1)·PS_ep. So the claims-only coefficients are bT* = bT + bPS·a2 and bPS* = bPS·a1; inverting those two equations gives the correction above. The averaging step is valid only under surrogacy.")]));
+        c.push(h.h2("Calibration equation"));
+        if (m.a0 !== null && m.a1 !== null && m.a2 !== null) {
+          c.push(mono("PS_gs = " + pscFmt(m.a0, 4) + " " + pscSigned(m.a1, 4) + " * PS_ep " + pscSigned(m.a2, 4) + " * T"));
+          c.push(h.para("Correction factor a2 / a1 = " + pscFmt(m.k, 4) + (m.r2 !== null ? "; calibration-model R2 = " + pscFmt(m.r2, 3) : "") + "."));
+          c.push(h.para("A later " + m.claimsDb + "-only study of the same contrast can cite this protocol, fit PS_ep from the same covariate list C, and apply the correction directly — no validation data of its own required, provided the assumptions below still hold."));
+        } else {
+          c.push(mono("PS_gs = a0 + a1 * PS_ep + a2 * T"));
+          c.push(h.para("Once fitted, report a0, a1, a2 with their standard errors and the calibration-model R2. Those three numbers plus the covariate list C are the reusable artefact: a later " + m.claimsDb + "-only study applies them without repeating the validation work."));
+        }
+        if (m.bC !== null) {
+          c.push(h.h2("Result"));
+          if (m.ratio) {
+            c.push(h.bullet("Naive (claims only): " + m.measure + " " + pscFmt(Math.exp(m.bT), 3)));
+            c.push(h.bullet("Calibrated: " + m.measure + " " + pscFmt(Math.exp(m.bC), 3) + (m.se !== null ? " (95% CI " + pscFmt(Math.exp(m.lo), 3) + " to " + pscFmt(Math.exp(m.hi), 3) + "; approximate delta-method interval — report the bootstrap interval)" : "")));
+          } else {
+            c.push(h.bullet("Naive (claims only): " + m.measure + " " + pscFmt(m.bT, 4)));
+            c.push(h.bullet("Calibrated: " + m.measure + " " + pscFmt(m.bC, 4) + (m.se !== null ? " (95% CI " + pscFmt(m.lo, 4) + " to " + pscFmt(m.hi, 4) + ")" : "")));
+          }
+        }
+        c.push(h.h2("Assumptions"));
+        pscAssumptions(m).forEach((a) => c.push(new D.Paragraph({
+          children: [h.text(a[0] + ". ", { bold: true }), h.text(a[1])],
+          bullet: { level: 0 }, spacing: { before: 40, after: 40 },
+        })));
+        c.push(h.h2("What calibration cannot fix"));
+        pscCannotFix.forEach((x) => c.push(h.bullet(x)));
+        c.push(h.h2("Analysis code (R)"));
+        c.push(mono(pscRCode(s, m)));
+        return c;
       };
 
       // ── Markdown template ───────────────────────────
@@ -1458,6 +2049,7 @@ ${bullets(covariates)}
 
 PS model performance is assessed via standardised mean differences (SMDs) before/after weighting/matching (target < 0.1 across all covariates) and the c-statistic of the PS model.
 
+${pscMarkdownSection(s)}
 ## 8. Statistical analysis
 
 - **Effect estimate:** ${eff}
@@ -1556,6 +2148,15 @@ _Drafted with the AsPEN protocol builder (${today})._
         if (pa === "OT" || pa === "both") checks.push({ level: "info", msg: "On-treatment (per-protocol): follow-up is censored at deviation (discontinuation/switch), so this informative censoring should be adjusted with IPCW." });
         if (pa === "landmark") checks.push({ level: "warn", msg: "Landmark analysis is conditional on patients who survive event-free to the landmark time — it estimates a conditional effect and drops early events; state the landmark time and interpret accordingly." });
         checks.push({ level: "ok", msg: "Eligibility, treatment assignment, and follow-up start are aligned at the index date (time zero) — this is what avoids immortal-time bias." });
+        if (s.pscEnable === "yes") {
+          const m = pscModel(s);
+          if (m.clinical.length === 0) checks.push({ level: "warn", msg: "PS calibration is switched on but no covariate is marked clinical-only — the gold-standard and error-prone scores would be identical and the correction would be a no-op. Mark the variables the claims database cannot see." });
+          if (m.claims.length === 0) checks.push({ level: "warn", msg: "PS calibration is switched on but no covariate is marked claims-available — there is no error-prone propensity score to calibrate." });
+          if (!(s.pscValName || "").trim()) checks.push({ level: "info", msg: "Name the validation dataset that holds both the claims and the clinical variables (Section 8b)." });
+          if (m.a1 !== null && Math.abs(m.a1) < 0.05) checks.push({ level: "warn", msg: "α₁ is close to zero, so the correction factor α₂/α₁ explodes and the calibrated estimate is unstable. A near-zero α₁ means the error-prone PS carries almost no information about the gold-standard PS — calibration is not trustworthy here." });
+          if (m.a1 !== null && m.a1 < 0) checks.push({ level: "warn", msg: "α₁ is negative — the error-prone PS moves opposite to the gold-standard PS. Check the two PS models use the same treatment coding and the same scale before applying the correction." });
+          if (/match|strat|iptw|overlap|weight/i.test(String(s.psMethod || ""))) checks.push({ level: "info", msg: "Your primary confounding-control method is matching/stratification/weighting, which produces no β_PS coefficient. PS calibration needs an outcome model that adjusts for the PS as a linear term — fit that model alongside the primary one as the calibrated analysis." });
+        }
         return checks;
       };
 
@@ -1563,8 +2164,10 @@ _Drafted with the AsPEN protocol builder (${today})._
         const state = readForm();
         preview.textContent = buildMarkdown(state);
         renderFeasibility(state);
-        try { renderScheme(state); } catch {}
-        try { window.renderChecks(document.getElementById("checks"), computeChecks(state)); } catch {}
+        try { renderScheme(state); } catch (e) { console.error(e); }
+        try { window.renderChecks(document.getElementById("checks"), computeChecks(state)); } catch (e) { console.error(e); }
+        renderPscVars(state);
+        renderPscCard(state);
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
       };
 
@@ -1598,6 +2201,87 @@ _Drafted with the AsPEN protocol builder (${today})._
           if (target) { target.value = chip.dataset.value; render(); }
           return;
         }
+        const pscChip = e.target?.closest?.("[data-psc-set]");
+        if (pscChip) {
+          pscClass[pscChip.dataset.pscVar] = pscChip.dataset.pscSet;
+          savePscClass(); render();
+          return;
+        }
+        const pscBulk = e.target?.closest?.("[data-psc-bulk]");
+        if (pscBulk) {
+          const mode = pscBulk.dataset.pscBulk;
+          if (mode === "reset") { pscClass = {}; pscAi = {}; }
+          else pscCandidates(readForm()).forEach((n) => { pscClass[n] = mode; });
+          savePscClass(); render();
+          return;
+        }
+      });
+
+      // ── AI variable triage for PS calibration ────────
+      // Metadata only: the causal question, the name of the claims database,
+      // and variable NAMES plus whatever codebook text the investigator typed.
+      // No cell values, no rows — the Worker has no way to receive them.
+      const PSC_WORKER_URL = "https://target-checker.danielhttsai.workers.dev";
+      const setPscAiMsg = (t, bad) => {
+        const el = document.querySelector("[data-psc-ai-msg]");
+        if (el) { el.textContent = t || ""; el.className = "text-[11px] " + (bad ? "text-rose-600" : "text-emerald-700"); }
+      };
+      document.querySelector("[data-psc-ai]")?.addEventListener("click", async (ev) => {
+        const btn = ev.currentTarget;
+        const s = readForm();
+        const notes = pscNoteMap(s);
+        const vars = pscCandidates(s).map((n) => ({ name: n, note: notes[n] || "" }));
+        if (!vars.length) { setPscAiMsg("Tick some covariates in Section 8 first, or list validation-only variables.", true); return; }
+        btn.disabled = true;
+        setPscAiMsg("Asking the AI which of these " + vars.length + " variables a claims database can see (only names and your notes are sent — never data)…");
+        try {
+          const res = await fetch(PSC_WORKER_URL, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode: "psvars",
+              claimsDb: (s.pscClaimsDb || "Taiwan NHIRD").trim(),
+              question: {
+                population: s.picoP || "", outcome: s.picoO || "",
+                exposure: s.picoI || s.exposureName || "",
+                comparator: s.picoC || s.comparatorName || "",
+              },
+              variables: vars,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !Array.isArray(data.items)) { setPscAiMsg(data.error || "The AI could not classify the variables.", true); return; }
+          // Match the reply back to our variables. The model occasionally
+          // echoes the name with the " :: note" suffix we sent, or changes the
+          // case, so exact-string matching alone silently drops rows.
+          const byName = new Map();
+          vars.forEach((v) => { byName.set(v.name, v.name); byName.set(pscNorm(v.name).trim(), v.name); });
+          const resolve = (raw) => {
+            const t = String(raw || "").split("::")[0].trim();
+            return byName.get(t) || byName.get(pscNorm(t).trim()) || null;
+          };
+          let nClin = 0, nExcl = 0;
+          data.items.forEach((it) => {
+            const name = it && resolve(it.name);
+            if (!name) return;
+            pscAi[name] = { source: it.source, confounding: it.confounding, role: it.role, reason: it.reason || "" };
+            if (it.role && it.role !== "baseline") { pscClass[name] = "exclude"; nExcl++; }
+            else if (it.source === "clinical") { pscClass[name] = "clinical"; nClin++; }
+            else if (it.source === "claims") { pscClass[name] = "claims"; }
+            else delete pscClass[name];   // "unclear" — fall back to the keyword rule
+          });
+          savePscClass(); render();
+          const unseen = vars.filter((v) => !pscAi[v.name]).length;
+          setPscAiMsg("Marked " + nClin + " variable(s) clinical-only and excluded " + nExcl + " non-baseline variable(s)."
+            + (unseen ? " " + unseen + " variable(s) came back unmatched and keep their keyword-rule position — check those rows." : "")
+            + " Badges show how strongly each is judged to confound; hover a row for the reason. Review every one — the AI is working from names alone and the clinical call is yours.", unseen > 0);
+        } catch (e) {
+          setPscAiMsg("Couldn't reach the AI: " + (e && e.message ? e.message : e), true);
+        } finally { btn.disabled = false; }
+      });
+      document.querySelector("[data-psc-copy-r]")?.addEventListener("click", async () => {
+        const pre = document.querySelector("[data-psc-r]");
+        try { await navigator.clipboard.writeText(pre ? pre.textContent : ""); setPscAiMsg("R code copied to the clipboard."); }
+        catch { setPscAiMsg("Couldn't copy; your browser may block clipboard access.", true); }
       });
 
       // ── Filename ─────────────────────────────────────
@@ -1633,7 +2317,9 @@ _Drafted with the AsPEN protocol builder (${today})._
         if (!confirm("Clear every field and forget the saved draft?")) return;
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_CITATIONS_KEY);
+        localStorage.removeItem(PSC_STORAGE_KEY);
         pickedCitations = {};
+        pscClass = {}; pscAi = {}; pscVarsSig = "";
         // True blank slate; form.reset() only restores HTML defaults, which
         // leaves all the pre-checked checkboxes ticked. Walk every form
         // control and zero it out so "Clear" actually means clear.
@@ -1915,6 +2601,8 @@ _Drafted with the AsPEN protocol builder (${today})._
         children.push(h2("Baseline covariates"));
         covariates.length ? covariates.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
         children.push(para("PS model performance is assessed via standardised mean differences (SMDs) before/after weighting/matching (target < 0.1 across all covariates) and the c-statistic of the PS model."));
+
+        pscDocxSection(D, { text, p, h1, h2, para, bullet, labelTable }, s).forEach((el) => children.push(el));
 
         children.push(h1("8. Statistical analysis"));
         children.push(labelTable([
