@@ -374,6 +374,107 @@ export default {
       return json({ items: parsed2.items }, 200, origin);
     }
 
+    // ── Mode: data-source triage for propensity-score calibration ────────
+    // Receives ONLY metadata — the causal question, the name of the claims
+    // database the main study will run in, and variable NAMES (plus optional
+    // codebook text the investigator typed). Never patient-level rows.
+    // For each variable it judges (a) whether the variable is plausibly
+    // recorded in an administrative CLAIMS database or is CLINICAL-only, and
+    // (b) how strongly it is likely to confound the specific exposure→outcome
+    // contrast. The client uses this to split covariates into the error-prone
+    // PS (claims) and the gold-standard PS (claims + clinical) of Stürmer's
+    // propensity-score-calibration method.
+    if (payload && payload.mode === "psvars") {
+      if (env.TURNSTILE_SECRET) {
+        const ok = await verifyTurnstile(env.TURNSTILE_SECRET, payload.turnstileToken, request.headers.get("CF-Connecting-IP"));
+        if (!ok) return json({ error: "Bot check failed. Please reload and try again." }, 403, origin);
+      }
+      const q = payload.question || {};
+      const exposure = String(q.exposure || "").slice(0, 300).trim();
+      const outcome = String(q.outcome || "").slice(0, 300).trim();
+      const population = String(q.population || "").slice(0, 300).trim();
+      const comparator = String(q.comparator || "").slice(0, 300).trim();
+      const claimsDb = String(payload.claimsDb || "").slice(0, 200).trim() || "Taiwan's National Health Insurance Research Database (NHIRD)";
+      const vars = (Array.isArray(payload.variables) ? payload.variables : [])
+        .slice(0, 200)
+        .map((v) => ({
+          name: String((v && v.name) || "").slice(0, 140),
+          note: String((v && v.note) || "").slice(0, 240),
+        }))
+        .filter((v) => v.name);
+      if (!vars.length) {
+        return json({ error: "Provide at least one variable name." }, 400, origin);
+      }
+
+      const sysText = [
+        "You are a senior pharmacoepidemiologist planning a propensity-score CALIBRATION study (Stürmer T, Schneeweiss S, Avorn J, Glynn RJ, Am J Epidemiol 2005;162:279-89).",
+        "A large study will run in " + claimsDb + " — an administrative CLAIMS database — and can only build an error-prone propensity score from the variables that database records. A smaller, richer validation dataset (hospital EMR / registry / cohort) holds the same claims variables PLUS extra clinical variables, and is used to build the gold-standard propensity score.",
+        exposure && outcome
+          ? "The causal question: among " + (population || "(population not stated)") + ", the effect of " + exposure + (comparator ? " versus " + comparator : "") + " on " + outcome + "."
+          : "The causal question was not fully specified; judge confounding generically for a drug-safety cohort study and say so in the reason.",
+        "",
+        "What an administrative claims database like this DOES contain: patient demographics (age, sex, region, insurance/premium category), enrolment and disenrolment dates, outpatient/inpatient/emergency encounters with DIAGNOSIS codes (ICD), PROCEDURE and operation codes, drug DISPENSING / prescription records with ATC codes, dose, days supply and dispensing counts, costs, provider and facility identifiers, and (via linkage) death registry and cancer registry records. Anything that can be derived from those — comorbidity history flags, Charlson/Elixhauser indices, comedication flags, prior healthcare utilisation, treatment counts, index and follow-up dates, coded outcomes — is CLAIMS-available.",
+        "What such a database DOES NOT contain: laboratory RESULT VALUES (HbA1c, creatinine, eGFR, lipids, haemoglobin, albumin, INR, urine albumin, etc.), vital signs and anthropometry (height, weight, BMI, blood pressure, heart rate), imaging or test MEASUREMENTS and their readings (ejection fraction, spirometry, visual acuity, intraocular pressure, tumour stage/grade, biopsy findings), clinical severity scores (NYHA, GCS, NIHSS, Child-Pugh, MELD, ECOG, APACHE), lifestyle and behaviour (smoking, alcohol, betel quid, diet, exercise), symptoms, functional status, frailty measured clinically, socioeconomic detail beyond coarse insurance/region proxies, family history, and genetic data.",
+        "Borderline judgements: a coded DIAGNOSIS of a condition (e.g. 'obesity diagnosed', 'CKD diagnosis') IS in claims even though the underlying measurement is not; a lab-derived STAGE or VALUE is not. Disease DURATION is only partly available in claims — it is left-truncated at the database start — treat it as clinical unless the note says otherwise, and say why.",
+        "",
+        "For EACH variable name below, return:",
+        "- source: 'claims' if the variable is plausibly recorded in or derivable from " + claimsDb + "; 'clinical' if only a clinical/EMR/registry dataset would have it; 'unclear' if the name is too cryptic to judge.",
+        "- confounding: how strongly the variable is likely to confound THIS exposure→outcome contrast — 'strong', 'moderate', 'weak', or 'none'. Use 'none' for identifiers, dates, follow-up bookkeeping, the treatment variable itself, and the outcome variables themselves.",
+        "- role: 'baseline' (a pre-treatment covariate), 'treatment', 'outcome', 'identifier', or 'post-baseline' (measured after treatment start — must NOT enter either propensity score).",
+        "- reason: max ~18 words, phrased clinically, saying WHY it is (or is not) in claims and why it does (or does not) confound.",
+        "Be conservative and honest. Cryptic names are 'unclear', not guesses. Variable names may be in English, Chinese, or a mix; interpret both.",
+      ].join("\n");
+      const userText = "VARIABLES (name :: investigator's note, if any):\n" +
+        vars.map((v) => v.name + (v.note ? " :: " + v.note : "")).join("\n");
+      const schema = {
+        type: "OBJECT",
+        properties: {
+          items: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                name: { type: "STRING" },
+                source: { type: "STRING", enum: ["claims", "clinical", "unclear"] },
+                confounding: { type: "STRING", enum: ["strong", "moderate", "weak", "none"] },
+                role: { type: "STRING", enum: ["baseline", "treatment", "outcome", "identifier", "post-baseline"] },
+                reason: { type: "STRING" },
+              },
+              required: ["name", "source", "confounding", "role", "reason"],
+            },
+          },
+        },
+        required: ["items"],
+      };
+
+      const gBody3 = {
+        system_instruction: { parts: [{ text: sysText }] },
+        contents: [{ role: "user", parts: [{ text: userText }] }],
+        generationConfig: { temperature: 0.2, responseMimeType: "application/json", responseSchema: schema },
+      };
+      const RETRY3 = new Set([500, 502, 503]);
+      let res3 = null, net3 = false;
+      const url3 = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL || DEFAULT_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`;
+      for (let a = 0; a < 2; a++) {
+        if (a > 0) await new Promise((r) => setTimeout(r, 1200));
+        try { res3 = await fetch(url3, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(gBody3) }); }
+        catch { net3 = true; continue; }
+        net3 = false;
+        if (res3.ok || !RETRY3.has(res3.status)) break;
+      }
+      if (net3 || !res3) return json({ error: "Could not reach the AI service. Please try again shortly." }, 502, origin);
+      if (!res3.ok) {
+        if (res3.status === 429) return json({ error: "The AI is rate-limited right now. Please wait a minute and try again." }, 429, origin);
+        return json({ error: "The AI service returned an error (" + res3.status + ")." }, 502, origin);
+      }
+      const data3 = await res3.json().catch(() => null);
+      const raw3 = data3?.candidates?.[0]?.content?.parts?.[0]?.text;
+      let parsed3 = null;
+      try { parsed3 = JSON.parse(raw3); } catch {}
+      if (!parsed3 || !Array.isArray(parsed3.items)) return json({ error: "The AI returned an unreadable result. Please try again." }, 502, origin);
+      return json({ items: parsed3.items }, 200, origin);
+    }
+
     let text = (payload && typeof payload.text === "string" ? payload.text : "").trim();
     if (text.length < 200) {
       return json({ error: "Please paste at least a few paragraphs of the protocol (200+ characters)." }, 400, origin);
