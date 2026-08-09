@@ -68,19 +68,21 @@ const fwList = Object.values(FRAMEWORKS);
               ))}
             </fieldset>
           </div>
+          <p id="fwnote" class="-mt-2 text-xs text-slate-500 leading-relaxed"></p>
 
           <label id="drop" for="file"
             class="flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 transition">
             <span class="text-3xl">📄</span>
             <span class="text-sm font-semibold text-slate-700">Upload your protocol</span>
-            <span class="text-xs text-slate-500">Word (.docx), Excel (.xlsx), or PDF — click to choose a file</span>
-            <input id="file" type="file" accept=".docx,.xlsx,.pdf" class="hidden" />
+            <span class="text-xs text-slate-500">Word (.docx), PDF, plain text (.txt/.md) or Excel (.xlsx) — click to choose, or drop a file here</span>
+            <input id="file" type="file" accept=".docx,.xlsx,.pdf,.txt,.md,.markdown" class="hidden" />
           </label>
 
-          <div id="filechip" class="hidden items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
+          <div id="filechip" class="hidden items-start justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
             <div class="min-w-0">
               <p id="filename" class="text-sm font-semibold text-slate-800 truncate"></p>
               <p id="filemeta" class="text-xs text-slate-500"></p>
+              <ul id="filenotes" class="mt-1.5 space-y-1 text-xs text-amber-800"></ul>
             </div>
             <button id="removefile" class="shrink-0 text-sm font-semibold text-slate-500 hover:text-red-600">Remove ✕</button>
           </div>
@@ -92,6 +94,8 @@ const fwList = Object.values(FRAMEWORKS);
               class="mt-3 w-full rounded-xl border border-slate-300 p-4 text-sm leading-relaxed focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
               placeholder="Paste your protocol or manuscript text here…"></textarea>
           </details>
+
+          <p id="inputnote" class="hidden text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-relaxed"></p>
 
           <div class="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
             <button id="check"
@@ -107,6 +111,14 @@ const fwList = Object.values(FRAMEWORKS);
             AI-generated guidance to help self-audit a protocol's completeness — not a substitute for the official
             guideline or peer review.
           </p>
+        </div>
+
+        <!-- A failure the tool cannot recover from is shown here, in full, instead
+             of a score. Never score a document we could not actually assess. -->
+        <div id="runerror" class="hidden rounded-2xl border border-red-300 bg-red-50 p-6">
+          <h2 class="text-lg font-bold text-red-900">The check could not be completed</h2>
+          <p id="runerrormsg" class="mt-2 text-sm text-red-800 leading-relaxed"></p>
+          <p class="mt-3 text-xs text-red-700 leading-relaxed">Nothing was scored. A partial or unreadable answer is never turned into a conformance percentage.</p>
         </div>
 
         <!-- Results -->
@@ -132,7 +144,15 @@ const fwList = Object.values(FRAMEWORKS);
             </div>
             <div id="bar" class="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100"></div>
             <div id="tally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
-            <p id="trunc" class="mt-3 text-xs text-amber-700 hidden">⚠ The document was long and was truncated before analysis; later sections may be under-assessed.</p>
+            <p class="mt-3 text-xs text-slate-500 leading-relaxed">
+              <strong class="text-slate-600">How to read this.</strong> <em>Met</em> = the protocol says it, substantively.
+              <em>Partial</em> = the topic is raised but a key element (usually an operational definition, code list, or window) is missing.
+              <em>Missing</em> = no trace in the text. <em>N/A</em> = the item cannot apply to this kind of document.
+              <em>Not assessed</em> = the AI returned no usable verdict, so nothing is claimed either way — those items are excluded from the score.
+            </p>
+            <!-- Everything the run could NOT do is listed here rather than folded
+                 silently into the tally. -->
+            <ul id="caveats" class="mt-3 space-y-1.5 text-xs text-amber-800"></ul>
           </div>
 
           <!-- Study design scheme -->
@@ -143,6 +163,7 @@ const fwList = Object.values(FRAMEWORKS);
             <div class="mt-5 overflow-x-auto">
               <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Timeline (days relative to index date)</p>
               <div id="timeline"></div>
+              <p id="timelinenote" class="hidden mt-2 text-xs text-amber-800"></p>
               <div id="legend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
             </div>
             <div id="criteria" class="mt-6 grid gap-5 sm:grid-cols-3"></div>
@@ -153,6 +174,7 @@ const fwList = Object.values(FRAMEWORKS);
             <h2 class="text-lg font-bold text-slate-900">Planned outputs &amp; figures</h2>
             <p class="mt-1 text-xs text-slate-500">Does the protocol pre-specify the shell tables and figures a rigorous RWE study mocks up in advance — Table 1, a Love plot, a participant flow diagram, results shells, and so on?</p>
             <div id="delivtally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
+            <p class="mt-3 text-xs text-slate-500 leading-relaxed"><strong class="text-slate-600">“Absent” is not automatically a fault.</strong> Some of these outputs do not apply to every design — a Love plot means nothing without propensity-score adjustment, and a Kaplan–Meier curve means nothing without time-to-event follow-up. Read the evidence line before treating a red chip as a gap.</p>
             <ol id="delivlist" class="mt-4 space-y-3"></ol>
           </div>
 
@@ -171,14 +193,37 @@ const fwList = Object.values(FRAMEWORKS);
       const SHEETJS = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
       const DOCX = "https://unpkg.com/docx@8.5.0/build/index.umd.js";
 
+      // The worker truncates the document at this many characters before it
+      // reaches the model. Mirrored here so the page can warn BEFORE spending a
+      // request, and can say exactly how much was left out. Keep in lock-step
+      // with MAX_CHARS in workers/target-checker/worker.js.
+      const MAX_CHARS = 60000;
+
+      // The planned-outputs list the worker asks the model about, mirrored here
+      // ONLY so the page can tell "the model judged this absent" apart from
+      // "the model never answered about this". Keep in lock-step with
+      // DELIVERABLES in workers/target-checker/worker.js.
+      const DELIVERABLE_NAMES = [
+        "Participant flow diagram",
+        "Baseline characteristics table (Table 1)",
+        "Love plot / covariate balance",
+        "Primary results table (shell)",
+        "Cumulative incidence / Kaplan-Meier curve",
+        "Forest plot",
+        "Sensitivity-analysis outputs",
+      ];
+
       const $ = (id) => document.getElementById(id);
-      const drop = $("drop"), fileEl = $("file"), fileChip = $("filechip"), fileNameEl = $("filename"), fileMetaEl = $("filemeta"), removeFile = $("removefile"), fileErr = $("fileerr");
-      const textEl = $("text"), checkBtn = $("check"), clearBtn = $("clear"), statusEl = $("status");
-      const resultsEl = $("results"), confHead = $("confhead"), summaryEl = $("summary"), tallyEl = $("tally"), barEl = $("bar"), itemsEl = $("items"), truncEl = $("trunc"), citeEl = $("cite");
-      const schemeEl = $("scheme"), designGrid = $("designgrid"), timelineEl = $("timeline"), legendEl = $("legend"), criteriaEl = $("criteria");
+      const drop = $("drop"), fileEl = $("file"), fileChip = $("filechip"), fileNameEl = $("filename"), fileMetaEl = $("filemeta"), fileNotesEl = $("filenotes"), removeFile = $("removefile"), fileErr = $("fileerr");
+      const textEl = $("text"), checkBtn = $("check"), clearBtn = $("clear"), statusEl = $("status"), inputNoteEl = $("inputnote"), fwNoteEl = $("fwnote");
+      const resultsEl = $("results"), confHead = $("confhead"), summaryEl = $("summary"), tallyEl = $("tally"), barEl = $("bar"), itemsEl = $("items"), caveatsEl = $("caveats"), citeEl = $("cite");
+      const runErrEl = $("runerror"), runErrMsg = $("runerrormsg");
+      const schemeEl = $("scheme"), designGrid = $("designgrid"), timelineEl = $("timeline"), timelineNote = $("timelinenote"), legendEl = $("legend"), criteriaEl = $("criteria");
       const delivEl = $("deliverables"), delivTallyEl = $("delivtally"), delivListEl = $("delivlist");
       const tteEl = $("tte"), tteReason = $("ttereason"), alsoTargetBtn = $("alsotarget");
-      let loadedText = "", loadedName = "", lastReport = null;
+      // `loadedNotes` carries everything the extractor could NOT read, so it can
+      // be shown next to the score instead of quietly disappearing.
+      let loadedText = "", loadedName = "", loadedNotes = [], lastReport = null;
 
       const setStatus = (msg, isErr) => { statusEl.textContent = msg || ""; statusEl.className = "text-sm " + (isErr ? "text-red-600" : "text-slate-500"); };
       const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -194,89 +239,260 @@ const fwList = Object.values(FRAMEWORKS);
         });
       }
 
-      // ── File extraction (kept off-screen; we never dump raw text back) ──
+      // ── File extraction ────────────────────────────────────────────────
+      // Every extractor returns { text, notes } — `notes` is everything the
+      // reader could not see. It is shown on screen and carried into the report,
+      // because an unread table or an unread figure is the difference between
+      // "your protocol is missing this" and "we could not check this".
+
+      // A .docx is a ZIP. Entry names sit uncompressed in the archive, so the
+      // embedded pictures can be counted by scanning the bytes — no unzip needed.
+      // Worth doing because HARPER 7.2 REQUIRES a study-design diagram, and a
+      // diagram that exists only as a picture is invisible to a text reader:
+      // without this note the tool reports "missing" for a figure that is there.
+      function countDocxImages(buf) {
+        const bytes = new Uint8Array(buf);
+        let s = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        const names = new Set();
+        const re = /word\/media\/[\w.\-]{1,120}\.(?:png|jpe?g|gif|bmp|tiff?|emf|wmf|svg)/gi;
+        let m;
+        while ((m = re.exec(s))) names.add(m[0].toLowerCase());
+        return names.size;
+      }
+
+      // Word text. mammoth.extractRawText is used deliberately: convertToHtml
+      // would preserve table structure, but it hangs indefinitely on the Word
+      // files this site's own protocol builders produce — a silent "Reading…"
+      // forever is far worse than losing the table borders. Cell text IS read.
       async function extractDocx(file) {
         await loadScript(MAMMOTH);
-        const r = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-        return r.value || "";
+        const buf = await file.arrayBuffer();
+        let r;
+        try {
+          r = await window.mammoth.extractRawText({ arrayBuffer: buf });
+        } catch (e) {
+          // mammoth surfaces JSZip's internals here ("Can't find end of central
+          // directory…"), which tells a clinical researcher nothing.
+          const m = (e && e.message) || "";
+          if (/central directory|zip/i.test(m)) throw new Error("This file is not a readable Word document — a .docx is a zip archive and this one could not be opened. It may be corrupted, or renamed from another format. Re-save it from Word, or paste the text instead.");
+          throw new Error("This Word document could not be read" + (m ? " (" + m + ")" : "") + ". Re-save it from Word, or paste the text instead.");
+        }
+        const notes = [];
+        const imgs = countDocxImages(buf);
+        if (imgs) notes.push(imgs + (imgs === 1 ? " embedded image was" : " embedded images were") + " found and could NOT be read (this includes any logo). Anything that exists only as a picture — a study-design diagram, a flow chart — is invisible to this check and may be reported as missing.");
+        notes.push("Table cells are read, but their row and column structure is not, so an operational-definition table reads as a run of short lines.");
+        return { text: r.value || "", notes, detail: "Word document" + (imgs ? " · " + imgs + " image(s) not read" : "") };
       }
+
       async function extractXlsx(file) {
         await loadScript(SHEETJS);
         const wb = window.XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
-        return wb.SheetNames.map((n) => n + "\n" + window.XLSX.utils.sheet_to_csv(wb.Sheets[n])).join("\n\n");
+        const notes = [];
+        const parts = [];
+        const empty = [];
+        for (const n of wb.SheetNames) {
+          const csv = window.XLSX.utils.sheet_to_csv(wb.Sheets[n]);
+          if (csv.replace(/[\s,]/g, "")) parts.push(n + "\n" + csv);
+          else empty.push(n);
+        }
+        if (empty.length) notes.push("Sheet(s) with no readable cells were skipped: " + empty.join(", ") + ".");
+        notes.push("Only cell text is read. Charts, images, and comments in the workbook are not.");
+        return { text: parts.join("\n\n"), notes, detail: parts.length + " of " + wb.SheetNames.length + " sheet(s) read" };
       }
+
       async function extractPdf(file) {
         await loadScript(PDFJS);
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-        const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-        let out = "";
+        let pdf;
+        try {
+          pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+        } catch (e) {
+          const n = (e && e.name) || "";
+          if (/Password/i.test(n) || /password/i.test((e && e.message) || "")) {
+            throw new Error("This PDF is password-protected, so its text cannot be read. Remove the protection, or paste the text instead.");
+          }
+          throw new Error("This file could not be opened as a PDF" + (e && e.message ? " (" + e.message + ")" : "") + ".");
+        }
+        const notes = [];
+        let out = "", emptyPages = 0;
         for (let i = 1; i <= pdf.numPages; i++) {
           const tc = await (await pdf.getPage(i)).getTextContent();
-          out += tc.items.map((t) => t.str).join(" ") + "\n";
+          const page = tc.items.map((t) => t.str).join(" ").trim();
+          if (!page) emptyPages++;
+          out += page + "\n";
         }
-        return out;
+        const perPage = out.trim().length / Math.max(1, pdf.numPages);
+        if (emptyPages) notes.push(emptyPages + " of " + pdf.numPages + " page(s) contained no text layer at all — those pages are images to this tool and were not assessed.");
+        if (perPage < 200) notes.push("Only about " + Math.round(perPage) + " characters per page were readable across " + pdf.numPages + " page(s). This usually means a scanned document; run OCR or paste the text instead.");
+        notes.push("A PDF's figures cannot be read. Anything that exists only as a diagram is invisible to this check.");
+        return { text: out, notes, detail: pdf.numPages + " page(s)" };
       }
 
-      fileEl.addEventListener("change", async () => {
-        const f = fileEl.files && fileEl.files[0];
+      async function extractPlain(file) {
+        return { text: await file.text(), notes: [] };
+      }
+
+      const UNSUPPORTED = {
+        ".doc": "This is the old Word format (.doc). Open it in Word and use “Save As → Word Document (.docx)”, then upload that.",
+        ".rtf": "Rich Text (.rtf) cannot be read here. Save it as .docx or .txt, or paste the text instead.",
+        ".odt": "OpenDocument (.odt) cannot be read here. Save it as .docx or .txt, or paste the text instead.",
+        ".pages": "Apple Pages files cannot be read here. Export to Word (.docx) or PDF, or paste the text instead.",
+        ".xls": "This is the old Excel format (.xls). Save it as .xlsx, or paste the text instead.",
+      };
+
+      async function handleFile(f) {
         if (!f) return;
         fileErr.classList.add("hidden"); setStatus("");
         const name = f.name.toLowerCase();
         drop.classList.add("opacity-50", "pointer-events-none");
         fileMetaEl.textContent = "Reading " + f.name + "…";
+        fileNotesEl.innerHTML = "";
         fileNameEl.textContent = "📄 " + f.name;
         fileChip.classList.remove("hidden"); fileChip.classList.add("flex");
         drop.classList.add("hidden");
         try {
-          let txt = "";
-          if (name.endsWith(".docx")) txt = await extractDocx(f);
-          else if (name.endsWith(".xlsx")) txt = await extractXlsx(f);
-          else if (name.endsWith(".pdf")) txt = await extractPdf(f);
-          else throw new Error("Please choose a .docx, .xlsx, or .pdf file.");
-          txt = (txt || "").trim();
-          if (txt.length < 200) throw new Error("Only " + txt.length + " characters of text could be read. If this is a scanned PDF, paste the text instead.");
-          loadedText = txt; loadedName = f.name;
-          fileMetaEl.textContent = txt.length.toLocaleString() + " characters extracted · ready to check";
+          const bad = Object.keys(UNSUPPORTED).find((ext) => name.endsWith(ext));
+          if (bad) throw new Error(UNSUPPORTED[bad]);
+          let job;
+          if (name.endsWith(".docx")) job = extractDocx(f);
+          else if (name.endsWith(".xlsx")) job = extractXlsx(f);
+          else if (name.endsWith(".pdf")) job = extractPdf(f);
+          else if (/\.(txt|md|markdown)$/.test(name)) job = extractPlain(f);
+          else throw new Error("“" + f.name + "” is not a file type this tool can read. Use Word (.docx), PDF, plain text (.txt/.md) or Excel (.xlsx) — or paste the text instead.");
+          // A reader that never returns must not leave "Reading…" on screen for
+          // ever. (mammoth's HTML converter does exactly that on some files.)
+          const res = await Promise.race([job, new Promise((_, rej) =>
+            setTimeout(() => rej(new Error("Reading this file took longer than 90 seconds and was stopped. It may be very large or damaged — try saving it again from Word, or paste the text instead.")), 90000))]);
+          const txt = (res.text || "").trim();
+          if (txt.length < 200) {
+            throw new Error("Only " + txt.length + " characters of text could be read from this file, which is not enough to assess." +
+              (name.endsWith(".pdf") ? " If it is a scanned PDF, run OCR on it or paste the text instead." : " Paste the text instead."));
+          }
+          loadedText = txt; loadedName = f.name; loadedNotes = res.notes || [];
+          fileMetaEl.textContent = txt.length.toLocaleString() + " characters extracted" + (res.detail ? " from " + res.detail : "") + " · ready to check";
+          fileNotesEl.innerHTML = loadedNotes.map((n) => '<li class="flex gap-1.5"><span>⚠</span><span>' + escapeHtml(n) + "</span></li>").join("");
         } catch (e) {
-          loadedText = ""; loadedName = "";
+          loadedText = ""; loadedName = ""; loadedNotes = [];
           fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
           drop.classList.remove("hidden");
           fileErr.textContent = (e && e.message) ? e.message : String(e); fileErr.classList.remove("hidden");
         } finally {
           drop.classList.remove("opacity-50", "pointer-events-none");
           fileEl.value = "";
+          refreshInputNote();
         }
+      }
+
+      fileEl.addEventListener("change", () => handleFile(fileEl.files && fileEl.files[0]));
+
+      // The dashed box looked droppable but was not wired up: dropping a file on
+      // it made the browser navigate away and lose the page.
+      ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => {
+        e.preventDefault(); drop.classList.add("border-brand-500", "bg-brand-50");
+      }));
+      ["dragleave", "dragend"].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove("border-brand-500", "bg-brand-50")));
+      drop.addEventListener("drop", (e) => {
+        e.preventDefault();
+        drop.classList.remove("border-brand-500", "bg-brand-50");
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) handleFile(f);
       });
+      // Anywhere else on the page, a stray drop should do nothing rather than
+      // replace the tool with the dropped file.
+      window.addEventListener("dragover", (e) => e.preventDefault());
+      window.addEventListener("drop", (e) => e.preventDefault());
 
       removeFile.addEventListener("click", () => {
-        loadedText = ""; loadedName = "";
+        loadedText = ""; loadedName = ""; loadedNotes = [];
         fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
+        fileNotesEl.innerHTML = "";
         drop.classList.remove("hidden");
+        refreshInputNote();
       });
 
       const getInputText = () => (loadedText ? loadedText : (textEl.value || "").trim());
 
+      // Say plainly which text will be checked, and how much of it. Two silent
+      // failures live here: an uploaded file quietly overriding pasted text, and
+      // the worker silently cutting a long document off at MAX_CHARS.
+      function refreshInputNote() {
+        const pasted = (textEl.value || "").trim();
+        const msgs = [];
+        if (loadedText && pasted) {
+          msgs.push("Both a file and pasted text are present. The uploaded file (" + escapeHtml(loadedName) + ") will be checked; the pasted text will be ignored. Remove the file to check the pasted text instead.");
+        }
+        const text = getInputText();
+        if (text.length > MAX_CHARS) {
+          msgs.push("This document is " + text.length.toLocaleString() + " characters. Only the first " + MAX_CHARS.toLocaleString() +
+            " (" + Math.round(MAX_CHARS / text.length * 100) + "%) can be sent to the AI, so roughly the last " +
+            (text.length - MAX_CHARS).toLocaleString() + " characters will not be assessed. Consider checking the protocol in sections.");
+        }
+        inputNoteEl.innerHTML = msgs.map((m) => "<span>⚠ " + m + "</span>").join("<br>");
+        inputNoteEl.classList.toggle("hidden", !msgs.length);
+      }
+      textEl.addEventListener("input", refreshInputNote);
+
       // ── Rendering ──
       const STATUS_META = {
-        met:     { label: "Met",     dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200", bar: "bg-emerald-500" },
-        partial: { label: "Partial", dot: "bg-amber-500",   chip: "bg-amber-50 text-amber-700 border-amber-200",       bar: "bg-amber-500" },
-        missing: { label: "Missing", dot: "bg-red-500",     chip: "bg-red-50 text-red-700 border-red-200",             bar: "bg-red-500" },
-        na:      { label: "N/A",     dot: "bg-slate-400",   chip: "bg-slate-50 text-slate-600 border-slate-200",       bar: "bg-slate-300" },
+        met:      { label: "Met",          dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200", bar: "bg-emerald-500", edge: "border-emerald-300" },
+        partial:  { label: "Partial",      dot: "bg-amber-500",   chip: "bg-amber-50 text-amber-700 border-amber-200",       bar: "bg-amber-500",   edge: "border-amber-300" },
+        missing:  { label: "Missing",      dot: "bg-red-500",     chip: "bg-red-50 text-red-700 border-red-200",             bar: "bg-red-500",     edge: "border-red-300" },
+        na:       { label: "N/A",          dot: "bg-slate-400",   chip: "bg-slate-50 text-slate-600 border-slate-200",       bar: "bg-slate-300",   edge: "border-slate-200" },
+        // Distinct from "missing" on purpose. "Missing" is a claim about the
+        // protocol; "not assessed" is a claim about this run. Conflating them
+        // is how a model that skipped an item turns into a red mark against the
+        // author — TARGET item 7 is skipped by the model routinely, because it
+        // is the parent of 7a-7h.
+        unassessed: { label: "Not assessed", dot: "bg-slate-300", chip: "bg-white text-slate-500 border-slate-300 border-dashed", bar: "bg-slate-200", edge: "border-slate-300" },
       };
+      const SCORED = ["met", "partial", "missing", "na"];
+
+      // The model is asked for a fixed vocabulary but is not bound to it. Anything
+      // outside the vocabulary must NOT be silently coerced into a verdict.
+      const STATUS_ALIASES = {
+        met: "met", yes: "met", present: "met", complete: "met", satisfied: "met", addressed: "met",
+        partial: "partial", partially: "partial", "partially met": "partial", incomplete: "partial", unclear: "partial",
+        missing: "missing", absent: "missing", no: "missing", "not met": "missing", "not addressed": "missing", "not reported": "missing",
+        na: "na", "n/a": "na", "not applicable": "na", notapplicable: "na", inapplicable: "na",
+      };
+      function normStatus(s) {
+        const k = String(s == null ? "" : s).trim().toLowerCase();
+        return STATUS_ALIASES[k] || null;
+      }
+      // Ids come back from the model as "7.3.1", "7.3.1.", "Item 7.3.1", "7A"…
+      function normId(s) {
+        return String(s == null ? "" : s).trim().toLowerCase()
+          .replace(/^item\s*/, "").replace(/[\s.)]+$/, "").replace(/\s+/g, "");
+      }
       const KIND_COLOR = { washout: "#6366f1", covariate: "#f59e0b", exposure: "#14b8a6", followup: "#10b981", grace: "#8b5cf6", outcome: "#ef4444" };
       const KIND_LABEL = { washout: "Washout / eligibility", covariate: "Covariate look-back", exposure: "Exposure", followup: "Follow-up", grace: "Grace period", outcome: "Outcome window" };
 
       function fmtDay(d) {
-        if (!d) return "0";
+        if (!Number.isFinite(d)) return "?";
+        if (d === 0) return "0";
         const a = Math.abs(d), s = d < 0 ? "−" : "+";
         if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; }
         if (a >= 60) { return s + Math.round(a / 30) + "mo"; }
         return s + a + "d";
       }
 
-      function renderTimeline(tl) {
-        if (!Array.isArray(tl) || !tl.length) return "";
-        const rows = tl.slice().sort((a, b) => a.startDay - b.startDay);
+      // A window whose days are not finite numbers produces NaN geometry, which
+      // SVG renders as nothing at all — a diagram that silently loses a row is
+      // worse than one that says a row was unusable.
+      function cleanTimeline(tl) {
+        const kept = [], dropped = [];
+        for (const w of (Array.isArray(tl) ? tl : [])) {
+          const a = Number(w && w.startDay), b = Number(w && w.endDay);
+          if (Number.isFinite(a) && Number.isFinite(b)) kept.push({ ...w, startDay: a, endDay: b });
+          else dropped.push((w && (w.label || w.kind)) || "unnamed window");
+        }
+        return { kept, dropped };
+      }
+
+      function renderTimeline(clean) {
+        if (!Array.isArray(clean) || !clean.length) return "";
+        const rows = clean.slice().sort((a, b) => a.startDay - b.startDay);
         let lo = 0, hi = 0;
         for (const w of rows) { lo = Math.min(lo, w.startDay, w.endDay); hi = Math.max(hi, w.startDay, w.endDay); }
         if (lo === hi) hi = lo + 1;
@@ -305,13 +521,28 @@ const fwList = Object.values(FRAMEWORKS);
         return svg + "</svg>";
       }
 
-      function renderScheme(d) {
-        if (!d || (!d.timeline && !d.designType)) { schemeEl.classList.add("hidden"); return; }
-        const fields = [["Design", d.designType], ["Population", d.population], ["Exposure", d.exposure], ["Comparator", d.comparator], ["Outcome", d.outcome], ["Index date (time zero)", d.indexDate]];
+      function renderScheme(d, caveats) {
+        const fields = [["Design", d && d.designType], ["Population", d && d.population], ["Exposure", d && d.exposure], ["Comparator", d && d.comparator], ["Outcome", d && d.outcome], ["Index date (time zero)", d && d.indexDate]];
+        const { kept, dropped } = cleanTimeline(d && d.timeline);
+        const anyField = fields.some(([, v]) => v && String(v).trim() && String(v).trim() !== "—");
+        const anyList = ["inclusion", "exclusion", "covariates"].some((k) => Array.isArray(d && d[k]) && d[k].length);
+        // An empty array is truthy; the old gate let a completely blank scheme
+        // render as a panel full of em-dashes, which looks like an answer.
+        if (!d || (!anyField && !anyList && !kept.length)) {
+          schemeEl.classList.add("hidden");
+          if (caveats) caveats.push("No study-design scheme could be reconstructed from this text, so the design diagram and criteria panel are not shown.");
+          return;
+        }
         designGrid.innerHTML = fields.map(([k, v]) =>
           '<div><dt class="text-[11px] uppercase tracking-wider font-semibold text-slate-500">' + escapeHtml(k) + '</dt><dd class="text-sm text-slate-800 leading-snug">' + escapeHtml(v || "—") + '</dd></div>').join("");
-        timelineEl.innerHTML = renderTimeline(d.timeline || []);
-        const kinds = [...new Set((d.timeline || []).map((w) => w.kind))];
+        timelineEl.innerHTML = kept.length ? renderTimeline(kept)
+          : '<p class="text-xs text-slate-500 italic">No analysis windows could be placed on a day axis from this text.</p>';
+        const tlNotes = [];
+        if (dropped.length) tlNotes.push("⚠ " + dropped.length + " window(s) were returned without usable start/end days and are not drawn: " + dropped.map(escapeHtml).join(", ") + ".");
+        timelineNote.innerHTML = tlNotes.join("<br>");
+        timelineNote.classList.toggle("hidden", !tlNotes.length);
+        if (dropped.length && caveats) caveats.push(dropped.length + " timeline window(s) had no usable start/end day and were left out of the design diagram.");
+        const kinds = [...new Set(kept.map((w) => w.kind))];
         legendEl.innerHTML = kinds.map((k) =>
           '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + (KIND_COLOR[k] || "#64748b") + '"></span>' + escapeHtml(KIND_LABEL[k] || k) + '</span>').join("");
 
@@ -334,13 +565,38 @@ const fwList = Object.values(FRAMEWORKS);
         present: { label: "Present", dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200", border: "border-emerald-300" },
         partial: { label: "Partial", dot: "bg-amber-500",   chip: "bg-amber-50 text-amber-700 border-amber-200",       border: "border-amber-300" },
         absent:  { label: "Absent",  dot: "bg-red-500",     chip: "bg-red-50 text-red-700 border-red-200",             border: "border-red-300" },
+        unassessed: { label: "Not assessed", dot: "bg-slate-300", chip: "bg-white text-slate-500 border-slate-300 border-dashed", border: "border-slate-300" },
       };
+      const DELIV_ALIASES = { present: "present", yes: "present", planned: "present", "pre-specified": "present", prespecified: "present", partial: "partial", partially: "partial", implied: "partial", absent: "absent", missing: "absent", no: "absent", none: "absent" };
 
-      function renderDeliverables(list) {
-        if (!Array.isArray(list) || !list.length) { delivEl.classList.add("hidden"); return; }
-        const counts = { present: 0, partial: 0, absent: 0 };
-        delivListEl.innerHTML = list.map((d) => {
-          const m = DELIV_META[d.status] || DELIV_META.absent;
+      function renderDeliverables(list, caveats) {
+        // Reconcile against the list the worker actually asked about, so an entry
+        // the model dropped or renamed shows as "not assessed" rather than
+        // vanishing from a panel that looks complete.
+        const byName = new Map();
+        const extras = [];
+        for (const d of (Array.isArray(list) ? list : [])) {
+          const key = String((d && d.name) || "").trim().toLowerCase();
+          const canon = DELIVERABLE_NAMES.find((n) => n.toLowerCase() === key);
+          if (canon && !byName.has(canon)) byName.set(canon, d);
+          else if (d && d.name) extras.push(d);
+        }
+        const rows = DELIVERABLE_NAMES.map((name) => {
+          const d = byName.get(name);
+          const st = d ? DELIV_ALIASES[String(d.status || "").trim().toLowerCase()] : null;
+          if (!d) return { name, status: "unassessed", evidence: "The AI returned no verdict for this planned output, so nothing is claimed about it." };
+          if (!st) return { name, status: "unassessed", evidence: "The AI returned an unrecognised verdict (“" + String(d.status) + "”) for this planned output, so nothing is claimed about it." };
+          return { name, status: st, evidence: d.evidence, suggestion: d.suggestion };
+        }).concat(extras.map((d) => ({ name: d.name, status: DELIV_ALIASES[String(d.status || "").trim().toLowerCase()] || "unassessed", evidence: d.evidence, suggestion: d.suggestion })));
+
+        if (!rows.length) { delivEl.classList.add("hidden"); return; }
+        const nUn = rows.filter((r) => r.status === "unassessed").length;
+        if (nUn && caveats) caveats.push(nUn + " of the " + DELIVERABLE_NAMES.length + " planned-output checks came back without a usable verdict and are marked “Not assessed”.");
+        if (extras.length && caveats) caveats.push("The AI volunteered " + extras.length + " planned output(s) that were not on the list it was asked about (" + extras.map((e) => e.name).join(", ") + "). They are shown last and are not part of the standard set.");
+
+        const counts = {};
+        delivListEl.innerHTML = rows.map((d) => {
+          const m = DELIV_META[d.status] || DELIV_META.unassessed;
           counts[d.status] = (counts[d.status] || 0) + 1;
           return '<li class="border-l-2 pl-4 ' + m.border + '">' +
             '<div class="flex items-start justify-between gap-3">' +
@@ -348,72 +604,133 @@ const fwList = Object.values(FRAMEWORKS);
               '<span class="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ' + m.chip + '"><span class="inline-block w-1.5 h-1.5 rounded-full ' + m.dot + '"></span>' + m.label + '</span>' +
             '</div>' +
             (d.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(d.evidence) + '</p>' : '') +
-            (d.suggestion && d.status !== "present" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(d.suggestion) + '</p>' : '') +
+            (d.suggestion && d.status !== "present" && d.status !== "unassessed" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(d.suggestion) + '</p>' : '') +
           '</li>';
         }).join("");
-        delivTallyEl.innerHTML = ["present", "partial", "absent"].map((k) => {
+        delivTallyEl.innerHTML = ["present", "partial", "absent", "unassessed"].map((k) => {
           const m = DELIV_META[k];
           return counts[k] ? '<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ' + m.chip + '"><span class="inline-block w-2 h-2 rounded-full ' + m.dot + '"></span>' + counts[k] + ' ' + m.label + '</span>' : "";
         }).join("");
         delivEl.classList.remove("hidden");
+        return rows;
       }
 
-      function render(data) {
-        const fw = fwOf(data.framework);
-        const CHECKLIST = fw.checklist;
-        const verdicts = {};
-        for (const v of (data.items || [])) verdicts[v.id] = v;
-        const counts = { met: 0, partial: 0, missing: 0, na: 0 };
+      // Match the model's verdicts back onto the checklist. Anything that does
+      // not match is reported, never dropped and never guessed at.
+      function reconcile(fw, rawItems) {
+        const byId = new Map();
+        const unmatched = [], badStatus = [], duplicates = [];
+        const known = new Map();
+        for (const sec of fw.checklist) for (const it of sec.items) known.set(normId(it.id), it.id);
+        for (const v of (Array.isArray(rawItems) ? rawItems : [])) {
+          const id = known.get(normId(v && v.id));
+          if (!id) { unmatched.push(String((v && v.id) != null ? v.id : "(no id)")); continue; }
+          if (byId.has(id)) { duplicates.push(id); continue; }
+          const st = normStatus(v.status);
+          if (!st) { badStatus.push(id + " → “" + String(v.status) + "”"); byId.set(id, { status: "unassessed", evidence: "The AI returned an unrecognised verdict (“" + String(v.status) + "”), so nothing is claimed about this item.", suggestion: "" }); continue; }
+          byId.set(id, { status: st, evidence: v.evidence, suggestion: v.suggestion });
+        }
+        const omitted = [];
+        for (const sec of fw.checklist) for (const it of sec.items) {
+          if (!byId.has(it.id)) {
+            omitted.push(it.id);
+            byId.set(it.id, { status: "unassessed", evidence: "The AI returned no verdict for this item. That is a gap in this check, not a finding about your protocol — read the item and judge it yourself.", suggestion: "" });
+          }
+        }
+        return { byId, unmatched, badStatus, duplicates, omitted };
+      }
+
+      function showRunError(msg) {
+        runErrMsg.textContent = msg;
+        runErrEl.classList.remove("hidden");
+        resultsEl.classList.add("hidden");
+        runErrEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      function render(data, requestedFramework) {
+        const caveats = [];
+        if (!data || !Array.isArray(data.items) || !data.items.length) {
+          showRunError("The AI returned an answer with no item verdicts in it, so there is nothing to score. Please try again — and if it keeps happening, the model is probably struggling with this document's length or formatting.");
+          return;
+        }
+        if (data.framework && requestedFramework && data.framework !== requestedFramework) {
+          showRunError("The service answered for the " + (fwOf(data.framework).name) + " checklist but " + (fwOf(requestedFramework).name) + " was requested. Nothing is shown rather than scoring your protocol against the wrong framework.");
+          return;
+        }
+        const fw = fwOf(data.framework || requestedFramework);
+        const { byId, unmatched, badStatus, duplicates, omitted } = reconcile(fw, data.items);
+        const counts = { met: 0, partial: 0, missing: 0, na: 0, unassessed: 0 };
 
         itemsEl.innerHTML = "";
-        for (const sec of CHECKLIST) {
+        for (const sec of fw.checklist) {
           const block = document.createElement("section");
           block.className = "rounded-2xl border border-slate-200 bg-white p-6 shadow-sm";
           block.innerHTML = '<h3 class="text-sm font-extrabold uppercase tracking-widest text-brand-700 mb-4">' + escapeHtml(sec.section) + '</h3>';
           const ol = document.createElement("ol");
           ol.className = "space-y-4";
           for (const it of sec.items) {
-            const v = verdicts[it.id] || { status: "missing", evidence: "Not assessed.", suggestion: "" };
-            const st = STATUS_META[v.status] || STATUS_META.missing;
-            counts[v.status] = (counts[v.status] || 0) + 1;
+            const v = byId.get(it.id);
+            const st = STATUS_META[v.status];
+            counts[v.status] += 1;
             const li = document.createElement("li");
-            li.className = "border-l-2 pl-4 " + (v.status === "met" ? "border-emerald-300" : v.status === "partial" ? "border-amber-300" : v.status === "na" ? "border-slate-200" : "border-red-300");
+            li.className = "border-l-2 pl-4 " + st.edge;
             li.innerHTML =
               '<div class="flex items-start justify-between gap-3">' +
                 '<p class="text-sm font-semibold text-slate-900"><span class="text-brand-700">' + escapeHtml(it.id) + '.</span> ' + escapeHtml(it.label) + '</p>' +
                 '<span class="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ' + st.chip + '"><span class="inline-block w-1.5 h-1.5 rounded-full ' + st.dot + '"></span>' + st.label + '</span>' +
               '</div>' +
+              // The hint says what "met" actually looks like. Shown only where it
+              // is useful — on an item the author still has work to do on.
+              (it.hint && v.status !== "met" ? '<p class="mt-1 text-xs text-slate-500 leading-relaxed"><span class="font-semibold text-slate-400">What this asks for:</span> ' + escapeHtml(it.hint) + '</p>' : '') +
               (v.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(v.evidence) + '</p>' : '') +
-              (v.suggestion && v.status !== "met" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(v.suggestion) + '</p>' : '');
+              (v.suggestion && v.status !== "met" && v.status !== "unassessed" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(v.suggestion) + '</p>' : '');
             ol.appendChild(li);
           }
           block.appendChild(ol);
           itemsEl.appendChild(block);
         }
 
-        const total = counts.met + counts.partial + counts.missing + counts.na;
-        const assessable = total - counts.na;
+        const total = SCORED.reduce((a, k) => a + counts[k], 0) + counts.unassessed;
+        const assessable = counts.met + counts.partial + counts.missing;
         confHead.textContent = fw.name + " conformance";
-        summaryEl.textContent = (data.summary ? data.summary + " " : "") + counts.met + " of " + (assessable || total) + " applicable items met.";
-        barEl.innerHTML = ["met", "partial", "missing", "na"].map((k) =>
+        summaryEl.textContent = (data.summary ? data.summary + " " : "") +
+          counts.met + " of " + assessable + " assessable items met" +
+          (counts.na ? " (" + counts.na + " not applicable)" : "") +
+          (counts.unassessed ? "; " + counts.unassessed + " item(s) could not be assessed and are excluded from that count" : "") + ".";
+        barEl.innerHTML = ["met", "partial", "missing", "na", "unassessed"].map((k) =>
           counts[k] ? '<div class="' + STATUS_META[k].bar + '" style="width:' + (counts[k] / (total || 1) * 100).toFixed(2) + '%"></div>' : "").join("");
-        tallyEl.innerHTML = ["met", "partial", "missing", "na"].map((k) => k === "na" && !counts.na ? "" : chip(k, counts[k])).join("");
-        truncEl.classList.toggle("hidden", !data.truncated);
+        tallyEl.innerHTML = ["met", "partial", "missing", "na", "unassessed"].map((k) => counts[k] ? chip(k, counts[k]) : "").join("");
         citeEl.textContent = fw.name + ": " + fw.citation;
 
-        renderScheme(data.design);
-        renderDeliverables(data.deliverables);
+        // ── Everything this run could not do, said out loud ──
+        if (data.truncated) {
+          caveats.push("The document was longer than the " + MAX_CHARS.toLocaleString() + "-character limit and was cut off before analysis. Sections after that point were not read, and items answered only there will read as missing.");
+        }
+        if (omitted.length) caveats.push("The AI returned no verdict for " + omitted.length + " item(s) (" + omitted.join(", ") + "). They are marked “Not assessed” and excluded from the score — judge them yourself.");
+        if (badStatus.length) caveats.push("The AI returned an unrecognised verdict for " + badStatus.length + " item(s) (" + badStatus.join("; ") + "). They are marked “Not assessed”.");
+        if (unmatched.length) caveats.push("The AI returned " + unmatched.length + " verdict(s) for item id(s) that are not in the " + fw.name + " checklist (" + unmatched.slice(0, 8).join(", ") + (unmatched.length > 8 ? ", …" : "") + "). They were ignored.");
+        if (duplicates.length) caveats.push("The AI returned more than one verdict for item(s) " + [...new Set(duplicates)].join(", ") + "; only the first was used.");
+        for (const n of loadedNotes) caveats.push(n);
+        if (fw.kind === "reporting guideline") {
+          caveats.push(fw.name + " is a reporting guideline for a completed study. If you are checking a protocol, the results and discussion items describe what you will have to report later — a verdict of “met” there means the protocol says it plans to, not that it has been done.");
+        }
+
+        renderScheme(data.design, caveats);
+        const delivRows = renderDeliverables(data.deliverables, caveats);
+
+        caveatsEl.innerHTML = caveats.map((c) => '<li class="flex gap-1.5"><span class="shrink-0">⚠</span><span>' + escapeHtml(c) + "</span></li>").join("");
 
         // Offer TARGET when a HARPER run detects a target-trial emulation
         const tte = data.targetTrialEmulation;
-        if (data.framework === "harper" && tte && tte.likely) {
+        if (fw.key === "harper" && tte && tte.likely) {
           tteReason.textContent = tte.reason || "";
           tteEl.classList.remove("hidden");
         } else {
           tteEl.classList.add("hidden");
         }
 
-        lastReport = { data, counts, fw };
+        lastReport = { data, counts, fw, byId, caveats, delivRows };
+        runErrEl.classList.add("hidden");
         resultsEl.classList.remove("hidden");
         resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -445,19 +762,35 @@ const fwList = Object.values(FRAMEWORKS);
       async function runCheck(framework) {
         const text = getInputText();
         if (text.length < 200) { setStatus("Please upload a protocol, or paste at least a few paragraphs (200+ characters).", true); return; }
+        // Never leave the previous run's score on screen while a new one runs or
+        // fails — it reads as the answer to the question just asked.
+        resultsEl.classList.add("hidden");
+        runErrEl.classList.add("hidden");
         checkBtn.disabled = true; setStatus("Checking against " + fwOf(framework).name + " — this can take 10–20 seconds…");
-        try { const data = await postCheck(text, framework); setStatus(""); render(data); }
-        catch (e) { setStatus(e && e.message ? e.message : "Something went wrong.", true); }
+        try { const data = await postCheck(text, framework); setStatus(""); render(data, framework); }
+        catch (e) {
+          setStatus("", false);
+          showRunError((e && e.message ? e.message : "Something went wrong.") +
+            " (Checked against " + fwOf(framework).name + ".)");
+        }
         finally { checkBtn.disabled = false; }
       }
 
       function downloadReport() {
         if (!lastReport) return;
-        const { data, counts, fw } = lastReport;
+        const { data, counts, fw, byId, caveats, delivRows } = lastReport;
         const date = new Date().toISOString().slice(0, 10);
         let md = "![Population Health Data Center](" + LOGO_ABS + ")\n\n# " + fw.name + " conformance report\n\n_Population Health Data Center · generated " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
         if (data.summary) md += data.summary + "\n\n";
-        md += "**Tally:** " + counts.met + " met · " + counts.partial + " partial · " + counts.missing + " missing" + (counts.na ? " · " + counts.na + " N/A" : "") + "\n\n";
+        md += "**Tally:** " + counts.met + " met · " + counts.partial + " partial · " + counts.missing + " missing" +
+          (counts.na ? " · " + counts.na + " N/A" : "") +
+          (counts.unassessed ? " · " + counts.unassessed + " NOT ASSESSED" : "") +
+          " (" + counts.met + " of " + (counts.met + counts.partial + counts.missing) + " assessable items met)\n\n";
+        if (caveats && caveats.length) {
+          md += "## What this check could not do\n\n";
+          for (const c of caveats) md += "- " + c + "\n";
+          md += "\n";
+        }
         const d = data.design;
         if (d) {
           md += "## Study design scheme\n\n";
@@ -472,24 +805,23 @@ const fwList = Object.values(FRAMEWORKS);
           critList("Exclusion", d.exclusion);
           critList("Covariates", d.covariates);
         }
-        if (Array.isArray(data.deliverables) && data.deliverables.length) {
+        if (Array.isArray(delivRows) && delivRows.length) {
           md += "## Planned outputs & figures (shell tables, Love plot, …)\n\n";
-          for (const x of data.deliverables) {
-            md += "- **" + x.name + "** — _" + ((DELIV_META[x.status] || DELIV_META.absent).label) + "_\n";
+          md += "_“Absent” means the protocol does not pre-specify the output; some are genuinely not applicable to a given design._\n\n";
+          for (const x of delivRows) {
+            md += "- **" + x.name + "** — _" + ((DELIV_META[x.status] || DELIV_META.unassessed).label) + "_\n";
             if (x.evidence) md += "  - Evidence: " + x.evidence + "\n";
-            if (x.suggestion && x.status !== "present") md += "  - Suggestion: " + x.suggestion + "\n";
+            if (x.suggestion && x.status !== "present" && x.status !== "unassessed") md += "  - Suggestion: " + x.suggestion + "\n";
           }
           md += "\n";
         }
-        const verdicts = {};
-        for (const v of (data.items || [])) verdicts[v.id] = v;
         for (const sec of fw.checklist) {
           md += "## " + sec.section + "\n\n";
           for (const it of sec.items) {
-            const v = verdicts[it.id] || { status: "missing", evidence: "Not assessed.", suggestion: "" };
-            md += "- **" + it.id + ". " + it.label + "** — _" + (STATUS_META[v.status] || STATUS_META.missing).label + "_\n";
+            const v = byId.get(it.id);
+            md += "- **" + it.id + ". " + it.label + "** — _" + STATUS_META[v.status].label + "_\n";
             if (v.evidence) md += "  - Evidence: " + v.evidence + "\n";
-            if (v.suggestion && v.status !== "met") md += "  - Suggestion: " + v.suggestion + "\n";
+            if (v.suggestion && v.status !== "met" && v.status !== "unassessed") md += "  - Suggestion: " + v.suggestion + "\n";
           }
           md += "\n";
         }
@@ -513,7 +845,7 @@ const fwList = Object.values(FRAMEWORKS);
         try {
           await loadScript(DOCX);
           const D = window.docx;
-          const { data, counts, fw } = lastReport;
+          const { data, counts, fw, byId, caveats, delivRows } = lastReport;
           const date = new Date().toISOString().slice(0, 10);
           const FONT = "Calibri";
           const logo = await loadLogo();
@@ -521,7 +853,7 @@ const fwList = Object.values(FRAMEWORKS);
           const para = (runs, o = {}) => new D.Paragraph({ children: Array.isArray(runs) ? runs : [runs], spacing: { before: 40, after: 40, ...(o.spacing || {}) }, ...o });
           const h1 = (t) => new D.Paragraph({ heading: D.HeadingLevel.HEADING_1, spacing: { before: 220, after: 80 }, children: [text(t, { bold: true, size: 26, color: "21443E" })] });
           const h2 = (t) => new D.Paragraph({ spacing: { before: 140, after: 40 }, children: [text(t, { bold: true, size: 21 })] });
-          const STCOL = { met: "16A34A", partial: "D97706", missing: "DC2626", na: "64748B", present: "16A34A", absent: "DC2626" };
+          const STCOL = { met: "16A34A", partial: "D97706", missing: "DC2626", na: "64748B", unassessed: "94A3B8", present: "16A34A", absent: "DC2626" };
 
           const children = [];
           if (logo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: logo, transformation: { width: 210, height: 51 } })] }));
@@ -535,7 +867,14 @@ const fwList = Object.values(FRAMEWORKS);
             text(counts.partial + " partial", { color: STCOL.partial, bold: true }), text(" · "),
             text(counts.missing + " missing", { color: STCOL.missing, bold: true }),
             ...(counts.na ? [text(" · " + counts.na + " N/A", { color: STCOL.na })] : []),
+            ...(counts.unassessed ? [text(" · " + counts.unassessed + " NOT ASSESSED", { color: STCOL.unassessed, bold: true })] : []),
+            text("  —  " + counts.met + " of " + (counts.met + counts.partial + counts.missing) + " assessable items met."),
           ], { spacing: { after: 80 } }));
+
+          if (caveats && caveats.length) {
+            children.push(h1("What this check could not do"));
+            for (const c of caveats) children.push(para([text("•  " + c, { size: 18, color: "8A5A00" })]));
+          }
 
           const d = data.design;
           if (d) {
@@ -561,26 +900,25 @@ const fwList = Object.values(FRAMEWORKS);
             critBlock("Covariates", d.covariates);
           }
 
-          if (Array.isArray(data.deliverables) && data.deliverables.length) {
+          if (Array.isArray(delivRows) && delivRows.length) {
             children.push(h1("Planned outputs & figures"));
-            for (const x of data.deliverables) {
-              const lab = (DELIV_META[x.status] || DELIV_META.absent).label;
-              children.push(para([text(x.name + " — ", { bold: true }), text(lab, { color: STCOL[x.status] || STCOL.absent, bold: true })]));
+            children.push(para([text("“Absent” means the protocol does not pre-specify the output; some are genuinely not applicable to a given design.", { italics: true, size: 16, color: "777777" })]));
+            for (const x of delivRows) {
+              const lab = (DELIV_META[x.status] || DELIV_META.unassessed).label;
+              children.push(para([text(x.name + " — ", { bold: true }), text(lab, { color: STCOL[x.status] || STCOL.unassessed, bold: true })]));
               if (x.evidence) children.push(para([text("Evidence: " + x.evidence, { size: 18, color: "555555" })]));
-              if (x.suggestion && x.status !== "present") children.push(para([text("Suggestion: " + x.suggestion, { size: 18, color: "555555" })]));
+              if (x.suggestion && x.status !== "present" && x.status !== "unassessed") children.push(para([text("Suggestion: " + x.suggestion, { size: 18, color: "555555" })]));
             }
           }
 
-          const verdicts = {};
-          for (const v of (data.items || [])) verdicts[v.id] = v;
           for (const sec of fw.checklist) {
             children.push(h1(sec.section));
             for (const it of sec.items) {
-              const v = verdicts[it.id] || { status: "missing", evidence: "Not assessed.", suggestion: "" };
-              const lab = (STATUS_META[v.status] || STATUS_META.missing).label;
-              children.push(para([text(it.id + ". " + it.label + "  ", { bold: true }), text("[" + lab + "]", { color: STCOL[v.status] || STCOL.missing, bold: true })]));
+              const v = byId.get(it.id);
+              const lab = STATUS_META[v.status].label;
+              children.push(para([text(it.id + ". " + it.label + "  ", { bold: true }), text("[" + lab + "]", { color: STCOL[v.status] || STCOL.unassessed, bold: true })]));
               if (v.evidence) children.push(para([text("Evidence: " + v.evidence, { size: 18, color: "555555" })]));
-              if (v.suggestion && v.status !== "met") children.push(para([text("Suggestion: " + v.suggestion, { size: 18, color: "555555" })]));
+              if (v.suggestion && v.status !== "met" && v.status !== "unassessed") children.push(para([text("Suggestion: " + v.suggestion, { size: 18, color: "555555" })]));
             }
           }
           children.push(para([text(fw.name + ": " + fw.citation + " " + fw.url, { italics: true, size: 16, color: "777777" })], { spacing: { before: 300 } }));
@@ -603,18 +941,35 @@ const fwList = Object.values(FRAMEWORKS);
         }
       }
 
+      // Plain-language line under the framework picker: which guideline this is,
+      // and what kind of document it was written for. Beginners pick TARGET for a
+      // protocol without realising it is a guideline for finished papers.
+      function refreshFrameworkNote() {
+        const fw = fwOf(getFramework());
+        const kindLine = fw.kind === "protocol template"
+          ? "a protocol template — it asks whether each element is written down and operationally defined before the study runs."
+          : "a reporting guideline for a completed study — on an unpublished protocol its results and discussion items describe what you will have to report later, not what you have done.";
+        fwNoteEl.innerHTML = "<strong>" + escapeHtml(fw.name) + "</strong> is " + kindLine +
+          ' <a class="text-brand-700 hover:underline" href="' + escapeHtml(fw.url) + '" target="_blank" rel="noopener">Source ↗</a>';
+      }
+      document.querySelectorAll('input[name="framework"]').forEach((r) => r.addEventListener("change", refreshFrameworkNote));
+      refreshFrameworkNote();
+
       checkBtn.addEventListener("click", () => runCheck(getFramework()));
       $("downloadword").addEventListener("click", downloadWord);
       alsoTargetBtn.addEventListener("click", () => {
         const r = document.querySelector('input[name="framework"][value="target"]');
         if (r) r.checked = true;
+        refreshFrameworkNote();
         runCheck("target");
       });
       clearBtn.addEventListener("click", () => {
-        textEl.value = ""; loadedText = ""; loadedName = "";
+        textEl.value = ""; loadedText = ""; loadedName = ""; loadedNotes = []; lastReport = null;
         fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
+        fileNotesEl.innerHTML = "";
         drop.classList.remove("hidden"); fileErr.classList.add("hidden");
-        resultsEl.classList.add("hidden"); tteEl.classList.add("hidden"); setStatus("");
+        resultsEl.classList.add("hidden"); runErrEl.classList.add("hidden"); tteEl.classList.add("hidden");
+        refreshInputNote(); setStatus("");
       });
       $("download").addEventListener("click", downloadReport);
     </script>
