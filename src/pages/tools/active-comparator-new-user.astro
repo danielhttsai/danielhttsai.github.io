@@ -332,7 +332,7 @@ const PHENOTYPES = {
       name: "Heart failure hospitalisation",
       codes: "ICD-10 I50.*, I11.0, I13.0, I13.2 (primary discharge diagnosis)",
       definition: "First hospitalisation with a primary discharge diagnosis of heart failure.",
-      validation: "Validated in NHIRD- and CGRD-linked studies; see Shao SC et al, Clinical Epidemiology series, and the broader CGRD foundational paper: Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database; a multi-institutional electronic medical records database for real-world epidemiological research in Taiwan. Pharmacoepidemiol Drug Saf 2019;28(5):593-600.",
+      validation: "Validated in NHIRD- and CGRD-linked studies; see Shao SC et al, Clinical Epidemiology series, and the broader CGRD foundational paper: Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database - a multi-institutional electronic medical records database for real-world epidemiological studies in Taiwan. Pharmacoepidemiol Drug Saf 2019;28(5):593-600. doi:10.1002/pds.4713.",
     },
     {
       name: "3-point MACE",
@@ -506,18 +506,18 @@ const TIMELINE_PRESETS: Record<string, string> = {
 ---
 
 <BaseLayout
-  title="Protocol template · ACNU · AsPEN members"
-  description="Guided form that drafts a multi-national active-comparator new-user (ACNU) study protocol for AsPEN sites."
+  title="Active-comparator new-user (ACNU) protocol — Daniel Tsai"
+  description="A free, in-browser protocol builder for multi-national active-comparator new-user cohort studies under a target-trial-emulation framework, with one-click Word / Markdown export."
 >
   <PageHeader
-    eyebrow="Members → Templates"
+    eyebrow="Protocol templates → Active-comparator new-user"
     title="Multi-national ACNU protocol builder"
     description="Active-comparator new-user design under a target trial emulation framework. The active comparator behaves as an 'emulated placebo' from the same therapeutic context; minimising confounding by indication and addressing immortal-time / prevalent-user bias. Tick the boxes for the operational pieces; export as Word (.docx) or Markdown."
   />
 
   <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
     <div class="flex items-center justify-between gap-3 flex-wrap">
-      <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator/`}>← Members area</a>
+      <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator/`}>← All designs</a>
       <button type="button" data-action="reset-top" class="text-xs font-semibold text-rose-700 border border-rose-300 hover:bg-rose-50 px-3 py-1.5 rounded transition">
         ⟲ Clear &amp; start over
       </button>
@@ -1256,17 +1256,17 @@ const TIMELINE_PRESETS: Record<string, string> = {
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Key references (one per line)</span>
-              <textarea name="references" rows="11" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Cashin AG, Hansford HJ, Hernán MA, Swanson SA, Lee H, Jones MD, et al. Transparent Reporting of Observational Studies Emulating a Target Trial: The TARGET Statement. JAMA 2025. PMID: 40899949. (Reporting framework anchoring this protocol; see also https://target-guideline.org/)
-Tsai DHT, Chuang ATM, Liu KH, Shao SC, Lai ECC. SGLT2 inhibitors and risk of CKD-mineral and bone disorders in patients with type 2 diabetes mellitus and stage 1-3 CKD. CMAJ 2025;197(7):E178-E189. PMID: 39993818. (AsPEN ACNU + target trial emulation exemplar.)
-Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183(8):758-64.
-Lund JL, Richardson DB, Stürmer T. The active comparator, new user study design in pharmacoepidemiology: historical foundations and contemporary application. Curr Epidemiol Rep 2015;2:221-8.
-Andersen M, Pratt N, Sanfélix-Gimeno G et al. Pharmacoepidemiol Drug Saf 2013 (AsPEN founding methods paper).
-Lai EC, Man KK, Chaiyakunapruk N et al. Epidemiology 2015 (AsPEN database survey).
-Pratt NL, Mack CD, Meyer AM et al. Pharmacoepidemiol Drug Saf 2018 (AsPEN common data model framework).
-Hsieh CY, Su CC, Shao SC, Sung SF, Lin SJ, Kao Yang YH, Lai EC. Taiwan's NHIRD: past and future. Clin Epidemiol 2019;11:349-358.
-Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database (CGRD). Pharmacoepidemiol Drug Saf 2019;28(5):593-600.
-Tsai DHT, Wong ICK, Pratt N et al. Clin Epidemiol 2023 (NeuroGEN multi-database infrastructure).
-Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</textarea>
+              <textarea name="references" rows="11" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Cashin AG, Hansford HJ, Hernan MA, Swanson SA, Lee H, Jones MD, et al. Transparent Reporting of Observational Studies Emulating a Target Trial - The TARGET Statement. JAMA 2025;334(12):1084-1093. doi:10.1001/jama.2025.13350. PMID: 40899949. (Reporting framework anchoring this protocol; see also https://target-guideline.org/)
+Tsai DHT, Chuang ATM, Liu KH, Shao SC, Lai ECC. Sodium-glucose cotransporter 2 (SGLT2) inhibitors and risk of chronic kidney disease-mineral and bone disorders in patients with type 2 diabetes mellitus and stage 1-3 chronic kidney disease. CMAJ 2025;197(7):E178-E189. doi:10.1503/cmaj.240922. PMID: 39993818. (Active-comparator new-user + target-trial-emulation exemplar.)
+Hernan MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183(8):758-764. doi:10.1093/aje/kwv254. PMID: 26994063.
+Lund JL, Richardson DB, Sturmer T. The active comparator, new user study design in pharmacoepidemiology: historical foundations and contemporary application. Curr Epidemiol Rep 2015;2(4):221-228. doi:10.1007/s40471-015-0053-5. PMID: 26954351.
+Andersen M, Bergman U, Choi NK, Gerhard T, Huang C, Jalbert J, et al. The Asian Pharmacoepidemiology Network (AsPEN): promoting multi-national collaboration for pharmacoepidemiologic research in Asia. Pharmacoepidemiol Drug Saf 2013;22(7):700-704. doi:10.1002/pds.3439. PMID: 23653370. (AsPEN founding methods paper.)
+Pratt N, Andersen M, Bergman U, Choi NK, Gerhard T, Huang C, et al. Multi-country rapid adverse drug event assessment: the Asian Pharmacoepidemiology Network (AsPEN) antipsychotic and acute hyperglycaemia study. Pharmacoepidemiol Drug Saf 2013;22(9):915-924. doi:10.1002/pds.3440. PMID: 23696036. (AsPEN common-protocol, distributed-analysis exemplar.)
+Lai ECC, Man KKC, Chaiyakunapruk N, Cheng CL, Chien HC, Chui CSL, et al. Brief Report: Databases in the Asia-Pacific Region: The Potential for a Distributed Network Approach. Epidemiology 2015;26(6):815-820. doi:10.1097/EDE.0000000000000325. PMID: 26133022.
+Hsieh CY, Su CC, Shao SC, Sung SF, Lin SJ, Kao Yang YH, Lai EC. Taiwan's National Health Insurance Research Database: past and future. Clin Epidemiol 2019;11:349-358. doi:10.2147/CLEP.S196293. PMID: 31118821.
+Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database - a multi-institutional electronic medical records database for real-world epidemiological studies in Taiwan. Pharmacoepidemiol Drug Saf 2019;28(5):593-600. doi:10.1002/pds.4713. PMID: 30648314.
+Tsai DHT, Bell JS, Abtahi S, Baak B, Bazelier M, Brauer R, et al. Cross-Regional Data Initiative for the Assessment and Development of Treatment for Neurological and Mental Disorders. Clin Epidemiol 2023;15:1241-1252. doi:10.2147/CLEP.S426485. PMID: 38146486.
+Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensional propensity score adjustment in studies of treatment effects using health care claims data. Epidemiology 2009;20(4):512-522. doi:10.1097/EDE.0b013e3181a663cc. PMID: 19487948.</textarea>
             </label>
           </div>
         </details>
@@ -1296,7 +1296,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         <div class="border border-slate-200 rounded-2xl bg-slate-50 shadow-sm overflow-hidden">
           <header class="flex items-center justify-between px-4 py-2 bg-white border-b border-slate-200">
             <p class="text-xs uppercase tracking-widest text-brand-700 font-bold">Live preview</p>
-            <p class="text-[10px] text-slate-500">Auto-saved to this browser · server save coming soon</p>
+            <p class="text-[10px] text-slate-500">Saved in this browser only — never uploaded. “Clear &amp; start over” erases it.</p>
           </header>
           <pre data-preview class="text-xs leading-relaxed text-slate-800 p-4 overflow-auto max-h-[calc(100vh-12rem)] whitespace-pre-wrap font-mono"></pre>
         </div>
