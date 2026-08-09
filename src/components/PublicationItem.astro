@@ -47,6 +47,14 @@ const JCR_YEAR = 2025;
 const jcrUrl = (abbrev: string) =>
   `https://jcr.clarivate.com/jcr-jp/journal-profile?journal=${encodeURIComponent(abbrev)}&year=${JCR_YEAR}`;
 
+// The article title, for the cover thumbnail's link label. The thumbnail image
+// itself is decorative (alt=""), so without this the link has no accessible
+// name and a screen reader announces a bare "link".
+const titleOf = (p: Pub): string => {
+  const m = (p.ris || "").match(/^TI  - (.+?)\r?$/m);
+  return m ? unesc(m[1].trim()).replace(/[\s.]+$/, "") : p.citation;
+};
+
 const journal = journalOf(pub);
 // No abbreviation on file → no link, rather than one that lands on an empty profile.
 const jcrAbbrev = journal ? (JCR_ABBREV as Record<string, string>)[journal] : undefined;
@@ -66,7 +74,7 @@ const pt = pub.pmcid
 <li class="border-l-2 pl-4" class:list={[pub.tag ? "border-brand-600" : pub.pmcid ? "border-accent-500" : "border-slate-200"]}>
   <div class="flex gap-4">
     {pub.cover && !hideCover && (
-      <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" class="shrink-0">
+      <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" aria-label={`${titleOf(pub)} — full article at the publisher`} class="shrink-0">
         <img src={`${base}/images/${pub.cover}`} alt="" width="56" height="79" loading="lazy" class="w-14 rounded ring-1 ring-slate-200 shadow-sm hover:shadow-md transition" />
       </a>
     )}
