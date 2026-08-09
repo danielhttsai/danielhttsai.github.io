@@ -247,14 +247,34 @@ const fwList = Object.values(FRAMEWORKS);
       // `window.XLSX.read` on an undefined XLSX. Observed live: a workbook that
       // read fine on one attempt failed on another with "Cannot read properties
       // of undefined (reading 'read')".
+      //
+      // A stalled download also needs its own deadline. `onerror` fires for a
+      // refused or 404 request, but a request that simply never answers fires
+      // nothing at all, and the only backstop was the 90-second read timeout —
+      // during which the page said "Reading yourfile.docx…" and gave no hint it
+      // was waiting on a CDN. That is the shape of the reported stall: the first
+      // upload loads its reader fine, a second upload of a DIFFERENT format has
+      // to fetch a reader that has never loaded, and if that fetch hangs the
+      // page looks frozen with nothing to explain it.
       const scriptPromises = new Map();
+      const SCRIPT_TIMEOUT = 20000;
       function loadScript(src) {
         if (scriptPromises.has(src)) return scriptPromises.get(src);
+        const name = src.split("/").pop();
         const p = new Promise((res, rej) => {
           const s = document.createElement("script");
+          const fail = (why) => {
+            // Drop the cached promise so the next attempt can genuinely retry
+            // rather than replaying this failure for the rest of the session.
+            scriptPromises.delete(src);
+            try { s.remove(); } catch (e) {}
+            rej(new Error("A component needed to read this file (" + name + ") " + why +
+              ". It is fetched from cdnjs.cloudflare.com — check your connection or any blocker, then try again, or paste the text instead."));
+          };
+          const timer = setTimeout(() => fail("took more than " + (SCRIPT_TIMEOUT / 1000) + " seconds to download"), SCRIPT_TIMEOUT);
           s.src = src;
-          s.onload = () => res();
-          s.onerror = () => { scriptPromises.delete(src); rej(new Error("A component needed to read this file could not be downloaded (" + src.split("/").pop() + "). Check your connection, or paste the text instead.")); };
+          s.onload = () => { clearTimeout(timer); res(); };
+          s.onerror = () => { clearTimeout(timer); fail("could not be downloaded"); };
           document.head.appendChild(s);
         });
         scriptPromises.set(src, p);
@@ -287,8 +307,10 @@ const fwList = Object.values(FRAMEWORKS);
       // would preserve table structure, but it hangs indefinitely on the Word
       // files this site's own protocol builders produce — a silent "Reading…"
       // forever is far worse than losing the table borders. Cell text IS read.
-      async function extractDocx(file) {
+      async function extractDocx(file, step) {
+        step("Loading the Word reader…");
         await loadScript(MAMMOTH);
+        step("Extracting the text…");
         const buf = await file.arrayBuffer();
         let r;
         try {
@@ -307,8 +329,10 @@ const fwList = Object.values(FRAMEWORKS);
         return { text: r.value || "", notes, detail: "Word document" + (imgs ? " · " + imgs + " image(s) not read" : "") };
       }
 
-      async function extractXlsx(file) {
+      async function extractXlsx(file, step) {
+        step("Loading the spreadsheet reader…");
         await loadScript(SHEETJS);
+        step("Reading the cells…");
         const wb = window.XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
         const notes = [];
         const parts = [];
@@ -323,8 +347,10 @@ const fwList = Object.values(FRAMEWORKS);
         return { text: parts.join("\n\n"), notes, detail: parts.length + " of " + wb.SheetNames.length + " sheet(s) read" };
       }
 
-      async function extractPdf(file) {
+      async function extractPdf(file, step) {
+        step("Loading the PDF reader…");
         await loadScript(PDFJS);
+        step("Opening the PDF…");
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
         let pdf;
         try {
@@ -351,7 +377,8 @@ const fwList = Object.values(FRAMEWORKS);
         return { text: out, notes, detail: pdf.numPages + " page(s)" };
       }
 
-      async function extractPlain(file) {
+      async function extractPlain(file, step) {
+        step("Reading the text…");
         return { text: await file.text(), notes: [] };
       }
 
@@ -367,6 +394,10 @@ const fwList = Object.values(FRAMEWORKS);
         if (!f) return;
         const seq = ++fileSeq;
         const stale = () => seq !== fileSeq;
+        // Say which STEP is running, not just "Reading…". A stalled CDN fetch
+        // for a reader this page has not needed before is indistinguishable
+        // from a slow file otherwise, and the user is left watching a word.
+        const step = (msg) => { if (!stale()) fileMetaEl.textContent = msg + " (" + f.name + ")"; };
         fileErr.classList.add("hidden"); setStatus("");
         const name = f.name.toLowerCase();
         drop.classList.add("opacity-50", "pointer-events-none");
@@ -379,10 +410,10 @@ const fwList = Object.values(FRAMEWORKS);
           const bad = Object.keys(UNSUPPORTED).find((ext) => name.endsWith(ext));
           if (bad) throw new Error(UNSUPPORTED[bad]);
           let job;
-          if (name.endsWith(".docx")) job = extractDocx(f);
-          else if (name.endsWith(".xlsx")) job = extractXlsx(f);
-          else if (name.endsWith(".pdf")) job = extractPdf(f);
-          else if (/\.(txt|md|markdown)$/.test(name)) job = extractPlain(f);
+          if (name.endsWith(".docx")) job = extractDocx(f, step);
+          else if (name.endsWith(".xlsx")) job = extractXlsx(f, step);
+          else if (name.endsWith(".pdf")) job = extractPdf(f, step);
+          else if (/\.(txt|md|markdown)$/.test(name)) job = extractPlain(f, step);
           else throw new Error("“" + f.name + "” is not a file type this tool can read. Use Word (.docx), PDF, plain text (.txt/.md) or Excel (.xlsx) — or paste the text instead.");
           // A reader that never returns must not leave "Reading…" on screen for
           // ever. (mammoth's HTML converter does exactly that on some files.)
@@ -404,9 +435,14 @@ const fwList = Object.values(FRAMEWORKS);
           drop.classList.remove("hidden");
           fileErr.textContent = (e && e.message) ? e.message : String(e); fileErr.classList.remove("hidden");
         } finally {
+          // Always clear the input's value, even for a superseded read. If it
+          // keeps the old filename, re-picking that same file fires no `change`
+          // event at all and the page simply does nothing — which looks exactly
+          // like a hang. The newer read already holds its own File object, so
+          // resetting the element cannot disturb it.
+          fileEl.value = "";
           if (!stale()) {
             drop.classList.remove("opacity-50", "pointer-events-none");
-            fileEl.value = "";
             refreshInputNote();
           }
         }
@@ -431,13 +467,24 @@ const fwList = Object.values(FRAMEWORKS);
       window.addEventListener("dragover", (e) => e.preventDefault());
       window.addEventListener("drop", (e) => e.preventDefault());
 
-      removeFile.addEventListener("click", () => {
+      // Dropping the loaded file must also CANCEL a read that is still running.
+      // Without the ++fileSeq, a read started before the click stays "current"
+      // and, when it finishes, writes "…ready to check" and re-arms loadedText
+      // into a page the user has just emptied — a file they thought they had
+      // removed, silently queued for checking behind a hidden chip.
+      function resetFileInput() {
+        fileSeq++;
         loadedText = ""; loadedName = ""; loadedNotes = [];
         fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
         fileNotesEl.innerHTML = "";
+        fileMetaEl.textContent = "";
+        fileNameEl.textContent = "";
+        fileEl.value = "";
         drop.classList.remove("hidden");
-        refreshInputNote();
-      });
+        drop.classList.remove("opacity-50", "pointer-events-none");
+      }
+
+      removeFile.addEventListener("click", () => { resetFileInput(); refreshInputNote(); });
 
       const getInputText = () => (loadedText ? loadedText : (textEl.value || "").trim());
 
@@ -999,10 +1046,9 @@ const fwList = Object.values(FRAMEWORKS);
         runCheck("target");
       });
       clearBtn.addEventListener("click", () => {
-        textEl.value = ""; loadedText = ""; loadedName = ""; loadedNotes = []; lastReport = null;
-        fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
-        fileNotesEl.innerHTML = "";
-        drop.classList.remove("hidden"); fileErr.classList.add("hidden");
+        resetFileInput();
+        textEl.value = ""; lastReport = null;
+        fileErr.classList.add("hidden");
         resultsEl.classList.add("hidden"); runErrEl.classList.add("hidden"); tteEl.classList.add("hidden");
         refreshInputNote(); setStatus("");
       });

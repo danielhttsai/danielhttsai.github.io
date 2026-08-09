@@ -132,8 +132,12 @@
         const edits = w.edits || (w.edit ? [w.edit] : []);
         for (const ed of edits) {
           const ex = ed.edge === "start" ? xa : xb;
-          svg += '<line x1="' + ex + '" y1="' + (y + 1) + '" x2="' + ex + '" y2="' + (y + 23) + '" stroke="#0f172a" stroke-width="2" stroke-opacity="0.55"/>';
-          svg += '<circle cx="' + ex + '" cy="' + (y + 12) + '" r="5" fill="#fff" stroke="' + meta.c + '" stroke-width="2"/>';
+          // dd-mark = editing furniture. Visible on the page, stripped from the
+          // exported figure: in a formal protocol a reviewer reasonably asks
+          // what the little white circles mean, and they carry no information a
+          // reader of the figure needs.
+          svg += '<line class="dd-mark" x1="' + ex + '" y1="' + (y + 1) + '" x2="' + ex + '" y2="' + (y + 23) + '" stroke="#0f172a" stroke-width="2" stroke-opacity="0.55"/>';
+          svg += '<circle class="dd-mark" cx="' + ex + '" cy="' + (y + 12) + '" r="5" fill="#fff" stroke="' + meta.c + '" stroke-width="2"/>';
           svg += '<rect x="' + (ex - 8) + '" y="' + (y - 2) + '" width="16" height="28" fill="#fff" fill-opacity="0.001" class="dd-handle" data-field="' + ed.field + '" data-edge="' + ed.edge + '" data-idx="' + (ed.idx != null ? ed.idx : "") + '" data-past="' + (ed.allowPast ? "1" : "0") + '" style="cursor:ew-resize;touch-action:none"/>';
         }
       });
@@ -148,7 +152,7 @@
         }
         if (b.edit) {
           const ex = b.edit.edge === "start" ? bx0 : bx1;
-          svg += '<rect x="' + (ex - 2) + '" y="38" width="4" height="' + (H - 54) + '" fill="' + col + '" fill-opacity="0.6" style="pointer-events:none"/>';
+          svg += '<rect class="dd-mark" x="' + (ex - 2) + '" y="38" width="4" height="' + (H - 54) + '" fill="' + col + '" fill-opacity="0.6" style="pointer-events:none"/>';
           svg += '<rect x="' + (ex - 8) + '" y="30" width="16" height="' + (H - 44) + '" fill="#fff" fill-opacity="0.001" class="dd-handle" data-field="' + b.edit.field + '" data-edge="' + b.edit.edge + '" data-idx="" data-past="' + (b.edit.allowPast ? "1" : "0") + '" style="cursor:ew-resize;touch-action:none"/>';
         }
       }
@@ -329,9 +333,17 @@
         h = Math.max(1, Math.round(vh * unitPx));
 
         const clone = svgEl.cloneNode(true);
+        // Editing furniture — invisible hit targets AND the visible drag handles
+        // — is tagged now but removed AFTER the styles are inlined: inlineStyles
+        // walks source and clone in parallel by index, so deleting nodes from the
+        // clone first would shift every subsequent element's styles onto its
+        // neighbour. Covers the shared diagram's .dd-mark handles and the
+        // bespoke ones builders draw (its-handle, tit-handle, [data-field]);
+        // any page can opt an element out with data-export="omit".
+        clone.querySelectorAll('[data-field], [data-export="omit"], .dd-mark, [class*="handle"]')
+          .forEach((el) => el.setAttribute("data-omit", "1"));
         inlineStyles(svgEl, clone);
-        // Drag handles are interaction-only and invisible; nothing to export.
-        clone.querySelectorAll("[data-field]").forEach((el) => el.remove());
+        clone.querySelectorAll("[data-omit]").forEach((el) => el.remove());
         clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
         clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
         clone.setAttribute("width", w);
@@ -407,6 +419,11 @@
 
     function describeSpec(spec) {
       const lines = [];
+      // HARPER 7.2 asks for "time 0, time anchors, and assessment windows".
+      // The windows were described but time zero was only ever implicit in each
+      // page's caption, and a checker reading the text reasonably called that
+      // short of the item. State it outright, once, for every page at a time.
+      lines.push("Time zero (day 0): " + (spec.indexLabel || "the index date"));
       for (const w of (spec.windows || [])) {
         if (!Number.isFinite(+w.startDay) || !Number.isFinite(+w.endDay)) continue;
         const meta = K[w.kind] || { l: w.kind };
@@ -460,7 +477,10 @@
         // The written version of the same picture. An image is invisible to any
         // reader — human or machine — working from the document's text, which is
         // why a diagram alone does not satisfy a text-based conformance check.
-        for (const line of (fig && fig.lines) || []) {
+        // Pages that draw their own SVG never register a spec, so fig.lines is
+        // empty for them; they can pass their own description as opts.lines.
+        const written = (fig && fig.lines && fig.lines.length) ? fig.lines : (opts.lines || []);
+        for (const line of written) {
           out.push(new D.Paragraph({ spacing: { before: 0, after: 0 }, children: [new D.TextRun({ text: "•  " + line, font: FONT, size: 18, color: "555555" })] }));
         }
         out.placed = placed;
@@ -482,7 +502,8 @@
       if (fig && fig.ok && fig.dataUrl) md += "![Study design diagram](" + fig.dataUrl + ")\n\n";
       else md += "> **The study design diagram could not be generated automatically** — " + ((fig && fig.reason) || "unknown reason") + ". HARPER item 7.2 requires one; paste a screenshot here.\n\n";
       md += "_" + caption + "_\n\n";
-      for (const line of (fig && fig.lines) || []) md += "- " + line + "\n";
+      const written = (fig && fig.lines && fig.lines.length) ? fig.lines : (opts.lines || []);
+      for (const line of written) md += "- " + line + "\n";
       return md + "\n";
     };
 
