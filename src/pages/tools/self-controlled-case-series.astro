@@ -128,6 +128,41 @@ const SUBGROUPS = [
   "Concomitant exposure (yes vs no)",
 ];
 
+// The assumptions SCCS stands on. Layered deliberately: `plain` is what someone
+// meeting SCCS for the first time needs in order to decide whether the design
+// fits at all; `precise` is the version for a methods section or a reviewer;
+// `check` is the thing you actually do. Each is traceable to a cited paper.
+const ASSUMPTIONS = [
+  {
+    t: "Having the event must not change the chance of later exposure",
+    plain: "If the event — or the illness that produced it — makes a clinician start, stop, or delay the drug, the design is biased.",
+    precise: "The SCCS likelihood conditions on each case's whole exposure history being fixed in advance. If exposure after the event differs from what it would have been, that condition fails. The mirror image is what you can actually see in the data: an excess (or dearth) of exposures after an event is the same thing as an excess (or dearth) of events just before an exposure, which is why a pre-exposure risk window measures it directly.",
+    check: "Put a short pre-exposure (pretreatment) window immediately before exposure start and report its incidence rate ratio as a separate parameter, never folded into the baseline. A raised pre-exposure IRR is a finding, not a nuisance: in the AsPEN antipsychotic-falls series a 14-day pretreatment window carried an IRR of 6.17, which the authors read as the underlying disease rather than the drug.",
+    cite: "Whitaker 2006; Whitaker 2018; Wang GH BMJ 2021",
+  },
+  {
+    t: "The length of observation must not depend on the event",
+    plain: "If having the event can end the person's follow-up, the design is biased. Death is the obvious case.",
+    precise: "The standard model requires each case's observation period to be fixed independently of when their events occur. Censoring at death breaks this whenever the outcome itself raises mortality; the extreme case is an outcome that is death, for which the standard SCCS is simply not applicable.",
+    check: "If the outcome is fatal or raises short-term mortality, say so and either restrict to non-fatal events or use a method for event-dependent observation periods (Farrington et al, JASA 2011). Do not silently keep the standard model.",
+    cite: "Farrington 2011; Petersen 2016",
+  },
+  {
+    t: "Repeat events in the same person must be independent",
+    plain: "If one event makes the next one more likely, counting them all makes the study look more precise than it is.",
+    precise: "The Poisson likelihood treats a person's events as independent given their exposure and age. For clustered outcomes — repeat falls in the same frail patient, repeat admissions for the same episode — that fails, and confidence intervals are too narrow.",
+    check: "Either restrict to the first event per person (Event handling, section 4) or justify independence explicitly. If the outcome can only happen once, first-event handling is the only coherent choice.",
+    cite: "Whitaker 2006",
+  },
+  {
+    t: "Only time-invariant confounding is removed; time-varying confounding is not",
+    plain: "Being your own control removes anything about you that does not change — genes, sex, lifelong habits. It does nothing about things that change while you are being observed.",
+    precise: "Age and season are the two that change in every study and are handled by splitting person-time into age bands and calendar strata inside the same conditional Poisson model. Anything else that varies within a person over the observation period — an intercurrent illness, a concomitant drug, a change in care setting — remains a confounder unless it is modelled as time-varying.",
+    check: "Set age bands and season in section 9, and list any other time-varying covariate explicitly. If you leave season unadjusted for a seasonal outcome, state why.",
+    cite: "Whitaker 2006; Petersen 2016",
+  },
+];
+
 const SENSITIVITY = [
   "Alternative risk window length (e.g., 7-30, 0-90, 0-180 d)",
   "Alternative pre-risk window (0, 30, 60 d); checks for event-dependent exposure",
@@ -160,21 +195,38 @@ const TIMELINE_PRESETS: Record<string, string> = {
 ---
 
 <BaseLayout
-  title="Protocol template · SCCS · AsPEN members"
+  title="Self-controlled case series (SCCS) protocol template"
   description="Guided form for drafting a multi-national self-controlled case series (SCCS) protocol."
 >
   <PageHeader
-    eyebrow="Members → Templates → SCCS"
+    eyebrow="Protocol templates → Self-controlled case series"
     title="Multi-national SCCS protocol builder"
     description="Self-controlled case series. Each case acts as their own control; all time-invariant between-person confounding (genetics, lifelong habits) is automatically removed. AsPEN convention: separate a short pretreatment window (e.g., 14 days) before the first dispensing to absorb confounding by indication and benchmark the underlying-disease risk before therapy (see Wang GH et al BMJ 2021; PMID 34503972)."
   />
 
   <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
     <div class="flex items-center justify-between gap-3 flex-wrap">
-      <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator/`}>← All templates</a>
+      <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator/`}>← All designs</a>
       <button type="button" data-action="reset-top" class="text-xs font-semibold text-rose-700 border border-rose-300 hover:bg-rose-50 px-3 py-1.5 rounded transition">
         ⟲ Clear &amp; start over
       </button>
+    </div>
+
+    <!-- Assumptions first: SCCS fails silently, and returns an IRR either way. -->
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">Before you use this design</h2>
+      <p class="mt-1 text-sm text-slate-600">An SCCS that breaks one of these four assumptions still returns an incidence rate ratio with a confidence interval. Nothing warns you. Read the plain line first; the paragraph under it is the version for a methods section or a reviewer.</p>
+      <ol class="mt-4 space-y-3">
+        {ASSUMPTIONS.map((a, i) => (
+          <li class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <p class="text-sm font-bold text-slate-900"><span class="text-brand-700">{i + 1}.</span> {a.t}</p>
+            <p class="mt-1 text-sm text-slate-700">{a.plain}</p>
+            <p class="mt-2 text-xs text-slate-600 leading-relaxed"><span class="uppercase tracking-widest font-bold text-slate-500 text-[10px]">Why</span> · {a.precise}</p>
+            <p class="mt-1.5 text-xs text-slate-600 leading-relaxed"><span class="uppercase tracking-widest font-bold text-slate-500 text-[10px]">What to do</span> · {a.check} <span class="text-slate-400">[{a.cite}]</span></p>
+          </li>
+        ))}
+      </ol>
+      <div data-checks class="mt-4 hidden"></div>
     </div>
 
     <div data-state="ready" class="grid gap-8 lg:grid-cols-[1fr,1fr] items-start">
@@ -555,10 +607,12 @@ Reference | 90</textarea>
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Key references (one per line)</span>
-              <textarea name="references" rows="6" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Whitaker HJ, Farrington CP, Spiessens B, Musonda P. Tutorial in biostatistics: the self-controlled case series method. Stat Med 2006;25:1768-97.
-Farrington CP. Relative incidence estimation from case series for vaccine safety evaluation. Biometrics 1995;51(1):228-35.
-Petersen I, Douglas I, Whitaker H. Self controlled case series methods: an alternative to standard epidemiological study designs. BMJ 2016;354:i4515.
-Wang GH, Man KKC, Chang WH, Liao TC, Lai ECC. BMJ 2021 (AsPEN antipsychotic-falls SCCS, PMID 34503972).
+              <textarea name="references" rows="8" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Whitaker HJ, Farrington CP, Spiessens B, Musonda P. Tutorial in biostatistics: the self-controlled case series method. Stat Med 2006;25(10):1768-97. doi:10.1002/sim.2302
+Farrington CP. Relative incidence estimation from case series for vaccine safety evaluation. Biometrics 1995;51(1):228-35. doi:10.2307/2533328
+Petersen I, Douglas I, Whitaker H. Self controlled case series methods: an alternative to standard epidemiological study designs. BMJ 2016;354:i4515. doi:10.1136/bmj.i4515
+Whitaker HJ, Ghebremichael-Weldeselassie Y, Douglas IJ, Smeeth L, Farrington CP. Investigating the assumptions of the self-controlled case series method. Stat Med 2018;37(4):643-58. doi:10.1002/sim.7536 (tests and graphical checks for the assumptions above.)
+Farrington CP, Anaya-Izquierdo K, Whitaker HJ, Hocine MN, Douglas I, Smeeth L. Self-controlled case series analysis with event-dependent observation periods. J Am Stat Assoc 2011;106(494):417-26. doi:10.1198/jasa.2011.ap10108 (the method to use when the event curtails observation, e.g. a fatal outcome.)
+Wang GH, Man KKC, Chang WH, Liao TC, Lai EC. Use of antipsychotic drugs and cholinesterase inhibitors and risk of falls and fractures: self-controlled case series. BMJ 2021;374:n1925. doi:10.1136/bmj.n1925; PMID 34503972. (AsPEN exemplar; 14-day pretreatment window, pretreatment IRR 6.17.)
 Hsieh CY, Su CC, Shao SC, Sung SF, Lin SJ, Kao Yang YH, Lai EC. Taiwan's NHIRD: past and future. Clin Epidemiol 2019;11:349-358.
 Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database. Pharmacoepidemiol Drug Saf 2019;28(5):593-600.</textarea>
             </label>
@@ -616,7 +670,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
 
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
 
-  <script is:inline define:vars={{ BASE: base, SITES_DETAIL_MAP, FEATURES, PHENOTYPES, TIMELINE_PRESETS, STROBE_ITEMS }}>
+  <script is:inline define:vars={{ BASE: base, SITES_DETAIL_MAP, FEATURES, PHENOTYPES, TIMELINE_PRESETS, STROBE_ITEMS, ASSUMPTIONS }}>
     (() => {
       const setState = (name) => {
         document.querySelectorAll("[data-state]").forEach((el) => {
@@ -852,7 +906,13 @@ ${sccsVariantText}
 - **Ends at:** ${({ "earliest-of": "Earliest of: end of study period, death, disenrolment", "study-end": "Calendar end of study period", death: "Death", disenrol: "Disenrolment from database" })[s.obsEnd] || "earliest of end of period / death / disenrolment"}
 - **Study calendar period:** ${orFb(s.studyCalendar, "_(specify)_")}
 
-## 8. Time-varying confounders
+## 8. Design assumptions and checks
+
+${ASSUMPTIONS.map((a, i) => (i + 1) + ". **" + a.t + ".** " + a.plain + "\n\n   *Why it matters.* " + a.precise + "\n\n   *What we do about it.* " + a.check + " [" + a.cite + "]").join("\n\n")}
+
+${(() => { const c = sccsChecks(s); return c.length ? "**Outstanding issues in this draft**\n\n" + c.map((x) => "- " + (x.lvl === "stop" ? "**" + x.t + ".** " : x.t + ". ") + x.d).join("\n") : "_No assumption checks are outstanding for this draft._"; })()}
+
+## 9. Time-varying confounders
 
 - **Age bands:** ${ageBand} bands
 - **Season:** ${season}
@@ -861,7 +921,7 @@ ${sccsVariantText}
 
 ${bullets(tvCovs)}
 
-## 9. Statistical analysis
+## 10. Statistical analysis
 
 - **Primary model:** ${orFb(s.primaryModel, "Conditional Poisson regression with offset for log person-time.")}
 - **Effect estimate:** ${orFb(s.effectMeasure, "Incidence rate ratio (IRR) with 95% CI.")}
@@ -875,7 +935,7 @@ ${bullets(subgroups)}
 
 ${bullets(sensitivity)}
 
-## 10. Execution and timeline
+## 11. Execution and timeline
 
 **Architecture.** ${arch}
 
@@ -883,7 +943,7 @@ ${bullets(sensitivity)}
 
 ${numbered(milestones)}
 
-## 11. Ethics, data sharing, dissemination
+## 12. Ethics, data sharing, dissemination
 
 **Ethics.** ${orFb(s.ethics, "Each participating site obtains local IRB / ethics approval before data extraction.")}
 
@@ -891,7 +951,7 @@ ${numbered(milestones)}
 
 ${window.PC.tailMd(pcOf(s))}
 
-## 12. Key references
+## 13. Key references
 
 ${numbered(refs)}
 
@@ -902,7 +962,10 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       };
 
       const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));   // declared here: renderScheme() runs on first paint, before the old position
-      const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
+      // Look-back windows are clamped to >= 1 day so the text and the drag handle
+      // (which floors at 1) can never disagree, and a "0 d" look-back can't be
+      // drawn as a visible bar.
+      const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(1, parseInt(p[1]) || 1) }; }).filter((r) => r.name);
       const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
       const parsePeriods = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
         const p = l.split("|"); const name = (p[0] || "").trim(); const days = Math.max(1, parseInt(p[1]) || 1); const n = name.toLowerCase();
@@ -917,6 +980,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       const PKIND = { reference: { c: "#94a3b8", l: "Reference (baseline)" }, exposure: { c: "#14b8a6", l: "Exposure risk" }, pre: { c: "#f59e0b", l: "Pre-exposure risk" }, post: { c: "#fb923c", l: "Post-exposure risk" }, custom: { c: "#8b5cf6", l: "Custom period" } };
       const fmtD = (d) => { const a = Math.abs(d), s = d < 0 ? "−" : "+"; if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return s + Math.round(a / 30) + "mo"; return s + a + "d"; };
 
+      let dragAxis = null;   // {lo, hi} pinned for the life of one edge drag
       const renderScheme = (s) => {
         const anchor = s.sccsAnchor === "calendar" ? "calendar" : "exposure";
         const covRows = parseRows(s.covWindows);
@@ -934,10 +998,22 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         const stripMin = segs.length ? segs[0].start : 0, stripMax = segs.length ? segs[segs.length - 1].end : 1;
         let lo = Math.min(stripMin, -covMax, anchor === "calendar" ? -baseDays : 0), hi = Math.max(stripMax, 1);
         const pad = (hi - lo) * 0.03 || 1; lo -= pad; hi += pad;
+        // While an edge is being dragged, freeze the axis. Every pointermove
+        // re-renders, and re-fitting the axis to the new lengths mid-drag means
+        // the edge is drawn on a different scale from the one that turned the
+        // cursor into a day count — the handle then runs away from the pointer
+        // and writes a number nobody asked for. Same trick as DesignDiagram.
+        if (dragAxis) { lo = dragAxis.lo; hi = dragAxis.hi; }
         const W = 900, plotL = 186, plotR = W - 16, plotW = plotR - plotL;
         const trunc = (t, n) => { t = String(t); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
         const extraRow = anchor === "calendar" && baseDays > 0 ? 1 : 0;
-        const top = 52, rowH = 25, stripY = top + (covRows.length + extraRow) * rowH + 8, H = stripY + 30 + 26;
+        // Segments too thin to hold their own caption get a leader line and a
+        // label underneath instead of no label at all — which is what the
+        // default protocol produced for pre-risk, exposure and post-risk.
+        const segPx = (seg) => Math.max(2, ((seg.end - seg.start) / (hi - lo)) * plotW);
+        const LABEL_MIN = 46, callouts = segs.filter((seg) => segPx(seg) <= LABEL_MIN).length;
+        const top = 52, rowH = 25, stripY = top + (covRows.length + extraRow) * rowH + 8;
+        const calloutH = callouts ? (callouts > 1 ? 26 : 14) : 0, H = stripY + 30 + 26 + calloutH;
         const xF = (d) => plotL + ((d - lo) / (hi - lo)) * plotW, x0 = xF(0);
         let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:700px;overflow:visible" xmlns="http://www.w3.org/2000/svg">';
         svg += '<line x1="' + x0 + '" y1="26" x2="' + x0 + '" y2="' + (H - 16) + '" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4 3"/>';
@@ -948,7 +1024,21 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         if (extraRow) { const y = top + row * rowH, xa = xF(-baseDays); svg += '<text x="' + (plotL - 10) + '" y="' + (y + 13) + '" text-anchor="end" font-size="11" fill="#334155">Baseline (calendar ' + (baseY === 1 ? "1 y" : baseY + " y") + ')</text>'; svg += '<rect x="' + xa + '" y="' + (y + 2) + '" width="' + Math.max(3, x0 - xa) + '" height="16" rx="3" fill="#94a3b8" fill-opacity="0.35" stroke="#94a3b8" stroke-dasharray="4 3"/>'; row++; }
         covRows.forEach((r, i) => { const y = top + row * rowH, xa = xF(-r.days); svg += '<text x="' + (plotL - 10) + '" y="' + (y + 13) + '" text-anchor="end" font-size="11" fill="#334155"><title>' + esc(r.name) + '</title>' + esc(trunc(r.name, 26)) + '</text>'; svg += '<rect x="' + xa + '" y="' + (y + 2) + '" width="' + Math.max(3, x0 - xa) + '" height="16" rx="3" fill="#8b5cf6" fill-opacity="0.85"/>'; svg += '<circle cx="' + xa + '" cy="' + (y + 10) + '" r="4.5" fill="#fff" stroke="#8b5cf6" stroke-width="2" class="sccs-h" data-kind="cov" data-idx="' + i + '" style="cursor:ew-resize;touch-action:none"/>'; row++; });
         svg += '<text x="' + (plotL - 10) + '" y="' + (stripY + 17) + '" text-anchor="end" font-size="11" fill="#334155" font-weight="600">Observation strip</text>';
-        segs.forEach((seg, i) => { const xa = xF(seg.start), xb = xF(seg.end), w = Math.max(2, xb - xa), meta = PKIND[seg.kind] || PKIND.custom; svg += '<rect x="' + xa + '" y="' + stripY + '" width="' + w + '" height="26" fill="' + meta.c + '" fill-opacity="0.9" stroke="#ffffff" stroke-width="1"/>'; if (w > 46) { svg += '<text x="' + (xa + w / 2) + '" y="' + (stripY + 12) + '" text-anchor="middle" font-size="8.5" fill="#fff" font-weight="600">' + esc(seg.name) + '</text><text x="' + (xa + w / 2) + '" y="' + (stripY + 22) + '" text-anchor="middle" font-size="8" fill="#fff">' + seg.days + 'd</text>'; } svg += '<circle cx="' + xb + '" cy="' + (stripY + 13) + '" r="4.5" fill="#fff" stroke="' + meta.c + '" stroke-width="2" class="sccs-h" data-kind="seg" data-idx="' + i + '" style="cursor:ew-resize;touch-action:none"/>'; });
+        let lane = 0;
+        segs.forEach((seg, i) => {
+          const xa = xF(seg.start), xb = xF(seg.end), w = Math.max(2, xb - xa), meta = PKIND[seg.kind] || PKIND.custom;
+          svg += '<rect x="' + xa + '" y="' + stripY + '" width="' + w + '" height="26" fill="' + meta.c + '" fill-opacity="0.9" stroke="#ffffff" stroke-width="1"><title>' + esc(seg.name + " · " + seg.days + " d (day " + Math.round(seg.start) + " to " + Math.round(seg.end) + ")") + '</title></rect>';
+          if (w > LABEL_MIN) {
+            svg += '<text x="' + (xa + w / 2) + '" y="' + (stripY + 12) + '" text-anchor="middle" font-size="8.5" fill="#fff" font-weight="600" pointer-events="none">' + esc(seg.name) + '</text><text x="' + (xa + w / 2) + '" y="' + (stripY + 22) + '" text-anchor="middle" font-size="8" fill="#fff" pointer-events="none">' + seg.days + 'd</text>';
+          } else {
+            const txt = seg.name + " " + seg.days + "d", half = txt.length * 2.3;
+            const cx = Math.min(W - 4 - half, Math.max(4 + half, xa + w / 2)), ly = stripY + 37 + lane * 12;
+            svg += '<line x1="' + (xa + w / 2) + '" y1="' + (stripY + 26) + '" x2="' + cx + '" y2="' + (ly - 8) + '" stroke="' + meta.c + '" stroke-width="1"/>';
+            svg += '<text x="' + cx + '" y="' + ly + '" text-anchor="middle" font-size="9" fill="#334155" pointer-events="none">' + esc(txt) + '</text>';
+            lane = callouts > 1 ? (lane + 1) % 2 : 0;
+          }
+          svg += '<circle cx="' + xb + '" cy="' + (stripY + 13) + '" r="4.5" fill="#fff" stroke="' + meta.c + '" stroke-width="2" class="sccs-h" data-kind="seg" data-idx="' + i + '" style="cursor:ew-resize;touch-action:none"/>';
+        });
         const diag = document.getElementById("diagram"); diag.innerHTML = svg + "</svg>";
         document.getElementById("dlegend").innerHTML = ["reference", "exposure", "pre", "post"].map((k) => '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + PKIND[k].c + '"></span>' + PKIND[k].l + '</span>').join("") + '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Covariate look-back</span>';
 
@@ -957,6 +1047,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           h.addEventListener("pointerdown", (ev) => {
             ev.preventDefault(); ev.stopPropagation(); if (window.__diagDrag) window.__diagDrag.cleanup();
             const hkind = h.getAttribute("data-kind"), idx = parseInt(h.getAttribute("data-idx")), segStart = hkind === "seg" ? segs[idx].start : 0;
+            dragAxis = { lo: lo, hi: hi };   // this closure's lo/hi are what the day maths below uses
             const pid = ev.pointerId; try { diag.setPointerCapture(pid); } catch (e) {}
             let pending = null, raf = 0;
             const apply = () => { raf = 0; if (pending == null) return;
@@ -966,7 +1057,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
             };
             const move = (e) => { if (e.pointerId !== pid) return; const x = svgXof(e.clientX); if (x == null) return; const day = Math.round((lo + ((x - plotL) / plotW) * (hi - lo)) / 5) * 5;
               pending = hkind === "cov" ? Math.max(1, -day) : Math.max(1, Math.round(day - segStart)); if (!raf) raf = requestAnimationFrame(apply); };
-            const end = (e) => { if (e && e.pointerId != null && e.pointerId !== pid) return; document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", end); document.removeEventListener("pointercancel", end); if (raf) { cancelAnimationFrame(raf); raf = 0; } apply(); try { diag.releasePointerCapture(pid); } catch (e2) {} window.__diagDrag = null; };
+            const end = (e) => { if (e && e.pointerId != null && e.pointerId !== pid) return; document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", end); document.removeEventListener("pointercancel", end); if (raf) { cancelAnimationFrame(raf); raf = 0; } apply(); try { diag.releasePointerCapture(pid); } catch (e2) {} window.__diagDrag = null; dragAxis = null; render(); };
             window.__diagDrag = { cleanup: end }; document.addEventListener("pointermove", move); document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);
           });
         });
@@ -981,14 +1072,57 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           : "Day 0 = the start of the first <em>Exposure risk</em> segment.";
       };
 
+      // Which assumptions are at risk given what the user actually entered.
+      // Everything here is derived from the form, never from a stored guess.
+      const FATAL_RX = /\b(death|deaths|mortality|fatal|suicide|self-?harm|cardiac arrest|sudden death)\b/i;
+      const HIGH_MORTALITY_RX = /\b(myocardial infarction|\bmi\b|stroke|h(a)?emorrhage|sepsis|septic|hip fracture|pneumonia|cardiac|cardiovascular|respiratory failure)\b/i;
+      const sccsChecks = (s) => {
+        const out = [];
+        const periods = parsePeriods(s.periods);
+        const outcomeBlob = [s.picoO, s.outcomeDef, s.outcomeCodes].filter(Boolean).join(" ");
+        if (periods.length && !periods.some((p) => p.kind === "pre")) {
+          out.push({ lvl: "warn", t: "No pre-exposure risk window", d: "Assumption 1. Without a pre-exposure (pretreatment) window the strip gives you no way to see whether the event, or the illness behind it, changed the chance of being treated — the exposed period simply absorbs it. Add one from the chips under the period strip; the AsPEN antipsychotic-falls series used 14 days." });
+        }
+        if (periods.length && !periods.some((p) => p.kind === "reference")) {
+          out.push({ lvl: "stop", t: "No reference (baseline) period", d: "The strip has no unexposed reference time, so there is nothing for the risk window to be a rate ratio against. Add a Reference period, or switch to the active-comparator variant in section 6, where the comparator drug's time supplies the baseline." });
+        }
+        const censorsAtDeath = s.obsEnd === "death" || s.obsEnd === "earliest-of";
+        if (censorsAtDeath && FATAL_RX.test(outcomeBlob)) {
+          out.push({ lvl: "stop", t: "The outcome looks fatal, and observation ends at death", d: "Assumption 2. Observation time then ends because the event happened, which is exactly the dependence the standard SCCS likelihood forbids; when the outcome is death the standard model does not apply at all. Restrict to non-fatal events, or use a method for event-dependent observation periods (Farrington et al, JASA 2011), and say which in section 8." });
+        } else if (censorsAtDeath && HIGH_MORTALITY_RX.test(outcomeBlob)) {
+          out.push({ lvl: "warn", t: "This outcome may raise short-term mortality, and observation ends at death", d: "Assumption 2. Case-fatal events shorten the observation period for the people who have them, which biases the standard SCCS. Report the case-fatality of the outcome in your data; if it is appreciable, either restrict to survivors of the index event or use a method for event-dependent observation periods." });
+        }
+        if (s.eventHandling !== "first" && FATAL_RX.test(outcomeBlob)) {
+          out.push({ lvl: "warn", t: "Recurrent-event handling with an outcome that can happen only once", d: "Assumption 3. Event handling (section 4) is set to all events per person, but the outcome as written cannot recur. Set it to first event only." });
+        }
+        if (s.seasonAdj === "none") {
+          out.push({ lvl: "info", t: "Season not adjusted", d: "Assumption 4. Seasonality is a within-person time-varying confounder that the self-controlled design does not remove. If the outcome or the prescribing has any seasonal pattern, adjust for calendar month; if you leave it out, state why in the protocol." });
+        }
+        return out;
+      };
+      const renderSccsChecks = (s) => {
+        const box = document.querySelector("[data-checks]"); if (!box) return;
+        const notes = sccsChecks(s);
+        if (!notes.length) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+        const style = { stop: ["bg-rose-50 border-rose-300", "text-rose-900", "⛔"], warn: ["bg-amber-50 border-amber-300", "text-amber-900", "⚠"], info: ["bg-slate-50 border-slate-300", "text-slate-700", "ℹ"] };
+        box.innerHTML = '<p class="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500">Checks against what you entered</p><div class="mt-2 space-y-2">' +
+          notes.map((n) => { const st = style[n.lvl]; return '<div class="rounded-lg border ' + st[0] + ' p-3 text-xs ' + st[1] + '"><p class="font-bold">' + st[2] + " " + esc(n.t) + '</p><p class="mt-1 leading-relaxed">' + esc(n.d) + "</p></div>"; }).join("") + "</div>";
+        box.classList.remove("hidden");
+      };
+
       const render = () => {
         const state = readForm();
         preview.textContent = buildMarkdown(state);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn("draft not saved", e); }
         renderFeasibility(state);
+        try { renderSccsChecks(state); } catch (e) { console.error("assumption checks failed", e); }
         try { renderScheme(state); } catch (e) { console.error("renderScheme failed", e); }
       };
-      try { window.PC && PC.restore ? PC.restore(form, STORAGE_KEY, writeForm) : (localStorage.getItem(STORAGE_KEY) && writeForm(JSON.parse(localStorage.getItem(STORAGE_KEY)))); } catch {}
+      // Never a bare catch here: this is the only path that restores a saved
+      // draft or a ?seed= link, and swallowing its failure loses the user's work
+      // with no trace on screen or in the console.
+      try { window.PC && PC.restore ? PC.restore(form, STORAGE_KEY, writeForm) : (localStorage.getItem(STORAGE_KEY) && writeForm(JSON.parse(localStorage.getItem(STORAGE_KEY)))); }
+      catch (e) { console.error("could not restore the saved draft", e); setMsg("Your saved draft could not be restored; the form has been left at its defaults.", true); }
       const timelineTa = form.querySelector('[name="timeline"]');
       if (timelineTa && !timelineTa.value) timelineTa.value = TIMELINE_PRESETS["12-month"];
       render();
@@ -1043,8 +1177,13 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         localStorage.removeItem(STORAGE_CITATIONS_KEY);
         pickedCitations = {};
         form.querySelectorAll("input, textarea, select").forEach((el) => {
-          if (el.type === "checkbox" || el.type === "radio") el.checked = false;
-          else if (el.tagName === "SELECT") el.selectedIndex = 0;
+          // Radios and selects have no "empty" state. Unchecking every radio left
+          // the timeline anchor with neither option ticked — a state the UI cannot
+          // display and the user cannot reach by clicking — so restore each
+          // control's own HTML default instead.
+          if (el.type === "radio") el.checked = el.defaultChecked;
+          else if (el.type === "checkbox") el.checked = false;
+          else if (el.tagName === "SELECT") { const i = [...el.options].findIndex((o) => o.defaultSelected); el.selectedIndex = i < 0 ? 0 : i; }
           else el.value = "";
         });
         render();
@@ -1111,7 +1250,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           "11": "Age modelled as a time-varying covariate in " + ageTxt + " bands; seasonality: " + seasonTxt + ".",
           "12": "Conditional Poisson regression for the within-person incidence rate ratio (IRR), with age and season as time-varying covariates. Site-specific IRRs pooled by " + metaTxt + " meta-analysis (report I², τ²). Subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
           "17": "Pre-specified subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
-          "19": "The within-person design controls time-invariant confounding but not time-varying confounders; it assumes event occurrence does not alter subsequent exposure probability (event-dependent exposure) and is non-censoring; outcome misclassification is possible.",
+          "19": "The within-person design controls time-invariant confounding but not time-varying confounders; it assumes event occurrence does not alter subsequent exposure probability, does not curtail the observation period (the extreme violation being a fatal outcome), and that repeat events within a person are independent; outcome misclassification is possible." + (() => { const c = sccsChecks(s); return c.length ? " Outstanding assumption checks in the current draft: " + c.map((x) => x.t + " — " + x.d).join(" ") : ""; })(),
           "21": "Results generalise to the source populations of the contributing AsPEN databases: " + sitesPlain + ".",
         };
       };
@@ -1251,12 +1390,26 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           ["Study calendar period", s.studyCalendar || "-"],
         ]));
 
-        children.push(h1("8. Time-varying confounders"));
+        children.push(h1("8. Design assumptions and checks"));
+        ASSUMPTIONS.forEach((a, i) => {
+          children.push(p([text((i + 1) + ". " + a.t + ". ", { bold: true }), text(a.plain)]));
+          children.push(p([text("Why it matters. ", { italics: true }), text(a.precise)]));
+          children.push(p([text("What we do about it. ", { italics: true }), text(a.check + " [" + a.cite + "]")]));
+        });
+        const openChecks = sccsChecks(s);
+        if (openChecks.length) {
+          children.push(h2("Outstanding issues in this draft"));
+          openChecks.forEach((x) => children.push(bullet(x.t + ". " + x.d)));
+        } else {
+          children.push(para("No assumption checks are outstanding for this draft."));
+        }
+
+        children.push(h1("9. Time-varying confounders"));
         children.push(labelTable([["Age bands", ageBand + " bands"], ["Season", season]]));
         children.push(h2("Other time-varying covariates"));
         tvCovs.length ? tvCovs.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
 
-        children.push(h1("9. Statistical analysis"));
+        children.push(h1("10. Statistical analysis"));
         children.push(labelTable([
           ["Primary model", s.primaryModel || "Conditional Poisson regression with offset for log person-time"],
           ["Effect estimate", s.effectMeasure || "Incidence rate ratio (IRR) with 95% CI"],
@@ -1267,17 +1420,17 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         children.push(h2("Sensitivity analyses"));
         sensitivity.length ? sensitivity.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
 
-        children.push(h1("10. Execution and timeline"));
+        children.push(h1("11. Execution and timeline"));
         children.push(labelTable([["Architecture", arch]]));
         children.push(h2("Timeline milestones"));
         milestones.length ? milestones.forEach((l) => children.push(numItem(l))) : children.push(para("(none)"));
 
-        children.push(h1("11. Ethics, data sharing, dissemination"));
+        children.push(h1("12. Ethics, data sharing, dissemination"));
         children.push(p([text("Ethics. ", { bold: true }), text(s.ethics || "Each participating site obtains local IRB / ethics approval before data extraction.")]));
         children.push(p([text("Dissemination. ", { bold: true }), text(s.dissemination || "Primary manuscript to a peer-reviewed pharmacoepidemiology journal.")]));
 
         window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
-        children.push(h1("12. Key references"));
+        children.push(h1("13. Key references"));
         refs.length ? refs.forEach((l) => children.push(numItem(l))) : children.push(para("(none)"));
 
         children.push(p([new D.TextRun({ text: "Drafted with the AsPEN SCCS protocol builder (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
