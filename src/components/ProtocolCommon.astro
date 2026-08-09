@@ -16,7 +16,43 @@
 //   dataMeta, studySize, ethics, registration,  // optional; sensible defaults
 //   limitations,       // optional design-specific sentence, appended to the generic one
 //   plannedOutputs,    // optional array of extra shell tables/figures for this design
+//   amendments,        // optional; the raw "amendments" field (see below)
+//   version,           // optional; the builder's version/date string
 // }
+//
+// ── HARPER item 3 (amendments and updates) — integrating a builder ──────────
+//
+// The amendments log is emitted by abstractMd()/abstractDocx(), which every
+// builder already calls, so ITEM 3 IS SATISFIED WITH NO BUILDER CHANGE AT ALL:
+// with no amendment data the protocol states, in its own front matter, that it
+// is the original version and no amendments have been made. That is the correct
+// claim for a first draft, not a placeholder.
+//
+// To let the user actually record amendments, a builder adds three lines:
+//
+//   1. Mount the editor into the form (either side of restore is fine —
+//      PC.restore() creates the field itself and repaints afterwards):
+//        window.PC && PC.mountAmendments(form);
+//      It inserts its own <details> block just above the download buttons and
+//      owns a hidden field named "amendments". Nothing else to add to the
+//      markup: readForm(), localStorage and ?seed= pick the field up already
+//      because it is a normal named form control.
+//
+//   2. Pass it through pcOf() so the export uses the state the builder read,
+//      not the live DOM:
+//        amendments: s.amendments, version: s.version,
+//      (Omitting this still works — PC falls back to reading the field off the
+//      page — but passing it is what keeps export and state in step.)
+//
+//   3. If the builder has a "Clear all"/reset that writes fields directly:
+//        window.PC && PC.syncAmendments(form);
+//      after resetting, so the rows repaint. (The editor also self-heals on the
+//      form's change event, so forgetting this degrades rather than breaks.)
+//
+// Storage format: one line per amendment in the single field "amendments",
+// pipe-delimited in HARPER's own column order —
+//   version date | version number | section of protocol | amendment | reason
+// Only the first four pipes split, so a reason may contain "|".
 ---
 
 <script is:inline>
@@ -64,6 +100,76 @@
     const ethicsText = (s) => nz(s.ethics,
       "Each participating data source obtains local institutional review board / ethics approval (or a documented waiver) before data extraction; only de-identified data are analysed.");
 
+    /* ── HARPER item 3: amendments and updates ─────────────────────────────
+       Every builder failed this item, because a protocol that has never been
+       amended still has to SAY so — "no log" and "no changes yet" look the
+       same in an exported document, and a reader cannot tell which they are
+       looking at. Built once here rather than nine times, so the nine builders
+       cannot drift into nine incompatible amendment tables.
+
+       Column order follows the HARPER template's own table
+       (drugepi.gitlab-pages.partners.org/harper): version date, version
+       number, section of protocol, amendment or update, reason.
+
+       Storage is one line per amendment in a single form field named
+       "amendments", pipe-delimited in that same order — the idiom the builders
+       already use for their period strips and look-back windows, so their
+       existing readForm / localStorage / ?seed= paths carry it with no change.
+       A reason containing a pipe survives: only the first four are split. */
+    const AM_FIELD = "amendments";
+    const AM_COLS = ["Version date", "Version number", "Section of protocol", "Amendment or update", "Reason"];
+
+    // Read a builder field straight off the page. Used only as a fallback when
+    // a builder has not yet been updated to pass the value through pcOf(), so
+    // that shipping this component fixes the item everywhere at once instead of
+    // waiting on nine separate edits. Export always runs from the live form, so
+    // this reads the same values the builder itself would hand over.
+    function fromForm(name) {
+      try {
+        var f = document.querySelector("[data-builder]") || document.querySelector("form");
+        if (!f) return "";
+        var el = f.querySelector('[name="' + name + '"]');
+        return el && el.value != null ? String(el.value) : "";
+      } catch (e) {
+        console.warn("[PC] could not read field", name, e);
+        return "";
+      }
+    }
+
+    function amendmentRows(s) {
+      var raw = (s && s.amendments != null) ? s.amendments : fromForm(AM_FIELD);
+      return String(raw || "").split(/\r?\n/).map(function (line) {
+        if (!line.trim()) return null;
+        var p = line.split("|");
+        var cells = [ (p[0] || "").trim(), (p[1] || "").trim(), (p[2] || "").trim(),
+                      (p[3] || "").trim(), p.slice(4).join("|").trim() ];
+        return cells.some(function (c) { return c; }) ? cells : null;
+      }).filter(Boolean);
+    }
+
+    function amendmentIntro(s, rows) {
+      var v = nz(s && s.version, fromForm("version"));
+      var at = v ? " (" + v + ")" : "";
+      if (!rows.length) {
+        return "This is the original version of the protocol" + at + "; no amendments have been made. " +
+          "Any later change is recorded here as a numbered amendment with its date, the version it produced, " +
+          "the section of the protocol affected, what changed, and the reason for the change.";
+      }
+      return "The protocol" + at + " has been amended " + rows.length + (rows.length === 1 ? " time" : " times") +
+        " since its original version. Each amendment is listed below with its date, the version it produced, " +
+        "the section of the protocol affected, what changed, and the reason for the change.";
+    }
+
+    function amendmentsMd(s) {
+      var rows = amendmentRows(s);
+      var out = "## Amendments and updates\n\n" + amendmentIntro(s, rows);
+      if (!rows.length) return out + "\n";
+      var esc = function (c) { return String(c || "—").replace(/\|/g, "\\|"); };
+      out += "\n\n| No. | " + AM_COLS.join(" | ") + " |\n|---|" + AM_COLS.map(function () { return "---"; }).join("|") + "|\n";
+      rows.forEach(function (r, i) { out += "| " + (i + 1) + " | " + r.map(esc).join(" | ") + " |\n"; });
+      return out;
+    }
+
     // Keyed tail sections. A builder can drop any it already prints itself via
     // pc.skip (e.g. AsPEN builders skip "studySize"/"ethics"). Each entry is
     // [key, heading, bodyLines[], kind?] where kind "bullets" renders a list.
@@ -82,9 +188,141 @@
       ].filter((x) => !skip.includes(x[0]));
     }
 
+    /* The field has to exist before anything restores into it. If it were
+       created only when the editor mounts — which a builder naturally does
+       after restoring — then a saved draft's amendments would land nowhere,
+       and the first render would write the now-empty field back over them.
+       Silent loss of the user's own text, so restore() creates it too and the
+       mount order stops mattering. */
+    function ensureAmendmentField(form) {
+      var field = form.querySelector('[name="' + AM_FIELD + '"]');
+      if (!field) {
+        // A hidden <input> looks like the obvious choice and is a trap: for
+        // type="hidden" the value IDL attribute reflects the CONTENT attribute,
+        // so assigning .value also moves .defaultValue. Every builder's
+        // "Clear all" resets fields with `el.value = el.defaultValue`, which on
+        // such an input is a no-op — the amendments would survive a reset that
+        // cleared everything else. A textarea's defaultValue is its markup text
+        // and never moves, so this field resets like all the others.
+        field = document.createElement("textarea");
+        field.name = AM_FIELD;
+        field.hidden = true;
+        field.setAttribute("aria-hidden", "true");
+        field.tabIndex = -1;
+        form.appendChild(field);
+      }
+      return field;
+    }
+
+    /* Mount the amendment editor into a builder's form. Idempotent, so a page
+       may call it more than once, before or after restore. The rows are a view
+       over one hidden field named "amendments"; the field is the single source
+       of truth, so the builder's own readForm / localStorage / ?seed= paths
+       need no change. */
+    function mountAmendments(form, opts) {
+      if (!form) return null;
+      opts = opts || {};
+      var existing = form.querySelector("[data-pc-amendments]");
+      if (existing) { existing.__pcSync(); return existing; }
+
+      var field = ensureAmendmentField(form);
+
+      var box = document.createElement("details");
+      box.setAttribute("data-pc-amendments", "");
+      box.className = "border border-slate-200 rounded-2xl bg-white shadow-sm";
+      box.innerHTML =
+        '<summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">' +
+        'Amendments and updates <span class="font-normal text-slate-500 text-sm">· HARPER front matter</span></summary>' +
+        '<div class="px-5 pb-5 space-y-3">' +
+        '<p class="text-xs text-slate-600 leading-relaxed">A protocol that has never been amended is not deficient — but it has to <em>say</em> so, ' +
+        'because "no amendments yet" and "no log kept" look identical in a finished document. Leave this empty for version 1 and the protocol states ' +
+        'that it is the original version. Add a row each time you change the protocol after circulating it.</p>' +
+        '<div data-pc-am-rows class="space-y-2"></div>' +
+        '<button type="button" data-pc-am-add class="text-xs font-semibold text-brand-700 border border-brand-300 hover:bg-brand-50 px-3 py-1.5 rounded transition">+ Add an amendment</button>' +
+        "</div>";
+
+      var anchor = opts.before && form.querySelector(opts.before);
+      if (!anchor) { var dl = form.querySelector("[data-action='download-docx']"); anchor = dl ? dl.closest("div") : null; }
+      if (anchor && anchor.parentNode === form) form.insertBefore(box, anchor); else form.appendChild(box);
+
+      var rowsEl = box.querySelector("[data-pc-am-rows]");
+      var lastWritten = null;
+      var INPUT = "border border-slate-300 rounded px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
+
+      var readRows = function () {
+        return String(field.value || "").split(/\r?\n/).filter(function (l) { return l.trim(); }).map(function (l) {
+          var p = l.split("|");
+          return [(p[0] || "").trim(), (p[1] || "").trim(), (p[2] || "").trim(), (p[3] || "").trim(), p.slice(4).join("|").trim()];
+        });
+      };
+      var writeRows = function (rows) {
+        // Drop rows the user left entirely blank, so an accidental "+ Add"
+        // never becomes an empty amendment in the exported protocol.
+        var text = rows.filter(function (r) { return r.some(function (c) { return c.trim(); }); })
+          .map(function (r) { return r.map(function (c) { return c.replace(/\r?\n/g, " ").trim(); }).join(" | "); }).join("\n");
+        field.value = text;
+        lastWritten = text;
+        form.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      var paint = function (rows) {
+        rowsEl.innerHTML = "";
+        rows.forEach(function (r, i) {
+          var row = document.createElement("div");
+          row.className = "grid gap-1.5 sm:grid-cols-[8rem,6rem,1fr,1.4fr,1.4fr,auto] items-start";
+          AM_COLS.forEach(function (label, j) {
+            var inp = document.createElement("input");
+            inp.type = j === 0 ? "date" : "text";
+            inp.className = INPUT;
+            inp.value = r[j] || "";
+            inp.placeholder = label;
+            inp.setAttribute("aria-label", label + ", amendment " + (i + 1));
+            inp.addEventListener("input", function () { r[j] = inp.value; writeRows(rows); });
+            row.appendChild(inp);
+          });
+          var del = document.createElement("button");
+          del.type = "button";
+          del.className = "text-xs text-slate-400 hover:text-rose-600 px-2 py-1.5";
+          del.textContent = "✕";
+          del.setAttribute("aria-label", "Remove amendment " + (i + 1));
+          del.addEventListener("click", function () { rows.splice(i, 1); writeRows(rows); paint(rows); });
+          row.appendChild(del);
+          rowsEl.appendChild(row);
+        });
+        if (!rows.length) {
+          var none = document.createElement("p");
+          none.className = "text-xs text-slate-500 italic";
+          none.textContent = "No amendments — the protocol will state that this is the original version.";
+          rowsEl.appendChild(none);
+        }
+      };
+      var sync = function () { var rows = readRows(); lastWritten = field.value; paint(rows); };
+
+      box.querySelector("[data-pc-am-add]").addEventListener("click", function () {
+        var rows = readRows();
+        rows.push([new Date().toISOString().slice(0, 10), "", "", "", ""]);
+        writeRows(rows); paint(rows);
+      });
+      // A builder that resets or restores the form writes the hidden field
+      // directly. Rebuild if that happened behind the editor's back, so the
+      // rows can never disagree with the field the export reads.
+      form.addEventListener("change", function () { if (field.value !== lastWritten) sync(); });
+      box.__pcSync = sync;
+      sync();
+      return box;
+    }
+    function syncAmendments(form) {
+      var b = form && form.querySelector("[data-pc-amendments]");
+      if (b && b.__pcSync) b.__pcSync();
+    }
+
     // ── Markdown ──────────────────────────────────────────────
     function abstractMd(s) {
-      return "## Structured abstract\n" + abstractLines(s).map((l) => "**" + l[0].trim() + "** " + l[1]).join(" ") + "\n";
+      // The amendments log rides with the abstract because HARPER puts it in
+      // front matter (item 3, right after item 2) and because every builder
+      // already calls this one function — so the item is satisfied everywhere
+      // without nine separate edits to nine export functions.
+      return "## Structured abstract\n" + abstractLines(s).map((l) => "**" + l[0].trim() + "** " + l[1]).join(" ") + "\n\n"
+        + amendmentsMd(s) + "\n";
     }
     function tailMd(s) {
       return tailSections(s).map(([key, h, lines, kind]) =>
@@ -99,12 +337,37 @@
       const p = (ch, o = {}) => new D.Paragraph({ children: Array.isArray(ch) ? ch : [ch], spacing: { before: 60, after: 60, ...(o.spacing || {}) }, ...o });
       const h1 = (str) => new D.Paragraph({ children: [text(str, { bold: true, size: 28 })], spacing: { before: 200, after: 80 }, heading: D.HeadingLevel.HEADING_1 });
       const bullet = (str) => new D.Paragraph({ children: [text(str)], bullet: { level: 0 }, spacing: { before: 0, after: 0 } });
-      return { text, p, h1, bullet };
+      const border = { style: D.BorderStyle.SINGLE, size: 4, color: "BBBBBB" };
+      const cb = { top: border, bottom: border, left: border, right: border };
+      const cell = (str, w, opt) => new D.TableCell(Object.assign({
+        borders: cb, width: { size: w, type: D.WidthType.DXA },
+        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+        children: [p([text(str)])],
+      }, opt || {}));
+      const headCell = (str, w) => new D.TableCell({
+        borders: cb, width: { size: w, type: D.WidthType.DXA },
+        shading: { fill: "F5F5F5", type: D.ShadingType.CLEAR },
+        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+        children: [p([text(str, { bold: true })])],
+      });
+      return { text, p, h1, bullet, cell, headCell };
+    }
+    function amendmentsDocx(D, s) {
+      const k = docxKit(D);
+      const rows = amendmentRows(s);
+      const out = [k.h1("Amendments and updates"), k.p([k.text(amendmentIntro(s, rows))])];
+      if (!rows.length) return out;
+      const W = [560, 1180, 1180, 1560, 2400, 2146];
+      const header = new D.TableRow({ tableHeader: true, children: ["No."].concat(AM_COLS).map((c, i) => k.headCell(c, W[i])) });
+      const body = rows.map((r, i) => new D.TableRow({ children: [String(i + 1)].concat(r.map((c) => c || "—")).map((c, j) => k.cell(c, W[j])) }));
+      out.push(new D.Table({ width: { size: 9026, type: D.WidthType.DXA }, columnWidths: W, rows: [header].concat(body) }));
+      return out;
     }
     function abstractDocx(D, s) {
       const k = docxKit(D);
       const out = [k.h1("Structured abstract")];
       abstractLines(s).forEach((l) => out.push(k.p([k.text(l[0], { bold: true }), k.text(l[1])])));
+      amendmentsDocx(D, s).forEach((c) => out.push(c));
       return out;
     }
     function tailDocx(D, s) {
@@ -151,16 +414,40 @@
         var els = form.elements[k];
         if (!els) continue;
         var val = state[k];
-        if (Array.isArray(val)) {
-          form.querySelectorAll('[name="' + k + '"]').forEach(function (n) {
-            n.checked = val.indexOf(n.value) >= 0;
-          });
-        } else if (els.type === "checkbox") {
-          els.checked = !!val;
+
+        // form.elements[name] is a single element only when the name is unique.
+        // Share a name across several controls — every checkbox group here does
+        // — and it is a RadioNodeList, which has no .type, so the old code fell
+        // through to `els.value = val`. On a RadioNodeList that setter only
+        // ticks a matching RADIO; for a checkbox group it is a silent no-op, so
+        // a seeded set of ticks was dropped without a word.
+        var many = els.tagName === undefined && typeof els.length === "number";
+        var nodes = many ? Array.prototype.slice.call(els) : [els];
+        var first = nodes[0];
+        if (!first) continue;
+
+        if (first.type === "checkbox") {
+          if (Array.isArray(val)) {
+            var want = val.map(String);
+            nodes.forEach(function (n) { n.checked = want.indexOf(n.value) >= 0; });
+          } else if (typeof val === "boolean" || val == null) {
+            nodes.forEach(function (n) { n.checked = !!val; });
+          } else {
+            // A lone checkbox stored as its own value, or "true"/"1".
+            var sv = String(val);
+            nodes.forEach(function (n) { n.checked = n.value === sv || sv === "true" || sv === "1" || sv === "on"; });
+          }
+        } else if (first.type === "radio") {
+          // Assigning .value here would rewrite the option a radio stands for.
+          var rv = Array.isArray(val) ? String(val[0]) : String(val == null ? "" : val);
+          nodes.forEach(function (n) { n.checked = n.value === rv; });
+        } else if (Array.isArray(val)) {
+          nodes.forEach(function (n, i) { if (val[i] != null) n.value = val[i]; });
         } else {
-          els.value = val == null ? "" : val;
+          nodes.forEach(function (n) { n.value = val == null ? "" : val; });
         }
       }
+      syncAmendments(form);
       return true;
     }
 
@@ -262,7 +549,11 @@
        draft. Returns "seed" | "paste" | "saved" | "none" so a page can tell
        the user. */
     function restore(form, storageKey, writeForm) {
-      var write = writeForm || function (s) { applySeed(form, s); };
+      if (form) ensureAmendmentField(form);   // must exist before anything writes into it
+      var write = function (s) {
+        (writeForm || function (x) { applySeed(form, x); })(s);
+        syncAmendments(form);
+      };
       if (new URLSearchParams(location.search).get("seed") === "paste") {
         pastePanel(form, write);
         return "paste";
@@ -276,7 +567,9 @@
       try {
         var saved = localStorage.getItem(storageKey);
         if (saved) { write(JSON.parse(saved)); return "saved"; }
-      } catch (e) {}
+      } catch (e) {
+        console.warn("[PC] saved draft could not be read", e);
+      }
       return "none";
     }
 
@@ -297,6 +590,8 @@
     }
 
     window.PC = { abstractMd, tailMd, abstractDocx, tailDocx,
-                  readSeed: readSeed, applySeed: applySeed, restore: restore };
+                  readSeed: readSeed, applySeed: applySeed, restore: restore,
+                  mountAmendments: mountAmendments, syncAmendments: syncAmendments,
+                  amendmentRows: amendmentRows, amendmentsMd: amendmentsMd, amendmentsDocx: amendmentsDocx };
   })();
 </script>

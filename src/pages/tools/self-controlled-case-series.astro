@@ -811,6 +811,8 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         analysis: "a conditional Poisson (self-controlled) model contrasting exposed vs unexposed person-time within each case, pooled across sites",
         groupBy: "risk vs baseline period",
         skip: ["ethics"],
+        amendments: s.amendments,
+        version: s.version,
         limitations: "SCCS removes time-invariant between-person confounding but assumes events do not affect subsequent exposure and do not censor observation; time-varying confounders (age, season) must be modelled.",
         plannedOutputs: ["Case-selection flow diagram.", "Distribution of exposed vs unexposed person-time and events.", "Incidence-rate ratio by risk window, with a forest plot across sites."],
       });
@@ -1128,6 +1130,9 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       catch (e) { console.error("could not restore the saved draft", e); setMsg("Your saved draft could not be restored; the form has been left at its defaults.", true); }
       const timelineTa = form.querySelector('[name="timeline"]');
       if (timelineTa && !timelineTa.value) timelineTa.value = TIMELINE_PRESETS["12-month"];
+      // HARPER item 3. Mounted after restore so the editor paints the rows the
+      // saved draft (or a ?seed= link) actually carried.
+      if (window.PC && PC.mountAmendments) PC.mountAmendments(form);
       render();
       form.addEventListener("input", render);
       form.addEventListener("change", render);
@@ -1194,6 +1199,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // defaultValue to come back from.
         const tl = form.querySelector('[name="timeline"]');
         if (tl && !tl.value) tl.value = TIMELINE_PRESETS["12-month"];
+        if (window.PC && PC.syncAmendments) PC.syncAmendments(form);
         render();
         setMsg("Reset to defaults.");
       };
