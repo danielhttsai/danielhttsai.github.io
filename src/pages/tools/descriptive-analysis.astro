@@ -282,18 +282,18 @@ const TIMELINE_PRESETS: Record<string, string> = {
 ---
 
 <BaseLayout
-  title="Protocol template · Descriptive analysis · AsPEN members"
-  description="Guided form for drafting a multi-country descriptive epidemiology protocol (incidence, prevalence, mortality, drug utilisation, switching, age-standardisation, joinpoint trends)."
+  title="Descriptive analysis protocol — Daniel Tsai"
+  description="A free, in-browser protocol builder for multi-country descriptive epidemiology — incidence, prevalence, mortality, drug utilisation, switching, age-standardisation and joinpoint trends — with one-click Word / Markdown export."
 >
   <PageHeader
-    eyebrow="Members → Templates → DA"
-    title="Multi-national descriptive analysis builder"
-    description="Characterise a population; how common a disease is, how a drug is used, who dies; across AsPEN sites. Standard output for Policy & Utilisation theme work and the denominator on which causal studies depend."
+    eyebrow="Protocol Generator · DA"
+    title="Multi-national descriptive analysis protocol"
+    description="How common a disease is, how a drug is used, who dies — counted the same way in every database so the numbers can be put side by side. Descriptive work is where a causal study gets its denominator, and where most cross-country comparisons quietly go wrong."
   />
 
   <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
     <div class="flex items-center justify-between gap-3 flex-wrap">
-      <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator/`}>← All templates</a>
+      <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator/`}>← All designs</a>
       <button type="button" data-action="reset-top" class="text-xs font-semibold text-rose-700 border border-rose-300 hover:bg-rose-50 px-3 py-1.5 rounded transition">
         ⟲ Clear &amp; start over
       </button>
@@ -308,11 +308,11 @@ const TIMELINE_PRESETS: Record<string, string> = {
           <div class="px-5 pb-5 grid sm:grid-cols-2 gap-3">
             <label class="flex flex-col gap-1 sm:col-span-2">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Study title</span>
-              <input type="text" name="title" placeholder="e.g. DDD/1000/day for anticonvulsants across 14 AsPEN sites, 2010-2023" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <input type="text" name="title" placeholder="e.g. DDD/1000/day for anticonvulsants across 14 databases, 2010-2023" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Short ID</span>
-              <input type="text" name="shortId" placeholder="AsPEN-ANTISEIZ-DA-2026" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <input type="text" name="shortId" placeholder="ANTISEIZ-DA-2026" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Version · Date</span>
@@ -330,7 +330,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
           <div class="px-5 pb-5 grid sm:grid-cols-2 gap-3">
             <label class="flex flex-col gap-1 sm:col-span-2">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population</span>
-              <input type="text" name="picoP" placeholder="Adults ≥18 y with continuous enrolment in each AsPEN site, 2010-2023" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <input type="text" name="picoP" placeholder="Adults ≥18 y with continuous enrolment in each participating database, 2010-2023" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">What we measure</span>
@@ -473,7 +473,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
         <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
           <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">6 · Output metrics; what to report</summary>
           <div class="px-5 pb-5 space-y-4">
-            <p class="text-xs text-slate-500">Tick every metric to report. Each ticked metric gets its own section in the protocol output (Markdown + Word), with operational definition, formula, and unit. Mix-and-match freely; most descriptive AsPEN papers report 3-6 metrics.</p>
+            <p class="text-xs text-slate-500">Tick every metric to report. Each ticked metric gets its own section in the protocol output (Markdown + Word), with operational definition, formula, and unit. Mix-and-match freely; most descriptive multi-database papers report 3-6 metrics.</p>
             {(["Occurrence", "Mortality", "Utilisation", "Adjustment", "Trends"] as const).map((group) => (
               <div>
                 <p class="text-[11px] uppercase tracking-widest text-slate-600 font-bold">{group}</p>
@@ -526,7 +526,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
                 <option value="who2000" selected>WHO World Standard 2000</option>
                 <option value="esp2013">European Standard Population 2013</option>
                 <option value="segi1960">Segi 1960</option>
-                <option value="internal">Internal-pooled (sum across AsPEN sites)</option>
+                <option value="internal">Internal-pooled (sum across the selected sites)</option>
               </select>
               <span class="text-[11px] text-slate-500">WHO 2000 is the most common for cross-country comparisons; ESP 2013 is preferred in European contexts.</span>
             </label>
@@ -676,10 +676,11 @@ const TIMELINE_PRESETS: Record<string, string> = {
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Key references (one per line)</span>
-              <textarea name="references" rows="8" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Lai EC, Stang P, Yang YHK, Kimura S, Wong IC, Setoguchi S. International multi-database pharmacoepidemiology: potentials and pitfalls. Curr Epidemiol Rep 2015 (AsPEN database survey foundation; PMID 26133022).
-Kim HJ, Fay MP, Feuer EJ, Midthune DN. Permutation tests for joinpoint regression with applications to cancer rates. Stat Med 2000;19(3):335-51.
+              <textarea name="references" rows="8" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Lai ECC, Stang P, Yang YHK, Kubota K, Wong ICK, Setoguchi S. International multi-database pharmacoepidemiology: potentials and pitfalls. Curr Epidemiol Rep 2015;2(4):229-238. doi:10.1007/s40471-015-0059-z
+Lai EC, Man KK, Chaiyakunapruk N, et al. Brief report: databases in the Asia-Pacific region: the potential for a distributed network approach. Epidemiology 2015;26(6):815-820. doi:10.1097/EDE.0000000000000325 (PMID 26133022)
+Kim HJ, Fay MP, Feuer EJ, Midthune DN. Permutation tests for joinpoint regression with applications to cancer rates. Stat Med 2000;19(3):335-351. doi:10.1002/(SICI)1097-0258(20000215)19:3&lt;335::AID-SIM336&gt;3.0.CO;2-Z
 Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-trend research design for causal inference. Epidemiology 2017;28(4):529-536. doi:10.1097/EDE.0000000000000579
-Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time-series studies in medication use research. J Clin Pharm Ther 2002;27(4):299-309.
+Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time-series studies in medication use research. J Clin Pharm Ther 2002;27(4):299-309. doi:10.1046/j.1365-2710.2002.00430.x
 WHO. Age-standardisation of rates: a new WHO standard. GPE Discussion Paper 31, 2001 (Ahmad OB et al).
 Tan EC, Pratt NL, Ilomäki J et al. Multi-country comparison of polypharmacy. Pharmacoepidemiol Drug Saf 2023 (PMID 36821644).
 Hsieh CY, Su CC, Shao SC, Sung SF, Lin SJ, Kao Yang YH, Lai EC. Taiwan's NHIRD: past and future. Clin Epidemiol 2019;11:349-58.
@@ -707,6 +708,12 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           <pre data-preview class="text-xs leading-relaxed text-slate-800 p-4 overflow-auto max-h-[calc(100vh-12rem)] whitespace-pre-wrap font-mono"></pre>
         </div>
       </aside>
+    </div>
+
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="text-base font-bold text-slate-900">Consistency checks <span class="text-xs font-normal text-slate-400">· descriptive 防呆</span></h2>
+      <p class="mt-1 text-xs text-slate-500">A descriptive study fails quietly: the numerator and the denominator get counted over different people, and the rate that comes out looks perfectly reasonable. These checks look for that.</p>
+      <div id="checks" class="mt-3 space-y-1.5"></div>
     </div>
 
     <!-- Study design diagram -->
@@ -875,7 +882,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         exposure: "",
         comparator: "",
         outcome: orFb(s.picoMeasure, "(measure)"),
-        data: (s.sites && s.sites.length ? s.sites.length + " AsPEN data source(s)" : "multi-national AsPEN data sources"),
+        data: (s.sites && s.sites.length ? s.sites.length + " data source(s)" : "multi-national data sources"),
         analysis: "age-standardised rates / proportions with 95% CIs, described overall and by the pre-specified strata, and pooled across sites",
         groupBy: "stratum",
         skip: ["ethics"],
@@ -986,7 +993,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           case "ageStandardised": return {
             name: m.label, unit: m.unit,
             numerator: "(See age-stratum-specific rates from the relevant metric above)",
-            denominator: "Standardised to: " + (({who2000:"WHO World Standard 2000",esp2013:"European Standard Population 2013",segi1960:"Segi 1960",internal:"Internal-pooled (AsPEN sum)"})[s.ageStdRef] || "WHO 2000"),
+            denominator: "Standardised to: " + (({who2000:"WHO World Standard 2000",esp2013:"European Standard Population 2013",segi1960:"Segi 1960",internal:"Internal-pooled (sum across the selected sites)"})[s.ageStdRef] || "WHO 2000"),
             formula: ((s.ageStdMethod === "indirect") ? "Indirect (SMR / SIR): observed / expected events × 1000" : (s.ageStdMethod === "both" ? "Direct AND Indirect (SMR / SIR), reported side-by-side" : "Direct: Σ (age-stratum rate × reference proportion); reported with 95% CI by Dobson method")),
             stratifyBy: "Age bands: " + orFb(s.ageStdBands, "5-year bands 0–4 through 85+"),
           };
@@ -1017,7 +1024,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           descriptive: "Descriptive only; side-by-side tables and ranked figures; no pooled estimate.",
         })[s.metaMethod] || "Descriptive comparison across sites.";
         const arch = ({
-          federated: "Federated; each AsPEN site executes the common analytic package locally and shares aggregate counts + person-time only.",
+          federated: "Federated; each site executes the common analytic package locally and shares aggregate counts + person-time only.",
           cdm: "Common Data Model; each site transforms data into an agreed CDM, runs the shared package.",
           centralised: "Centralised; site-level individual data pooled under DUA.",
         })[s.arch] || "Federated";
@@ -1152,8 +1159,89 @@ ${numbered(refs)}
 
 ---
 
-_Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
+_Drafted with the Protocol Generator — descriptive analysis (${today})._
 `;
+      };
+
+      // ── Consistency checks ────────────────────────────────────
+      // A descriptive study does not crash; it returns a rate. The failure that
+      // matters is a numerator and a denominator counted over different people,
+      // or a metric whose defining input was never filled in. Everything below
+      // is about that, plus the standardisation and trend rules that make a
+      // number comparable across countries.
+      const computeChecks = (s) => {
+        const c = [];
+        const ticked = s.metricsPick || [];
+        const has = (id) => ticked.includes(id);
+        const txt = (k) => String(s[k] || "").trim();
+        const strata = mergeList(s.strataPick, s.strataCustom);
+        const label = (id) => ((OUTPUT_METRICS.find((m) => m.id === id) || {}).label || id);
+        const popBlob = (txt("populationDef") + " " + txt("populationCodes") + " " + txt("inclusionCriteria") + " " + txt("indexDateRule")).toLowerCase();
+
+        const miss = missing(s);
+        if (miss.length) c.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft is printed with placeholders so you can see its shape — it is not a finished protocol." });
+
+        // ── Numerator defined? Each metric names its own numerator source. ──
+        const needsOutcome = ["incidence", "periodPrev", "pointPrev"].filter(has);
+        if (needsOutcome.length && !txt("outcomeName") && !txt("outcomeCodes"))
+          c.push({ level: "error", msg: needsOutcome.map(label).join(" and ") + (needsOutcome.length > 1 ? " count" : " counts") + " outcome events in the numerator, but no outcome name or code set is defined (Section 5). The protocol currently specifies a denominator and no numerator." });
+        if ((has("ddd") || has("initiation") || has("persistence") || has("switching") || has("concomitant")) && !txt("exposureName") && !txt("exposureCodes"))
+          c.push({ level: "error", msg: "A drug-utilisation metric is ticked but no drug exposure or ATC code set is defined (Section 5). DDD, initiation, persistence, switching and concomitant use all take the drug as their numerator." });
+        if (has("mortCause") && !txt("mortCauseCodes"))
+          c.push({ level: "error", msg: "Cause-specific mortality is ticked but no cause-of-death code set is defined (Section 5). Without it the numerator is 'some deaths' and the rate is uninterpretable." });
+
+        // ── The classic denominator mismatch. ──
+        const enrolmentRestricted = /continuous enrol|continuous enrol?ment|washout|≥\s*365|365\s*d|1 year of baseline|enrol/i.test(popBlob);
+        if (has("ddd") && enrolmentRestricted)
+          c.push({ level: "warn", msg: "DDD/1000 inhabitants/day is defined against the SOURCE POPULATION, but your denominator population is restricted (continuous enrolment / washout). If the numerator counts every dispensing while the denominator counts only the enrolment-qualified cohort, the two are drawn from different people and the rate is neither a population DDD nor a cohort rate. State explicitly which population each side of the fraction uses." });
+        if (has("ddd") && !/mid-?year|inhabitant|population/i.test(txt("populationDef") + " " + txt("suppression")))
+          c.push({ level: "info", msg: "The DDD denominator is the mid-period source-population estimate × days in the window. Say where that population figure comes from for each database — it is usually not the same object as the analytic cohort." });
+
+        if (has("incidence") && !/washout|prior|history|prevalent|na[iï]ve|first[- ]ever|incident/i.test(popBlob + " " + txt("exclusionCriteria").toLowerCase()))
+          c.push({ level: "warn", msg: "Incidence rate is ticked but nothing in the population definition, inclusion or exclusion criteria excludes people who already have the outcome. Without a clean baseline look-back the numerator mixes incident with prevalent cases and the 'incidence rate' is not one." });
+        if (has("initiation") && !/washout|365|prior|na[iï]ve|new user/i.test(popBlob))
+          c.push({ level: "warn", msg: "Initiation rate counts new users with no dispensing in a prior 365-day washout, but the index-date rule and inclusion criteria do not mention a baseline look-back of at least that length. Prevalent users will be counted as initiators wherever the available history is shorter than the washout." });
+        if (has("periodPrev") && has("pointPrev"))
+          c.push({ level: "info", msg: "Period and point prevalence have different denominators — everyone enrolled at any time in the window, versus everyone enrolled on one date. Report them as separate rows, never in the same column." });
+
+        // ── Standardisation. ──
+        const hasAgeStratum = strata.some((x) => /age/i.test(x));
+        if (has("ageStandardised") && !hasAgeStratum)
+          c.push({ level: "error", msg: "Age-standardised rates are ticked but no age stratum is selected in Section 7. Direct standardisation applies age-specific rates to a reference age structure — with no age bands there are no age-specific rates to apply, and nothing can be standardised." });
+        if (has("ageStandardised") && s.ageStdRef === "internal")
+          c.push({ level: "warn", msg: "An internal-pooled reference population makes your standardised rates comparable within this study only. They cannot be placed beside published WHO-2000 or ESP-2013 standardised rates. If cross-study comparison matters, report a WHO/ESP-standardised version too." });
+        if (!has("ageStandardised") && (strata.some((x) => /country|site/i.test(x)) || (s.sites || []).length > 1))
+          c.push({ level: "warn", msg: "You are comparing more than one country or site without age-standardisation. Populations with different age structures produce different crude rates for the same underlying risk, so a ranked crude-rate figure across countries mostly ranks their age distributions." });
+
+        // ── Trends. ──
+        if (has("joinpoint")) {
+          const yrs = (txt("trendYears").match(/\d{4}/g) || []).map(Number);
+          const jp = parseInt(s.trendMaxJp) || 3;
+          if (yrs.length >= 2) {
+            const npts = Math.abs(yrs[yrs.length - 1] - yrs[0]) + 1;
+            if (npts < (jp + 1) * 2) c.push({ level: "error", msg: "Joinpoint: " + npts + " annual data point(s) with up to " + jp + " joinpoint(s) means " + (jp + 1) + " segments over " + npts + " points. A segment fitted to one or two points is not a trend — the model will still return an APC. Reduce the maximum joinpoints or lengthen the series." });
+            else if (npts < (jp + 1) * 3) c.push({ level: "warn", msg: "Joinpoint: " + npts + " points across " + (jp + 1) + " possible segments leaves roughly " + Math.floor(npts / (jp + 1)) + " points per segment. APCs from segments that short are very unstable; consider fewer joinpoints." });
+          } else if (!txt("trendYears")) {
+            c.push({ level: "warn", msg: "Joinpoint trend is ticked but no trend year range is given (Section 9), so the number of data points cannot be checked against the maximum number of joinpoints." });
+          }
+        }
+        if (has("trendInTrend"))
+          c.push({ level: "warn", msg: "Trend-in-trend is a causal design, not a descriptive metric: it estimates an odds ratio by stratifying on each person's predicted probability of exposure. It does not belong in a descriptive protocol's metric list except as a stub — use the dedicated trend-in-trend builder for it." });
+
+        // ── Pooling across countries. ──
+        if (s.metaMethod === "re" || s.metaMethod === "re-reml")
+          c.push({ level: "warn", msg: "Random-effects pooling of descriptive rates across countries: the pooled number is an average of populations that genuinely differ, so I² will be near 100% and the summary describes no real population. Report it, if at all, alongside the site-specific estimates — never instead of them." });
+
+        // ── Small cells. ──
+        if (strata.length >= 4)
+          c.push({ level: "info", msg: strata.length + " stratifying variables means the cross-tabulation is deep and many cells will fall under your suppression rule. Say which strata are crossed and which are reported one at a time, or most of the table will be '<5'." });
+        if (!txt("suppression"))
+          c.push({ level: "warn", msg: "No small-cell suppression rule is set. Multi-database descriptive output is where re-identification risk actually lives; every site's governance will ask for one." });
+
+        if (s.ciMethod === "normal")
+          c.push({ level: "warn", msg: "A normal-approximation confidence interval is only valid with large counts. Descriptive work stratified by age, sex and year produces sparse cells, where it gives intervals that cross zero or exceed 1. Exact Poisson / Wilson is the safe default." });
+
+        return c;
       };
 
       const renderScheme = (s) => {
@@ -1181,6 +1269,14 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
         preview.textContent = buildMarkdown(state);
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
         renderFeasibility(state);
+        // Never swallow a render failure silently: a blank checks panel that
+        // looks like "no issues" is exactly the failure mode this page is for.
+        try { window.renderChecks(document.getElementById("checks"), computeChecks(state)); }
+        catch (err) {
+          console.error("[DA] consistency checks failed to render", err);
+          const el = document.getElementById("checks");
+          if (el) el.innerHTML = '<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">The consistency checks could not be rendered, so this panel is showing nothing rather than showing "no issues". Details are in the browser console.</div>';
+        }
         // Never swallow a render failure silently — an empty diagram box that
         // looks intentional is how a broken diagram survived for weeks.
         try { renderScheme(state); }
@@ -1290,9 +1386,9 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
         const metaTxt = ({ re: "random-effects (DerSimonian-Laird)", "re-reml": "random-effects (REML)", fe: "fixed-effects (inverse-variance)" })[s.metaMethod] || "descriptive cross-site comparison";
         return {
           "1a": "Multi-national descriptive epidemiology study (disease frequency / drug utilisation).",
-          "3": "Characterise " + (s.picoMeasure || "(metric)") + " among " + (s.picoP || "(population)") + " across the participating AsPEN sites. Descriptive; no causal hypothesis.",
+          "3": "Characterise " + (s.picoMeasure || "(metric)") + " among " + (s.picoP || "(population)") + " across the participating sites. Descriptive; no causal hypothesis.",
           "4": "Descriptive cross-national analysis. Population-level rates / proportions are computed within each site and compared; no exposure-outcome causal contrast.",
-          "5": "AsPEN sites: " + sitesPlain + ". Observation period and calendar window as defined in the protocol.",
+          "5": "Participating sites: " + sitesPlain + ". Observation period and calendar window as defined in the protocol.",
           "6": "Source population: " + (s.populationDef || s.picoP || "(population)") + (s.populationCodes ? " (" + s.populationCodes + ")" : "") + ". Eligibility (e.g. continuous enrolment) per the protocol.",
           "7": "Output metrics:\n" + bul(metricLabels) + "\nNumerator(s): " + (s.outcomeName || s.outcomeDef || "exposures / outcomes / mortality causes per the protocol") + (s.outcomeCodes ? " (" + s.outcomeCodes + ")" : "") + ".",
           "8": "Routinely-collected health data from the contributing databases (" + sitesPlain + "). Each metric's numerator and denominator ascertained from the protocol code sets and enrolment data.",
@@ -1302,7 +1398,7 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
           "14": "Per-site population characteristics and denominators to be tabulated (Table 1).",
           "17": "Stratified analyses:\n" + bul(strata) + "\nSensitivity analyses:\n" + bul(sens),
           "19": "Descriptive estimates reflect coding and capture practices that differ across databases; cross-site comparisons should account for differential ascertainment; no causal interpretation is intended.",
-          "21": "Estimates generalise to the source populations of the contributing AsPEN databases: " + sitesPlain + ".",
+          "21": "Estimates generalise to the source populations of the contributing databases: " + sitesPlain + ".",
         };
       };
 
@@ -1333,7 +1429,7 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
         const children = [
           new D.Paragraph({ children: [text("STROBE checklist; " + (s.title || "(Untitled multi-national descriptive study)"), { bold: true, size: 32 })], spacing: { after: 120 } }),
           p([new D.TextRun({ text: "This document maps the protocol fields to the STROBE statement (von Elm E, et al. PLoS Med 2007;4:e296). Methods items are pre-filled from your protocol; Results / Discussion items are placeholders to complete at the time of reporting. Full checklist with elaboration: strobe-statement.org.", font: FONT, size: 20, italics: true, color: "555555" })]),
-          p([new D.TextRun({ text: "Generated " + today + " from the AsPEN descriptive-analysis protocol builder.", font: FONT, size: 18, italics: true, color: "777777" })]),
+          p([new D.TextRun({ text: "Generated " + today + " from the Protocol Generator descriptive-analysis builder.", font: FONT, size: 18, italics: true, color: "777777" })]),
           table,
         ];
         const doc = new D.Document({ sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children }] });
@@ -1380,7 +1476,7 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
           descriptive: "Descriptive only; side-by-side tables and ranked figures.",
         })[s.metaMethod] || "Descriptive across sites";
         const arch = ({
-          federated: "Federated; each AsPEN site executes locally; aggregate counts + person-time leave the site.",
+          federated: "Federated; each site executes locally; aggregate counts + person-time leave the site.",
           cdm: "Common Data Model; site transforms to agreed CDM, runs shared package.",
           centralised: "Centralised; pooled individual data under DUA.",
         })[s.arch] || "Federated";
@@ -1493,11 +1589,11 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
         if (refs.length === 0) children.push(para("(none)"));
         else refs.forEach((l) => children.push(numItem(l)));
 
-        children.push(p([new D.TextRun({ text: "Drafted with the AsPEN Descriptive Analysis protocol builder (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
+        children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator — descriptive analysis (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
 
         const doc = new D.Document({
-          creator: "AsPEN protocol builder",
-          title: s.title || "AsPEN descriptive-analysis protocol",
+          creator: "Protocol Generator — Descriptive Analysis",
+          title: s.title || "Descriptive-analysis protocol",
           styles: {
             default: { document: { run: { font: FONT, size: 22 } } },
             paragraphStyles: [
