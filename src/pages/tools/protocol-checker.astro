@@ -224,19 +224,36 @@ const fwList = Object.values(FRAMEWORKS);
       // `loadedNotes` carries everything the extractor could NOT read, so it can
       // be shown next to the score instead of quietly disappearing.
       let loadedText = "", loadedName = "", loadedNotes = [], lastReport = null;
+      // Reading a file is asynchronous. If a second file is chosen before the
+      // first finishes, the slower read must not write its result — or its error
+      // — over the newer one. Seen live: a success message and a failure message
+      // from two different files on screen at the same time.
+      let fileSeq = 0;
 
       const setStatus = (msg, isErr) => { statusEl.textContent = msg || ""; statusEl.className = "text-sm " + (isErr ? "text-red-600" : "text-slate-500"); };
       const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       const getFramework = () => { const r = document.querySelector('input[name="framework"]:checked'); return r ? r.value : DEFAULT_FRAMEWORK; };
       const fwOf = (key) => FRAMEWORKS[key] || FRAMEWORKS[DEFAULT_FRAMEWORK];
 
+      // Load a library once and wait for it to actually finish. The previous
+      // version resolved the moment a <script> tag with the same src EXISTED,
+      // which is true from the instant it is appended — so a second call while
+      // the first download was still in flight resolved early and the caller hit
+      // `window.XLSX.read` on an undefined XLSX. Observed live: a workbook that
+      // read fine on one attempt failed on another with "Cannot read properties
+      // of undefined (reading 'read')".
+      const scriptPromises = new Map();
       function loadScript(src) {
-        return new Promise((res, rej) => {
-          if (document.querySelector(`script[src="${src}"]`)) return res();
+        if (scriptPromises.has(src)) return scriptPromises.get(src);
+        const p = new Promise((res, rej) => {
           const s = document.createElement("script");
-          s.src = src; s.onload = () => res(); s.onerror = () => rej(new Error("Could not load " + src));
+          s.src = src;
+          s.onload = () => res();
+          s.onerror = () => { scriptPromises.delete(src); rej(new Error("A component needed to read this file could not be downloaded (" + src.split("/").pop() + "). Check your connection, or paste the text instead.")); };
           document.head.appendChild(s);
         });
+        scriptPromises.set(src, p);
+        return p;
       }
 
       // ── File extraction ────────────────────────────────────────────────
@@ -343,6 +360,8 @@ const fwList = Object.values(FRAMEWORKS);
 
       async function handleFile(f) {
         if (!f) return;
+        const seq = ++fileSeq;
+        const stale = () => seq !== fileSeq;
         fileErr.classList.add("hidden"); setStatus("");
         const name = f.name.toLowerCase();
         drop.classList.add("opacity-50", "pointer-events-none");
@@ -364,6 +383,7 @@ const fwList = Object.values(FRAMEWORKS);
           // ever. (mammoth's HTML converter does exactly that on some files.)
           const res = await Promise.race([job, new Promise((_, rej) =>
             setTimeout(() => rej(new Error("Reading this file took longer than 90 seconds and was stopped. It may be very large or damaged — try saving it again from Word, or paste the text instead.")), 90000))]);
+          if (stale()) return;
           const txt = (res.text || "").trim();
           if (txt.length < 200) {
             throw new Error("Only " + txt.length + " characters of text could be read from this file, which is not enough to assess." +
@@ -373,14 +393,17 @@ const fwList = Object.values(FRAMEWORKS);
           fileMetaEl.textContent = txt.length.toLocaleString() + " characters extracted" + (res.detail ? " from " + res.detail : "") + " · ready to check";
           fileNotesEl.innerHTML = loadedNotes.map((n) => '<li class="flex gap-1.5"><span>⚠</span><span>' + escapeHtml(n) + "</span></li>").join("");
         } catch (e) {
+          if (stale()) return;
           loadedText = ""; loadedName = ""; loadedNotes = [];
           fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
           drop.classList.remove("hidden");
           fileErr.textContent = (e && e.message) ? e.message : String(e); fileErr.classList.remove("hidden");
         } finally {
-          drop.classList.remove("opacity-50", "pointer-events-none");
-          fileEl.value = "";
-          refreshInputNote();
+          if (!stale()) {
+            drop.classList.remove("opacity-50", "pointer-events-none");
+            fileEl.value = "";
+            refreshInputNote();
+          }
         }
       }
 
