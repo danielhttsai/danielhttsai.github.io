@@ -26,12 +26,17 @@ const EXCL_TYPES = ["Prior outcome event", "Competing diagnosis", "Prior exposur
 
 // Events that create informative (artificial) censoring, each weighted by IPCW.
 // Weights are fitted separately per arm; each event maps to the assigned strategy.
+// `v` is the value written into the protocol (kept stable so saved drafts keep
+// matching); `l` is the on-screen label, which may carry a caveat.
+// Death is deliberately NOT ticked by default: censoring at death and weighting
+// for it targets a hypothetical estimand in which death is removed, which is a
+// different question from a competing-risks analysis (Young 2020).
 const IPCW_REASONS = [
-  "Death",
-  "Treatment discontinuation",
-  "Switch to the comparator / another drug",
-  "Add-on of another therapy",
-  "Loss to follow-up / disenrolment",
+  { v: "Treatment discontinuation", l: "Treatment discontinuation", on: true },
+  { v: "Switch to the comparator / another drug", l: "Switch to the comparator / another drug", on: true },
+  { v: "Add-on of another therapy", l: "Add-on of another therapy", on: true },
+  { v: "Loss to follow-up / disenrolment", l: "Loss to follow-up / disenrolment", on: false },
+  { v: "Death", l: "Death — only if death is treated as censoring rather than as a competing event", on: false },
 ];
 const SENSITIVITY = [
   "On-treatment (per-protocol analogue): censor at discontinuation (>90-day gap) or switch",
@@ -46,7 +51,7 @@ const SENSITIVITY = [
 
 <BaseLayout
   title="Clone-Censor-Weight (CCW) protocol — Daniel Tsai"
-  description="A free, in-browser protocol builder for the clone-censor-weight (sequential trial / grace-period) approach to target-trial emulation, with one-click Word / Markdown export."
+  description="A free, in-browser protocol builder for the clone-censor-weight (grace-period) approach to target-trial emulation, with one-click Word / Markdown export."
 >
   <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
     <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
@@ -109,6 +114,10 @@ const SENSITIVITY = [
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
           <legend class="px-2 text-sm font-bold text-brand-700">4 · Censoring &amp; weights</legend>
+          <details class="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600">
+            <summary class="cursor-pointer font-semibold text-slate-700">In one sentence: everyone is copied into both arms, and each copy is dropped the moment it stops matching its arm.</summary>
+            <p class="mt-2 leading-relaxed">Because a patient's data are compatible with <em>both</em> strategies until they act, the same person-time counts in both arms during the grace period — that is what removes immortal-time bias. But the dropping (“artificial censoring”) is not random: the clones that survive in an arm are the ones who happened to behave that way, so they must be up-weighted to stand in for the ones removed. That up-weighting is the IPCW. Two consequences follow, and both matter for the analysis: model-based standard errors are too small (the number of events is artificially inflated), so confidence intervals come from a non-parametric bootstrap that re-runs cloning, censoring and weighting inside every replicate; and the arms are identical by construction during the grace period, so proportional hazards is violated by design (Maringe 2020, <a class="underline" href="https://doi.org/10.1093/ije/dyaa057" target="_blank" rel="noopener">doi:10.1093/ije/dyaa057</a>).</p>
+          </details>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Deviation / censoring rule</span>
             <textarea name="censor" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. A clone is artificially censored when its data first become incompatible with the assigned strategy: in the 'initiate' arm, if no anticoagulant is dispensed by the end of the grace period; in the 'deferred' arm, at the first dispensing during the grace period."></textarea></label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">IPCW covariates (baseline + time-varying)</span>
@@ -116,15 +125,15 @@ const SENSITIVITY = [
           <div>
             <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Censoring events weighted by IPCW</span>
             <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-              {IPCW_REASONS.map((r, i) => (
+              {IPCW_REASONS.map((r) => (
                 <label class="flex items-start gap-2 text-xs text-slate-700">
-                  <input type="checkbox" name="ipcwReasonsPick" value={r} checked={i < 3} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
-                  <span>{r}</span>
+                  <input type="checkbox" name="ipcwReasonsPick" value={r.v} checked={r.on} class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
+                  <span>{r.l}</span>
                 </label>
               ))}
             </div>
             <textarea name="ipcwReasonsCustom" rows="1" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom censoring events (one per line)"></textarea>
-            <p class="mt-1 text-[11px] text-slate-400">Weights are estimated <strong>separately for the treatment and control arms</strong>; each event maps to the assigned strategy.</p>
+            <p class="mt-1 text-[11px] text-slate-400">Weights are estimated <strong>separately for the treatment and control arms</strong>, because the two arms deviate at different times: a clone can leave the “initiate” arm only once, at the end of the grace period, while a clone can leave the “deferred” arm at any point inside it (Maringe 2020).</p>
           </div>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Inclusion look-back (days)</span>
             <input type="number" name="incllookback" value="365" min="0" step="1" class="mt-1 w-32 rounded-lg border border-slate-300 p-2 text-sm" /></label>
@@ -165,7 +174,8 @@ Comedications | 180</textarea>
               <option value="RD">Risk difference &amp; risk ratio from weighted cumulative incidence</option>
               <option value="HR">Hazard ratio from a weighted pooled logistic / Cox model</option>
               <option value="both">Both absolute (RD/RR) and relative (HR)</option>
-            </select></label>
+            </select>
+            <span class="mt-1 block text-[11px] text-slate-500">Prefer an absolute contrast here. In a cloned design the two arms are <em>the same people</em> during the grace period, so the hazards cannot be proportional; Maringe et al. advise against a simple Cox model for these data and against giving the hazard ratio a causal reading. A difference in survival at a fixed time, or in restricted mean survival time, is the safer primary measure.</span></label>
           <div>
             <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Subgroup analyses (tick to perform)</span>
             <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
@@ -240,17 +250,31 @@ Comedications | 180</textarea>
     const rowsText = (txt) => parseRows(txt).map((r) => r.name + " (" + r.days + " d)").join("; ") || "none";
     const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
 
+    // Numbers are read RAW — no silent fallback. A blank grace/look-back/follow-up
+    // box used to be quietly replaced by 14/365/90 in the exported protocol, so a
+    // half-finished form produced a document asserting windows nobody chose (and
+    // "Clear all", which blanks every box, produced a complete-looking protocol).
+    // Blank now travels as "" and is printed as "(not specified)" + flagged.
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), outcome: V("outcome"),
-      timezero: V("timezero"), stratA: V("stratA"), stratB: V("stratB"), grace: V("grace") || "14",
-      censor: V("censor"), ipcw: V("ipcw"), ipcwReasonsPick: MV("ipcwReasonsPick"), ipcwReasonsCustom: V("ipcwReasonsCustom"), incllookback: V("incllookback") || "365", excllist: V("excllist"), covlist: V("covlist"), followup: V("followup"), fudays: V("fudays") || "90", effect: V("effect"),
+      timezero: V("timezero"), stratA: V("stratA"), stratB: V("stratB"), grace: V("grace"),
+      censor: V("censor"), ipcw: V("ipcw"), ipcwReasonsPick: MV("ipcwReasonsPick"), ipcwReasonsCustom: V("ipcwReasonsCustom"), incllookback: V("incllookback"), excllist: V("excllist"), covlist: V("covlist"), followup: V("followup"), fudays: V("fudays"), effect: V("effect"),
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
+    // "14 days" / "(not specified)" — never a number the user did not type.
+    const daysTxt = (v) => { const t = String(v == null ? "" : v).trim(); return t === "" ? "(not specified)" : t + " day" + (t === "1" ? "" : "s"); };
+    const blank = (v) => String(v == null ? "" : v).trim() === "";
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     function renderScheme(s) {
       const grace = Math.max(0, parseInt(s.grace) || 0);
-      const fu = Math.max(grace + 1, parseInt(s.fudays) || 90);
+      // The follow-up bar shows the field's own value. It used to be inflated to
+      // grace+1 whenever the grace period ran past follow-up, so the bar read
+      // "+101d" while the box said 90 — a diagram that disagreed with the
+      // protocol it was illustrating. Now the grace band simply overruns the bar,
+      // which is what the (error-level) consistency check is telling you about.
+      const fuSet = !blank(s.fudays) && (parseInt(s.fudays) || 0) > 0;
+      const fu = fuSet ? parseInt(s.fudays) : 90;
       const incl = Math.max(0, parseInt(s.incllookback) || 0);
       const exRows = parseRows(s.excllist);
       const covRows = parseRows(s.covlist);
@@ -258,7 +282,9 @@ Comedications | 180</textarea>
       if (incl > 0) wins.push({ label: "Inclusion assessment", kind: "inclusion", startDay: -incl, endDay: 0, edit: { field: "incllookback", edge: "start" } });
       exRows.forEach((r, i) => wins.push({ label: r.name, kind: "exclusion", startDay: -r.days, endDay: 0, edit: { field: "excllist", edge: "start", idx: i } }));
       covRows.forEach((r, i) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covlist", edge: "start", idx: i } }));
-      wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "fudays", edge: "end" } });
+      wins.push(fuSet
+        ? { label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "fudays", edge: "end" } }
+        : { label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, note: "length not set — drag to set", edit: { field: "fudays", edge: "end" } });
       const bands = grace > 0 ? [{ startDay: 0, endDay: grace, label: "grace " + grace + "d", color: "#f59e0b", edit: { field: "grace", edge: "end" } }] : [];
       const onEdit = (field, day, meta) => {
         if (field === "covlist" || field === "excllist") {
@@ -281,10 +307,11 @@ Comedications | 180</textarea>
 
     const or = (s, d) => (s && s.length ? s : d);
     const effectText = (e) => ({
-      RD: "the risk difference and risk ratio, obtained by contrasting weighted cumulative-incidence (risk) curves at the end of follow-up",
-      HR: "the hazard ratio from a weighted pooled logistic regression (discrete-time hazards) model with the assigned strategy as the exposure",
-      both: "both absolute effects (risk difference and risk ratio from weighted cumulative-incidence curves) and the relative effect (hazard ratio from a weighted pooled logistic model)",
+      RD: "the risk difference and risk ratio, obtained by contrasting weighted cumulative-incidence (risk) curves at the end of follow-up (and, alongside them, the difference in restricted mean survival time)",
+      HR: "the hazard ratio from a weighted pooled logistic regression (discrete-time hazards) model with the assigned strategy as the exposure, reported with the caveat in Section 10 that proportional hazards cannot hold in a cloned design",
+      both: "both absolute effects (risk difference and risk ratio from weighted cumulative-incidence curves) and the relative effect (hazard ratio from a weighted pooled logistic model), the absolute contrast being the primary measure",
     })[e] || "the per-protocol effect on the risk of the outcome";
+    const usesHR = (e) => e === "HR" || e === "both";
 
     // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
     const pcOf = (s) => ({
@@ -295,11 +322,25 @@ Comedications | 180</textarea>
       comparator: or(s.stratB, "(strategy B)"),
       outcome: or(s.outcome, "(outcome)"),
       data: s.data,
-      analysis: "a clone-censor-weight per-protocol analysis estimating " + effectText(s.effect) + ", with 95% CIs by nonparametric bootstrap",
+      analysis: "a clone-censor-weight per-protocol analysis estimating " + effectText(s.effect) + ", with 95% CIs from a non-parametric bootstrap that re-runs cloning, censoring and weight estimation inside each replicate",
       groupBy: "treatment strategy",
-      limitations: "Artificial censoring is informative and adjusted with inverse-probability-of-censoring weights, which assume no unmeasured predictors of deviation; baseline confounding of the cloned assignment is removed only to the extent covariates are measured.",
-      plannedOutputs: ["Weighted cumulative-incidence (risk) curves by strategy.", "Weight-distribution and covariate-balance (SMD) diagnostics.", "Comparison of the CCW estimate with a conventional as-started analysis."],
+      limitations: "Artificial censoring is informative and adjusted with inverse-probability-of-censoring weights, which assume that every predictor of deviation is measured, that the weight models are correctly specified, and that the probability of deviating is non-zero at every time in the grace period for every patient (Maringe 2020). Cloning removes confounding of the assigned strategy at time zero, but only the observed covariates enter the weight models, so residual confounding of adherence remains possible.",
+      plannedOutputs: ["Weighted cumulative-incidence (risk) curves by strategy, with the difference in survival at the end of follow-up and in restricted mean survival time.", "Weight-distribution diagnostics (mean, range, extreme percentiles) and weighted covariate balance (SMD) between arms.", "Number of clones censored, and when, in each arm.", "Comparison of the CCW estimate with a conventional as-started analysis."],
     });
+
+    // One list, used by both the Markdown and the Word export so they cannot
+    // drift apart. Every DOI here was checked against Crossref/PubMed rather than
+    // written from memory; note "Reflection" (singular) in Maringe, and Gran's
+    // page range, both of which were wrong before.
+    const REFS = [
+      "Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183(8):758-764. doi:10.1093/aje/kwv254",
+      "Hernán MA. How to estimate the effect of treatment duration on survival outcomes using observational data. BMJ 2018;360:k182. doi:10.1136/bmj.k182",
+      "Maringe C, Benitez Majano S, Exarchakou A, et al. Reflection on modern methods: trial emulation in the presence of immortal-time bias. Assessing the benefit of major surgery for elderly lung cancer patients using observational data. Int J Epidemiol 2020;49(5):1719-1729. doi:10.1093/ije/dyaa057",
+      "Gaber CE, Hanson KA, Kim S, Lund JL, Lee TA, Murray EJ. The clone-censor-weight method in pharmacoepidemiologic research: foundations and methodological implementation. Curr Epidemiol Rep 2024;11(3):164-174. doi:10.1007/s40471-024-00346-2",
+      "Young JG, Stensrud MJ, Tchetgen Tchetgen EJ, Hernán MA. A causal framework for classical statistical estimands in failure-time settings with competing events. Stat Med 2020;39(8):1199-1236. doi:10.1002/sim.8471",
+      "Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment in the presence of time-dependent confounding applied to data from the Swiss HIV Cohort Study. Stat Med 2010;29(26):2757-2768. doi:10.1002/sim.4048",
+      "Cashin AG, Hansford HJ, Hernán MA, et al. Transparent reporting of observational studies emulating a target trial — the TARGET statement. JAMA 2025;334(12):1084-1093. doi:10.1001/jama.2025.13350",
+    ];
 
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
@@ -311,7 +352,7 @@ _Study protocol · clone-censor-weight target-trial emulation · drafted ${today
 
 ${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
-This study emulates a target trial to estimate the **per-protocol effect** of two treatment strategies that cannot be distinguished at time zero and are only defined by what happens over a **grace period** of ${s.grace} days. A conventional "as-treated at baseline" analysis would misclassify person-time and induce **immortal-time bias**; a "new-user" comparison cannot represent a *deferred / sustained* strategy. The clone-censor-weight (CCW) approach removes these biases by explicitly emulating the trial's assignment, adherence, and censoring structure (Hernán 2016; Maringe 2020).
+This study emulates a target trial to estimate the **per-protocol effect** of two treatment strategies that cannot be distinguished at time zero and are only defined by what happens over a **grace period** of ${daysTxt(s.grace)}. A conventional "as-treated at baseline" analysis would misclassify person-time and induce **immortal-time bias**, because treatment received at time *t* can only be observed in patients who survived to *t*; a "new-user" comparison cannot represent a *deferred / sustained* strategy at all. The clone-censor-weight (CCW) approach removes these biases by explicitly emulating the trial's assignment, adherence, and censoring structure (Hernán 2016; Hernán 2018; Maringe 2020).
 
 ## 2. Causal question (target trial)
 Among **${or(s.population, "(population)")}**, what is the effect of **${A}** versus **${B}** on **${or(s.outcome, "(outcome)")}**?
@@ -325,35 +366,44 @@ ${or(s.timezero, "(define time zero — a point at which every patient is compat
 ## 5. Treatment strategies
 - **${A}**
 - **${B}**
-- **Grace period:** ${s.grace} days from time zero, during which the strategies are still compatible with the data.
+- **Grace period:** ${daysTxt(s.grace)} from time zero, during which the data are still compatible with either strategy.
 
 ## 6. Cloning
-At time zero each eligible patient is **cloned** once into every strategy arm. Each clone is assigned to, and followed under, one strategy. This makes baseline covariate distributions identical across arms by construction (no baseline confounding of assignment).
+At time zero each eligible patient is **cloned** once into every strategy arm. Each clone is assigned to, and followed under, one strategy. Because assignment is made by construction rather than by anything about the patient, the baseline covariate distributions are identical across arms and the assigned strategy is unconfounded at time zero.
+
+Until a patient acts, their data are compatible with *both* strategies, so their person-time and any event they experience inside the grace period contribute to **both** arms; this is what removes immortal-time bias (Maringe 2020). It also means the arms are not independent samples, and the number of records exceeds the number of patients — with two consequences for Sections 10 and 11.
 
 ## 7. Artificial censoring (deviation)
-${or(s.censor, "A clone is censored when its observed data first become incompatible with its assigned strategy (e.g. failure to initiate by the end of the grace period, or initiation in the deferred arm). Administrative censoring applies at death, disenrolment, or end of study.")}
+${or(s.censor, "A clone is censored when its observed data first become incompatible with its assigned strategy (e.g. failure to initiate by the end of the grace period, or initiation in the deferred arm). Administrative censoring applies at disenrolment or end of study.")}
+
+The two arms deviate on different schedules, and this shapes the weight models in Section 8: a clone in the **initiate** arm can only deviate at one time — the end of the grace period, when it becomes clear that treatment was not started — whereas a clone in the **deferred** arm can deviate at any moment inside the grace period. Maringe et al. therefore fit a time-varying (survival) model in the deferred arm and a time-fixed model in the initiate arm.
 
 ## 8. Inverse-probability-of-censoring weights (IPCW)
-Because artificial censoring is informative, each clone receives a **time-varying, stabilised inverse-probability-of-censoring weight** (the inverse probability of remaining uncensored) to restore the population that would have persisted under full adherence. Censoring is modelled by pooled logistic regression over follow-up time, using baseline covariates over their look-back windows (**${rowsText(s.covlist)}**), with inclusion criteria assessed over ${s.incllookback} d and exclusions (${rowsText(s.excllist)}), together with time-varying predictors:
+Artificial censoring is informative: the clones that remain uncensored in an arm are exactly those whose treatment behaviour matched it, and that behaviour is associated with prognosis. Each clone therefore receives a **stabilised inverse-probability-of-censoring weight** — the inverse of its estimated probability of remaining uncensored — so that the clones still in the risk set stand in for those removed and the arms stay comparable through the grace period (Maringe 2020). Censoring is modelled over follow-up time using baseline covariates measured over their look-back windows (**${rowsText(s.covlist)}**), with inclusion criteria assessed over ${daysTxt(s.incllookback)} and exclusions (${rowsText(s.excllist)}), together with time-varying predictors:
 
 ${(s.ipcw || "(list the baseline and time-varying predictors of deviation — e.g. age, sex, comorbidity and bleeding-risk scores, disease severity, concomitant therapy, and post-baseline events)").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n") || "- (covariates)"}
 
-Separate weight models are fitted for the **treatment** and **control** arms. The events treated as informative censoring and weighted by IPCW (each mapping to the assigned strategy) are: ${mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).join("; ") || "(none selected)"}. Weights are cumulative over follow-up and truncated at the 1st/99th percentiles.
+**Separate weight models are fitted for the treatment and the control arm** (Section 7). The events treated as informative censoring and weighted by IPCW (each mapping to the assigned strategy) are: ${mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).join("; ") || "(none selected — the artificial censoring created by cloning would then be left unadjusted)"}.
+
+Weights are cumulative over follow-up. We report the distribution of the weights (mean, range, and extreme percentiles) and the weighted standardised mean differences between arms, and we confirm that the weights remove the imbalance that artificial censoring creates before the primary analysis is run. ${mergeList(s.sensitivityPick, s.sensitivityCustom).some((x) => /truncat/i.test(x)) ? "Truncation at the 1st/99th percentiles is examined as a pre-specified sensitivity analysis (Section 13); the primary analysis uses untruncated weights." : "Truncation is not applied in the primary analysis; if the weight distribution proves extreme, a truncated-weight analysis will be added as a documented amendment."}
+
+**Identifying assumptions** (Maringe 2020): (i) every predictor of deviation from the assigned strategy is measured and included; (ii) the weight models are correctly specified; (iii) positivity — the probability of deviating is non-zero at every time within the grace period, for every patient; and (iv) consistency. Assumption (i) is not testable; assumption (iii) fails silently if the grace period is long enough that some covariate pattern always (or never) initiates, so we inspect the weight distribution for extreme values as a diagnostic.
 
 ## 9. Follow-up and outcome
-${or(s.followup, "Follow-up runs from time zero until the outcome, death, disenrolment, or the end of the study period, whichever comes first.")} Outcome: **${or(s.outcome, "(outcome)")}**.
+${or(s.followup, "Follow-up runs from time zero until the outcome, death, disenrolment, or the end of the study period, whichever comes first.")} Maximum follow-up per patient: **${daysTxt(s.fudays)}** from time zero. Outcome: **${or(s.outcome, "(outcome)")}**.
 
 ## 10. Estimand and effect measure
-The primary estimand is the **per-protocol effect** (receiving and adhering to each strategy), estimated by the clone-censor-weight analysis. For comparison we also report an **as-started (intention-to-treat-analogue) effect** from a conventional analysis (Section 11). We report ${effectText(s.effect)}, with 95% confidence intervals from a **nonparametric bootstrap** (resampling patients, keeping each patient's clones together).
-
+The primary estimand is the **per-protocol effect** — what would have happened had every patient received and adhered to the assigned strategy. For comparison we also report an **as-started (intention-to-treat-analogue) effect** from a conventional analysis (Section 11). We report ${effectText(s.effect)}, with 95% confidence intervals from a **non-parametric bootstrap**.
+${usesHR(s.effect) ? "\n> **Caveat on the hazard ratio.** During the grace period the two arms contain the same people, so their hazards are equal by construction and the proportional-hazards assumption is violated by design. Maringe et al. (2020) advise against analysing cloned data with a simple Cox model, and against reading the hazard ratio causally, because it averages conditional time-specific effects over a risk set whose composition changes. The absolute contrast (difference in survival at the end of follow-up, or in restricted mean survival time) is the interpretable measure here.\n" : ""}
 ## 11. Statistical analysis
 **Primary — clone-censor-weight (per-protocol):**
 1. Clone the eligible cohort into the strategy arms and apply the censoring rule.
-2. Fit the censoring model(s) and compute stabilised, time-varying IPCW.
-3. Fit a **weighted pooled logistic regression** for the discrete-time hazard, with the assigned strategy, follow-up time, its quadratic term, and a strategy × time interaction; derive weighted cumulative-incidence curves.
-4. Contrast the curves for the effect measure(s); obtain 95% CIs by **nonparametric bootstrap** (resampling patients).
+2. Fit the arm-specific censoring model(s) and compute the stabilised IPCW.
+3. Estimate the weighted survival / cumulative-incidence curve in each arm (weighted Kaplan–Meier, or a **weighted pooled logistic regression** for the discrete-time hazard with the assigned strategy, follow-up time, its quadratic term, and a strategy × time interaction).
+4. Contrast the curves for the effect measure(s).
+5. Obtain 95% CIs by **non-parametric bootstrap**: resample **patients** (not clones) with replacement, then repeat steps 1–4 — cloning, censoring, weight estimation and outcome modelling — inside every replicate. Model-based standard errors must not be used: cloning inflates the apparent number of events, so they are too small (Maringe 2020).
 
-**Comparison — conventional analysis (as-started, ITT-analogue):** start follow-up at the index date, balance the arms by **propensity-score matching** (standardised mean difference < 0.1 as the balance criterion), and handle the competing risk of death with **Fine–Gray sub-distribution** and **cause-specific Cox** models. The gap between this and the CCW estimate indexes the time-lag / immortal-time bias removed.
+**Comparison — conventional analysis (as-started, ITT-analogue):** start follow-up at the index date, balance the arms by **propensity-score matching** (standardised mean difference < 0.1 as the balance criterion), and handle the competing risk of death with **Fine–Gray sub-distribution** and **cause-specific Cox** models. The gap between this and the CCW estimate indexes the time-lag / immortal-time bias removed.${mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).some((x) => /^death/i.test(x)) ? "\n\n**Note on death.** Death is listed above as an event censored and weighted by IPCW. Censoring at death and weighting for it estimates a *hypothetical* effect — the effect that would be seen if death could not occur — which is a different estimand from the total effect in a world where death competes with the outcome. State which of the two is intended, and report the competing-risk analysis alongside it (Young 2020)." : ""}
 
 ## 12. Subgroup analyses
 ${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsPick, s.subgroupsCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
@@ -364,36 +414,44 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 ${window.PC.tailMd(pcOf(s))}
 
 ## References
-- Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183:758-64.
-- Hernán MA. How to estimate the effect of treatment duration on survival outcomes using observational data. BMJ 2018;360:k182.
-- Maringe C, Benitez Majano S, Exarchakou A, et al. Reflections on modern methods: trial emulation in the presence of immortal-time bias. Int J Epidemiol 2020;49:1719-29.
-- Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment. Stat Med 2010;29:2757-70.
+${REFS.map((r) => "- " + r).join("\n")}
 `;
     };
 
     const computeChecks = (s) => {
       const checks = [];
-      const grace = parseInt(s.grace) || 0, fu = parseInt(s.fudays) || 0, lb = parseRows(s.covlist).length;
-      if (grace <= 0) checks.push({ level: "error", msg: "Grace period is 0 — with no grace window the two strategies cannot be distinguished by cloning. Set a grace period > 0." });
-      if (fu > 0 && grace >= fu) checks.push({ level: "warn", msg: "Grace period (" + grace + "d) is ≥ the follow-up (" + fu + "d) — almost all follow-up falls inside the grace window. Shorten the grace or lengthen follow-up." });
-      if (lb <= 0) checks.push({ level: "warn", msg: "No covariate look-back — baseline confounders and eligibility are assessed only at time zero. Set a look-back window before index." });
-      if (!s.timezero || !s.timezero.trim()) checks.push({ level: "warn", msg: "Define time zero — eligibility, cloning, and follow-up must all start there, aligned to avoid immortal-time bias." });
-      if (!s.censor || !s.censor.trim()) checks.push({ level: "warn", msg: "No deviation / censoring rule — clones must be censored when their data stop matching the assigned strategy." });
-      if (!s.ipcw || !s.ipcw.trim()) checks.push({ level: "warn", msg: "No IPCW covariates listed — the informative censoring created by cloning must be adjusted with inverse-probability-of-censoring weights." });
-      if (!mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).length) checks.push({ level: "warn", msg: "No censoring events selected for IPCW — pick the events (death, discontinuation, switch, add-on…) that create informative censoring under each strategy." });
-      checks.push({ level: "info", msg: "CCW targets the per-protocol effect (adherence to the assigned strategy); the weight models are fitted separately for the treatment and control arms." });
+      const grace = parseInt(s.grace) || 0, fu = parseInt(s.fudays) || 0, covRows = parseRows(s.covlist), lb = covRows.length;
+      const reasons = mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom);
+      if (blank(s.grace)) checks.push({ level: "error", msg: "Grace period is empty. It is not assumed to be anything — the protocol will print “(not specified)” until you set it. With no grace window the two strategies cannot be distinguished by cloning." });
+      else if (grace <= 0) checks.push({ level: "error", msg: "Grace period is 0 — with no grace window the two strategies cannot be distinguished by cloning, and every clone deviates at time zero. Set a grace period > 0." });
+      if (blank(s.fudays)) checks.push({ level: "error", msg: "Maximum follow-up is empty. The diagram shows a placeholder bar labelled “length not set”, and the protocol prints “(not specified)” — nothing is assumed." });
+      else if (fu > 0 && grace >= fu) checks.push({ level: "error", msg: "The grace period (" + grace + " d) is ≥ the maximum follow-up (" + fu + " d), so the arms are identical for the whole of follow-up and there is no post-grace period in which they can differ. The grace band in the diagram now overruns the follow-up bar to show this. Shorten the grace period or lengthen follow-up." });
+      if (lb <= 0) checks.push({ level: "warn", msg: "No covariate look-back — baseline confounders and eligibility are assessed only at time zero. The IPCW models need these covariates, so without them the weights cannot adjust the artificial censoring." });
+      const zeroRows = [...covRows, ...parseRows(s.excllist)].filter((r) => !r.days).map((r) => r.name);
+      if (zeroRows.length) checks.push({ level: "warn", msg: "These rows have a look-back of 0 days, which means the criterion is assessed only on the index day itself: " + zeroRows.join("; ") + ". A row is read as “Name | days” — check for a missing or non-numeric value after the “|”." });
+      if (!s.timezero || !s.timezero.trim()) checks.push({ level: "warn", msg: "Define time zero. It must be a point at which every patient is still eligible for, and compatible with, every strategy — otherwise cloning assigns people to strategies they could never have followed." });
+      if (!s.censor || !s.censor.trim()) checks.push({ level: "warn", msg: "No deviation / censoring rule — clones must be censored when their data stop matching the assigned strategy. State the rule for each arm separately; they are not symmetric." });
+      if (!s.ipcw || !s.ipcw.trim()) checks.push({ level: "warn", msg: "No IPCW covariates listed. Cloning removes confounding of the assigned strategy, but the censoring it introduces is informative; without the weights the CCW estimate is not less biased than the naive one, only differently biased." });
+      if (!reasons.length) checks.push({ level: "warn", msg: "No censoring events selected for IPCW — pick the events (discontinuation, switch, add-on…) that create informative censoring under each strategy." });
+      if (usesHR(s.effect)) checks.push({ level: "warn", msg: "You have chosen the hazard ratio. In a cloned design the arms contain the same people during the grace period, so their hazards are equal by construction and proportional hazards cannot hold. Maringe et al. (2020) recommend against a simple Cox model here and against a causal reading of the HR. Prefer the difference in survival at the end of follow-up, or in restricted mean survival time." });
+      if (reasons.some((x) => /^death/i.test(x))) checks.push({ level: "warn", msg: "Death is marked as a censoring event weighted by IPCW. That targets a hypothetical estimand — the effect if death could not occur — not the total effect in a world where death competes with the outcome (Young 2020). If death is a competing event rather than a loss of information, say so and analyse it as one. If the outcome is death, it should not appear here at all." });
+      checks.push({ level: "info", msg: "CCW targets the per-protocol effect: what would have happened had everyone received and adhered to the assigned strategy. It is not the intention-to-treat effect, and it is not what a conventional as-started analysis estimates." });
+      checks.push({ level: "info", msg: "Confidence intervals come from a non-parametric bootstrap that resamples patients and re-runs cloning, censoring and weighting in each replicate. Model-based standard errors are too small here, because cloning inflates the apparent number of events (Maringe 2020)." });
       if (!s.population || !s.population.trim()) checks.push({ level: "info", msg: "Specify the population." });
       if (!s.outcome || !s.outcome.trim()) checks.push({ level: "info", msg: "Specify the outcome." });
       if (!s.stratA || !s.stratB) checks.push({ level: "info", msg: "Specify both treatment strategies (A and B)." });
       return checks;
     };
 
+    // No bare `catch {}` around rendering: a swallowed error here is how a
+    // diagram once stayed blank for weeks. Failures are logged, and each stage is
+    // isolated so one broken panel cannot take the others down with it.
     const render = () => {
       const s = readForm();
       preview.textContent = buildMarkdown(s);
-      renderScheme(s);
-      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch {}
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
+      try { renderScheme(s); } catch (e) { console.error("[ccw] diagram failed", e); }
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch (e) { console.error("[ccw] checks failed", e); }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) { console.warn("[ccw] autosave failed", e); }
     };
 
     (() => {
@@ -411,7 +469,7 @@ ${window.PC.tailMd(pcOf(s))}
           else if (els.type === "checkbox") els.checked = !!val;
           else els.value = val;
         }
-      } catch {}
+      } catch (e) { console.error("[ccw] restore failed", e); }
       render();
     })();
     form.addEventListener("input", render);
@@ -423,18 +481,27 @@ ${window.PC.tailMd(pcOf(s))}
       if (!rows.some((r) => r.name === name)) { rows.push({ name: name, days: 365 }); el.value = rowsJoin(rows); render(); }
     }));
 
+    const actionMsg = document.querySelector("[data-action-msg]");
+    const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
+
     const slugify = () => (readForm().title || "ccw-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "ccw-protocol";
     const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
     const dl = (blob, name) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
 
-    document.querySelector("[data-action='download-md']").addEventListener("click", () =>
-      dl(new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" }), fname("md")));
+    document.querySelector("[data-action='download-md']").addEventListener("click", () => {
+      try { dl(new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" }), fname("md")); setMsg("Markdown downloaded."); }
+      catch (e) { console.error(e); setMsg("Markdown export failed: " + (e && e.message ? e.message : e), true); }
+    });
 
     document.querySelector("[data-action='download-target']").addEventListener("click", async () => {
-      const D = window.docx; if (!D || !window.buildTargetChecklistDocx) return;
+      const D = window.docx;
+      // Silence here used to mean "click does nothing" — the docx UMD bundle is
+      // loaded from a CDN and can simply not arrive.
+      if (!D) { setMsg("The Word engine (docx) did not load — check the network, then reload the page.", true); return; }
+      if (!window.buildTargetChecklistDocx) { setMsg("The TARGET checklist component did not load — reload the page.", true); return; }
       const s = readForm();
       const A = or(s.stratA, "(strategy A)"), B = or(s.stratB, "(strategy B)");
-      const grace = s.grace, tz = or(s.timezero, "(define time zero)");
+      const grace = daysTxt(s.grace), tz = or(s.timezero, "(define time zero)");
       const ipcwReasons = mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).join("; ") || "(none selected)";
       const subg = mergeList(s.subgroupsPick, s.subgroupsCustom).join("; ") || "none pre-specified";
       const sens = mergeList(s.sensitivityPick, s.sensitivityCustom).join("; ") || "(see protocol)";
@@ -442,16 +509,16 @@ ${window.PC.tailMd(pcOf(s))}
       const item7 = [
         ["a. Eligibility criteria",
           "Patients meeting the indication at time zero; compatible with, and eligible for, every treatment strategy at that point.",
-          "Population: " + or(s.population, "(specify)") + ".\nInclusion assessed over " + s.incllookback + " d.\nExclusions: " + rowsText(s.excllist) + "."],
+          "Population: " + or(s.population, "(specify)") + ".\nInclusion assessed over " + daysTxt(s.incllookback) + ".\nExclusions: " + rowsText(s.excllist) + "."],
         ["b. Treatment strategies",
-          "Initiate " + A + " vs " + B + " — strategies distinguished only by what happens over a grace period of " + grace + " days.",
-          "Strategy A: " + A + ".\nStrategy B: " + B + ".\nGrace period: " + grace + " days from time zero."],
+          "Initiate " + A + " vs " + B + " — strategies distinguished only by what happens over a grace period of " + grace + ".",
+          "Strategy A: " + A + ".\nStrategy B: " + B + ".\nGrace period: " + grace + " from time zero."],
         ["c. Assignment procedures",
           "Random assignment to strategy at time zero.",
           "Every eligible patient is CLONED into both strategy arms at time zero, so assignment is unconfounded by construction (baseline covariate distributions identical across arms). Covariates: " + rowsText(s.covlist) + "."],
         ["d. Follow-up",
           "Follow-up begins at assignment (time zero) and ends at the outcome, death, or end of study.",
-          "Time zero: " + tz + ".\n" + or(s.followup, "Follow-up from time zero to outcome, death, disenrolment, or end of study.") + "\nGrace period: " + grace + " days."],
+          "Time zero: " + tz + ".\n" + or(s.followup, "Follow-up from time zero to outcome, death, disenrolment, or end of study.") + "\nGrace period: " + grace + ".\nMaximum follow-up: " + daysTxt(s.fudays) + " from time zero."],
         ["e. Outcomes",
           "Primary outcome: " + or(s.outcome, "(specify)") + ".",
           "Outcome: " + or(s.outcome, "(specify)") + "."],
@@ -459,28 +526,30 @@ ${window.PC.tailMd(pcOf(s))}
           "Per-protocol effect — the effect of receiving and adhering to the assigned strategy.",
           "Primary estimand: the per-protocol effect via clone-censor-weight; " + effectText(s.effect) + ". A conventional as-started (ITT-analogue) analysis is reported for comparison."],
         ["g. Identifying assumptions",
-          "Exchangeability, positivity, and consistency; and — because artificial censoring is informative — no unmeasured predictors of censoring.",
-          "Baseline exchangeability by cloning. Informative censoring at deviation is addressed with stabilised, time-varying inverse-probability-of-censoring weights fitted SEPARATELY per arm, over: " + or(s.ipcw, "(covariates)") + ". Censoring events weighted (each mapped to the assigned strategy): " + ipcwReasons + "."],
+          "Exchangeability, positivity, and consistency; and — because artificial censoring is informative — no unmeasured predictors of deviation.",
+          "Baseline exchangeability of the assigned strategy holds by construction, because cloning assigns every patient to every arm. The informative censoring introduced at deviation is addressed with stabilised inverse-probability-of-censoring weights fitted SEPARATELY per arm (the arms deviate on different schedules), over: " + or(s.ipcw, "(covariates)") + ". Censoring events weighted (each mapped to the assigned strategy): " + ipcwReasons + ".\nAssumptions carried by the weights (Maringe 2020): all predictors of deviation measured; weight models correctly specified; positivity of deviation at every time within the grace period for every patient; consistency. Weight distribution and weighted SMDs are reported as diagnostics."],
         ["h. Data analysis plan",
           "An estimator that recovers the per-protocol effect under the identifying assumptions.",
-          "Weighted pooled logistic regression (discrete-time hazard) with the assigned strategy, follow-up time, its quadratic term, and a strategy × time interaction; weighted cumulative-incidence curves contrasted for the effect measure; 95% CIs by nonparametric bootstrap.\nSubgroups: " + subg + ".\nSensitivity: " + sens + "."],
+          "Weighted survival / cumulative-incidence curves per arm (weighted Kaplan-Meier, or a weighted pooled logistic regression for the discrete-time hazard with the assigned strategy, follow-up time, its quadratic term, and a strategy x time interaction), contrasted for the effect measure.\n95% CIs by non-parametric bootstrap resampling PATIENTS and re-running cloning, censoring and weighting in each replicate; model-based standard errors are not used, because cloning inflates the apparent number of events (Maringe 2020).\nSubgroups: " + subg + ".\nSensitivity: " + sens + "."],
       ];
       const map = {
         "1a": "This study emulates a target trial of " + A + " vs " + B + " among " + or(s.population, "(population)") + ", analysed by clone-censor-weight.",
         "1b": or(s.data, ""),
         "3": "Among " + or(s.population, "(population)") + ", what is the per-protocol effect of " + A + " vs " + B + " on " + or(s.outcome, "(outcome)") + "?",
-        "4": "The two strategies cannot be distinguished at time zero and differ only over a " + grace + "-day grace period, so a conventional as-treated analysis is biased by immortal time; the target trial is specified de novo and emulated by clone-censor-weight (Hernán 2016; Maringe 2020).",
+        "4": "The two strategies cannot be distinguished at time zero and differ only over a grace period of " + grace + ", so a conventional as-treated analysis is biased by immortal time; the target trial is specified de novo and emulated by clone-censor-weight (Hernán 2016; Maringe 2020).",
         "5": or(s.data, ""),
-        "6": "Target trial: randomise eligible patients at time zero to " + A + " vs " + B + " (strategies distinguished over a " + grace + "-day grace period) and follow to the outcome, death, or end of study.",
+        "6": "Target trial: randomise eligible patients at time zero to " + A + " vs " + B + " (strategies distinguished over a grace period of " + grace + ") and follow to the outcome, death, or end of study.",
         "16": "The clone-censor-weight approach removes time-lag / immortal-time bias; residual and unmeasured confounding cannot be excluded, and the IPCW models assume no unmeasured predictors of deviation.",
       };
-      try { dl(await window.buildTargetChecklistDocx(D, { title: s.title || "CCW study", designName: "clone-censor-weight", item7: item7, map: map }), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx"); } catch (e) {}
+      try {
+        dl(await window.buildTargetChecklistDocx(D, { title: s.title || "CCW study", designName: "clone-censor-weight", item7: item7, map: map }), slugify() + "-TARGET-" + new Date().toISOString().slice(0, 10) + ".docx");
+        setMsg("TARGET checklist downloaded.");
+      } catch (e) { console.error(e); setMsg("TARGET checklist export failed: " + (e && e.message ? e.message : e), true); }
     });
     document.querySelector("[data-action='copy']").addEventListener("click", async (e) => {
-      try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
+      try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); }
+      catch (err) { console.error(err); setMsg("Could not copy — your browser blocked clipboard access. Select the preview text and copy it manually.", true); }
     });
-    const actionMsg = document.querySelector("[data-action-msg]");
-    const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
     document.querySelector("[data-action='reset']").addEventListener("click", () => {
       if (!confirm("Clear every field and forget the saved draft?")) return;
       localStorage.removeItem(STORAGE_KEY);
@@ -493,7 +562,7 @@ ${window.PC.tailMd(pcOf(s))}
         else el.value = "";
       });
       render();
-      setMsg("Cleared.");
+      setMsg("Cleared. Every number is now blank — the protocol says “(not specified)” rather than assuming a default.");
     });
 
     // Word export — Markdown-ish rendered to a formatted .docx
@@ -531,7 +600,7 @@ ${window.PC.tailMd(pcOf(s))}
       window.PC.abstractDocx(window.docx, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
-      children.push(para("This study emulates a target trial to estimate the per-protocol effect of two treatment strategies distinguished only by what happens over a grace period of " + s.grace + " days. A conventional as-treated analysis would misclassify person-time and introduce immortal-time bias; the clone-censor-weight (CCW) approach removes these biases (Hernán 2016; Maringe 2020)."));
+      children.push(para("This study emulates a target trial to estimate the per-protocol effect of two treatment strategies distinguished only by what happens over a grace period of " + daysTxt(s.grace) + ". A conventional as-treated analysis would misclassify person-time and introduce immortal-time bias, because treatment received at time t can only be observed in patients who survived to t; the clone-censor-weight (CCW) approach removes these biases (Hernán 2016; Hernán 2018; Maringe 2020)."));
 
       children.push(h1("2. Causal question (target trial)"));
       children.push(para("Among " + or(s.population, "(population)") + ", what is the effect of " + A + " versus " + B + " on " + or(s.outcome, "(outcome)") + "?"));
@@ -543,35 +612,42 @@ ${window.PC.tailMd(pcOf(s))}
         ["Population", or(s.population, "-")],
         ["Strategy A", A],
         ["Strategy B", B],
-        ["Grace period", s.grace + " days"],
+        ["Grace period", daysTxt(s.grace)],
         ["Time zero", or(s.timezero, "-")],
         ["Outcome", or(s.outcome, "-")],
-        ["Inclusion look-back", s.incllookback + " days"],
+        ["Inclusion look-back", daysTxt(s.incllookback)],
+        ["Maximum follow-up", daysTxt(s.fudays)],
         ["Exclusion criteria", rowsText(s.excllist)],
         ["Covariates", rowsText(s.covlist)],
       ]));
 
       children.push(h1("4. Cloning"));
-      children.push(para("At time zero each eligible patient is cloned once into every strategy arm, making baseline covariate distributions identical across arms by construction."));
+      children.push(para("At time zero each eligible patient is cloned once into every strategy arm. Because assignment is made by construction rather than by anything about the patient, baseline covariate distributions are identical across arms and the assigned strategy is unconfounded at time zero."));
+      children.push(para("Until a patient acts, their data are compatible with both strategies, so their person-time and any event inside the grace period contribute to BOTH arms; this is what removes immortal-time bias (Maringe 2020). It also means the arms are not independent samples and the number of records exceeds the number of patients — see Sections 8 and 9."));
 
       children.push(h1("5. Artificial censoring (deviation)"));
-      children.push(para(or(s.censor, "A clone is censored when its observed data first become incompatible with its assigned strategy. Administrative censoring applies at death, disenrolment, or end of study.")));
+      children.push(para(or(s.censor, "A clone is censored when its observed data first become incompatible with its assigned strategy. Administrative censoring applies at disenrolment or end of study.")));
+      children.push(para("The two arms deviate on different schedules. A clone in the initiate arm can deviate at only one time — the end of the grace period, when it becomes clear treatment was not started — whereas a clone in the deferred arm can deviate at any moment inside it. Maringe et al. therefore fit a time-varying model in the deferred arm and a time-fixed model in the initiate arm."));
 
       children.push(h1("6. Inverse-probability-of-censoring weights (IPCW)"));
-      children.push(para("Each clone receives a time-varying, stabilised inverse-probability-of-censoring weight, modelled by pooled logistic regression using baseline covariates over their look-back windows (" + rowsText(s.covlist) + "); inclusion assessed over " + s.incllookback + " d; exclusions: " + rowsText(s.excllist) + "; plus time-varying predictors:"));
+      children.push(para("Artificial censoring is informative: the clones that remain uncensored in an arm are those whose treatment behaviour matched it, and that behaviour is associated with prognosis. Each clone therefore receives a stabilised inverse-probability-of-censoring weight — the inverse of its estimated probability of remaining uncensored — so that the clones still in the risk set stand in for those removed and the arms stay comparable through the grace period (Maringe 2020). Censoring is modelled using baseline covariates over their look-back windows (" + rowsText(s.covlist) + "); inclusion assessed over " + daysTxt(s.incllookback) + "; exclusions: " + rowsText(s.excllist) + "; plus time-varying predictors:"));
       (ipcwLines.length ? ipcwLines : ["(list the predictors of deviation)"]).forEach((l) => children.push(bullet(l)));
-      children.push(para("Separate weight models are fitted for the treatment and control arms. Events weighted by IPCW (each mapping to the assigned strategy): " + (mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).join("; ") || "(none selected)") + "."));
+      children.push(para("Separate weight models are fitted for the treatment and control arms (Section 5). Events weighted by IPCW (each mapping to the assigned strategy): " + (mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).join("; ") || "(none selected — the artificial censoring created by cloning would then be left unadjusted)") + "."));
+      children.push(para("We report the weight distribution (mean, range, extreme percentiles) and the weighted standardised mean differences between arms, and confirm the weights remove the imbalance created by artificial censoring before the primary analysis is run."));
+      children.push(para("Identifying assumptions carried by the weights (Maringe 2020): (i) every predictor of deviation is measured and included; (ii) the weight models are correctly specified; (iii) positivity — the probability of deviating is non-zero at every time within the grace period, for every patient; (iv) consistency. Assumption (i) is not testable; assumption (iii) fails silently when the grace period is long enough that some covariate pattern always or never initiates, so extreme weights are inspected as a diagnostic."));
 
       children.push(h1("7. Follow-up and outcome"));
-      children.push(para(or(s.followup, "From time zero to outcome, death, disenrolment, or end of study.") + " Outcome: " + or(s.outcome, "(outcome)") + "."));
+      children.push(para(or(s.followup, "From time zero to outcome, death, disenrolment, or end of study.") + " Maximum follow-up per patient: " + daysTxt(s.fudays) + " from time zero. Outcome: " + or(s.outcome, "(outcome)") + "."));
 
       children.push(h1("8. Estimand and effect measure"));
-      children.push(para("Primary estimand: the per-protocol effect via clone-censor-weight; a conventional as-started (intention-to-treat-analogue) analysis is reported for comparison. We report " + effectText(s.effect) + ", with 95% CIs from a nonparametric bootstrap."));
+      children.push(para("Primary estimand: the per-protocol effect — what would have happened had every patient received and adhered to the assigned strategy. A conventional as-started (intention-to-treat-analogue) analysis is reported for comparison. We report " + effectText(s.effect) + ", with 95% CIs from a non-parametric bootstrap."));
+      if (usesHR(s.effect)) children.push(para("Caveat on the hazard ratio. During the grace period the two arms contain the same people, so their hazards are equal by construction and proportional hazards is violated by design. Maringe et al. (2020) advise against analysing cloned data with a simple Cox model, and against a causal reading of the hazard ratio, because it averages conditional time-specific effects over a risk set whose composition changes. The absolute contrast — difference in survival at the end of follow-up, or in restricted mean survival time — is the interpretable measure here."));
 
       children.push(h1("9. Statistical analysis"));
       children.push(para("Primary — clone-censor-weight (per-protocol):"));
-      ["Clone the eligible cohort into the strategy arms and apply the censoring rule.", "Fit the censoring model(s) and compute stabilised, time-varying IPCW.", "Fit a weighted pooled logistic regression for the discrete-time hazard, with the assigned strategy, follow-up time, its quadratic term, and a strategy × time interaction; derive weighted cumulative-incidence curves.", "Contrast the curves for the effect measure(s); 95% CIs by nonparametric bootstrap."].forEach((l) => children.push(numItem(l)));
+      ["Clone the eligible cohort into the strategy arms and apply the censoring rule.", "Fit the arm-specific censoring model(s) and compute the stabilised IPCW.", "Estimate the weighted survival / cumulative-incidence curve in each arm (weighted Kaplan-Meier, or a weighted pooled logistic regression for the discrete-time hazard with the assigned strategy, follow-up time, its quadratic term, and a strategy x time interaction).", "Contrast the curves for the effect measure(s).", "Obtain 95% CIs by non-parametric bootstrap: resample PATIENTS (not clones) with replacement, then repeat steps 1-4 — cloning, censoring, weight estimation and outcome modelling — inside every replicate. Model-based standard errors are not used: cloning inflates the apparent number of events, so they are too small (Maringe 2020)."].forEach((l) => children.push(numItem(l)));
       children.push(para("Comparison — conventional analysis (as-started, ITT-analogue): start follow-up at the index date, balance the arms by propensity-score matching (standardised mean difference < 0.1), and handle the competing risk of death with Fine–Gray sub-distribution and cause-specific Cox models."));
+      if (mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).some((x) => /^death/i.test(x))) children.push(para("Note on death. Death is listed above as an event censored and weighted by IPCW. Censoring at death and weighting for it estimates a hypothetical effect — the effect that would be seen if death could not occur — which is a different estimand from the total effect in a world where death competes with the outcome. State which of the two is intended, and report the competing-risk analysis alongside it (Young 2020)."));
 
       children.push(h1("10. Subgroup analyses"));
       (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
@@ -582,7 +658,7 @@ ${window.PC.tailMd(pcOf(s))}
       window.PC.tailDocx(window.docx, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("References"));
-      ["Hernán MA, Robins JM. Using big data to emulate a target trial when a randomized trial is not available. Am J Epidemiol 2016;183:758-64.", "Hernán MA. How to estimate the effect of treatment duration on survival outcomes using observational data. BMJ 2018;360:k182.", "Maringe C, Benitez Majano S, Exarchakou A, et al. Reflections on modern methods: trial emulation in the presence of immortal-time bias. Int J Epidemiol 2020;49:1719-29.", "Gran JM, Røysland K, Wolbers M, et al. A sequential Cox approach for estimating the causal effect of treatment. Stat Med 2010;29:2757-70."].forEach((l) => children.push(bullet(l)));
+      REFS.forEach((l) => children.push(bullet(l)));
 
       children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
 
@@ -599,8 +675,10 @@ ${window.PC.tailMd(pcOf(s))}
     };
 
     document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
-      if (!window.docx) return;
-      try { dl(await buildDocx(readForm()), fname("docx")); } catch (e) {}
+      if (!window.docx) { setMsg("The Word engine (docx) did not load — check the network, then reload the page.", true); return; }
+      setMsg("Building the Word document…");
+      try { dl(await buildDocx(readForm()), fname("docx")); setMsg("Word document downloaded."); }
+      catch (e) { console.error(e); setMsg("Word export failed: " + (e && e.message ? e.message : e), true); }
     });
   </script>
 </BaseLayout>
