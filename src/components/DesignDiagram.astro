@@ -2,6 +2,39 @@
 // Shared study-design timeline. Include once per builder page, then in the
 // page's render() build a spec and call:
 //   window.renderDesignDiagram(diagramEl, legendEl, spec)
+//
+// ── Putting the diagram into the Word export (HARPER item 7.2) ──────────
+// HARPER REQUIRES a study design diagram. Every builder on this site drew one
+// on screen and shipped a .docx without it, so every generated protocol failed
+// a mandatory item — confirmed by running the site's own output through the
+// site's own Protocol Checker. In buildDocx (NOT in render — see below):
+//
+//   const fig = await window.designDiagramFigure(document.getElementById("diagram"));
+//   const figParas = window.designDiagramDocx(D, fig, { font: FONT });
+//   figParas.forEach((c) => children.push(c));
+//   if (!figParas.placed) setMsg("Exported without the design diagram: " +
+//     (fig.reason || figParas.error) + ". The document says so where the figure
+//     should be.", true);
+//
+// designDiagramDocx returns the picture, a numbered caption and a plain-text
+// list of the windows. The text matters as much as the picture: a reviewer or
+// an automated checker reading the .docx as text cannot see an embedded image
+// at all, so a diagram with no caption is invisible to them. On failure it
+// returns a visible note in the document saying the diagram is missing and why
+// — never a silently absent figure — and sets `.placed = false` so the page can
+// tell the user which of the two they got.
+//
+// CONTRACT, because several builders call renderDesignDiagram from a live
+// keystroke-driven render loop, ahead of their consistency checks and their
+// autosave:
+//   * Nothing here rasterises on the render path. renderDesignDiagram adds only
+//     a try-caught WeakMap write; all canvas work is in svgToPng/
+//     designDiagramFigure, which are async and meant to be called at EXPORT time.
+//   * svgToPng and designDiagramFigure never throw and never reject — they
+//     resolve to { ok: false, reason }. designDiagramDocx never throws either.
+//     A throw from here would otherwise skip a caller's checks panel and its
+//     localStorage autosave while the page still promised "Auto-saved", and the
+//     only trace would be a console error nobody has open.
 // spec = {
 //   windows: [{ label, kind, startDay, endDay, note? }],  // days relative to index (day 0)
 //   indexLabel?: "Index (day 0)",   // vertical anchor line
@@ -37,8 +70,13 @@
       return s + a + "d";
     }
 
+    // The spec behind whatever is currently drawn in each container, so the
+    // Word export can describe the picture in words as well as embed it.
+    const lastSpec = new WeakMap();
+
     window.renderDesignDiagram = function (diagramEl, legendEl, spec) {
       if (!diagramEl) return;
+      try { lastSpec.set(diagramEl, spec); } catch (e) {}
       const wins = (spec.windows || []).filter((w) => w && Number.isFinite(+w.startDay) && Number.isFinite(+w.endDay));
       if (!wins.length) { diagramEl.innerHTML = ""; if (legendEl) legendEl.innerHTML = ""; return; }
       // Row order: sort by start day when idle, but FREEZE that order while an
@@ -69,7 +107,12 @@
       let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:640px" xmlns="http://www.w3.org/2000/svg">';
       // index anchor
       svg += '<line x1="' + x0 + '" y1="28" x2="' + x0 + '" y2="' + (H - 16) + '" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4 3"/>';
-      svg += '<text x="' + x0 + '" y="18" text-anchor="middle" font-size="11" font-weight="700" fill="#0f766e">' + esc(spec.indexLabel || "Index (day 0)") + '</text>';
+      // Keep the index label inside the plot. When day 0 sits at the right-hand
+      // edge — every look-back-only design, e.g. case-control — a centred label
+      // hangs off the canvas and is cut off on screen and in the exported PNG.
+      const idxAnchor = x0 > plotR - 90 ? "end" : x0 < plotL + 90 ? "start" : "middle";
+      const idxX = idxAnchor === "end" ? plotR : idxAnchor === "start" ? plotL : x0;
+      svg += '<text x="' + idxX + '" y="18" text-anchor="' + idxAnchor + '" font-size="11" font-weight="700" fill="#0f766e">' + esc(spec.indexLabel || "Index (day 0)") + '</text>';
       // baseline axis
       svg += '<line x1="' + plotL + '" y1="' + (H - 16) + '" x2="' + plotR + '" y2="' + (H - 16) + '" stroke="#cbd5e1"/>';
       const ticks = [...new Set([Math.ceil(lo), 0, Math.floor(hi)])];
@@ -195,6 +238,252 @@
         }
         legendEl.innerHTML = html;
       }
+    };
+
+    /* ── SVG → PNG, client-side, no dependency ───────────────────────────
+       Used to get the study-design diagram into the Word export. Takes an SVG
+       ELEMENT (not a container id) so it works for the shared timeline above
+       and for the bespoke SVGs individual builders draw.
+
+       The traps, and what is done about each:
+       - An <img> renders an SVG in a sandbox with no access to the document's
+         stylesheets. The shared diagram styles itself with presentation
+         ATTRIBUTES and survives, but a diagram styled by CSS CLASS would come
+         out unstyled — black on black. Every painting property is therefore
+         read back with getComputedStyle and written inline on the clone.
+       - The same sandbox cannot fetch web fonts. Whatever font-family the page
+         resolved is kept, and a CJK-capable system chain is appended, so
+         Chinese labels do not become boxes.
+       - Without explicit width/height on the serialised root, browsers size the
+         image inconsistently (Safari treats it as 0 or 300x150).
+       - A transparent PNG looks fine on a white Word page and awful anywhere
+         else, so the canvas is filled white first.
+       - Rasterising at CSS pixels gives a diagram that is visibly soft at print
+         size, so it is drawn at 2x (or the device ratio, whichever is larger). */
+    const PAINT_PROPS = [
+      "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity",
+      "stroke-dasharray", "stroke-dashoffset", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit",
+      "opacity", "color", "visibility", "paint-order",
+      "font-family", "font-size", "font-weight", "font-style", "font-variant", "letter-spacing",
+      "word-spacing", "text-anchor", "dominant-baseline", "alignment-baseline",
+      "marker-start", "marker-mid", "marker-end", "clip-rule", "shape-rendering",
+    ];
+    // Appended to every resolved font stack. Web fonts cannot load inside the
+    // <img> sandbox, so the export must be able to fall back to something the
+    // operating system actually has — including for Chinese and Japanese.
+    const FONT_FALLBACK = ', "Noto Sans CJK TC", "Noto Sans CJK JP", "Microsoft JhengHei", "Microsoft YaHei", "PingFang TC", "PingFang SC", "Hiragino Sans", "Malgun Gothic", system-ui, sans-serif';
+
+    function inlineStyles(srcRoot, cloneRoot) {
+      const src = [srcRoot].concat([...srcRoot.querySelectorAll("*")]);
+      const dst = [cloneRoot].concat([...cloneRoot.querySelectorAll("*")]);
+      const n = Math.min(src.length, dst.length);
+      for (let i = 0; i < n; i++) {
+        let cs;
+        try { cs = window.getComputedStyle(src[i]); } catch (e) { continue; }
+        if (!cs) continue;
+        let css = "";
+        for (const p of PAINT_PROPS) {
+          const v = cs.getPropertyValue(p);
+          // Only empty values are skipped. "none" in particular must be kept —
+          // dropping `fill:none` turns an outlined path into a solid black one.
+          if (!v) continue;
+          css += p + ":" + (p === "font-family" ? v + FONT_FALLBACK : v) + ";";
+        }
+        if (css) dst[i].setAttribute("style", css + (dst[i].getAttribute("style") || ""));
+        dst[i].removeAttribute("class");
+      }
+    }
+
+    // Resolves to { ok:true, data, dataUrl, width, height, docxWidth, docxHeight }
+    // or { ok:false, reason }. It never throws and never rejects: a builder's
+    // export must not die because a picture could not be drawn.
+    window.svgToPng = async function (svgEl, opts) {
+      opts = opts || {};
+      try {
+        if (!svgEl || svgEl.namespaceURI !== "http://www.w3.org/2000/svg" || svgEl.tagName.toLowerCase() !== "svg") {
+          return { ok: false, reason: "no diagram was found on the page to export" };
+        }
+        // Size: what the page actually laid out, else the viewBox.
+        const rect = svgEl.getBoundingClientRect();
+        let w = Math.round(rect.width), h = Math.round(rect.height);
+        const vb = (svgEl.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+        const hasVb = vb.length === 4 && vb.every(Number.isFinite);
+        if ((!w || !h) && hasVb) { w = Math.round(vb[2]); h = Math.round(vb[3]); }
+        if (!w || !h) return { ok: false, reason: "the diagram has no measurable size (it may be hidden)" };
+
+        // A label near the edge of the viewBox overflows it. On the page that is
+        // just a clipped word; in a PNG it is a figure with its own title cut in
+        // half. Widen the box to whatever is actually inked before rasterising.
+        let vx = hasVb ? vb[0] : 0, vy = hasVb ? vb[1] : 0, vw = hasVb ? vb[2] : w, vh = hasVb ? vb[3] : h;
+        const unitPx = w / (vw || w);
+        try {
+          const bb = svgEl.getBBox();
+          if (bb && Number.isFinite(bb.width) && bb.width > 0) {
+            const pad = 2;
+            const x1 = Math.min(vx, bb.x - pad), y1 = Math.min(vy, bb.y - pad);
+            const x2 = Math.max(vx + vw, bb.x + bb.width + pad), y2 = Math.max(vy + vh, bb.y + bb.height + pad);
+            vx = x1; vy = y1; vw = x2 - x1; vh = y2 - y1;
+          }
+        } catch (e) {}
+        w = Math.max(1, Math.round(vw * unitPx));
+        h = Math.max(1, Math.round(vh * unitPx));
+
+        const clone = svgEl.cloneNode(true);
+        inlineStyles(svgEl, clone);
+        // Drag handles are interaction-only and invisible; nothing to export.
+        clone.querySelectorAll("[data-field]").forEach((el) => el.remove());
+        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+        clone.setAttribute("width", w);
+        clone.setAttribute("height", h);
+        clone.setAttribute("viewBox", vx + " " + vy + " " + vw + " " + vh);
+        clone.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        // The on-page copy carries min-width for horizontal scrolling; inside an
+        // <img> that only fights the explicit width we just set.
+        clone.setAttribute("style", (clone.getAttribute("style") || "").replace(/(^|;)\s*min-width\s*:[^;]*/gi, ""));
+
+        const xml = new XMLSerializer().serializeToString(clone);
+        // A Blob carries UTF-8 directly, so accented and CJK labels survive
+        // without the base64 round-trip that mangles them.
+        const url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml;charset=utf-8" }));
+        let img;
+        try {
+          img = new Image();
+          img.decoding = "sync";
+          await new Promise((res, rej) => {
+            const timer = setTimeout(() => rej(new Error("timed out")), 15000);
+            img.onload = () => { clearTimeout(timer); res(); };
+            img.onerror = () => { clearTimeout(timer); rej(new Error("the browser could not render the diagram")); };
+            img.src = url;
+          });
+          if (img.decode) { try { await img.decode(); } catch (e) {} }
+        } finally {
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
+
+        // 2x minimum so it is not soft in print; capped so a very wide diagram
+        // cannot allocate an enormous canvas.
+        let scale = opts.scale || Math.max(2, window.devicePixelRatio || 1);
+        if (w * scale > 3200) scale = 3200 / w;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = opts.background || "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        let dataUrl;
+        try { dataUrl = canvas.toDataURL("image/png"); }
+        catch (e) { return { ok: false, reason: "the diagram references an external image, so it cannot be exported" }; }
+        const b64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+        const bin = atob(b64);
+        const data = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) data[i] = bin.charCodeAt(i);
+
+        // Fit the usable width of a portrait A4/Letter page with 1in margins.
+        const maxW = opts.docxMaxWidth || 600;
+        const docxWidth = Math.min(maxW, w);
+        const docxHeight = Math.round(docxWidth * (h / w));
+        return { ok: true, data, dataUrl, width: w, height: h, scale, docxWidth, docxHeight };
+      } catch (e) {
+        return { ok: false, reason: (e && e.message) ? e.message : String(e) };
+      }
+    };
+
+    /* Convenience for the builders: pass the container the diagram was rendered
+       into (or the <svg> itself, or an id) and get back the picture PLUS the
+       word-description of the same windows. */
+    window.designDiagramFigure = async function (target, opts) {
+      const el = typeof target === "string" ? document.getElementById(target) : target;
+      if (!el) return { ok: false, reason: "no diagram container on the page" };
+      const svg = el.tagName && el.tagName.toLowerCase() === "svg" ? el : el.querySelector("svg");
+      const out = await window.svgToPng(svg, opts);
+      let spec = null;
+      try { spec = lastSpec.get(el) || null; } catch (e) {}
+      out.lines = spec ? describeSpec(spec) : [];
+      return out;
+    };
+
+    function describeSpec(spec) {
+      const lines = [];
+      for (const w of (spec.windows || [])) {
+        if (!Number.isFinite(+w.startDay) || !Number.isFinite(+w.endDay)) continue;
+        const meta = K[w.kind] || { l: w.kind };
+        lines.push((w.label || meta.l) + ": day " + fmtDay(w.startDay) + " to " + fmtDay(w.endDay) + (w.note ? " (" + w.note + ")" : ""));
+      }
+      for (const b of (spec.bands || [])) {
+        if (!Number.isFinite(+b.startDay) || !Number.isFinite(+b.endDay)) continue;
+        lines.push((b.label || "band") + ": day " + fmtDay(b.startDay) + " to " + fmtDay(b.endDay));
+      }
+      return lines;
+    }
+
+    /* Turn the figure into docx children. Pass the `docx` UMD namespace the
+       page already loaded. Always returns something: when the picture could not
+       be made, it returns a visible note rather than nothing at all. */
+    window.designDiagramDocx = function (D, fig, opts) {
+      opts = opts || {};
+      const out = [];
+      try {
+        const FONT = opts.font || "Calibri";
+        const caption = opts.caption || "Figure 1. Study design diagram — time zero, time anchors and the assessment windows on a day axis relative to the index date.";
+        const note = (msg) => new D.Paragraph({
+          spacing: { before: 160, after: 40 },
+          children: [new D.TextRun({
+            text: "[The study design diagram could not be included automatically — " + msg +
+              ". HARPER item 7.2 requires a design diagram: please paste a screenshot of the on-screen diagram here before circulating this protocol.]",
+            font: FONT, size: 18, italics: true, color: "B45309",
+          })],
+        });
+        let placed = false;
+        if (fig && fig.ok && fig.data) {
+          // A malformed picture must never take the whole export down with it:
+          // a protocol without its figure is far better than no protocol.
+          try {
+            out.push(new D.Paragraph({
+              spacing: { before: 160, after: 40 },
+              children: [new D.ImageRun({ data: fig.data, transformation: { width: fig.docxWidth, height: fig.docxHeight } })],
+            }));
+            placed = true;
+          } catch (e) {
+            out.length = 0;
+            out.push(note("Word rejected the generated picture (" + ((e && e.message) || e) + ")"));
+          }
+        } else {
+          out.push(note((fig && fig.reason) || "unknown reason"));
+        }
+        out.push(new D.Paragraph({
+          spacing: { after: 60 },
+          children: [new D.TextRun({ text: caption, font: FONT, size: 16, italics: true, color: "777777" })],
+        }));
+        // The written version of the same picture. An image is invisible to any
+        // reader — human or machine — working from the document's text, which is
+        // why a diagram alone does not satisfy a text-based conformance check.
+        for (const line of (fig && fig.lines) || []) {
+          out.push(new D.Paragraph({ spacing: { before: 0, after: 0 }, children: [new D.TextRun({ text: "•  " + line, font: FONT, size: 18, color: "555555" })] }));
+        }
+        out.placed = placed;
+      } catch (e) {
+        // Even the fallback failed. Return nothing rather than throwing: the
+        // caller is mid-export and losing the whole document would be worse.
+        out.length = 0;
+        out.placed = false;
+        out.error = (e && e.message) || String(e);
+      }
+      return out;
+    };
+
+    /* Markdown equivalent, for builders that also emit a .md protocol. */
+    window.designDiagramMd = function (fig, opts) {
+      opts = opts || {};
+      const caption = opts.caption || "Figure 1. Study design diagram — time zero, time anchors and the assessment windows on a day axis relative to the index date.";
+      let md = "";
+      if (fig && fig.ok && fig.dataUrl) md += "![Study design diagram](" + fig.dataUrl + ")\n\n";
+      else md += "> **The study design diagram could not be generated automatically** — " + ((fig && fig.reason) || "unknown reason") + ". HARPER item 7.2 requires one; paste a screenshot here.\n\n";
+      md += "_" + caption + "_\n\n";
+      for (const line of (fig && fig.lines) || []) md += "- " + line + "\n";
+      return md + "\n";
     };
 
     // Consistency-check panel: pass [{ level: "error"|"warn"|"info"|"ok", msg }].

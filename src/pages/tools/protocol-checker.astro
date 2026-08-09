@@ -150,6 +150,11 @@ const fwList = Object.values(FRAMEWORKS);
               <em>Missing</em> = no trace in the text. <em>N/A</em> = the item cannot apply to this kind of document.
               <em>Not assessed</em> = the AI returned no usable verdict, so nothing is claimed either way — those items are excluded from the score.
             </p>
+            <p class="mt-2 text-xs text-slate-500 leading-relaxed">
+              <strong class="text-slate-600">This score is one sample, not a measurement.</strong> The same protocol, submitted four times unchanged,
+              scored 19, 20, 21 and 22 of 23 in our own testing — the model is not deterministic. Treat a one- or two-item difference as noise,
+              read the per-item evidence rather than the total, and re-run if a verdict surprises you.
+            </p>
             <!-- Everything the run could NOT do is listed here rather than folded
                  silently into the tally. -->
             <ul id="caveats" class="mt-3 space-y-1.5 text-xs text-amber-800"></ul>
@@ -973,7 +978,14 @@ const fwList = Object.values(FRAMEWORKS);
           ? "a protocol template — it asks whether each element is written down and operationally defined before the study runs."
           : "a reporting guideline for a completed study — on an unpublished protocol its results and discussion items describe what you will have to report later, not what you have done.";
         fwNoteEl.innerHTML = "<strong>" + escapeHtml(fw.name) + "</strong> is " + kindLine +
-          ' <a class="text-brand-700 hover:underline" href="' + escapeHtml(fw.url) + '" target="_blank" rel="noopener">Source ↗</a>';
+          ' <a class="text-brand-700 hover:underline" href="' + escapeHtml(fw.url) + '" target="_blank" rel="noopener">Source ↗</a>' +
+          // Said BEFORE the request is spent, not only afterwards. Checking a
+          // protocol against a reporting guideline reliably returns a near-perfect
+          // score, because "a flow diagram is planned" reads as the item being met.
+          (fw.kind === "protocol template" ? "" :
+            '<br><span class="text-amber-800">⚠ If what you are checking is a <strong>protocol</strong> rather than a finished paper, expect a near-perfect score that means very little — ' +
+            escapeHtml(fw.name) + ' asks for results you have not produced yet. Check a protocol against ' +
+            escapeHtml(FRAMEWORKS[DEFAULT_FRAMEWORK].name) + ' instead.</span>');
       }
       document.querySelectorAll('input[name="framework"]').forEach((r) => r.addEventListener("change", refreshFrameworkNote));
       refreshFrameworkNote();
