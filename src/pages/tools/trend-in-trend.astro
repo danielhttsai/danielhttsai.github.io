@@ -225,6 +225,21 @@ const SENSITIVITY = [
     const or = (s, d) => (s && s.length ? s : d);
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+    // A draft saved before the unsupported estimator was removed still carries
+    // estimator:"logistic". Assigning that to a <select> that no longer offers it
+    // leaves the select showing nothing, and readForm()'s `|| "ml"` fallback then
+    // prints a protocol asserting the maximum-likelihood estimator — a different
+    // analysis from the one the user's draft named, swapped in silently. Capture
+    // the stale value on restore (before the first render overwrites the saved
+    // state) and say so on screen instead.
+    let staleEstimator = "";
+    const KNOWN_ESTIMATORS = [...form.querySelectorAll('[name="estimator"] option')].map((o) => o.value);
+    const noteStale = (obj) => {
+      if (obj && typeof obj === "object" && obj.estimator && KNOWN_ESTIMATORS.indexOf(String(obj.estimator)) < 0) {
+        staleEstimator = String(obj.estimator);
+      }
+    };
+
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), outcome: V("outcome"),
       period: V("period") || "yearly", first: V("first"), last: V("last"),
@@ -335,6 +350,7 @@ ${window.PC.tailMd(pcOf(s))}
       const checks = [];
       const np = parseInt(s.nperiods) || 0, ns = parseInt(s.nstrata) || 0;
       const miss = missing(s);
+      if (staleEstimator) checks.push({ level: "error", msg: "Your saved draft selected the estimator “" + staleEstimator + "”, and this page no longer offers it. It described a logistic-regression approximation that appears neither in Ji et al (2017) nor in the TrendInTrend package, so it was removed rather than left asserting a method that cannot be cited. The Estimator field has been set to the trend-in-trend maximum-likelihood estimator and the protocol below describes THAT — a different analysis from the one your draft named. Check it reads as you intend before exporting." });
       if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft below is printed with placeholders so you can see its shape — it is not a finished protocol." });
       if (!s.cpecov || !s.cpecov.trim()) checks.push({ level: "error", msg: "CPE is a predicted probability, not an observed percentage: it comes from a stage-1 logistic model of EXPOSURE on covariates. Until you name those covariates the strata are undefined. Use variables that affect exposure and are not affected by it — no mediators, no post-exposure variables." });
       if (np < 5) checks.push({ level: "warn", msg: "Only " + np + " calendar periods — the exposure trend is estimated across periods; too few weakens power. Aim for ≥ 5–10." });
@@ -425,17 +441,23 @@ ${window.PC.tailMd(pcOf(s))}
         // A ?seed= link wins over the saved draft; PC.restore falls back to
         // localStorage on its own and tells the user which one it used.
         const seeded = (window.PC && PC.restore)
-          ? PC.restore(form, STORAGE_KEY, (s) => PC.applySeed(form, s)) === "seed"
+          ? PC.restore(form, STORAGE_KEY, (s) => { noteStale(s); PC.applySeed(form, s); }) === "seed"
           : false;
         const saved = seeded ? null : JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-        if (saved) for (const k in saved) {
-          const els = form.elements[k]; if (!els) continue;
-          const val = saved[k];
-          if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
-          else if (els.type === "checkbox") els.checked = !!val;
-          else els.value = val;
+        if (saved) {
+          noteStale(saved);
+          for (const k in saved) {
+            const els = form.elements[k]; if (!els) continue;
+            const val = saved[k];
+            if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
+            else if (els.type === "checkbox") els.checked = !!val;
+            else els.value = val;
+          }
         }
-      } catch {}
+        // Leave the select showing the estimator the protocol will actually
+        // describe, rather than blank, now that the check below explains why.
+        if (staleEstimator && form.elements.estimator) form.elements.estimator.value = KNOWN_ESTIMATORS[0];
+      } catch (err) { console.warn("[TIT] could not restore the saved draft", err); }
       render();
     })();
     form.addEventListener("input", render);
