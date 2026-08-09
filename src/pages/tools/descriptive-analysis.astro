@@ -234,7 +234,7 @@ const OUTPUT_METRICS = [
   { id: "concomitant",     group: "Utilisation",  label: "Concomitant use",                unit: "% on ≥2 classes",                hint: "Proportion using multiple drug classes within a window." },
   { id: "ageStandardised", group: "Adjustment",   label: "Age-standardised rates",         unit: "per 1000 (standardised)",        hint: "Direct or indirect standardisation to a reference population." },
   { id: "joinpoint",       group: "Trends",       label: "Joinpoint / segmented trend",    unit: "APC / AAPC",                     hint: "Annual percent change with break-point detection (Kim 2000)." },
-  { id: "trendInTrend",    group: "Trends",       label: "Trend-in-trend (Ji 2017)",       unit: "RR via trend correlation",       hint: "Advanced variant; exploits cross-region trend covariance. May spin off into its own template." },
+  { id: "trendInTrend",    group: "Trends",       label: "Trend-in-trend (Ji 2017)",       unit: "odds ratio, exp(β₁)",            hint: "Advanced causal design; strata are quantiles of each person's predicted probability of exposure. Better done in its own template." },
 ];
 
 const STRATIFICATION = [
@@ -578,7 +578,8 @@ const TIMELINE_PRESETS: Record<string, string> = {
               </select>
             </label>
             <p class="sm:col-span-2 text-[11px] text-slate-500 leading-relaxed bg-slate-50 border border-slate-200 rounded p-2">
-              <strong>Trend-in-trend variant</strong> (Ji ECC et al, <em>Pharmacoepidemiol Drug Saf</em> 2017) is an advanced extension that exploits cross-region covariance between exposure-trend and outcome-trend; useful when a policy interruption affects exposure unevenly across AsPEN sites. If you ticked "Trend-in-trend" in Section 6 above, the protocol will include a methods stub describing this design; consider spinning it off into its own protocol if the trend-in-trend logic is the central analytic question.
+              <strong>Trend-in-trend</strong> (Ji X, Small DS, Leonard CE, Hennessy S. <em>Epidemiology</em> 2017;28(4):529-536) is not a descriptive metric — it is a causal design. It stratifies the population by each person's <em>predicted probability of exposure</em> (the cumulative probability of exposure, CPE) from a stage-1 logistic model, then compares outcome trends across those strata. If you tick it in Section 6 the protocol carries a methods stub only; use the
+              <a class="underline font-semibold" href={`${base}/tools/trend-in-trend/`}>dedicated trend-in-trend builder</a> if it is your central analytic question.
             </p>
           </div>
         </details>
@@ -677,7 +678,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Key references (one per line)</span>
               <textarea name="references" rows="8" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Lai EC, Stang P, Yang YHK, Kimura S, Wong IC, Setoguchi S. International multi-database pharmacoepidemiology: potentials and pitfalls. Curr Epidemiol Rep 2015 (AsPEN database survey foundation; PMID 26133022).
 Kim HJ, Fay MP, Feuer EJ, Midthune DN. Permutation tests for joinpoint regression with applications to cancer rates. Stat Med 2000;19(3):335-51.
-Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-Trend research design for causal inference. Epidemiology 2017;28(4):529-36.
+Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-trend research design for causal inference. Epidemiology 2017;28(4):529-536. doi:10.1097/EDE.0000000000000579
 Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time-series studies in medication use research. J Clin Pharm Ther 2002;27(4):299-309.
 WHO. Age-standardisation of rates: a new WHO standard. GPE Discussion Paper 31, 2001 (Ahmad OB et al).
 Tan EC, Pratt NL, Ilomäki J et al. Multi-country comparison of polypharmacy. Pharmacoepidemiol Drug Saf 2023 (PMID 36821644).
@@ -881,6 +882,18 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         limitations: "Descriptive estimates are sensitive to case-ascertainment and denominator definitions and to between-site coding differences; no causal interpretation is intended.",
         plannedOutputs: ["Population-selection flow diagram.", "Table 1 of the study population.", "Age-standardised rate / trend figures by stratum and site."],
       });
+      // What is still blank. A protocol that reads as finished while it does not
+      // say who is counted or what is measured is worse than one that says so, so
+      // the gap list travels into the preview, the Markdown and the Word file.
+      const missing = (s) => [
+        [!orFb(s.picoP, ""), "the population"],
+        [!orFb(s.picoMeasure, ""), "what is being measured"],
+        [!orFb(s.populationDef, ""), "the operational definition of the denominator population"],
+        [!(s.sites || []).length && !orFb(s.sitesOther, ""), "at least one data source / site"],
+        [!(s.metricsPick || []).length, "at least one output metric (Section 6) — without one the protocol does not say what it reports"],
+        [!orFb(s.studyCalendar, ""), "the study calendar period"],
+      ].filter((x) => x[0]).map((x) => x[1]);
+
       const sitesLine = (ids, otherText) => {
         const parts = (ids || []).map((c) => "- " + formatSiteFull(c));
         const others = (otherText || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -986,9 +999,9 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           };
           case "trendInTrend": return {
             name: m.label, unit: m.unit,
-            numerator: "Outcome trend in high-exposure stratum",
-            denominator: "Outcome trend in low-exposure stratum (stratification by site-level exposure prevalence)",
-            formula: "Trend-in-trend (Ji ECC et al 2017): exploits cross-stratum covariance between exposure-trend and outcome-trend to identify causal contribution. **Advanced variant; if this is your central analytic question, consider a dedicated Trend-in-trend protocol.**",
+            numerator: "Outcome trend across calendar periods within each CPE stratum",
+            denominator: "Exposure-prevalence trend across calendar periods within each CPE stratum",
+            formula: "Trend-in-trend (Ji X, Small DS, Leonard CE, Hennessy S. Epidemiology 2017;28(4):529-536; doi:10.1097/EDE.0000000000000579). Stage 1: a logistic model of exposure on covariates that affect exposure but are not affected by it gives each person's cumulative probability of exposure (CPE); the population is cut into quantiles of CPE (quintiles in the original paper). Stage 2: for each CPE stratum and calendar period, a 2×2 table of exposed/unexposed by case/non-case is tabulated and the trend-in-trend likelihood maximised, giving exp(β₁), an odds ratio. **This is a causal design, not a descriptive metric — use the dedicated Trend-in-trend protocol builder if it is the central question.**",
             stratifyBy: strataLine,
           };
           default: return null;
@@ -1038,7 +1051,10 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             `| **Stratify by** | ${block.stratifyBy} |\n`;
           n++;
         }
-        if (!metricSection) metricSection = "\n## 7. Output metrics\n\n_(none selected; tick at least one in Section 6 of the form)_\n";
+        // n must advance here too, or the next heading repeats "## 7." — the
+        // Markdown then has two section 7s and every later number is off by one
+        // against the Word version, which does not print this fallback.
+        if (!metricSection) { metricSection = "\n## 7. Output metrics\n\n> **No output metric is selected, so this protocol does not yet say what it measures.** Tick at least one metric in Section 6 of the form.\n"; n++; }
 
         return `# ${title}
 
@@ -1049,7 +1065,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
 
 ---
 
-${window.PC.abstractMd(pcOf(s))}
+${missing(s).length ? "> **This draft is incomplete.** Still to be specified: " + missing(s).join("; ") + ".\n\n" : ""}${window.PC.abstractMd(pcOf(s))}
 ## 1. Research question
 
 | | |
@@ -1141,10 +1157,21 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
       };
 
       const renderScheme = (s) => {
-        let meas = parseInt(s.picoWindow); if (!(meas > 0)) meas = 365;
+        // "Time window" is free text and is usually a calendar range, not a
+        // duration. A bare parseInt turned "2010–2023 (annual)" into a 2010-DAY
+        // measurement window and drew it as if it were the user's design. Only
+        // accept a value that is explicitly written as a duration; otherwise draw
+        // a labelled one-year schematic.
+        const m = String(s.picoWindow || "").match(/^\s*(\d{1,4})\s*(d|day|days|w|wk|week|weeks|mo|month|months|y|yr|year|years)\s*$/i);
+        let meas = 365, labelled = false;
+        if (m) {
+          const n = parseInt(m[1], 10), u = m[2].toLowerCase();
+          const mult = u[0] === "d" ? 1 : u[0] === "w" ? 7 : u.startsWith("m") ? 30 : 365;
+          if (n > 0) { meas = Math.min(365 * 20, n * mult); labelled = true; }
+        }
         const wins = [
           { label: "Baseline look-back (prevalent-case exclusion)", kind: "lookback", startDay: -365, endDay: 0 },
-          { label: "Person-time / measurement window", kind: "study", startDay: 0, endDay: meas },
+          { label: labelled ? "Person-time / measurement window" : "Person-time / measurement window (1 y, schematic)", kind: "study", startDay: 0, endDay: meas },
         ];
         window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Cohort entry / index" });
       };
@@ -1154,9 +1181,17 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
         preview.textContent = buildMarkdown(state);
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
         renderFeasibility(state);
-        try { renderScheme(state); } catch {}
+        // Never swallow a render failure silently — an empty diagram box that
+        // looks intentional is how a broken diagram survived for weeks.
+        try { renderScheme(state); }
+        catch (err) {
+          console.error("[DA] study-design diagram failed to render", err);
+          const el = document.getElementById("diagram");
+          if (el) el.innerHTML = '<p class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">The design diagram could not be drawn. It is blank because of an error, not because there is nothing to show; details are in the browser console.</p>';
+        }
       };
-      try { window.PC && PC.restore ? PC.restore(form, STORAGE_KEY, writeForm) : (localStorage.getItem(STORAGE_KEY) && writeForm(JSON.parse(localStorage.getItem(STORAGE_KEY)))); } catch {}
+      try { window.PC && PC.restore ? PC.restore(form, STORAGE_KEY, writeForm) : (localStorage.getItem(STORAGE_KEY) && writeForm(JSON.parse(localStorage.getItem(STORAGE_KEY)))); }
+      catch (err) { console.warn("[DA] could not restore the saved draft", err); }
       const timelineTa = form.querySelector('[name="timeline"]');
       if (timelineTa && !timelineTa.value) timelineTa.value = TIMELINE_PRESETS["12-month"];
       render();
@@ -1366,6 +1401,8 @@ _Drafted with the AsPEN Descriptive Analysis protocol builder (${today})._
           ["Version", s.version || ("v0.1 draft · " + today)],
           ["Design", "Multi-national descriptive epidemiology"],
         ]));
+        const miss = missing(s);
+        if (miss.length) children.push(p([text("This draft is incomplete. Still to be specified: " + miss.join("; ") + ".", { bold: true, color: "9E3A2C" })], { spacing: { before: 120, after: 120 } }));
 
         window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
         children.push(h1("1. Research question"));
