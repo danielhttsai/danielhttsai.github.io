@@ -37,18 +37,26 @@ const DESIGNS = [
     </div>
 
     <!-- Step tracker -->
-    <ol class="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-400">
-      <li class="text-brand-700">1 · Question &amp; design</li>
-      <li>2 · Upload &amp; profile</li>
-      <li>3 · Map columns</li>
-      <li>4 · Clean → master file</li>
-      <li>5 · Analyse (R)</li>
-      <li>6 · Export</li>
-    </ol>
+    <div class="flex items-start justify-between gap-3 flex-wrap">
+      <ol class="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-400">
+        <li class="text-brand-700">1 · Question &amp; design</li>
+        <li>2 · Upload &amp; profile</li>
+        <li>3 · Map columns</li>
+        <li>4 · Clean → master file</li>
+        <li>5 · Analyse (R)</li>
+        <li>6 · Export</li>
+      </ol>
+      <button type="button" id="clearall" class="text-xs font-semibold text-rose-700 border border-rose-300 hover:bg-rose-50 px-3 py-1.5 rounded transition">
+        ⟲ Clear &amp; start over
+      </button>
+    </div>
 
     <!-- Step 1: clinical question & design -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 class="text-lg font-bold text-slate-900">1 · Clinical question &amp; study design</h2>
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <h2 class="text-lg font-bold text-slate-900">1 · Clinical question &amp; study design</h2>
+        <p class="text-[10px] text-slate-500">Your question and chosen design are auto-saved to this browser · your dataset never is</p>
+      </div>
       <p class="mt-1 text-sm text-slate-600">Decide this <strong>first</strong> — the design determines which columns you'll map and what cleaning actually matters.</p>
       <div class="mt-4 grid gap-3 sm:grid-cols-2">
         <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population</span>
@@ -200,6 +208,42 @@ const DESIGNS = [
             </div>
             <p class="text-[11px] text-slate-400">Crude is always shown alongside.</p>
           </div>
+
+          <div class="border-t border-slate-200 pt-3">
+            <label class="flex items-start gap-2 text-xs text-slate-700">
+              <input type="checkbox" id="psc_on" checked class="mt-0.5" />
+              <span><strong>Also fit a propensity-score calibration formula</strong> (Stürmer 2005) — for a later claims-only study that
+              cannot see your clinical variables. Splits the covariates into what a claims database records and what only a hospital
+              record holds, fits a propensity score from each, and derives the correction a claims-only study can apply.</span>
+            </label>
+            <div id="pscbody" class="mt-2 space-y-2">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Which covariates would a claims database actually have?</span>
+                <span class="flex flex-wrap gap-3 text-[11px]">
+                  <button type="button" id="psc_reseed" class="text-slate-500 hover:underline">Re-seed from names</button>
+                  <button type="button" id="psc_allc" class="text-slate-500 hover:underline">All claims</button>
+                  <button type="button" id="psc_allu" class="text-slate-500 hover:underline">All clinical-only</button>
+                </span>
+              </div>
+              <p class="text-[11px] text-slate-500">A coded <em>diagnosis</em> of a condition is in claims even though the measurement behind it is not — obesity is claims, BMI is not. Anything the seeding cannot place is left <strong>unset</strong> and must be decided before the formula is computed.</p>
+              <div id="psclist" class="grid gap-1 sm:grid-cols-2 text-xs"></div>
+              <div class="grid gap-3 sm:grid-cols-3">
+                <label class="block text-xs"><span class="text-slate-600">Validation sample is</span>
+                  <select id="psc_valtype" class="mt-1 w-full rounded border border-slate-300 p-1.5">
+                    <option value="internal" selected>Internal — a subset of the main study</option>
+                    <option value="external">External — a separate dataset</option>
+                  </select></label>
+                <label class="block text-xs"><span class="text-slate-600">Bootstrap replicates</span>
+                  <select id="psc_boot" class="mt-1 w-full rounded border border-slate-300 p-1.5">
+                    <option value="0">None (no interval)</option>
+                    <option value="200" selected>200</option><option value="500">500</option>
+                  </select></label>
+                <label class="block text-xs"><span class="text-slate-600">Propensity-score scale</span>
+                  <input value="Probability (both models)" readonly class="mt-1 w-full rounded border border-slate-200 bg-slate-100 p-1.5 text-slate-500" /></label>
+              </div>
+              <p id="pscmsg" class="text-[11px]"></p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -317,6 +361,7 @@ const DESIGNS = [
       </div>
       <div id="anaresults" class="mt-4 hidden rounded-xl border border-brand-200 bg-brand-50/60 p-4"></div>
       <div id="itschart" class="mt-4 hidden rounded-xl border border-slate-200 bg-white p-4 overflow-x-auto"></div>
+      <div id="pscresults" class="mt-4 hidden rounded-xl border border-violet-200 bg-violet-50/50 p-4"></div>
       <div id="table1" class="mt-4 hidden rounded-xl border border-slate-200 bg-white p-4 overflow-x-auto"></div>
       <pre id="routput" class="mt-3 hidden rounded-lg bg-slate-900 text-slate-100 p-4 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[360px]"></pre>
     </div>
@@ -1078,6 +1123,43 @@ const DESIGNS = [
     })();
     document.querySelectorAll('[name="q_pop"],[name="q_exp"],[name="q_comp"],[name="q_out"],[name="design"]').forEach((e) => e.addEventListener("input", saveQ));
 
+    // ── Clear & start over ──────────────────────────────────────────────────
+    // The page saves the question and design on every keystroke and says so
+    // nowhere obvious, so a restored value is indistinguishable from a shipped
+    // default — and there was no way back to a blank form without dev tools.
+    // Only keys this page owns are removed; another page's storage is never
+    // touched, for the same reason it is never written.
+    const ownKeys = () => {
+      const out = [];
+      try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k === Q_KEY || (k && k.indexOf(Q_KEY + ".") === 0)) out.push(k); } } catch (e) {}
+      return out;
+    };
+    $("clearall").addEventListener("click", () => {
+      const keys = ownKeys();
+      const bits = [];
+      if (keys.length) bits.push("the saved question and design");
+      if (DATA.rows.length) bits.push("the loaded dataset (" + DATA.rows.length + " rows) and its column mapping");
+      if (LAST) bits.push("the analysis results");
+      if (!bits.length) bits.push("this form");
+      if (!confirm("Clear " + bits.join(", ") + "?\n\nNothing here was ever uploaded, so this only affects this browser.")) return;
+      keys.forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
+      qNames.forEach((n) => { const e = document.querySelector('[name="' + n + '"]'); if (e) e.value = ""; });
+      document.querySelectorAll('[name="design"]').forEach((r) => { r.checked = false; });
+      ["s_policy", "s_twodrugs", "s_transient", "s_acute"].forEach((n) => { const e = document.querySelector('[name="' + n + '"]'); if (e) e.checked = false; });
+      $("suggestmsg").textContent = "";
+      // Unload the dataset and everything derived from it, so no later step is
+      // left pointing at data that is gone.
+      DATA = { rows: [], columns: [], profile: [], name: "dataset" };
+      WB = null; SHEETS = []; SPLITINFO = null; CBWB = null; CBNAME = ""; CODEBOOK = {}; CBINFO = null;
+      STRUCT = { sheet: "", headerRow: 0, split: false, unit: "", unitConf: "low", idCol: "", idConf: "low", repeats: 0, repeatKind: "none", dateCols: [], dayFirst: false, vocabs: [], yes: {} };
+      YMCACHE = null; MAP = {}; COVS = []; COVROLE = {}; PSCSPLIT = {}; PSCRUN = null; MASTER = null; LAST = null;
+      ["file", "cbfile"].forEach((id) => { const e = $(id); if (e) e.value = ""; });
+      ["results", "mapcard", "cleancard", "anacard", "expcard", "demonote", "anaresults", "table1", "itschart", "routput", "dlfitted", "pscresults"].forEach((id) => { const e = $(id); if (e) e.classList.add("hidden"); });
+      ["fileinfo", "cbinfo", "cleaninfo", "anastatus", "mapmsg", "covnote"].forEach((id) => { const e = $(id); if (e) e.textContent = ""; });
+      setMsg("Cleared. The four boxes above show their grey examples again — those are hints, not values.");
+      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
+    });
+
     const DESIGN_LABEL = { acnu: "Active-comparator new-user cohort", sccs: "Self-controlled case series", cco: "Case-crossover", its: "Interrupted time series" };
     $("suggest").addEventListener("click", () => {
       const ck = (n) => { const e = document.querySelector('[name="' + n + '"]'); return !!(e && e.checked); };
@@ -1162,6 +1244,55 @@ const DESIGNS = [
           if (M.indexOf("finestrat") >= 0) r += "  { br<-unique(quantile(ps,probs=seq(0,1,length.out=" + (ns + 1) + "))); if(length(br)>=3){ q<-cut(ps,breaks=br,include.lowest=TRUE,labels=FALSE); keep<-ave(as.integer(tr),q,FUN=function(z)length(unique(z)))==2; ok<-which(keep); dd<-data.frame(t=t[ok],e=e[ok],TREAT=d$TREAT[ok],st=q[ok]); fit<-tryCatch(coxph(Surv(t,e)~TREAT+strata(st),data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|Fine stratification (" + ns + " strata) - %s HR|%.2f (95%% CI %.2f-%.2f)\\n',est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))} } }\n";
           if (M.indexOf("matching") >= 0) r += "  { mi<-matchidx(); if(length(mi)>2){ dd<-data.frame(t=t[mi],e=e[mi],TREAT=d$TREAT[mi]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|" + ratio + ":1 PS matching (%d matched) - %s HR|%.2f (95%% CI %.2f-%.2f)\\n',length(mi),est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))} } }\n";
           r += "}\n";
+          // ── Propensity-score calibration (Stürmer 2005; surrogacy per Lunt 2012) ──
+          // Everything the ACNU protocol page currently asks to be typed in by hand.
+          const P = opts.psc;
+          if (P && P.C.length && P.U.length) {
+            const qc = (a) => a.map((c) => q(c.col)).join(",");
+            r += "cvC<-c(" + qc(P.C) + "); cvU<-c(" + qc(P.U) + ")\n";
+            r += "fmlEP<-as.formula(paste('TREAT ~',paste(cvC,collapse=' + '))); fmlGS<-as.formula(paste('TREAT ~',paste(c(cvC,cvU),collapse=' + ')))\n";
+            // Probability scale in both models — the convention the protocol page
+            // states. alpha1 and alpha2 are not scale-free, so mixing PS in one
+            // model with logit(PS) in the other silently invalidates the correction.
+            r += "fep<-suppressWarnings(glm(fmlEP,family=binomial,data=d)); fgs<-suppressWarnings(glm(fmlGS,family=binomial,data=d))\n";
+            r += "d$psep<-as.numeric(predict(fep,type='response')); d$psgs<-as.numeric(predict(fgs,type='response'))\n";
+            r += "cal<-lm(psgs ~ psep + TREAT, data=d); scal<-summary(cal); cc<-coef(scal)\n";
+            r += "a0<-cc[1,1]; a1<-cc[2,1]; a2<-cc[3,1]; a1se<-cc[2,2]; a2se<-cc[3,2]; r2<-scal$r.squared\n";
+            // Surrogacy: Y independent of PS_ep given (T, PS_gs). S is the share of
+            // the outcome information carried by BOTH scores that the gold-standard
+            // score carries alone, as a ratio of likelihood-ratio statistics against
+            // a treatment-only model (Lunt 2012, Table 2 footnote g). Nested models,
+            // so S is always in [0,100].
+            r += "sv<-Surv(d$TIME,d$EVENT)\n";
+            r += "m0<-coxph(sv~TREAT,data=d); m1<-coxph(sv~TREAT+psgs,data=d); m2<-coxph(sv~TREAT+psgs+psep,data=d)\n";
+            r += "l0<-as.numeric(logLik(m0)); l1<-as.numeric(logLik(m1)); l2<-as.numeric(logLik(m2))\n";
+            r += "LR1<-2*(l1-l0); LR2<-2*(l2-l0)\n";
+            r += "Sv<-if(is.finite(LR2) && LR2>1e-8) max(0,min(100,100*LR1/LR2)) else NA_real_\n";
+            r += "cm<-summary(m2)$coefficients; scoef<-cm['psep','coef']; sp<-cm['psep',ncol(cm)]\n";
+            // A demonstration ON THIS DATA of whether the correction helps: fit the
+            // claims-only analogue, correct it, and compare with the gold standard.
+            r += "mn<-coxph(sv~TREAT+psep,data=d); bT<-coef(mn)['TREAT']; bPS<-coef(mn)['psep']\n";
+            r += "mg<-coxph(sv~TREAT+psgs,data=d); bG<-coef(mg)['TREAT']\n";
+            r += "bcal<-if(is.finite(a1) && abs(a1)>1e-8) bT-(a2/a1)*bPS else NA_real_\n";
+            r += "BB<-" + (P.boot || 0) + "; A1<-numeric(0); A2<-numeric(0); RT<-numeric(0); bfail<-0\n";
+            if (P.boot > 0) {
+              r += "set.seed(1); nn<-nrow(d)\n";
+              r += "for(bi in 1:BB){ ii<-sample.int(nn,nn,replace=TRUE); db<-d[ii,,drop=FALSE]\n";
+              r += "  rr<-tryCatch({ e1<-suppressWarnings(glm(fmlEP,family=binomial,data=db)); g1<-suppressWarnings(glm(fmlGS,family=binomial,data=db))\n";
+              r += "    db$psep<-as.numeric(predict(e1,type='response')); db$psgs<-as.numeric(predict(g1,type='response'))\n";
+              r += "    co<-coef(lm(psgs ~ psep + TREAT, data=db)); c(co[2],co[3]) }, error=function(x) NULL)\n";
+              r += "  if(is.null(rr) || any(!is.finite(rr)) || abs(rr[1])<1e-8){ bfail<-bfail+1; next }\n";
+              r += "  A1<-c(A1,rr[1]); A2<-c(A2,rr[2]); RT<-c(RT,rr[2]/rr[1]) }\n";
+            }
+            r += "qn<-function(v,p) if(length(v)>=20) as.numeric(quantile(v,p,names=FALSE)) else NA_real_\n";
+            r += "fm<-function(x) if(length(x)==0 || !is.finite(x)) 'NA' else sprintf('%.6g',x)\n";
+            r += "cat(paste0('PSC|ev=',sum(d$EVENT==1,na.rm=TRUE),'|a0=',fm(a0),'|a1=',fm(a1),'|a1se=',fm(a1se),'|a2=',fm(a2),'|a2se=',fm(a2se),'|r2=',fm(r2),'|n=',nrow(d),'|nC=',length(cvC),'|nU=',length(cvU),'|S=',fm(Sv),'|scoef=',fm(scoef),'|sp=',fm(sp),'|ratio=',fm(a2/a1),'|B=',length(A1),'|bfail=',bfail,'|a1lo=',fm(qn(A1,0.025)),'|a1hi=',fm(qn(A1,0.975)),'|a2lo=',fm(qn(A2,0.025)),'|a2hi=',fm(qn(A2,0.975)),'|rlo=',fm(qn(RT,0.025)),'|rhi=',fm(qn(RT,0.975)),'|bT=',fm(bT),'|bPS=',fm(bPS),'|bcal=',fm(bcal),'|bG=',fm(bG)),'\\n')\n";
+            r += "cat('\\n--- Propensity-score calibration ---\\n')\n";
+            r += "cat(sprintf('PS_gs = %.4f + %.4f x PS_ep + %.4f x T   (R2 %.3f, n %d)\\n', a0, a1, a2, r2, nrow(d)))\n";
+            r += "cat(sprintf('Surrogacy: S = %.1f%%; PS_ep coefficient %.4f (p = %.4g)\\n', Sv, scoef, sp))\n";
+          } else if (P) {
+            r += "cat('PSCSKIP|" + (P.why || "not computed") + "\\n')\n";
+          }
           return r;
         },
       },
@@ -1455,6 +1586,8 @@ const DESIGNS = [
     };
     const getDesign = () => { const r = document.querySelector('[name="design"]:checked'); return r ? r.value : ""; };
     let MAP = {}, COVS = [], MASTER = null, LAST = null, COVROLE = {};
+    let PSCSPLIT = {};   // source column → "claims" | "clinical" | "" (undecided, and blocking)
+    let PSCRUN = null;   // snapshot of what the last run actually fitted
 
     // Role suggestions lean on three sources, in this order: the column name, the
     // codebook definition (which carries the meaning when the name is opaque or in
@@ -1550,7 +1683,76 @@ const DESIGNS = [
       $("covlist").querySelectorAll("input[data-cov]").forEach((cb) => cb.addEventListener("change", () => { const c = cb.getAttribute("data-cov"); if (cb.checked) { if (!COVS.includes(c)) COVS.push(c); } else COVS = COVS.filter((x) => x !== c); renderCovNote(); validateMap(); }));
       $("acnuopts").classList.toggle("hidden", getDesign() !== "acnu");
       renderCovNote();
+      try { renderPscSplit(); } catch (e) { console.error(e); }
     }
+    // ── Propensity-score calibration: which covariates does a claims database see? ──
+    // NFC first, for the same reason the codebook matcher needs it: a name written
+    // on one platform and a rule written on another compare unequal while rendering
+    // identically. Skipping this is why an earlier classifier silently mislabelled
+    // every Korean and accented-Latin column.
+    const PSC_NORM = (s) => String(s == null ? "" : s).normalize("NFC").toLowerCase().replace(/[_\-.]+/g, " ").replace(/\s+/g, " ").trim();
+    // Tested FIRST: a coded diagnosis, procedure, dispensing or visit is in claims
+    // even when the measurement behind it is not. Obesity is claims; BMI is not.
+    const PSC_CODED = /diagnos|\bdx\b|icd\b|procedure|\bcode[ds]?\b|claim|\bvisit|admission|hospitali[sz]|dispens|prescri|refill|\brx\b|count|次數|就醫|住院|處方|診斷|手術/;
+    const PSC_CLINICAL = /hba1c|glycated|a1c|egfr|creatinin|albumin|bilirubin|\balt\b|\bast\b|ldl|hdl|cholesterol|triglycerid|glucose|blood pressure|systolic|diastolic|\bbp\b|bmi|body mass|height|weight|waist|pulse|heart rate|temperature|oxygen|spo2|ejection fraction|\blvef\b|fev1|\bfvc\b|spiromet|visual acuity|intraocular|\biop\b|ecog|karnofsky|performance status|\bstage\b|\bgrade\b|severit|ki67|pd-?l1|biomarker|\blab\b|laborator|panss|ham-?d|madrs|mmse|apgar|gestational|birth weight|smok|pack.?year|frailty|symptom|functional status|family history|genetic|genotype|polygenic|dialysis vintage|kt.?v\b|\burr\b|troponin|sodium|potassium|haemoglobin|hemoglobin|收縮壓|舒張壓|血壓|血圧|혈압|身高|身長|체중|體重|体重|眼壓|眼圧|視力|抽菸|吸菸|喫煙|흡연|飲酒|檳榔|血糖|糖化|檢驗|クレアチニン|크레아티닌|ヘモグロビン|重症度/;
+    const PSC_CLAIMS = /\bage\b|年齡|年龄|\bsex\b|gender|性別|region|urban|rural|area|\bsite\b|clinic|hospital|centre|center|provider|facility|insur|income|\bses\b|deprivation|year|calendar|index date|\bhistory\b|\bhx\b|prior |comorbid|charlson|elixhauser|\bcci\b|drug|medication|therapy|保險|地區|病史|藥/;
+    function pscSeed(name, def) {
+      const n = PSC_NORM(name), d = PSC_NORM(def || "");
+      if (PSC_CODED.test(n) || PSC_CODED.test(d)) return "claims";
+      if (PSC_CLINICAL.test(n) || PSC_CLINICAL.test(d)) return "clinical";
+      if (PSC_CLAIMS.test(n) || PSC_CLAIMS.test(d)) return "claims";
+      return "";                                   // undecided, and blocking
+    }
+    function pscReseed(force) {
+      covPlan(MASTER || DATA.rows).info.forEach((c) => {
+        if (force || !PSCSPLIT[c.src]) {
+          const p = DATA.profile.find((x) => x.name === c.src);
+          PSCSPLIT[c.src] = pscSeed(c.src, p ? p.def : "");
+        }
+      });
+    }
+    const PSC_CLS = { claims: "bg-emerald-100 text-emerald-800 border-emerald-300", clinical: "bg-violet-100 text-violet-800 border-violet-300", "": "bg-white text-slate-500 border-slate-200" };
+    function renderPscSplit() {
+      const body = $("pscbody"); if (!body) return;
+      const on = getDesign() === "acnu" && $("psc_on").checked;
+      body.classList.toggle("hidden", !$("psc_on").checked);
+      if (!on || !COVS.length) { $("psclist").innerHTML = ""; $("pscmsg").textContent = ""; return; }
+      pscReseed(false);
+      const info = covPlan(MASTER || DATA.rows).info;
+      $("psclist").innerHTML = info.map((c) => {
+        const cur = PSCSPLIT[c.src] || "";
+        const btn = (v, label) => '<button type="button" data-pscset="' + v + '" data-pscvar="' + esc(c.src) + '" class="text-[10px] font-semibold px-2 py-0.5 rounded border transition ' + (cur === v ? PSC_CLS[v] : "bg-white text-slate-400 border-slate-200 hover:border-slate-400") + '">' + label + "</button>";
+        return '<div class="flex items-center gap-2 bg-white border border-slate-200 rounded px-2 py-1">' +
+          '<span class="flex-1 min-w-0 truncate" title="' + esc(c.src) + '">' + esc(c.src) + (cur ? "" : ' <span class="text-rose-600 font-bold">?</span>') + "</span>" +
+          '<span class="flex gap-1 shrink-0">' + btn("claims", "Claims") + btn("clinical", "Clinical-only") + "</span></div>";
+      }).join("");
+      $("psclist").querySelectorAll("[data-pscset]").forEach((b) => b.addEventListener("click", () => {
+        const v = b.getAttribute("data-pscset"), k = b.getAttribute("data-pscvar");
+        PSCSPLIT[k] = PSCSPLIT[k] === v ? "" : v;
+        renderPscSplit();
+      }));
+      const nC = info.filter((c) => PSCSPLIT[c.src] === "claims").length;
+      const nU = info.filter((c) => PSCSPLIT[c.src] === "clinical").length;
+      const un = info.filter((c) => !PSCSPLIT[c.src]).map((c) => c.src);
+      const m = $("pscmsg");
+      if (un.length) { m.innerHTML = '<span class="text-rose-700 font-semibold">Undecided: ' + un.map(esc).join(", ") + ".</span> The formula is not computed until every covariate is placed — a variable guessed into the wrong side silently breaks the correction."; m.className = "text-[11px] text-rose-700"; }
+      else if (!nU) { m.textContent = "No clinical-only covariates, so the two propensity scores would be identical and there is nothing to calibrate against. Mark at least one covariate a claims database could not see."; m.className = "text-[11px] text-amber-700"; }
+      else if (!nC) { m.textContent = "No claims-available covariates, so there is no error-prone score to calibrate."; m.className = "text-[11px] text-amber-700"; }
+      else { m.textContent = nC + " claims-available (error-prone score) · " + nU + " clinical-only (added for the gold-standard score). β̂ for the treatment and the score come from the claims-only study and cannot be computed here."; m.className = "text-[11px] text-slate-500"; }
+    }
+    function pscReady() {
+      if (getDesign() !== "acnu" || !$("psc_on").checked) return null;
+      const info = covPlan(MASTER || DATA.rows).info;
+      if (!info.length || info.some((c) => !PSCSPLIT[c.src])) return null;
+      const C = info.filter((c) => PSCSPLIT[c.src] === "claims"), U = info.filter((c) => PSCSPLIT[c.src] === "clinical");
+      if (!C.length || !U.length) return null;
+      return { C: C, U: U, valType: $("psc_valtype").value, boot: parseInt($("psc_boot").value) || 0 };
+    }
+    ["psc_on", "psc_valtype", "psc_boot"].forEach((id) => $(id).addEventListener("change", renderPscSplit));
+    $("psc_reseed").addEventListener("click", () => { pscReseed(true); renderPscSplit(); });
+    $("psc_allc").addEventListener("click", () => { COVS.forEach((c) => { PSCSPLIT[c] = "claims"; }); renderPscSplit(); });
+    $("psc_allu").addEventListener("click", () => { COVS.forEach((c) => { PSCSPLIT[c] = "clinical"; }); renderPscSplit(); });
+
     // Say up front how each ticked covariate will enter the model, and name any
     // that cannot be used. A variable must never leave the model in silence.
     function renderCovNote() {
@@ -1779,7 +1981,15 @@ const DESIGNS = [
     }
     function buildScript() {
       const spec = SPEC[getDesign()]; const { covNames, covInfo, covDropped } = analysisCSV();
-      if (getDesign() === "acnu") return spec.rscript(covInfo, Object.assign(acnuOpts(), { dropped: covDropped }));
+      if (getDesign() === "acnu") {
+        const ready = pscReady();
+        const o = acnuOpts();
+        // Snapshot what was actually fitted. The handoff must describe the run,
+        // not whatever the controls happen to say when the download is clicked.
+        PSCRUN = ready ? { C: ready.C.map((c) => c.src), U: ready.U.map((c) => c.src), boot: ready.boot, valType: ready.valType, estimands: o.estimands, methods: o.methods } : null;
+        const psc = ready ? { C: ready.C.map((c) => ({ col: c.col, src: c.src })), U: ready.U.map((c) => ({ col: c.col, src: c.src })), boot: ready.boot, valType: ready.valType } : null;
+        return spec.rscript(covInfo, Object.assign(o, { dropped: covDropped, psc: psc }));
+      }
       if (getDesign() === "its") return spec.rscript(covNames, itsOpts());
       return spec.rscript(covNames);
     }
@@ -1867,24 +2077,108 @@ const DESIGNS = [
         '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Interrupted time series chart">' + g + "</svg>";
     }
 
+    // ── PS-calibration result: the formula, the verdict, and the handoff ──────
+    // The release rule matches the ACNU protocol page exactly (S >= 90 releases,
+    // 50-90 and below withhold), because the two pages have to agree about when
+    // this correction may be used at all.
+    const pscVerdict = (S) => (S == null || !isFinite(S)) ? "untested" : (S >= 90 ? "s-high" : (S >= 50 ? "s-mid" : "s-low"));
+    const PSC_VERDICT_TEXT = {
+      "s-high": ["Surrogacy supported", "emerald", "S ≥ 90%: almost all of the outcome information carried by the two scores is carried by the gold-standard score, which is what surrogacy asserts. The correction is released below, for use as a pre-specified sensitivity analysis — never as the primary result."],
+      "s-mid": ["Partial surrogacy — correction withheld", "amber", "S between 50% and 90%. This is the region where calibration starts to hurt: published scenarios at this level lose much of the bias reduction, and it can move the estimate the wrong way. The correction factor is not released."],
+      "s-low": ["Surrogacy absent — correction withheld", "rose", "S below 50%: the error-prone score carries most of the outcome information, the opposite of what the method requires. In Lunt's scenarios at this level calibration roughly doubled the error. The correction factor is not released."],
+      "untested": ["Surrogacy could not be measured — correction withheld", "slate", "S needs outcomes and both scores to carry information. Without it there is no evidence the correction is safe to apply, so it is not released."],
+    };
+    function renderPsc(m) {
+      const el = $("pscresults"); if (!el || !m) return;
+      const num = (k) => { const v = parseFloat(m[k]); return isFinite(v) ? v : null; };
+      const S = num("S"), v = pscVerdict(S), vt = PSC_VERDICT_TEXT[v];
+      const released = v === "s-high";
+      const f = (x, d) => (x == null ? "—" : x.toFixed(d == null ? 4 : d));
+      const ci = (lo, hi, d) => (lo == null || hi == null) ? "" : " (95% CI " + f(lo, d) + " to " + f(hi, d) + ")";
+      const tone = { emerald: "border-emerald-300 bg-emerald-50 text-emerald-900", amber: "border-amber-300 bg-amber-50 text-amber-900", rose: "border-rose-300 bg-rose-50 text-rose-900", slate: "border-slate-300 bg-slate-100 text-slate-700" }[vt[1]];
+      const hr = (b) => { if (b == null) return "—"; const x = Math.exp(b); return (x >= 0.001 && x < 1000) ? x.toFixed(3) : x.toPrecision(3); };
+      let h = '<div class="text-xs uppercase tracking-widest text-violet-800 font-semibold mb-2">Propensity-score calibration formula</div>';
+      h += '<div class="rounded-lg bg-white border border-violet-200 px-3 py-2 font-mono text-sm text-slate-900">PS_gs = ' + f(num("a0")) + " + " + f(num("a1")) + " × PS_ep + " + f(num("a2")) + " × T</div>";
+      h += '<p class="mt-1 text-[11px] text-slate-600">α₁ = ' + f(num("a1")) + " (SE " + f(num("a1se")) + ")" + ci(num("a1lo"), num("a1hi")) + " · α₂ = " + f(num("a2")) + " (SE " + f(num("a2se")) + ")" + ci(num("a2lo"), num("a2hi")) +
+        " · R² = " + f(num("r2"), 3) + " · n = " + (m.n || "—") + " · " + (m.nC || "—") + " claims / " + (m.nU || "—") + " clinical-only covariates · both scores on the probability scale.</p>" +
+        (num("a1lo") != null ? '<p class="text-[11px] text-slate-500">Use the bootstrap interval, not the standard error beside it: the SE from the calibration regression treats PS_ep as a fixed, known quantity when it was itself estimated, and its residual spread is structural rather than sampling noise. The bootstrap refits both scores in every replicate.</p>' : "");
+      h += '<div class="mt-2 rounded-lg border px-3 py-2 text-xs ' + tone + '"><strong>' + esc(vt[0]) + "</strong> — S = " + (S == null ? "not computable" : S.toFixed(1) + "%") +
+        " (PS_ep coefficient " + f(num("scoef")) + ", p = " + (num("sp") == null ? "—" : num("sp").toPrecision(3)) + ")<br><span class='opacity-90'>" + esc(vt[2]) + "</span></div>";
+      if (released) {
+        h += '<div class="mt-2 rounded-lg bg-white border border-violet-200 px-3 py-2 text-sm"><span class="text-slate-600 text-xs uppercase tracking-widest font-semibold">Correction a claims-only study applies</span><br>' +
+          '<span class="font-mono">β_T(calibrated) = β_T(naive) − ' + f(num("ratio")) + " × β_PS(naive)</span>" +
+          (num("rlo") != null ? '<span class="block text-[11px] text-slate-500">correction factor α₂/α₁ bootstrap 95% CI ' + f(num("rlo")) + " to " + f(num("rhi")) + ", " + (m.B || 0) + " replicates" + (Number(m.bfail) ? ", " + m.bfail + " failed" : "") + "</span>" : '<span class="block text-[11px] text-slate-500">no bootstrap interval — set replicates above</span>') + "</div>";
+      } else {
+        h += '<div class="mt-2 rounded-lg bg-white border border-slate-200 px-3 py-2 text-xs text-slate-600"><strong>The correction factor is withheld.</strong> α₂/α₁ was computed, but printing it here would invite exactly the use this page has just advised against. Fix surrogacy — a richer claims-available set, or a different validation population — or present this as a bias analysis rather than a point correction.</div>';
+      }
+      if (num("bT") != null) {
+        // The same three numbers either way, but framed so a withheld correction
+        // is not quietly re-served as "the calibrated HR".
+        h += '<p class="mt-2 text-[11px] ' + (released ? "text-slate-600" : "text-rose-700") + '"><strong>Does the correction help on this data?</strong> ' +
+          "Fitting the claims-only analogue here (treatment + PS_ep only) gives HR " + hr(num("bT")) +
+          ", against a gold-standard fit (treatment + PS_gs) of HR " + hr(num("bG")) + ". " +
+          (released
+            ? "Applying the correction gives HR " + hr(num("bcal")) + "."
+            : "Applying the correction anyway would give HR " + hr(num("bcal")) + " — further from the gold standard than doing nothing. That is what the withheld verdict is protecting you from.") +
+          " A self-check on the validation data, not the study estimate.</p>";
+      }
+      h += '<p class="mt-2 text-[11px] text-slate-500">Still missing, and not obtainable here: <strong>β̂_T, its standard error, and β̂_PS</strong>. Those come from the claims-only study — a different dataset — and are typed into the protocol builder.</p>';
+      h += '<div class="mt-2"><button id="dlpsc" type="button" class="bg-violet-700 text-white hover:bg-violet-800 font-semibold px-3 py-1.5 rounded text-xs">⬇ Calibration handoff (JSON)</button></div>';
+      el.classList.remove("hidden");
+      el.innerHTML = h;
+      $("dlpsc").addEventListener("click", () => {
+        const j = pscHandoff(m);
+        dl(new Blob([JSON.stringify(j, null, 2)], { type: "application/json" }), DATA.name + "-psc-handoff.json");
+      });
+    }
+    function pscHandoff(m) {
+      const num = (k) => { const v = parseFloat(m[k]); return isFinite(v) ? v : null; };
+      const S = num("S"), v = pscVerdict(S), ready = PSCRUN || pscReady();
+      const valType = ready ? ready.valType : null;
+      return {
+        kind: "rwe-studio/psc-handoff", version: 1, generated: new Date().toISOString(),
+        // valType appears in two places on purpose: the importer accepts either,
+        // and a consumer reading only `dataset` should not miss it.
+        dataset: { label: DATA.name, n: num("n"), events: num("ev"), valType: valType },
+        claimsVars: (ready && ready.C) ? ready.C.map((c) => (typeof c === "string" ? c : c.src)) : [],
+        clinicalVars: (ready && ready.U) ? ready.U.map((c) => (typeof c === "string" ? c : c.src)) : [],
+        psScale: "ps",
+        validationType: valType,
+        calibration: { a0: num("a0"), a1: num("a1"), a1se: num("a1se"), a2: num("a2"), a2se: num("a2se"), r2: num("r2") },
+        correctionFactor: { value: num("ratio"), lo: num("rlo"), hi: num("rhi"), bootstrapB: Number(m.B) || 0, bootstrapFailures: Number(m.bfail) || 0 },
+        surrogacy: { S: S, coef: num("scoef"), p: num("sp"), verdict: v, testable: true },
+        released: v === "s-high",
+        naive: { bT: null, bTse: null, bPS: null },
+        // Estimand and method travel with the coefficients: alpha2 is only
+        // transportable to a study estimating the same thing the same way.
+        provenance: {
+          tool: "RWE Studio", engine: "WebR", design: "acnu", outcomeModel: "coxph",
+          estimand: (ready && ready.estimands) ? ready.estimands.join("+") : null,
+          psMethods: (ready && ready.methods) ? ready.methods : null,
+          note: "beta_T, its SE and beta_PS belong to the claims-only study and are not computable from the validation data.",
+        },
+      };
+    }
+
     $("runanalysis").addEventListener("click", async () => {
       if (!MASTER) buildMaster();
       if (!MASTER) return;
       const { csv } = analysisCSV(); const script = buildScript();
       const setS = (m) => { $("anastatus").textContent = m; };
-      $("runanalysis").disabled = true; $("anaresults").classList.add("hidden"); $("table1").classList.add("hidden"); $("itschart").classList.add("hidden"); $("dlfitted").classList.add("hidden");
+      $("runanalysis").disabled = true; $("anaresults").classList.add("hidden"); $("table1").classList.add("hidden"); $("itschart").classList.add("hidden"); $("dlfitted").classList.add("hidden"); $("pscresults").classList.add("hidden");
       try {
         const out = await window.RWEngine.run(script, csv, setS);
         setS("Done ✓");
-        const ests = [], t1 = [], notes = [], fitted = []; let meta = {};
+        const ests = [], t1 = [], notes = [], fitted = []; let meta = {}, psc = null;
         out.split("\n").forEach((l) => {
           if (l.indexOf("RESULT_ESTIMATE|") === 0) { const p = l.split("|"); ests.push({ label: p[1], value: p.slice(2).join("|") }); }
           else if (l.indexOf("TABLE1|") === 0) { t1.push(l.split("|").slice(1)); }
           else if (l.indexOf("RESULT_NOTE|") === 0) { notes.push(l.split("|").slice(1).join("|")); }
           else if (l.indexOf("FITTED|") === 0) { fitted.push(l.split("|").slice(1)); }
           else if (l.indexOf("ITSMETA|") === 0) { l.split("|").slice(1).forEach((kv) => { const i = kv.indexOf("="); if (i > 0) meta[kv.slice(0, i)] = kv.slice(i + 1); }); }
+          else if (l.indexOf("PSC|") === 0) { psc = {}; l.split("|").slice(1).forEach((kv) => { const i = kv.indexOf("="); if (i > 0) psc[kv.slice(0, i)] = kv.slice(i + 1); }); }
         });
-        const display = out.replace(/^(RESULT_ESTIMATE|RESULT_NOTE|TABLE1|FITTED|ITSMETA)\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+        const display = out.replace(/^(RESULT_ESTIMATE|RESULT_NOTE|TABLE1|FITTED|ITSMETA|PSC|PSCSKIP)\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
         if (ests.length || notes.length) {
           $("anaresults").classList.remove("hidden");
           const noteHtml = notes.length ? '<div class="mt-3 space-y-1">' + notes.map((n) => '<p class="text-[11px] text-slate-600">' + esc(n) + "</p>").join("") + "</div>" : "";
@@ -1892,6 +2186,7 @@ const DESIGNS = [
           $("anaresults").innerHTML = '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-2">Effect estimates</div>' + tblHtml + noteHtml;
         }
         if (fitted.length > 1) { renderITSChart(fitted, meta); $("dlfitted").classList.remove("hidden"); }
+        if (psc) { try { renderPsc(psc); } catch (e) { console.error(e); } }
         if (t1.length) {
           $("table1").classList.remove("hidden");
           const head = t1[0], body = t1.slice(1);
