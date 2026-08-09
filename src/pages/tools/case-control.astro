@@ -420,7 +420,18 @@ ${window.PC.tailMd(pcOf(s))}
     const render = () => {
       const s = readForm();
       preview.textContent = buildMarkdown(s);
-      renderScheme(s);
+      // A throw in here used to abort the rest of render(): the checks panel
+      // froze on the previous design while the protocol text moved on (so the
+      // two disagreed on screen, with the stale one showing a red error), and
+      // the autosave below never ran even though the page promises
+      // "Auto-saved to this browser". The diagram is the least important thing
+      // here; it must not be able to take the checks and the draft down with it.
+      try { renderScheme(s); }
+      catch (err) {
+        console.error("[case-control] study-design diagram failed to render", err);
+        const el = document.getElementById("diagram");
+        if (el) el.innerHTML = '<p class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">The design diagram could not be drawn. It is blank because of an error, not because there is nothing to show &mdash; details are in the browser console. The protocol text and the consistency checks are unaffected.</p>';
+      }
       // Never swallow a render failure silently: a blank checks panel that looks
       // like "no issues" is exactly the failure mode this page is meant to avoid.
       try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); }
