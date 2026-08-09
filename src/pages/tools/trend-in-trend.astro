@@ -570,15 +570,16 @@ ${window.PC.tailMd(pcOf(s))}
       const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: __cap });
       // This page draws its own SVG rather than calling renderDesignDiagram, so
       // the shared component holds no window spec for it and fig.lines comes back
-      // empty. Supply the written description here, or the figure would reach a
-      // text-only reader as a caption with nothing under it.
-      if (!fig.lines || !fig.lines.length) fig.lines = [
+      // empty. opts.lines is the supported way to supply the written description;
+      // without it the figure reaches a text-only reader as a caption with
+      // nothing under it, and that text is what carries HARPER 7.2.
+      const __figLines = [
         "Time axis: " + s.nperiods + " " + s.period + " calendar period(s) from " + or(s.first, "(first)") + " to " + or(s.last, "(last)") + " (this design is not anchored to a person-level day 0).",
         "Exposure-prevalence trend: the proportion exposed in each calendar period; a strong time trend is required for the design to identify anything.",
         "CPE strata: " + s.nstrata + " quantile(s) of the cumulative probability of exposure, from the stage-1 model" + (s.cpecov ? " fitted on " + s.cpecov : "") + "; each person keeps one stratum for the whole study.",
         "Read-out: the outcome trend is compared across CPE strata — a steeper outcome trend where exposure rose faster is what identifies the effect.",
       ];
-      const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: __cap });
+      const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: __cap, lines: __figLines });
       figParas.forEach((c) => children.push(c));
       if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
 
