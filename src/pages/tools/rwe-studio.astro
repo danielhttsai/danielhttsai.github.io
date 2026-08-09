@@ -208,6 +208,15 @@ const DESIGNS = [
             </div>
             <p class="text-[11px] text-slate-400">Crude is always shown alongside.</p>
           </div>
+          <div>
+            <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Positivity — restrict the cohort before estimating</span>
+            <select id="m_trim" class="mt-1 w-full sm:w-2/3 rounded border border-slate-300 p-1.5 text-xs">
+              <option value="none" selected>No restriction — report the overlap and refuse an unstable estimate</option>
+              <option value="cs">Restrict to the region of common support</option>
+              <option value="pct">Trim to the 1st–99th percentile of the propensity score</option>
+            </select>
+            <p class="text-[11px] text-slate-500">Restricting changes which patients the effect refers to, so it is never applied on your behalf. Whatever is chosen is reported with the results.</p>
+          </div>
 
           <div class="border-t border-slate-200 pt-3">
             <label class="flex items-start gap-2 text-xs text-slate-700">
@@ -361,6 +370,7 @@ const DESIGNS = [
       </div>
       <div id="anaresults" class="mt-4 hidden rounded-xl border border-brand-200 bg-brand-50/60 p-4"></div>
       <div id="itschart" class="mt-4 hidden rounded-xl border border-slate-200 bg-white p-4 overflow-x-auto"></div>
+      <div id="psdiag" class="mt-4 hidden rounded-xl border border-slate-200 bg-white p-4"></div>
       <div id="pscresults" class="mt-4 hidden rounded-xl border border-violet-200 bg-violet-50/50 p-4"></div>
       <div id="table1" class="mt-4 hidden rounded-xl border border-slate-200 bg-white p-4 overflow-x-auto"></div>
       <pre id="routput" class="mt-3 hidden rounded-lg bg-slate-900 text-slate-100 p-4 text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[360px]"></pre>
@@ -1215,6 +1225,29 @@ const DESIGNS = [
           r += "alias<-names(coef(psm))[is.na(coef(psm))]; if(length(alias)) cat('RESULT_NOTE|',length(alias),' propensity-model term(s) were collinear with the rest and dropped: ',paste(alias,collapse=', '),'.\\n',sep='')\n";
           r += "ps<-as.numeric(predict(psm, type='response'))\n";
           r += "ps<-pmin(pmax(ps,1e-6),1-1e-6); d$lp<-qlogis(ps); tr<-d$TREAT==1; n<-nrow(d)\n";
+          // ── Positivity ────────────────────────────────────────────────────
+          // A propensity model always returns a number. It returns one just as
+          // readily when an arm has no comparable members at all, and the weighted
+          // hazard ratio that follows looks exactly like a real one. So the common
+          // support is measured, and the weights it produces are inspected, before
+          // anything is reported.
+          r += "trimmode<-'" + (opts.trim || "none") + "'\n";
+          r += "psT<-ps[tr]; psC<-ps[!tr]; csLo<-max(min(psT),min(psC)); csHi<-min(max(psT),max(psC))\n";
+          r += "outT<-sum(psT<csLo | psT>csHi); outC<-sum(psC<csLo | psC>csHi)\n";
+          r += "keep<-rep(TRUE,n); trimlab<-'none'\n";
+          r += "if(trimmode=='cs'){ keep<-ps>=csLo & ps<=csHi; trimlab<-'restricted to the region of common support' }\n";
+          r += "if(trimmode=='pct'){ lo1<-as.numeric(quantile(ps,0.01)); hi1<-as.numeric(quantile(ps,0.99)); keep<-ps>=lo1 & ps<=hi1; trimlab<-'trimmed to the 1st-99th percentile of the propensity score' }\n";
+          r += "ntrim<-sum(!keep)\n";
+          r += "if(ntrim>0){ cat('RESULT_NOTE|Cohort ',trimlab,': ',ntrim,' of ',n,' row(s) removed before every estimate below, so all rows are comparable. This changes the population the effect refers to.\\n',sep='')\n";
+          r += "  d<-d[keep,,drop=FALSE]; ps<-ps[keep]; tr<-tr[keep]; n<-nrow(d); d$lp<-qlogis(ps); psT<-ps[tr]; psC<-ps[!tr] }\n";
+          // Weight diagnostics on the weights actually used for IPTW.
+          r += "wI<-ifelse(tr,1/ps,1/(1-ps))\n";
+          r += "ess<-sum(wI)^2/sum(wI^2); essPct<-100*ess/n; maxw<-max(wI)\n";
+          r += "k1<-max(1,ceiling(0.01*n)); top1<-100*sum(sort(wI,decreasing=TRUE)[1:k1])/sum(wI)\n";
+          r += "unstable<-(essPct<10) || (top1>25) || (maxw>100)\n";
+          r += "bi<-function(v) tabulate(pmin(20,pmax(1,ceiling(v*20))),nbins=20)\n";
+          r += "cat('PSHIST|',paste(bi(psT),collapse=','),'|',paste(bi(psC),collapse=','),'\\n',sep='')\n";
+          r += "cat('PSDIAG|nT=',sum(tr),'|nC=',sum(!tr),'|csLo=',sprintf('%.4f',csLo),'|csHi=',sprintf('%.4f',csHi),'|outT=',outT,'|outC=',outC,'|ess=',sprintf('%.1f',ess),'|essPct=',sprintf('%.1f',essPct),'|maxw=',sprintf('%.1f',maxw),'|top1=',sprintf('%.1f',top1),'|minps=',sprintf('%.4f',min(ps)),'|maxps=',sprintf('%.4f',max(ps)),'|ntrim=',ntrim,'|trim=',trimlab,'|unstable=',if(unstable) 1 else 0,'\\n',sep='')\n";
           r += "cat(sprintf('N = %d; exposure = %d; comparator = %d; events = %d\\n\\n', n, sum(tr), sum(!tr), sum(d$EVENT==1,na.rm=TRUE)))\n";
           r += "cat('RESULT_NOTE|Propensity model: ',sum(covkind=='numeric'),' continuous, ',sum(covkind=='binary'),' binary 0/1, ',sum(covkind=='factor'),' categorical entered as dummy-coded factors',if(any(covkind=='factor')) paste0(' (',paste(covsrc[covkind=='factor'],collapse=', '),')') else '','.\\n',sep='')\n";
           if (dropped.length) r += "cat(" + q("RESULT_NOTE|" + dropped.length + " ticked covariate(s) were left out of the model: " + dropped.map((x) => x.src + " — " + x.why).join("; ") + ".") + ",'\\n',sep='')\n";
@@ -1224,21 +1257,31 @@ const DESIGNS = [
           // Yang & Dalton (2012) multinomial standardised difference: a categorical
           // variable needs the Mahalanobis form, not the continuous one.
           r += "smdcat<-function(f,g,w){ lv<-levels(f); k<-length(lv); if(k<2) return(NA_real_); pr<-function(idx){ ww<-w[idx]; s<-sum(ww); vapply(lv,function(l) sum(ww[f[idx]==l])/s, 0) }; p1<-pr(g); p0<-pr(!g); if(k==2) return((p1[2]-p0[2])/sqrt((p1[2]*(1-p1[2])+p0[2]*(1-p0[2]))/2)); i<-2:k; mk<-function(p){ pv<-as.numeric(p[i]); m<-diag(pv*(1-pv), nrow=length(pv)); for(a in seq_along(pv)) for(b in seq_along(pv)) if(a!=b) m[a,b]<- -pv[a]*pv[b]; m }; S<-(mk(p1)+mk(p0))/2; dv<-as.numeric(p1[i]-p0[i]); tryCatch(as.numeric(sqrt(t(dv)%*%solve(S)%*%dv)), error=function(e) NA_real_) }\n";
-          r += "cat('TABLE1|Characteristic|Comparator (n=',sum(!tr),')|Exposure (n=',sum(tr),')|SMD\\n',sep='')\n";
+          // Balance BEFORE and AFTER weighting. The before column alone tells a
+          // reviewer nothing about whether the model fixed anything.
+          r += "smd1<-rep(NA_real_,length(covs)); smd2<-rep(NA_real_,length(covs))\n";
+          r += "cat('TABLE1|Characteristic|Comparator (n=',sum(!tr),')|Exposure (n=',sum(tr),')|SMD|SMD after IPTW\\n',sep='')\n";
           r += "for(i in seq_along(covs)){ cc<-covs[i]; lab<-covsrc[i]\n" +
                "  if(covkind[i]=='factor'){ f<-d[[cc]]; lv<-levels(f)\n" +
-               "    cat(sprintf('TABLE1|%s, n (%%)|||%.3f\\n', lab, smdcat(f,tr,rep(1,n))))\n" +
-               "    for(l in lv){ a<-sum(f[!tr]==l); b<-sum(f[tr]==l); cat(sprintf('TABLE1|  %s|%d (%.1f%%)|%d (%.1f%%)|\\n', l, a, 100*a/sum(!tr), b, 100*b/sum(tr))) }\n" +
+               "    s1<-smdcat(f,tr,rep(1,n)); s2<-smdcat(f,tr,wI); smd1[i]<-s1; smd2[i]<-s2\n" +
+               "    cat(sprintf('TABLE1|%s, n (%%)|||%.3f|%.3f\\n', lab, s1, s2))\n" +
+               "    for(l in lv){ a<-sum(f[!tr]==l); b<-sum(f[tr]==l); cat(sprintf('TABLE1|  %s|%d (%.1f%%)|%d (%.1f%%)||\\n', l, a, 100*a/sum(!tr), b, 100*b/sum(tr))) }\n" +
                "  } else { x<-d[[cc]]\n" +
-               "    if(covkind[i]=='binary'){ a<-sum(x[!tr]==1,na.rm=TRUE); b<-sum(x[tr]==1,na.rm=TRUE); cat(sprintf('TABLE1|%s, n (%%)|%d (%.1f%%)|%d (%.1f%%)|%.3f\\n', lab, a, 100*a/sum(!tr), b, 100*b/sum(tr), wsmd(x,tr,rep(1,n))))\n" +
-               "    } else cat(sprintf('TABLE1|%s, mean (SD)|%.2f (%.2f)|%.2f (%.2f)|%.3f\\n', lab, mean(x[!tr],na.rm=TRUE), sd(x[!tr],na.rm=TRUE), mean(x[tr],na.rm=TRUE), sd(x[tr],na.rm=TRUE), wsmd(x,tr,rep(1,n)))) } }\ncat('\\n')\n";
+               "    s1<-wsmd(x,tr,rep(1,n)); s2<-wsmd(x,tr,wI); smd1[i]<-s1; smd2[i]<-s2\n" +
+               "    if(covkind[i]=='binary'){ a<-sum(x[!tr]==1,na.rm=TRUE); b<-sum(x[tr]==1,na.rm=TRUE); cat(sprintf('TABLE1|%s, n (%%)|%d (%.1f%%)|%d (%.1f%%)|%.3f|%.3f\\n', lab, a, 100*a/sum(!tr), b, 100*b/sum(tr), s1, s2))\n" +
+               "    } else cat(sprintf('TABLE1|%s, mean (SD)|%.2f (%.2f)|%.2f (%.2f)|%.3f|%.3f\\n', lab, mean(x[!tr],na.rm=TRUE), sd(x[!tr],na.rm=TRUE), mean(x[tr],na.rm=TRUE), sd(x[tr],na.rm=TRUE), s1, s2)) } }\ncat('\\n')\n";
+          r += "mx1<-max(abs(smd1),na.rm=TRUE); mx2<-max(abs(smd2),na.rm=TRUE)\n";
+          r += "cat('PSBAL|mx1=',sprintf('%.3f',mx1),'|mx2=',sprintf('%.3f',mx2),'|nbad=',sum(abs(smd2)>0.1,na.rm=TRUE),'|ncov=',length(covs),'\\n',sep='')\n";
           r += "ET<-list(); EE<-list(); ET[['ITT']]<-d$TIME; EE[['ITT']]<-d$EVENT\n";
           if (E.indexOf("PP") >= 0) r += "if('DISC' %in% names(d)){ disc<-ifelse(is.na(d$DISC), Inf, as.numeric(d$DISC)); ET[['PP']]<-pmin(d$TIME, disc); EE[['PP']]<-d$EVENT*(d$TIME<=disc) }\n";
           r += "fitw<-function(t,e,w,idx,label){ dd<-data.frame(t=t[idx],e=e[idx],TREAT=d$TREAT[idx],w=w[idx]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd,weights=w,robust=TRUE),error=function(x)NULL); if(is.null(fit)){cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label));return(invisible())}; s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', label, s$conf.int[1,'exp(coef)'], s$conf.int[1,'lower .95'], s$conf.int[1,'upper .95'])) }\n";
           if (M.indexOf("matching") >= 0) r += "matchidx<-function(){ ci<-which(!tr); ti<-which(tr); used<-logical(n); cal<-0.2*sd(d$lp); out<-integer(0); ord<-ti[order(d$lp[ti])]; for(i in ord){ cand<-ci[!used[ci]]; if(!length(cand))next; dd<-abs(d$lp[cand]-d$lp[i]); o<-order(dd); k<-0; for(j in o){ if(dd[j]<=cal){ out<-c(out,i,cand[j]); used[cand[j]]<-TRUE; k<-k+1; if(k>=" + ratio + ")break } } }; unique(out) }\n";
           r += "for(est in names(ET)){ t<-ET[[est]]; e<-EE[[est]]; all<-1:n\n";
           r += "  fitw(t,e,rep(1,n),all, paste0('Crude - ',est,' HR'))\n";
-          if (M.indexOf("iptw") >= 0) r += "  fitw(t,e,ifelse(tr,1/ps,1/(1-ps)),all, paste0('IPTW (ATE) - ',est,' HR'))\n";
+          // An IPTW estimate built on collapsed weights is not a weak estimate, it
+          // is an arbitrary one: a handful of subjects carry the answer. Refuse it
+          // and say which diagnostic failed, rather than print a confident number.
+          if (M.indexOf("iptw") >= 0) r += "  if(unstable){ cat(sprintf('RESULT_ESTIMATE|IPTW (ATE) - %s HR|withheld - weights unstable\\n',est)) } else fitw(t,e,wI,all, paste0('IPTW (ATE) - ',est,' HR'))\n";
           if (M.indexOf("smrw") >= 0) r += "  fitw(t,e,ifelse(tr,1,ps/(1-ps)),all, paste0('SMR weighting (ATT) - ',est,' HR'))\n";
           if (M.indexOf("overlap") >= 0) r += "  fitw(t,e,ifelse(tr,1-ps,ps),all, paste0('Overlap weighting - ',est,' HR'))\n";
           if (M.indexOf("finestrat") >= 0) r += "  { br<-unique(quantile(ps,probs=seq(0,1,length.out=" + (ns + 1) + "))); if(length(br)>=3){ q<-cut(ps,breaks=br,include.lowest=TRUE,labels=FALSE); keep<-ave(as.integer(tr),q,FUN=function(z)length(unique(z)))==2; ok<-which(keep); dd<-data.frame(t=t[ok],e=e[ok],TREAT=d$TREAT[ok],st=q[ok]); fit<-tryCatch(coxph(Surv(t,e)~TREAT+strata(st),data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|Fine stratification (" + ns + " strata) - %s HR|%.2f (95%% CI %.2f-%.2f)\\n',est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))} } }\n";
@@ -1309,11 +1352,40 @@ const DESIGNS = [
         rscript: () =>
           "d<-read.csv('/data.csv', stringsAsFactors=FALSE)\n" + R_CHK01 + R_CHKNUM +
           "d$EXPOSED<-chk01(d$EXPOSED,'Exposed indicator'); d$EVENTS<-chknum(d$EVENTS,'Event count'); d$INTERVAL<-chknum(d$INTERVAL,'Interval length')\n" +
-          "fit<-glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=d)\n" +
-          "b<-coef(fit)['EXPOSED']; se<-sqrt(diag(vcov(fit)))['EXPOSED']; irr<-exp(b)\n" +
-          "cat(sprintf('Conditional Poisson incidence-rate ratio (exposed vs unexposed): %.3f (95%% CI %.3f to %.3f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))\n" +
+          // The exact SCCS conditional likelihood: condition on each case's total
+          // event count, so the events fall across that case's intervals with
+          // probability proportional to tau*exp(b*x). Newton-Raphson on the single
+          // parameter, so no per-case nuisance parameter is ever estimated.
+          "sccsfit<-function(y,x,tau,id){ b<-0; I<-0\n" +
+          "  gs<-split(seq_along(y), id)\n" +
+          "  for(it in 1:200){ w<-tau*exp(b*x); U<-0; I<-0\n" +
+          "    for(k in gs){ ni<-sum(y[k]); if(ni==0) next; sw<-sum(w[k]); if(!is.finite(sw)||sw<=0) next\n" +
+          "      m1<-sum(w[k]*x[k])/sw; m2<-sum(w[k]*x[k]*x[k])/sw\n" +
+          "      U<-U+sum(y[k]*x[k])-ni*m1; I<-I+ni*(m2-m1*m1) }\n" +
+          "    if(!is.finite(I) || I<=1e-12) break\n" +
+          "    st<-U/I; if(!is.finite(st)) break; b<-b+max(-2,min(2,st)); if(abs(st)<1e-10) break }\n" +
+          "  list(b=b, se=if(is.finite(I) && I>0) sqrt(1/I) else NA_real_, info=I) }\n" +
+          "cf<-sccsfit(d$EVENTS, d$EXPOSED, d$INTERVAL, d$ID)\n" +
+          "b<-cf$b; se<-cf$se; irr<-exp(b)\n" +
+          "cat(sprintf('Exact conditional SCCS incidence-rate ratio (exposed vs unexposed): %.3f (95%% CI %.3f to %.3f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))\n" +
           "cat(sprintf('Cases (strata): %d; interval-rows: %d; events: %d\\n', length(unique(d$ID)), nrow(d), sum(d$EVENTS)))\n" +
           "cat(sprintf('RESULT_ESTIMATE|Self-controlled incidence-rate ratio (within person)|%.2f (95%% CI %.2f-%.2f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))\n" +
+          // Fitting a dummy per case is the other route to the same number. Where
+          // they disagree, something is wrong, so the disagreement is checked
+          // rather than assumed away.
+          "fe<-tryCatch(glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=d), error=function(e) NULL)\n" +
+          "if(!is.null(fe)){ bfe<-coef(fe)['EXPOSED']; if(is.finite(bfe) && abs(bfe-b)>0.01) cat(sprintf('RESULT_NOTE|The exact conditional fit (IRR %.3f) and a fixed-effect Poisson fit (IRR %.3f) disagree by more than 1%%. They are algebraically the same estimator, so this points at a numerical problem - check for cases with enormous interval lengths or zero person-time.\\n', irr, exp(bfe))) }\n" +
+          // Events per case is what governs how much any case contributes.
+          "epc<-as.numeric(tapply(d$EVENTS,d$ID,sum)); both<-tapply(d$EXPOSED,d$ID,function(z)length(unique(z))>1)\n" +
+          "cat('TABLE1|Characteristic|Value\\n')\n" +
+          "cat(sprintf('TABLE1|Cases (people with >=1 event)|%d\\n', length(epc)))\n" +
+          "cat(sprintf('TABLE1|Person-interval rows|%d\\n', nrow(d)))\n" +
+          "cat(sprintf('TABLE1|Events, total|%d\\n', sum(d$EVENTS)))\n" +
+          "cat(sprintf('TABLE1|Events per case, median (range)|%.0f (%.0f-%.0f)\\n', median(epc), min(epc), max(epc)))\n" +
+          "cat(sprintf('TABLE1|Cases with exposed and unexposed time|%d (%.1f%%)\\n', sum(both), 100*mean(both)))\n" +
+          "cat(sprintf('TABLE1|Person-time exposed|%.0f (%.1f%%)\\n', sum(d$INTERVAL[d$EXPOSED==1]), 100*sum(d$INTERVAL[d$EXPOSED==1])/sum(d$INTERVAL)))\n" +
+          "cat(sprintf('TABLE1|Events during exposed time|%d (%.1f%%)\\n', sum(d$EVENTS[d$EXPOSED==1]), 100*sum(d$EVENTS[d$EXPOSED==1])/sum(d$EVENTS)))\n" +
+          "if(median(epc)<2) cat('RESULT_NOTE|Half the cases contribute a single event. The conditional likelihood handles that correctly - it is the design working as intended, not a defect - but the estimate rests on how each case s one event fell relative to their own exposed window, so precision comes from the number of cases rather than the number of events.\\n')\n" +
           // The same data analysed as if the person did not matter. Showing it next
           // to the self-controlled estimate is what makes the design's value visible.
           "p0<-glm(EVENTS ~ EXPOSED, family=poisson, offset=log(INTERVAL), data=d)\n" +
@@ -1343,7 +1415,15 @@ const DESIGNS = [
           // The same windows analysed as one pool, so the value of the matching shows.
           "u<-glm(CASE ~ EXPOSED, family=binomial, data=d); bu<-coef(u)['EXPOSED']; su<-sqrt(diag(vcov(u)))['EXPOSED']\n" +
           "cat(sprintf('RESULT_ESTIMATE|Unmatched, pairing discarded (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bu), exp(bu-1.96*su), exp(bu+1.96*su)))\n" +
+          "nw<-as.numeric(tapply(rep(1,nrow(d)), d$ID, sum)); hz<-d$EXPOSED[d$CASE==1]; ct<-d$EXPOSED[d$CASE==0]\n" +
+          "cat('TABLE1|Characteristic|Value\\n')\n" +
+          "cat(sprintf('TABLE1|Cases|%d\\n', length(unique(d$ID))))\n" +
+          "cat(sprintf('TABLE1|Windows, total|%d\\n', nrow(d)))\n" +
+          "cat(sprintf('TABLE1|Windows per case, median (range)|%.0f (%.0f-%.0f)\\n', median(nw), min(nw), max(nw)))\n" +
+          "cat(sprintf('TABLE1|Exposed in the hazard window|%d of %d (%.1f%%)\\n', sum(hz==1), length(hz), 100*mean(hz==1)))\n" +
+          "cat(sprintf('TABLE1|Exposed in control windows|%d of %d (%.1f%%)\\n', sum(ct==1), length(ct), 100*mean(ct==1)))\n" +
           "disc<-sum(tapply(seq_len(nrow(d)), d$ID, function(i) length(unique(d$EXPOSED[i]))>1))\n" +
+          "cat(sprintf('TABLE1|Cases discordant on exposure (carry the estimate)|%d (%.1f%%)\\n', disc, 100*disc/length(unique(d$ID))))\n" +
           "cat(sprintf('RESULT_NOTE|%d of %d case(s) are discordant on exposure and so carry the estimate; concordant cases contribute nothing to a matched analysis.\\n', disc, length(unique(d$ID))))\n" +
           "cat('RESULT_NOTE|The unmatched row throws the pairing away and is shown only as a contrast. It differs from the matched row both because an odds ratio is not collapsible and because it reintroduces between-person differences. Report the matched row.\\n')",
       },
@@ -1550,6 +1630,15 @@ const DESIGNS = [
           L.push("for(i in seq_len(nrow(a))) cat(sprintf('FITTED|%s|%s|%d|%.6g|%s|%.6g|%.6g\\n', if(HASG) (if(a$g[i]>0) 'intervention' else 'control') else 'series', a$key[i], a$t[i], a$Y[i], if(useoff) sprintf('%.6g',a$N[i]) else '', fv[i], cv[i]))");
           L.push("cat(sprintf('ITSMETA|t0=%d|cutlabel=%s|np=%d|pre=%d|post=%d|controlled=%s\\n',t0,ukey[t0],np,npre,npost,if(HASG) 'yes' else 'no'))");
           L.push("");
+          // A series should describe itself before it is modelled.
+          L.push("pre<-a$g==gref & a$t<t0; pst<-a$g==gref & a$t>=t0");
+          L.push("rt<-function(m) if(useoff) sum(a$Y[m])/sum(a$N[m]) else mean(a$Y[m])");
+          L.push("cat('TABLE1|Characteristic|Before|From ',ukey[t0],'\\n',sep='')");
+          L.push("cat(sprintf('TABLE1|Periods|%d|%d\\n', npre, npost))");
+          L.push("cat(sprintf('TABLE1|Total outcome|%.6g|%.6g\\n', sum(a$Y[pre]), sum(a$Y[pst])))");
+          L.push("cat(sprintf('TABLE1|%s|%.6g|%.6g\\n', if(useoff) 'Rate per period (outcome/denominator)' else 'Mean per period', rt(pre), rt(pst)))");
+          L.push("if(useoff) cat(sprintf('TABLE1|Denominator per period, mean|%.6g|%.6g\\n', mean(a$N[pre]), mean(a$N[pst])))");
+          L.push("if(HASG) cat(sprintf('TABLE1|Control-series periods|%d|%d\\n', sum(a$g!=gref & a$t<t0), sum(a$g!=gref & a$t>=t0)))");
           L.push("dwt<-if(is.na(dw)) 'not computable' else sprintf('%.2f (lag-1 residual autocorrelation %+.2f)',dw,r1)");
           L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s) fitted: %d before and %d from %s onward%s. Inference uses %s. Durbin-Watson %s (descriptive only - on GLM Pearson residuals it has no standard null distribution).\\n', famlab, nfit, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, dwt))");
           L.push("cat(sprintf('RESULT_NOTE|Periods were ordered by %s. Level change is the immediate step at %s; slope change accrues from the period after it (Wagner 2002 convention, time-since-intervention = 0 at the first affected period).\\n', ordmode, ukey[t0]))");
@@ -1974,7 +2063,7 @@ const DESIGNS = [
       const estimands = [];
       if ($("est_itt").checked) estimands.push("ITT");
       if ($("est_pp").checked) estimands.push("PP");
-      return { methods: methods, estimands: estimands.length ? estimands : ["ITT"], ratio: parseInt($("m_ratio").value) || 2, nstrata: parseInt($("m_nstrata").value) || 10 };
+      return { methods: methods, estimands: estimands.length ? estimands : ["ITT"], ratio: parseInt($("m_ratio").value) || 2, nstrata: parseInt($("m_nstrata").value) || 10, trim: $("m_trim").value };
     }
     function itsOpts() {
       return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: parseInt($("its_cycle").value) || 12, ac: $("its_ac").value, order: $("its_order").value, denomcomb: $("its_denomcomb").value };
@@ -2077,6 +2166,76 @@ const DESIGNS = [
         '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Interrupted time series chart">' + g + "</svg>";
     }
 
+    // ── Positivity: the picture, then the numbers, then what to do ───────────
+    // Every diagnostic here gets one plain sentence saying what it means and what
+    // to do when it fails. A beginner should be able to act on it; a reviewer
+    // should find the number they were going to ask for.
+    function renderPsDiag(dg, hist, bal) {
+      const el = $("psdiag"); if (!el || !dg) return;
+      const num = (k) => { const v = parseFloat(dg[k]); return isFinite(v) ? v : null; };
+      const nT = num("nT"), nC = num("nC"), outT = num("outT"), outC = num("outC");
+      const essPct = num("essPct"), maxw = num("maxw"), top1 = num("top1"), ntrim = num("ntrim");
+      const unstable = dg.unstable === "1";
+      let g = "";
+      if (hist) {
+        const W = 720, H = 190, ml = 40, mr = 10, mt = 12, mb = 34;
+        const t = hist.t, c = hist.c, mx = Math.max(1, Math.max(...t, ...c));
+        const bw = (W - ml - mr) / 20;
+        const half = (H - mt - mb) / 2, mid = mt + half;
+        for (let i = 0; i < 20; i++) {
+          const x = ml + i * bw;
+          g += '<rect x="' + (x + 1).toFixed(1) + '" y="' + (mid - (t[i] / mx) * half).toFixed(1) + '" width="' + (bw - 2).toFixed(1) + '" height="' + ((t[i] / mx) * half).toFixed(1) + '" fill="#0e7490" opacity="0.85"/>';
+          g += '<rect x="' + (x + 1).toFixed(1) + '" y="' + mid.toFixed(1) + '" width="' + (bw - 2).toFixed(1) + '" height="' + ((c[i] / mx) * half).toFixed(1) + '" fill="#b45309" opacity="0.85"/>';
+        }
+        g += '<line x1="' + ml + '" y1="' + mid + '" x2="' + (W - mr) + '" y2="' + mid + '" stroke="#94a3b8" stroke-width="1"/>';
+        [num("csLo"), num("csHi")].forEach((v) => { if (v == null) return; const x = ml + v * (W - ml - mr); g += '<line x1="' + x.toFixed(1) + '" y1="' + mt + '" x2="' + x.toFixed(1) + '" y2="' + (H - mb) + '" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5 3"/>'; });
+        g += '<text x="' + (ml + 2) + '" y="' + (mt + 10) + '" font-size="10" fill="#0e7490" font-weight="600">exposure</text>';
+        g += '<text x="' + (ml + 2) + '" y="' + (H - mb - 3) + '" font-size="10" fill="#b45309" font-weight="600">comparator</text>';
+        [0, 0.25, 0.5, 0.75, 1].forEach((p) => { const x = ml + p * (W - ml - mr); g += '<text x="' + x.toFixed(1) + '" y="' + (H - mb + 14) + '" font-size="10" fill="#64748b" text-anchor="middle">' + p + "</text>"; });
+        g += '<text x="' + (W / 2) + '" y="' + (H - 4) + '" font-size="10" fill="#64748b" text-anchor="middle">propensity score — the red lines mark where both arms have members</text>';
+        g = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Propensity score distribution by arm">' + g + "</svg>";
+      }
+      const row = (ok, label, value, meaning) =>
+        '<tr class="border-b border-slate-100 align-top"><td class="py-1.5 pr-3 whitespace-nowrap">' +
+        '<span class="inline-block w-2 h-2 rounded-full ' + (ok === true ? "bg-emerald-500" : ok === false ? "bg-rose-500" : "bg-amber-400") + '"></span> ' + esc(label) + "</td>" +
+        '<td class="py-1.5 pr-3 font-semibold text-slate-900 whitespace-nowrap">' + esc(value) + "</td>" +
+        '<td class="py-1.5 text-[11px] text-slate-600">' + meaning + "</td></tr>";
+      const rows = [];
+      const outPct = (outT + outC) / Math.max(1, nT + nC) * 100;
+      rows.push(row(outT + outC === 0 ? true : (outPct < 5 ? null : false),
+        "Common support", (outT + outC) + " of " + (nT + nC) + " outside (" + outPct.toFixed(1) + "%)",
+        outT + outC === 0 ? "Every patient has a counterpart in the other arm across the whole propensity range. Positivity is satisfied here."
+          : "<strong>" + outT + " exposed and " + outC + " comparator patients sit outside the range the other arm occupies</strong> — for them there is no one to compare with, and the model is extrapolating rather than contrasting. Restrict to common support above, or narrow the eligibility criteria."));
+      rows.push(row(essPct >= 50 ? true : (essPct >= 10 ? null : false),
+        "Effective sample size after weighting", num("ess").toFixed(0) + " of " + (nT + nC) + " (" + essPct.toFixed(0) + "%)",
+        "Weighting spends precision. This is how many patients your weighted analysis is really worth. " +
+        (essPct >= 50 ? "Comfortable." : essPct >= 10 ? "A substantial loss — the confidence interval is wider than the row count suggests." : "<strong>The weighted analysis is worth a small fraction of the cohort.</strong>")));
+      rows.push(row(top1 <= 10 ? true : (top1 <= 25 ? null : false),
+        "Weight concentration", "top 1% of patients hold " + top1.toFixed(1) + "% of the weight",
+        "If a few patients hold most of the weight, the estimate is about them rather than about the cohort. " +
+        (top1 > 25 ? "<strong>This is the failure mode that produces a confident hazard ratio from almost no data.</strong>" : "")));
+      rows.push(row(maxw <= 20 ? true : null, "Largest single weight", maxw.toFixed(1) + "×",
+        "One patient counted this many times. A weight above ~20 usually means a propensity score near 0 or 1 — someone who, by the model, should never have received the treatment they got."));
+      if (bal) {
+        const mx2 = parseFloat(bal.mx2), nbad = parseInt(bal.nbad);
+        rows.push(row(mx2 <= 0.1 ? true : (mx2 <= 0.25 ? null : false),
+          "Balance after weighting", "largest |SMD| " + (isFinite(mx2) ? mx2.toFixed(3) : "—") + (nbad ? " · " + nbad + " covariate(s) > 0.1" : ""),
+          "Standardised differences below 0.10 are the usual bar for saying the arms are comparable on a covariate. Before weighting the largest was " + (isFinite(parseFloat(bal.mx1)) ? parseFloat(bal.mx1).toFixed(3) : "—") +
+          ". " + (mx2 > 0.1 ? "<strong>Weighting has not balanced everything</strong> — add the unbalanced covariates to the model, or use matching." : "Weighting did its job.")));
+      }
+      let h = '<div class="flex flex-wrap items-baseline justify-between gap-2"><div class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Positivity &amp; overlap — can these arms be compared at all?</div>' +
+        (unstable ? '<span class="text-[11px] font-bold text-rose-700">IPTW withheld</span>' : "") + "</div>";
+      h += '<p class="mt-1 text-[11px] text-slate-600">A propensity model returns a number even when the two arms barely overlap. These are the checks that tell you whether that number means anything.</p>';
+      if (unstable) h += '<div class="mt-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900"><strong>The IPTW estimate was not reported.</strong> ' +
+        (essPct < 10 ? "The effective sample size fell to " + essPct.toFixed(0) + "% of the cohort. " : "") + (top1 > 25 ? "The heaviest 1% of patients hold " + top1.toFixed(0) + "% of the weight. " : "") +
+        'A weighted hazard ratio computed here would be an artefact of a few patients, not an effect. Restrict to common support or trim the score above, then re-run — the other estimators are unaffected and are still shown.</div>';
+      if (ntrim) h += '<p class="mt-2 text-[11px] text-amber-700">' + ntrim + " row(s) were removed before estimating (" + esc(dg.trim) + "). The estimates below refer to the remaining patients.</p>";
+      h += g ? '<div class="mt-2">' + g + "</div>" : "";
+      h += '<div class="mt-1 overflow-x-auto"><table class="w-full text-xs border-collapse"><tbody>' + rows.join("") + "</tbody></table></div>";
+      el.classList.remove("hidden");
+      el.innerHTML = h;
+    }
+
     // ── PS-calibration result: the formula, the verdict, and the handoff ──────
     // The release rule matches the ACNU protocol page exactly (S >= 90 releases,
     // 50-90 and below withhold), because the two pages have to agree about when
@@ -2165,11 +2324,11 @@ const DESIGNS = [
       if (!MASTER) return;
       const { csv } = analysisCSV(); const script = buildScript();
       const setS = (m) => { $("anastatus").textContent = m; };
-      $("runanalysis").disabled = true; $("anaresults").classList.add("hidden"); $("table1").classList.add("hidden"); $("itschart").classList.add("hidden"); $("dlfitted").classList.add("hidden"); $("pscresults").classList.add("hidden");
+      $("runanalysis").disabled = true; $("anaresults").classList.add("hidden"); $("table1").classList.add("hidden"); $("itschart").classList.add("hidden"); $("dlfitted").classList.add("hidden"); $("pscresults").classList.add("hidden"); $("psdiag").classList.add("hidden");
       try {
         const out = await window.RWEngine.run(script, csv, setS);
         setS("Done ✓");
-        const ests = [], t1 = [], notes = [], fitted = []; let meta = {}, psc = null;
+        const ests = [], t1 = [], notes = [], fitted = []; let meta = {}, psc = null, psdiag = null, psbal = null, pshist = null;
         out.split("\n").forEach((l) => {
           if (l.indexOf("RESULT_ESTIMATE|") === 0) { const p = l.split("|"); ests.push({ label: p[1], value: p.slice(2).join("|") }); }
           else if (l.indexOf("TABLE1|") === 0) { t1.push(l.split("|").slice(1)); }
@@ -2177,8 +2336,11 @@ const DESIGNS = [
           else if (l.indexOf("FITTED|") === 0) { fitted.push(l.split("|").slice(1)); }
           else if (l.indexOf("ITSMETA|") === 0) { l.split("|").slice(1).forEach((kv) => { const i = kv.indexOf("="); if (i > 0) meta[kv.slice(0, i)] = kv.slice(i + 1); }); }
           else if (l.indexOf("PSC|") === 0) { psc = {}; l.split("|").slice(1).forEach((kv) => { const i = kv.indexOf("="); if (i > 0) psc[kv.slice(0, i)] = kv.slice(i + 1); }); }
+          else if (l.indexOf("PSDIAG|") === 0) { psdiag = {}; l.split("|").slice(1).forEach((kv) => { const i = kv.indexOf("="); if (i > 0) psdiag[kv.slice(0, i)] = kv.slice(i + 1); }); }
+          else if (l.indexOf("PSBAL|") === 0) { psbal = {}; l.split("|").slice(1).forEach((kv) => { const i = kv.indexOf("="); if (i > 0) psbal[kv.slice(0, i)] = kv.slice(i + 1); }); }
+          else if (l.indexOf("PSHIST|") === 0) { const p = l.split("|"); pshist = { t: p[1].split(",").map(Number), c: p[2].split(",").map(Number) }; }
         });
-        const display = out.replace(/^(RESULT_ESTIMATE|RESULT_NOTE|TABLE1|FITTED|ITSMETA|PSC|PSCSKIP)\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+        const display = out.replace(/^(RESULT_ESTIMATE|RESULT_NOTE|TABLE1|FITTED|ITSMETA|PSC|PSCSKIP|PSDIAG|PSBAL|PSHIST)\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
         if (ests.length || notes.length) {
           $("anaresults").classList.remove("hidden");
           const noteHtml = notes.length ? '<div class="mt-3 space-y-1">' + notes.map((n) => '<p class="text-[11px] text-slate-600">' + esc(n) + "</p>").join("") + "</div>" : "";
@@ -2186,6 +2348,7 @@ const DESIGNS = [
           $("anaresults").innerHTML = '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-2">Effect estimates</div>' + tblHtml + noteHtml;
         }
         if (fitted.length > 1) { renderITSChart(fitted, meta); $("dlfitted").classList.remove("hidden"); }
+        if (psdiag) { try { renderPsDiag(psdiag, pshist, psbal); } catch (e) { console.error(e); } }
         if (psc) { try { renderPsc(psc); } catch (e) { console.error(e); } }
         if (t1.length) {
           $("table1").classList.remove("hidden");
