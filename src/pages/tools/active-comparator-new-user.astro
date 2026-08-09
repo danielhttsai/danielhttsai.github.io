@@ -960,11 +960,38 @@ const TIMELINE_PRESETS: Record<string, string> = {
               (Stürmer T, Schneeweiss S, Avorn J, Glynn RJ. <em>Am J Epidemiol</em> 2005;162(3):279-89).
               The fitted equation is the deliverable: a later claims-only study can cite it and apply it without repeating the validation work.
             </p>
+            <p class="text-xs text-slate-700 leading-relaxed border border-slate-200 bg-slate-50 rounded px-3 py-2">
+              <strong>Where the numbers come from.</strong> This is a protocol builder — it holds no data and imports none. Every coefficient below
+              is the output of fitting <em>two</em> propensity models in your validation dataset: an error-prone score from the claims variables alone,
+              and a gold-standard score from those plus the clinical ones. Fit them wherever you like, or use
+              <a class="font-semibold text-brand-700 hover:underline" href={`${base}/tools/rwe-studio/`}>RWE Studio</a>, which runs real R in your browser on
+              a dataset that never leaves it and can emit a <em>calibration handoff</em> file you import here instead of retyping a dozen numbers.
+              The treatment coefficients from the claims-only study are the one thing no validation dataset can supply — those stay hand-entered.
+            </p>
             <label class="flex items-start gap-2 text-sm border border-brand-200 bg-brand-50/50 rounded px-3 py-2 cursor-pointer">
               <input type="checkbox" name="pscEnable" value="yes" class="mt-0.5 rounded border-slate-400 text-brand-700 focus:ring-brand-500" />
               <span><strong>Include a propensity-score-calibration validation sub-study in this protocol.</strong>
-                <span class="block text-[11px] text-slate-500">Adds Section 7b (variable split, calibration equation, assumptions, R code) to the Word and Markdown exports.</span></span>
+                <span class="block text-[11px] text-slate-500">Adds Section 7b (variable split, calibration equation, assumptions, R code) to the Word and Markdown exports. Leave unticked and nothing below appears in the protocol.</span></span>
             </label>
+
+            <div class="border border-slate-200 rounded-xl p-3 space-y-2 bg-white">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Import a calibration handoff (JSON)</p>
+                <div class="flex items-center gap-2">
+                  <input type="file" data-psc-import-file accept=".json,application/json" class="text-[11px] max-w-[15rem]" />
+                  <button type="button" data-psc-import-paste class="text-[10px] uppercase tracking-widest font-bold text-slate-600 border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded transition">Paste instead</button>
+                </div>
+              </div>
+              <p class="text-[11px] text-slate-500 leading-relaxed">
+                A small metadata-and-model-output file from RWE Studio (<code>kind: "rwe-studio/psc-handoff"</code>). It carries the two variable lists, the PS scale,
+                α₀/α₁/α₂ with standard errors, R², and the surrogacy result — <strong>never rows or cell values</strong>. A payload containing anything row-shaped is refused.
+              </p>
+              <textarea data-psc-import-text rows="4" placeholder='Paste the handoff JSON here, then press Import.' class="hidden w-full border border-slate-300 rounded px-3 py-2 font-mono text-[11px] focus:border-brand-500 focus:outline-none"></textarea>
+              <div class="hidden" data-psc-import-actions>
+                <button type="button" data-psc-import-go class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">Import</button>
+              </div>
+              <div data-psc-import-report class="text-[11px]"></div>
+            </div>
 
             <div class="grid sm:grid-cols-2 gap-3">
               <label class="flex flex-col gap-1">
@@ -1299,7 +1326,7 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         included in the Word / Markdown protocol.
       </p>
       <div data-psc-out class="mt-4 space-y-4"></div>
-      <div class="mt-5">
+      <div class="mt-5" data-psc-rwrap>
         <div class="flex items-center justify-between gap-2">
           <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">R code</p>
           <button type="button" data-psc-copy-r class="text-[10px] uppercase tracking-widest font-bold text-brand-700 border border-brand-200 bg-brand-50 hover:bg-brand-100 px-2 py-1 rounded transition">📋 Copy R</button>
@@ -1539,6 +1566,13 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
       try { pscClass = JSON.parse(localStorage.getItem(PSC_STORAGE_KEY) || "{}") || {}; } catch {}
       let pscAi = {};      // { name: {source, confounding, role, reason} } from the Worker
       const savePscClass = () => { try { localStorage.setItem(PSC_STORAGE_KEY, JSON.stringify(pscClass)); } catch {} };
+      // Declared here, not next to the import UI further down: renderPscCard
+      // reads it on first paint, and a `let` declared after the first render()
+      // call is a temporal-dead-zone error that blanks the card.
+      const PSC_IMPORT_KEY = "aspen.protocol-builder.acnu.psc-import";
+      let pscImport = null;
+      try { pscImport = JSON.parse(localStorage.getItem(PSC_IMPORT_KEY) || "null"); } catch {}
+      const savePscImport = () => { try { pscImport ? localStorage.setItem(PSC_IMPORT_KEY, JSON.stringify(pscImport)) : localStorage.removeItem(PSC_IMPORT_KEY); } catch {} };
       const pscEsc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
       // Deterministic first guess. Claims hold codes, not measurements: lab
@@ -2067,8 +2101,23 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         const out  = document.querySelector("[data-psc-out]");
         const rpre = document.querySelector("[data-psc-r]");
         if (!card || !out || !rpre) return;
-        if (s.pscEnable !== "yes") { card.classList.add("hidden"); return; }
+        const rwrap = document.querySelector("[data-psc-rwrap]");
+        // Never hide the whole card: a feature that is invisible until a
+        // checkbox is ticked is a feature nobody finds. When it is off, say what
+        // it is, what it needs, and where the numbers come from.
         card.classList.remove("hidden");
+        if (s.pscEnable !== "yes") {
+          if (rwrap) rwrap.classList.add("hidden");
+          rpre.textContent = "";
+          out.innerHTML =
+            '<div class="rounded-xl border border-slate-200 bg-slate-50 p-4">' +
+            '<p class="text-sm text-slate-700 leading-relaxed"><strong>Not switched on for this protocol.</strong> A claims database cannot see lab values, vitals, imaging measurements, severity scores or lifestyle, so a propensity score fitted there is error-prone and the confounding those variables carry stays in the estimate. If you have a smaller dataset holding <em>both</em> sets of variables, propensity-score calibration measures how far the claims-only score falls short and corrects the estimate — and the fitted equation is reusable by later claims-only studies.</p>' +
+            '<p class="mt-2 text-xs text-slate-600 leading-relaxed">To produce a formula here you need three things: the covariate split (which variables the claims database actually has), the calibration coefficients α₀/α₁/α₂ from fitting two propensity models in the validation dataset, and the treatment coefficients from the claims-only outcome model. The middle set can be computed for you in <a class="font-semibold text-brand-700 hover:underline" href="' + BASE + '/tools/rwe-studio/">RWE Studio</a> and imported as a handoff file; the last set is hand-entered, because it belongs to a different dataset.</p>' +
+            '<p class="mt-2 text-xs text-slate-500">Tick <em>Include a propensity-score-calibration validation sub-study</em> in Section 8b to switch it on.</p>' +
+            "</div>";
+          return;
+        }
+        if (rwrap) rwrap.classList.remove("hidden");
         const m = pscModel(s);
         const eq = (m.a1 !== null && m.a2 !== null && m.a0 !== null)
           ? "PS_gs = " + pscFmt(m.a0, 4) + " " + pscSigned(m.a1, 4) + " × PS_ep " + pscSigned(m.a2, 4) + " × T"
@@ -2115,7 +2164,22 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
         const list = (arr, empty) => arr.length
           ? '<ul class="mt-1 grid sm:grid-cols-2 gap-x-4 text-xs text-slate-700 list-disc pl-5">' + arr.map((x) => "<li>" + pscEsc(x) + "</li>").join("") + "</ul>"
           : '<p class="mt-1 text-xs text-slate-400 italic">' + empty + "</p>";
+        // An import fills a dozen fields at once, which makes the section look
+        // finished. Say plainly that the gate has not moved, and repeat the
+        // verdict here rather than letting the filled boxes speak for it.
+        const impBanner = pscImport
+          ? '<div class="rounded-xl border border-slate-400 bg-white p-3">' +
+            '<p class="text-xs uppercase tracking-widest font-bold text-slate-700">Imported from a calibration handoff' +
+            (pscImport.generated ? " · generated " + pscEsc(String(pscImport.generated).slice(0, 10)) : "") +
+            (pscImport.ageDays !== null && pscImport.ageDays !== undefined ? " · " + pscImport.ageDays + " day(s) old" : "") + "</p>" +
+            '<p class="mt-1 text-xs text-slate-700">' + pscImport.fills.length + " field(s) were filled automatically" + (pscImport.varsApplied ? ", and the covariate split was adopted from it" : "") +
+            ". That fills boxes; it does not establish that calibration is valid here. The verdict below is unchanged by importing, and is what decides whether any number may be reported.</p>" +
+            (pscImport.gaps && pscImport.gaps.length ? '<p class="mt-1 text-xs text-amber-800">Still missing from the handoff: ' + pscEsc(pscImport.gaps.map((g) => g.split("—")[0].trim()).join("; ")) + ".</p>" : "") +
+            '<p class="mt-1 text-[11px] text-slate-500">β̂ treatment, SE(β̂ treatment) and β̂ PS_ep are not importable — they belong to the claims-only study.</p>' +
+            "</div>"
+          : "";
         out.innerHTML =
+          impBanner +
           surroBox +
           '<div class="rounded-xl bg-slate-900 text-slate-100 p-4 font-mono text-xs sm:text-sm overflow-x-auto">' +
           '<p class="text-slate-400 text-[10px] uppercase tracking-widest">Calibration model (fitted in ' + pscEsc(m.valName) + ')</p>' +
@@ -2131,6 +2195,31 @@ Schneeweiss S et al. Epidemiology 2009 (high-dimensional propensity score).</tex
           "</div>" +
           (m.excluded.length ? '<p class="text-[11px] text-slate-500">Excluded from both scores: ' + pscEsc(m.excluded.join("; ")) + "</p>" : "");
         rpre.textContent = pscRCode(s, m);
+      };
+
+      // Where the coefficients came from. An imported protocol must be
+      // auditable — a reader should not have to guess whether a number was
+      // typed, computed here, or carried in from another tool.
+      const pscProvenanceLines = () => {
+        if (!pscImport) return null;
+        const p = pscImport, out = [];
+        out.push("Imported from a calibration handoff" + (p.prov && p.prov.tool ? " produced by " + p.prov.tool : "") +
+          (p.prov && p.prov.engine ? " (" + p.prov.engine + ")" : "") +
+          (p.generated ? ", generated " + String(p.generated).slice(0, 19).replace("T", " ") + " UTC" : "") +
+          "; imported " + String(p.at).slice(0, 10) + ".");
+        if (p.ds && (p.ds.label || p.ds.n)) out.push("Validation dataset as recorded in the handoff: " + (p.ds.label || "(unnamed)") +
+          (p.ds.n ? ", n = " + p.ds.n : "") + (p.ds.events ? ", events = " + p.ds.events : "") + (p.ds.treated ? ", treated = " + p.ds.treated : "") + ".");
+        out.push("Fields filled from it: " + p.fills.map((f) => f.label + " = " + f.value).join("; ") + ".");
+        out.push("The covariate split was " + (p.varsApplied ? "adopted from the handoff." : "NOT taken from the handoff; it is as set in this protocol."));
+        out.push("Not importable, and hand-entered: the treatment coefficient, its standard error, and the PS_ep coefficient from the claims-only outcome model.");
+        if (p.naiveOffered) out.push("The handoff also carried naive treatment coefficients; these were deliberately not imported, because they belong to the claims-only study rather than the validation sample.");
+        (p.gaps || []).forEach((g) => out.push("Not supplied by the handoff: " + g));
+        (p.warn || []).forEach((w) => out.push("Import note: " + w));
+        return out;
+      };
+      const pscProvenanceMd = () => {
+        const l = pscProvenanceLines();
+        return l ? "### Provenance of these coefficients\n\n" + bullets(l) + "\n" : "";
       };
 
       // ── Markdown / Word sections ──────────────────────────────────────
@@ -2212,6 +2301,7 @@ ${bullets(pscCannotFix)}
 ${pscRCode(s, m)}
 \`\`\`
 
+${pscProvenanceMd()}
 ### References for this section
 
 ${numbered(PSC_REFERENCES)}
@@ -2291,6 +2381,8 @@ ${numbered(PSC_REFERENCES)}
         pscCannotFix.forEach((x) => c.push(h.bullet(x)));
         c.push(h.h2("Analysis code (R)"));
         c.push(mono(pscRCode(s, m)));
+        const prov = pscProvenanceLines();
+        if (prov) { c.push(h.h2("Provenance of these coefficients")); prov.forEach((x) => c.push(h.bullet(x))); }
         c.push(h.h2("References for this section"));
         PSC_REFERENCES.forEach((x) => c.push(h.bullet(x)));
         return c;
@@ -2549,6 +2641,8 @@ _Drafted with the AsPEN protocol builder (${today})._
           if (m.surroVerdict === "untested") checks.push({ level: "warn", msg: "Surrogacy has not been measured. Your validation data have outcomes, so compute S — of the outcome information carried by both propensity scores, the percentage carried by the gold-standard score alone (Lunt 2012) — and enter it in Section 8b. Wan (2024) shows PS calibration is generally biased unless surrogacy holds." });
           if (m.surroVerdict === "untestable") checks.push({ level: "warn", msg: "Surrogacy cannot be measured because the validation dataset has no outcomes. This is the cross-sectional-validation setting Lunt et al. (2012) address, and their answer is to present PS calibration as a bias analysis over a range for the unmeasured confounder's outcome association rather than as a point correction." });
           if (m.nonCollapsible) checks.push({ level: "info", msg: "You are reporting a " + m.measure + ", which is non-collapsible. Wan (2024) identifies this as an independent source of PS-calibration bias: the calibrated estimate is conditional on the gold-standard propensity score, not on baseline covariates, so it is a slightly different estimand. The gap narrows as the outcome becomes rarer — state which estimand you report." });
+          if (pscImport && pscImport.ageDays !== null && pscImport.ageDays !== undefined && pscImport.ageDays > 30) checks.push({ level: "info", msg: "The imported calibration handoff was generated " + pscImport.ageDays + " days ago. If the covariate list has moved since, α₁ and α₂ no longer belong to it — re-export from RWE Studio and import again." });
+          if (pscImport && !pscImport.varsApplied) checks.push({ level: "info", msg: "The calibration coefficients were imported but the covariate split was not taken from the handoff. The method assumes PS_ep uses the same C the coefficients were fitted from — confirm the two agree." });
           if (!Object.keys(pscAi).length && (m.claims.length + m.clinical.length) > 0) checks.push({ level: "info", msg: "The claims/clinical split is still the keyword rule's guess. It reads names only, so it cannot distinguish a measurement from a billing code and it misses unfamiliar instruments — run 'Let AI classify' in Section 8b and check the rows it changes. A clinical variable left in the claims list collapses the correction toward zero, which reads as 'no unmeasured confounding'." });
           if (m.contradiction) checks.push({ level: "warn", msg: "The variable split and the entered calibration coefficients are inconsistent, so the calibrated estimate is not shown. " + m.contradiction });
           if (m.releaseLevel === "withheld" && m.bC !== null) checks.push({ level: "warn", msg: "A calibrated estimate is computable from the coefficients you entered but is deliberately withheld from the protocol, because surrogacy is not supported. Establish surrogacy with S and it will be released." });
@@ -2623,6 +2717,158 @@ _Drafted with the AsPEN protocol builder (${today})._
           return;
         }
       });
+
+      // ── Calibration handoff from RWE Studio ──────────────────────────────
+      // Schema: scratchpad/BRIDGE_NOTE.md, kind "rwe-studio/psc-handoff" v1.
+      // Metadata and model output only. The importer's job is to be suspicious:
+      // refuse anything row-shaped, refuse a PS-scale mismatch rather than
+      // coerce it, never overwrite the variable split without being asked, and
+      // never quietly accept the claims-study coefficients it must not have.
+      const PSC_ROWKEYS = /^(rows|records|data|patients|observations|individuals|subjects|cells|values|raw|dataset_rows)$/i;
+      // Walk the payload and refuse anything that looks like patient data. The
+      // handoff is a fixed, shallow shape; an array of objects in it means the
+      // sending side changed into something this page must not accept.
+      const pscScanRows = (o, path) => {
+        path = path || "$";
+        if (o === null || typeof o !== "object") return null;
+        if (Array.isArray(o)) {
+          if (o.length > 1000) return path + " has " + o.length + " elements";
+          for (let i = 0; i < o.length; i++) {
+            const v = o[i];
+            if (v !== null && typeof v === "object") return path + "[" + i + "] is a nested record";
+          }
+          return null;
+        }
+        for (const k of Object.keys(o)) {
+          if (PSC_ROWKEYS.test(k) && o[k] !== null && typeof o[k] === "object") return path + "." + k + " looks like a table";
+          const hit = pscScanRows(o[k], path + "." + k);
+          if (hit) return hit;
+        }
+        return null;
+      };
+
+      const pscNumOrNull = (v) => (typeof v === "number" && isFinite(v)) ? v : null;
+      const pscStrList = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string").map((x) => x.trim()).filter(Boolean) : null;
+      const pscDiff = (a, b) => { const B = new Set(b); return a.filter((x) => !B.has(x)); };
+
+      // Parse + validate. Returns { ok, error } or { ok:true, plan } where plan
+      // lists exactly what would be written, so the user sees it before and
+      // after. Nothing is applied here.
+      const pscParseHandoff = (text, s) => {
+        let raw = String(text || "").trim();
+        if (!raw) return { error: "Nothing to import — choose a file or paste the JSON first." };
+        if (raw.length > 262144) return { error: "That file is " + Math.round(raw.length / 1024) + " KB. A calibration handoff is a few kilobytes of coefficients; a file this large is not one, and is not being parsed." };
+        let j; try { j = JSON.parse(raw); } catch (e) { return { error: "That is not valid JSON (" + (e && e.message ? e.message : e) + ")." }; }
+        if (!j || typeof j !== "object" || Array.isArray(j)) return { error: "The handoff must be a JSON object." };
+        if (j.kind && String(j.kind) !== "rwe-studio/psc-handoff") return { error: "This file says it is “" + String(j.kind).slice(0, 60) + "”, not a calibration handoff (kind: \"rwe-studio/psc-handoff\")." };
+        const rowHit = pscScanRows(j);
+        if (rowHit) return { error: "Refused: the payload contains what looks like patient data (" + rowHit + "). A calibration handoff carries coefficients and variable NAMES only — never rows or cell values. Nothing was imported." };
+
+        const cal = j.calibration || {}, sur = j.surrogacy || {}, ds = j.dataset || {}, bs = j.bootstrap || {};
+        const warn = [], fills = [], gaps = [];
+
+        // PS scale: refuse, never coerce. Getting this wrong is silent and large.
+        const hs = j.psScale === "logit" ? "logit" : j.psScale === "ps" ? "ps" : null;
+        const cur = s.pscScale === "logit" ? "logit" : "ps";
+        const lbl = (x) => x === "logit" ? "logit(PS)" : "PS (probability scale)";
+        if (hs && hs !== cur) {
+          return { error: "Refused: scale mismatch. The handoff was fitted on " + lbl(hs) + "; this protocol is set to " + lbl(cur) +
+            ". α₁ and α₂ are not scale-free, so importing them across scales would be a silent and large error. Set “PS scale” in Section 8b to " + lbl(hs) +
+            " and import again, or refit the calibration on " + lbl(cur) + ". Nothing was imported." };
+        }
+        if (!hs) warn.push("The handoff does not state its PS scale, so it is assumed to match this protocol (" + lbl(cur) + "). Confirm that against whatever produced it.");
+
+        const put = (field, value, label, src) => { if (value === null || value === undefined) return; fills.push({ field: field, value: value, label: label, src: src }); };
+        put("pscA0", pscNumOrNull(cal.a0), "α₀ intercept", "calibration.a0");
+        put("pscA1", pscNumOrNull(cal.a1), "α₁ on PS_ep", "calibration.a1");
+        put("pscA1se", pscNumOrNull(cal.a1se), "SE(α₁)", "calibration.a1se");
+        put("pscA2", pscNumOrNull(cal.a2), "α₂ on treatment", "calibration.a2");
+        put("pscA2se", pscNumOrNull(cal.a2se), "SE(α₂)", "calibration.a2se");
+        put("pscR2", pscNumOrNull(cal.r2), "Calibration R²", "calibration.r2");
+        put("pscSurroCoef", pscNumOrNull(sur.coef), "Surrogacy: coefficient on PS_ep", "surrogacy.coef");
+        put("pscSurroP", pscNumOrNull(sur.p), "Surrogacy: p-value", "surrogacy.p");
+        // S is the instrument this page judges on, and it is NOT in the v1
+        // schema. Accept the obvious spellings; if none is present, say so
+        // loudly, because a p-value alone leaves the verdict at "compute S".
+        const S = pscNumOrNull(sur.S) !== null ? pscNumOrNull(sur.S)
+          : pscNumOrNull(sur.s) !== null ? pscNumOrNull(sur.s)
+          : pscNumOrNull(sur.luntS) !== null ? pscNumOrNull(sur.luntS) : pscNumOrNull(sur.lunt_s);
+        put("pscSurroS", S, "Surrogacy: S (%)", "surrogacy.S");
+        if (S === null) gaps.push("Lunt's S — the graded surrogacy measure this section judges on — was not in the handoff. A p-value alone cannot open the gate: compute S in the validation data (the R code below does it) and enter it by hand.");
+        if (sur.testable === false) put("pscSurroTestable", "no", "Validation outcomes available", "surrogacy.testable");
+        else if (sur.testable === true) put("pscSurroTestable", "yes", "Validation outcomes available", "surrogacy.testable");
+        put("pscValN", pscNumOrNull(ds.n), "Validation sample size", "dataset.n");
+        if (typeof ds.label === "string" && ds.label.trim()) put("pscValName", ds.label.trim().slice(0, 200), "Validation dataset", "dataset.label");
+        // Validation type is discussed in the note's failure modes but is not in
+        // the v1 JSON block; accept the plausible spellings.
+        const vt = [ds.valType, ds.validationType, j.validationType, (j.validation || {}).type].find((x) => x === "internal" || x === "external");
+        if (vt) put("pscValType", vt, "Validation sample type", "dataset.valType");
+        else gaps.push("Whether the validation sample is internal or external was not in the handoff. It is already set to “" + (s.pscValType === "external" ? "external" : "internal") + "” here — check it, because the bootstrap in the generated R resamples differently for each.");
+        if (pscNumOrNull(bs.lo) !== null && pscNumOrNull(bs.hi) !== null) {
+          put("pscBootLo", bs.lo, "Bootstrap 2.5%", "bootstrap.lo");
+          put("pscBootHi", bs.hi, "Bootstrap 97.5%", "bootstrap.hi");
+          if (pscNumOrNull(bs.B)) put("pscBootB", bs.B, "Bootstrap replicates", "bootstrap.B");
+        }
+        // The claims-only coefficients cannot come from a validation dataset.
+        const nv = j.naive || {};
+        const naiveOffered = [nv.bT, nv.bTse, nv.bPS].some((x) => pscNumOrNull(x) !== null);
+        if (naiveOffered) warn.push("The handoff carried naive treatment coefficients (naive.bT / bTse / bPS). They were NOT imported: those belong to the claims-only study, which is a different dataset from the validation sample that produced everything else here. Enter them by hand.");
+
+        const cv = pscStrList(j.claimsVars), uv = pscStrList(j.clinicalVars);
+        const m = pscModel(s);
+        const varPlan = (cv || uv) ? {
+          claims: cv || [], clinical: uv || [],
+          addC: pscDiff(cv || [], m.claims), dropC: pscDiff(m.claims, cv || []),
+          addU: pscDiff(uv || [], m.clinical), dropU: pscDiff(m.clinical, uv || []),
+        } : null;
+
+        const gen = typeof j.generated === "string" ? j.generated : "";
+        let ageDays = null;
+        if (gen) { const t = Date.parse(gen); if (!isNaN(t)) ageDays = Math.round((Date.now() - t) / 86400000); }
+        return { plan: {
+          fills: fills, warn: warn, gaps: gaps, varPlan: varPlan, generated: gen, ageDays: ageDays,
+          scale: hs || cur, naiveOffered: naiveOffered,
+          prov: (j.provenance && typeof j.provenance === "object") ? j.provenance : {},
+          ds: { label: typeof ds.label === "string" ? ds.label : "", n: pscNumOrNull(ds.n), events: pscNumOrNull(ds.events), treated: pscNumOrNull(ds.treated) },
+        } };
+      };
+
+      const pscApplyHandoff = (plan, alsoVars) => {
+        plan.fills.forEach((f) => {
+          const el = form.elements[f.field];
+          if (el) el.value = String(f.value);
+        });
+        if (alsoVars && plan.varPlan) {
+          const vp = plan.varPlan;
+          // "Adopt" has to make the split actually match, or the next import
+          // reports the same difference and the button did nothing useful. The
+          // method needs PS_ep built from exactly the C the coefficients were
+          // fitted from, so anything the handoff does not name leaves both
+          // scores. It stays in Section 8's adjustment set — this only governs
+          // 7b — and "Reset to rules" undoes it.
+          const named = new Set(vp.claims.concat(vp.clinical));
+          pscCandidates(readForm()).forEach((n) => { if (!named.has(n)) pscClass[n] = "exclude"; });
+          vp.claims.forEach((n) => { pscClass[n] = "claims"; });
+          vp.clinical.forEach((n) => { pscClass[n] = "clinical"; });
+          savePscClass();
+          // Anything the handoff names that the protocol has not listed must
+          // become a candidate, or the split silently stays different.
+          const known = new Set(pscCandidates(readForm()));
+          const extra = vp.claims.concat(vp.clinical).filter((n) => !known.has(n));
+          if (extra.length) {
+            const ta = form.elements.pscVarsExtra;
+            if (ta) ta.value = (ta.value ? ta.value.replace(/\s*$/, "") + "\n" : "") + extra.join("\n");
+          }
+        }
+        pscImport = {
+          at: new Date().toISOString(), generated: plan.generated, ageDays: plan.ageDays,
+          fills: plan.fills.map((f) => ({ label: f.label, value: f.value, src: f.src })),
+          warn: plan.warn, gaps: plan.gaps, prov: plan.prov, ds: plan.ds, scale: plan.scale,
+          varsApplied: !!alsoVars, naiveOffered: plan.naiveOffered,
+        };
+        savePscImport();
+        render();
+      };
 
       // ── AI variable triage for PS calibration ────────
       // Metadata only: the causal question, the name of the claims database,
@@ -2705,6 +2951,69 @@ _Drafted with the AsPEN protocol builder (${today})._
           setPscAiMsg("Couldn't reach the AI: " + (e && e.message ? e.message : e), true);
         } finally { btn.disabled = false; }
       });
+      // ── Handoff import UI ────────────────────────────
+      const pscImpReport = document.querySelector("[data-psc-import-report]");
+      let pscPending = null;   // a parsed plan awaiting the variable-split decision
+      const setImpMsg = (html) => { if (pscImpReport) pscImpReport.innerHTML = html; };
+      const li = (arr) => "<ul class='mt-1 ml-4 list-disc space-y-0.5'>" + arr.map((x) => "<li>" + pscEsc(x) + "</li>").join("") + "</ul>";
+
+      const pscRenderPlan = (plan) => {
+        const vp = plan.varPlan;
+        const diffs = vp ? vp.addC.length + vp.dropC.length + vp.addU.length + vp.dropU.length : 0;
+        let h = "<div class='rounded border border-emerald-300 bg-emerald-50 p-2'>";
+        h += "<p class='font-semibold text-emerald-900'>Imported " + plan.fills.length + " field(s)" +
+             (plan.generated ? " from a handoff generated " + pscEsc(plan.generated.slice(0, 10)) + (plan.ageDays !== null ? " (" + plan.ageDays + " day(s) ago)" : "") : "") + ".</p>";
+        h += "<div class='mt-1 grid sm:grid-cols-2 gap-x-4'>" + plan.fills.map((f) =>
+              "<div class='text-slate-700'>" + pscEsc(f.label) + " = <strong>" + pscEsc(String(f.value)) + "</strong> <span class='text-slate-400'>← " + pscEsc(f.src) + "</span></div>").join("") + "</div>";
+        h += "<p class='mt-1 text-slate-600'>β̂ treatment, its SE and β̂ PS_ep were <strong>not</strong> imported and cannot be — they come from the claims-only outcome model, a different dataset. They are the remaining gap.</p>";
+        h += "</div>";
+        if (plan.warn.length) h += "<div class='mt-1 rounded border border-amber-300 bg-amber-50 p-2 text-amber-900'><p class='font-semibold'>Check</p>" + li(plan.warn) + "</div>";
+        if (plan.gaps.length) h += "<div class='mt-1 rounded border border-amber-300 bg-amber-50 p-2 text-amber-900'><p class='font-semibold'>Not supplied by the handoff</p>" + li(plan.gaps) + "</div>";
+        if (vp) {
+          if (!diffs) h += "<div class='mt-1 rounded border border-slate-300 bg-white p-2 text-slate-700'>The handoff's covariate split matches this protocol's exactly (" + vp.claims.length + " claims, " + vp.clinical.length + " clinical-only).</div>";
+          else {
+            h += "<div class='mt-1 rounded border border-rose-300 bg-rose-50 p-2 text-rose-900'><p class='font-semibold'>The covariate split differs — α₁ and α₂ only apply to the split they were fitted from</p>";
+            if (vp.addC.length) h += "<p class='mt-1'>In the handoff's claims list but not here: " + pscEsc(vp.addC.join(", ")) + "</p>";
+            if (vp.dropC.length) h += "<p>Claims here but not in the handoff: " + pscEsc(vp.dropC.join(", ")) + "</p>";
+            if (vp.addU.length) h += "<p>In the handoff's clinical list but not here: " + pscEsc(vp.addU.join(", ")) + "</p>";
+            if (vp.dropU.length) h += "<p>Clinical here but not in the handoff: " + pscEsc(vp.dropU.join(", ")) + "</p>";
+            h += "<p class='mt-1'>Nothing has been changed. Either adopt the handoff's split, or refit the calibration against this protocol's split.</p>" +
+                 "<button type='button' data-psc-import-vars class='mt-1 text-[10px] uppercase tracking-widest font-bold text-rose-800 border border-rose-400 bg-white hover:bg-rose-100 px-2 py-1 rounded'>Adopt the handoff's split</button><span class='ml-1 text-[10px] text-rose-800'>Variables the handoff does not name leave both propensity scores (they stay in Section 8's adjustment set).</span></div>";
+          }
+        }
+        return h;
+      };
+
+      const pscDoImport = (text) => {
+        const s = readForm();
+        const res = pscParseHandoff(text, s);
+        if (res.error) { setImpMsg("<div class='rounded border border-rose-300 bg-rose-50 p-2 text-rose-800'>" + pscEsc(res.error) + "</div>"); return; }
+        pscPending = res.plan;
+        pscApplyHandoff(res.plan, false);
+        setImpMsg(pscRenderPlan(res.plan));
+      };
+
+      document.querySelector("[data-psc-import-file]")?.addEventListener("change", async (ev) => {
+        const f = ev.target.files && ev.target.files[0]; if (!f) return;
+        if (f.size > 262144) { setImpMsg("<div class='rounded border border-rose-300 bg-rose-50 p-2 text-rose-800'>" + pscEsc("That file is " + Math.round(f.size / 1024) + " KB. A calibration handoff is a few kilobytes; this was not read.") + "</div>"); ev.target.value = ""; return; }
+        try { pscDoImport(await f.text()); } catch (e) { setImpMsg("<div class='rounded border border-rose-300 bg-rose-50 p-2 text-rose-800'>Could not read that file.</div>"); }
+        ev.target.value = "";
+      });
+      document.querySelector("[data-psc-import-paste]")?.addEventListener("click", () => {
+        document.querySelector("[data-psc-import-text]")?.classList.toggle("hidden");
+        document.querySelector("[data-psc-import-actions]")?.classList.toggle("hidden");
+      });
+      document.querySelector("[data-psc-import-go]")?.addEventListener("click", () => {
+        pscDoImport((document.querySelector("[data-psc-import-text]") || {}).value || "");
+      });
+      pscImpReport?.addEventListener("click", (e) => {
+        if (!e.target?.closest?.("[data-psc-import-vars]")) return;
+        if (!pscPending) return;
+        pscApplyHandoff(pscPending, true);
+        setImpMsg(pscRenderPlan(Object.assign({}, pscPending, { varPlan: null })) +
+          "<div class='mt-1 rounded border border-slate-300 bg-white p-2 text-slate-700'>The handoff's covariate split has been adopted; any variable it named that this protocol did not list has been added to the validation-only box.</div>");
+      });
+
       document.querySelector("[data-psc-copy-r]")?.addEventListener("click", async () => {
         const pre = document.querySelector("[data-psc-r]");
         try { await navigator.clipboard.writeText(pre ? pre.textContent : ""); setPscAiMsg("R code copied to the clipboard."); }
@@ -2745,8 +3054,9 @@ _Drafted with the AsPEN protocol builder (${today})._
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_CITATIONS_KEY);
         localStorage.removeItem(PSC_STORAGE_KEY);
+        localStorage.removeItem(PSC_IMPORT_KEY);
         pickedCitations = {};
-        pscClass = {}; pscAi = {}; pscVarsSig = "";
+        pscClass = {}; pscAi = {}; pscVarsSig = ""; pscImport = null;
         // True blank slate; form.reset() only restores HTML defaults, which
         // leaves all the pre-checked checkboxes ticked. Walk every form
         // control and zero it out so "Clear" actually means clear.
