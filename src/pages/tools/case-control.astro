@@ -52,11 +52,41 @@ const SENSITIVITY = [
       <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">Protocol Generator · CC</p>
       <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Case-Control protocol</h1>
       <p class="mt-3 text-base text-slate-600 max-w-3xl">
-        Draft a <strong>case-control</strong> protocol — enrol on the outcome (cases), sample <strong>controls</strong>
-        from the source population (risk-set, cumulative, or case-cohort), optionally <strong>match</strong>, ascertain
-        exposure <strong>before the index date</strong>, and estimate the odds ratio by conditional or unconditional
-        logistic regression. Efficient for rare outcomes. Everything runs in your browser.
+        <strong>In plain terms.</strong> You find the people who got the disease, then you find comparable people who
+        did not, and you look backwards to see who had the exposure. It is efficient because you only have to look at
+        a sample of the people who stayed well. Nearly everything that goes wrong with a case-control study goes wrong
+        in <em>how that sample is chosen</em>.
       </p>
+      <details class="mt-3 max-w-3xl text-sm text-slate-600">
+        <summary class="cursor-pointer font-semibold text-brand-700">The one rule that decides whether the study is valid</summary>
+        <p class="mt-2">
+          <strong>Controls must represent the source population — the person-time — that produced the cases.</strong>
+          Controls are not a "healthy comparison group": they are a sample of the denominator. If a person in your
+          control sample had developed the outcome, they would have been captured as one of your cases. If that is not
+          true, the sample is not of the study base and the odds ratio is biased no matter how the analysis is done
+          (Wacholder 1992; Vandenbroucke &amp; Pearce 2012).
+        </p>
+        <p class="mt-2">
+          <strong>How you sample decides what the odds ratio means</strong>, and it is not always an approximation:
+        </p>
+        <ul class="mt-1 ml-4 list-disc space-y-1">
+          <li><strong>Incidence-density (risk-set) sampling</strong> — a control is drawn from those still at risk at
+            the moment each case occurs. The odds ratio estimates the <strong>incidence-rate ratio</strong>, with
+            <em>no rare-disease assumption</em>. Controls may later become cases, and a person may be sampled more
+            than once; that is correct, not an error.</li>
+          <li><strong>Cumulative (survivor) sampling</strong> — controls are drawn from those still outcome-free at the
+            end of follow-up. The odds ratio approximates the risk ratio <strong>only if the outcome is rare</strong>;
+            otherwise it overstates it.</li>
+          <li><strong>Case-cohort (case-base) sampling</strong> — controls are a random subcohort drawn at baseline.
+            The odds ratio estimates the <strong>risk ratio</strong>, again with no rare-disease assumption, and one
+            subcohort can serve several outcomes. It needs an analysis that accounts for subcohort members appearing
+            in several risk sets (weighted estimation with a robust variance), not a plain matched-set analysis.</li>
+        </ul>
+        <p class="mt-2">
+          Knol et al (2008) found that 90% of published case-control studies reported an "odds ratio" when their
+          sampling scheme entitled them to name a rate ratio or a risk ratio. Say which one you are estimating.
+        </p>
+      </details>
       <a class="mt-4 inline-block text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>← All designs</a>
     </div>
   </header>
@@ -236,13 +266,27 @@ const SENSITIVITY = [
 
     const isMatched = (s) => mergeList(s.matchingPick, s.matchingCustom).length > 0;
     const samplingText = (v) => ({
-      riskset: "incidence-density (risk-set) sampling — for each case, controls are sampled from those still at risk at the case's index date, so the odds ratio estimates the incidence-rate ratio without a rare-disease assumption",
-      cumulative: "cumulative (survivor) sampling — controls are sampled from those outcome-free at the end of the period; the odds ratio approximates the risk ratio only if the outcome is rare",
-      casecohort: "case-cohort sampling — controls are a random subcohort of the source population sampled at baseline, allowing several outcomes to share one control group",
+      riskset: "incidence-density (risk-set) sampling — for each case, controls are sampled from those still at risk at the case's index date. A sampled control may later become a case, and a person may be sampled into more than one risk set; both are correct under this scheme",
+      cumulative: "cumulative (survivor) sampling — controls are sampled from those still outcome-free at the end of the follow-up period",
+      casecohort: "case-cohort (case-base) sampling — controls are a random subcohort of the source population drawn at baseline, so one subcohort can serve several outcomes",
     })[v] || "the specified control-sampling scheme";
-    const analysisText = (s) => isMatched(s)
-      ? "conditional logistic regression (conditioning on the matched sets)"
-      : "unconditional logistic regression (adjusting for the covariates)";
+    const samplingShort = (v) => ({ riskset: "Incidence-density (risk-set)", cumulative: "Cumulative (survivor)", casecohort: "Case-cohort (case-base)" })[v] || "-";
+
+    // What the exposure odds ratio actually estimates under each sampling scheme.
+    // Source: Vandenbroucke JP, Pearce N. Case-control studies: basic concepts.
+    // Int J Epidemiol 2012;41:1480-9 (doi:10.1093/ije/dys147).
+    const orMeans = (v) => ({
+      riskset: "the **incidence-rate ratio**, with no rare-disease assumption",
+      cumulative: "the odds ratio of the full cohort; it approximates the **risk ratio only if the outcome is rare**, and overstates it otherwise",
+      casecohort: "the **risk ratio** of the full cohort, with no rare-disease assumption",
+    })[v] || "the effect measure implied by the sampling scheme";
+    const orMeansPlain = (v) => String(orMeans(v)).replace(/\*\*/g, "");
+
+    const analysisText = (s) => s.sampling === "casecohort"
+      ? "a case-cohort estimator — weighted (pseudo-likelihood) estimation with a robust variance, because subcohort members contribute to several risk sets and an unweighted logistic fit would misstate the precision"
+      : (isMatched(s)
+        ? "conditional logistic regression (conditioning on the matched sets)"
+        : "unconditional logistic regression (adjusting for the covariates)");
 
     const pcOf = (s) => ({
       design: (isMatched(s) ? "matched " : "") + "case-control study",
@@ -252,10 +296,10 @@ const SENSITIVITY = [
       comparator: "no/less exposure",
       outcome: or(s.outcome, "(outcome)"),
       data: s.data,
-      analysis: analysisText(s) + " estimating the odds ratio with 95% confidence intervals",
+      analysis: analysisText(s) + ", giving an exposure odds ratio that estimates " + orMeansPlain(s.sampling) + ", with 95% confidence intervals",
       groupBy: "case/control status",
-      limitations: "Exposure is ascertained before the index date, so recall/measurement of exposure and control selection are the main threats; risk-set sampling and an active-comparator exposure definition mitigate them.",
-      plannedOutputs: ["Case/control selection flow (with matching yield).", "Table 1 — characteristics of cases vs controls.", "Odds ratio (crude and adjusted) with 95% CI."],
+      limitations: "The dominant threat is control selection: if the controls do not represent the person-time of the source population that produced the cases, the estimate is biased however it is analysed. Exposure is ascertained before the index date from records collected for other purposes, so exposure misclassification and protopathic bias (early symptoms of the outcome prompting the exposure) also apply.",
+      plannedOutputs: ["Case/control selection flow (source population → eligible cases → sampled controls, with counts and matching yield).", "Table 1 — characteristics of cases vs controls.", "Odds ratio (crude and adjusted) with 95% CI, named as the rate ratio or risk ratio the sampling scheme entitles."],
     });
 
     function renderScheme(s) {
@@ -268,6 +312,23 @@ const SENSITIVITY = [
       window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Index date (event / matched time)", onEdit: onEdit, snap: 5 });
     }
 
+    // What is still blank. A case-control protocol without a case definition, an
+    // index date or a control-sampling rule is not a protocol, so the gap list
+    // travels into the preview, the Markdown and the Word file alike.
+    const missing = (s) => [
+      [!s.population, "the source population"],
+      [!s.exposure, "the exposure"],
+      [!s.outcome, "the outcome that defines cases"],
+      [!s.casedef, "the operational case definition (code set and setting)"],
+      [!s.indexdate, "the index date, and how it is assigned to controls"],
+      [!s.expdef, "the exposure definition"],
+      [!s.data, "the data source"],
+    ].filter((x) => x[0]).map((x) => x[1]);
+    const missingMd = (s) => {
+      const m = missing(s);
+      return m.length ? "> **This draft is incomplete.** Still to be specified: " + m.join("; ") + ".\n\n" : "";
+    };
+
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
       const P = or(s.population, "(source population)"), E = or(s.exposure, "(exposure)"), O = or(s.outcome, "(outcome)");
@@ -277,31 +338,39 @@ const SENSITIVITY = [
 
 _Study protocol · ${isMatched(s) ? "matched " : ""}case-control study · drafted ${today}_
 
-${window.PC.abstractMd(pcOf(s))}
+${missingMd(s)}${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
-This ${isMatched(s) ? "matched " : ""}**case-control** study estimates the association between **${E}** and **${O}** in **${P}**. Enrolling on the outcome makes the design **efficient for a rare outcome**; sampling controls from the source population and ascertaining exposure **before the index date** yields the exposure odds ratio.
+This ${isMatched(s) ? "matched " : ""}**case-control** study estimates the effect of **${E}** on **${O}** in **${P}**.
+
+*In plain terms:* we identify everyone in ${P} who developed ${O}, take a comparable sample of people who did not, and look backwards to see who had ${E}. Sampling rather than following the whole population is what makes the design efficient when ${O} is uncommon.
+
+*Precisely:* the design samples the **study base** — the person-time of the source population that gave rise to the cases. The controls are a sample of that denominator, not a "healthy comparison group": a control who had developed ${O} would have been captured as one of our cases. Exposure is ascertained identically in cases and controls, and only from the window **before the index date**.
 
 ## 2. Question
-Among **${P}**, is **${E}** associated with **${O}**?
+Among **${P}**, does **${E}** affect the incidence of **${O}**?
 
 ## 3. Study design
-A ${isMatched(s) ? "matched " : ""}case-control study using observational data from **${or(s.data, "(data source)")}**, with **${samplingText(s.sampling).split(" — ")[0]}** and **${s.nControls}** control(s) per case.
+A ${isMatched(s) ? "matched " : ""}case-control study using observational data from **${or(s.data, "(data source)")}**, with **${samplingShort(s.sampling).toLowerCase()} sampling** and **${s.nControls}** control(s) per case.
 
 ## 4. Cases and index date
-- **Case definition:** ${or(s.casedef, "(define the outcome that identifies cases)")}
-- **Index date:** ${or(s.indexdate, "The case's event date; matched controls are assigned the same date.")}
+- **Case definition:** ${or(s.casedef, "_(not yet specified — define the outcome that identifies cases, with the code set and care setting)_")}
+- **Index date:** ${or(s.indexdate, "_(not yet specified — the case's event date, and the rule that assigns the same date to their controls)_")}
 
 ## 5. Control selection${isMatched(s) ? " and matching" : ""}
-Controls are selected by ${samplingText(s.sampling)}, at a ratio of **${s.nControls}:1**.${isMatched(s) ? ` Cases and controls are **matched** on: ${match.join("; ")}.` : " No matching is applied; confounders are adjusted for in the analysis."}
+**The principle.** Controls must represent the source population — the person-time — that produced the cases. If a sampled control had developed ${O}, they would have been ascertained as a case in this study. Failure of this condition biases the estimate whatever the analysis does about it (Wacholder 1992; Vandenbroucke & Pearce 2012).
+
+**The scheme.** Controls are selected by ${samplingText(s.sampling)}, at a ratio of **${s.nControls}:1**.${isMatched(s) ? ` Cases and controls are **matched** on: ${match.join("; ")}.` : " No matching is applied; confounders are adjusted for in the analysis."}
+
+**What this buys.** Under this scheme the exposure odds ratio estimates ${orMeans(s.sampling)}.
 
 ## 6. Exposure ascertainment
-${or(s.expdef, "Exposure is defined as at least one qualifying record in the ascertainment window before the index date.")} Exposure is assessed in the **${s.lookback}-day** window before index; covariates in the **${s.covlookback}-day** window before index.
+${or(s.expdef, "_(not yet specified — e.g. at least one qualifying dispensing record in the ascertainment window before the index date)_")} Exposure is assessed in the **${s.lookback}-day** window before index; covariates in the **${s.covlookback}-day** window before index. Exposure is ascertained by the same procedure, from the same data, over the same window relative to index, for cases and for controls.
 
 ## 7. Covariates
 ${(covs.length ? covs : ["(none specified)"]).map((l) => "- " + l).join("\n")}
 
 ## 8. Estimand and analysis
-The estimand is the **exposure odds ratio** (95% CI), estimated by ${analysisText(s)}.${s.sampling === "riskset" ? " With risk-set sampling the odds ratio estimates the incidence-rate ratio directly." : ""} A crude and a covariate-adjusted OR are both reported.
+The estimand is the effect of ${E} on ${O}. It is estimated as the **exposure odds ratio** (95% CI) by ${analysisText(s)}, and — because of the control-sampling scheme above — that odds ratio estimates ${orMeans(s.sampling)}. It is reported under that name, not merely as "an odds ratio" (Knol 2008; Labrecque 2021). A crude and a covariate-adjusted estimate are both reported.${isMatched(s) && s.sampling !== "casecohort" ? " Because the design is matched, the matching factors are **not** additionally entered as covariates." : ""}
 
 ## 9. Subgroup analyses
 ${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsPick, s.subgroupsCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
@@ -312,24 +381,39 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 ${window.PC.tailMd(pcOf(s))}
 
 ## References
-- Vandenbroucke JP, Pearce N. Case-control studies: basic concepts. Int J Epidemiol 2012;41(5):1480-1489.
-- Wacholder S, Silverman DT, McLaughlin JK, Mandel JS. Selection of controls in case-control studies. Am J Epidemiol 1992;135(9):1019-1050.
-- Essebag V, Genest J, Suissa S, Pilote L. The nested case-control study in cardiology. Am Heart J 2003;146(4):581-590.
+- Vandenbroucke JP, Pearce N. Case-control studies: basic concepts. Int J Epidemiol 2012;41(5):1480-1489. doi:10.1093/ije/dys147
+- Wacholder S, McLaughlin JK, Silverman DT, Mandel JS. Selection of controls in case-control studies. I. Principles. Am J Epidemiol 1992;135(9):1019-1028. doi:10.1093/oxfordjournals.aje.a116396 (II. Types of controls, 1029-1041; III. Design options, 1042-1050)
+- Knol MJ, Vandenbroucke JP, Scott P, Egger M. What do case-control studies estimate? Survey of methods and assumptions in published case-control research. Am J Epidemiol 2008;168(9):1073-1081. doi:10.1093/aje/kwn217
+- Labrecque JA, Hunink MGM, Ikram MA, Ikram MK. Do case-control studies always estimate odds ratios? Am J Epidemiol 2021;190(2):318-321. doi:10.1093/aje/kwaa167
+- Essebag V, Genest J, Suissa S, Pilote L. The nested case-control study in cardiology. Am Heart J 2003;146(4):581-590. doi:10.1016/S0002-8703(03)00512-X
 `;
     };
 
     const computeChecks = (s) => {
       const checks = [];
-      const lb = parseInt(s.lookback) || 0, nc = parseInt(s.nControls) || 0;
-      if (lb <= 0) checks.push({ level: "warn", msg: "Exposure look-back is 0 — set the window before the index date over which exposure is ascertained." });
-      if (nc < 1) checks.push({ level: "warn", msg: "Set at least 1 control per case (commonly up to 4; more controls add little precision beyond ~4:1)." });
-      if (!s.casedef || !s.casedef.trim()) checks.push({ level: "info", msg: "Define the case (the outcome that identifies cases) precisely, including the code set and setting." });
-      if (!s.indexdate || !s.indexdate.trim()) checks.push({ level: "info", msg: "Define the index date; matched controls must be assigned the same date so exposure windows are comparable." });
-      if (isMatched(s)) checks.push({ level: "info", msg: "Matched design → analyse with CONDITIONAL logistic regression, and do NOT additionally adjust for the matching factors as covariates." });
-      else checks.push({ level: "info", msg: "Unmatched design → analyse with UNCONDITIONAL logistic regression, adjusting for the confounders you listed." });
-      if (s.sampling === "riskset") checks.push({ level: "ok", msg: "Risk-set (incidence-density) sampling: the odds ratio estimates the incidence-rate ratio without a rare-disease assumption." });
-      else if (s.sampling === "cumulative") checks.push({ level: "warn", msg: "Cumulative sampling: the odds ratio approximates the risk ratio only if the outcome is rare (< ~10%)." });
-      checks.push({ level: "info", msg: "Guard against selection and exposure-measurement bias: sample controls from the same source population that gave rise to the cases, and ascertain exposure identically for cases and controls." });
+      const lb = parseInt(s.lookback) || 0, cvb = parseInt(s.covlookback) || 0, nc = parseInt(s.nControls) || 0;
+      const miss = missing(s);
+      if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft below is printed with placeholders so you can see its shape — it is not a finished protocol." });
+
+      // The one rule, stated first, every time.
+      checks.push({ level: "info", msg: "The control-selection rule: controls must represent the person-time of the source population that produced the cases. Test it by asking — if this control had developed the outcome, would my study have captured them as a case? If not, the sample is not of the study base and no analysis can repair it." });
+
+      if (s.sampling === "riskset") checks.push({ level: "ok", msg: "Incidence-density (risk-set) sampling: the odds ratio estimates the INCIDENCE-RATE RATIO with no rare-disease assumption. A sampled control who later becomes a case, or a person sampled into more than one risk set, is correct here — do not 'clean' those out." });
+      else if (s.sampling === "cumulative") checks.push({ level: "warn", msg: "Cumulative (survivor) sampling: the odds ratio approximates the RISK RATIO only if the outcome is rare (roughly <10%); above that it overstates it. Sampling only end-of-period survivors also excludes people who died of other causes, which can select on exposure. Consider risk-set sampling instead." });
+      else if (s.sampling === "casecohort") checks.push({ level: "warn", msg: "Case-cohort (case-base) sampling: the odds ratio relative to the subcohort estimates the RISK RATIO with no rare-disease assumption — but the subcohort contains people who later become cases and who contribute to several risk sets, so it needs weighted (pseudo-likelihood) estimation with a robust variance, not a plain matched or unmatched logistic fit." });
+
+      if (s.sampling === "casecohort" && isMatched(s)) checks.push({ level: "error", msg: "Case-cohort sampling with individual matching is incoherent: a random subcohort is drawn once at baseline, so there are no case-specific matched sets to condition on, and conditional logistic regression does not apply. Either drop the matching factors and adjust for them in the weighted model, or switch to incidence-density (risk-set) sampling, which is what matching on index date actually implements." });
+      else if (isMatched(s)) checks.push({ level: "info", msg: "Matched design → conditional logistic regression, conditioning on the matched sets. Do NOT additionally enter the matching factors as covariates: within a matched set they are constant and the coefficient is not identified." });
+      else checks.push({ level: "info", msg: "Unmatched design → unconditional logistic regression, adjusting for the confounders you listed." });
+
+      if (s.sampling === "casecohort" && nc >= 1) checks.push({ level: "info", msg: "'Controls per case' is a risk-set concept. In a case-cohort study the subcohort is a fixed random sample of the cohort (a sampling fraction), so state the fraction or the subcohort size rather than a ratio per case." });
+
+      if (lb <= 0) checks.push({ level: "warn", msg: "Exposure look-back is 0 days — no window means no exposure can be ascertained. Set the window before the index date over which exposure is measured." });
+      if (lb > 0 && cvb > 0 && cvb < lb) checks.push({ level: "warn", msg: "The covariate look-back (" + cvb + " d) is shorter than the exposure look-back (" + lb + " d), so some confounders are measured over a narrower history than the exposure they are meant to control. Usually the covariate window should be at least as long." });
+      if (nc < 1) checks.push({ level: "warn", msg: "Set at least 1 control per case (commonly up to 4; beyond about 4:1 the precision gain is small)." });
+
+      checks.push({ level: "info", msg: "Ascertain exposure by the same procedure, from the same data, over the same window relative to index, for cases and for controls. Differential ascertainment is the classical case-control bias and secondary data does not make it go away." });
+      checks.push({ level: "info", msg: "Protopathic bias: if early, undiagnosed symptoms of the outcome prompt the exposure, a look-back that runs right up to the index date will read that as causation. A lag (excluding exposure in the days immediately before index) is the standard probe — it is in the sensitivity list." });
       return checks;
     };
 
@@ -337,8 +421,15 @@ ${window.PC.tailMd(pcOf(s))}
       const s = readForm();
       preview.textContent = buildMarkdown(s);
       renderScheme(s);
-      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch {}
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
+      // Never swallow a render failure silently: a blank checks panel that looks
+      // like "no issues" is exactly the failure mode this page is meant to avoid.
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); }
+      catch (err) {
+        console.error("[case-control] consistency checks failed to render", err);
+        const el = document.getElementById("checks");
+        if (el) el.innerHTML = '<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">The consistency checks could not be rendered, so this panel is showing nothing rather than showing "no issues". Details are in the browser console.</div>';
+      }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (err) { console.warn("[case-control] could not save draft", err); }
     };
 
     (() => {
@@ -380,7 +471,10 @@ ${window.PC.tailMd(pcOf(s))}
       form.querySelectorAll("input, textarea, select").forEach((el) => {
         if (el.type === "checkbox" || el.type === "radio") el.checked = false;
         else if (el.tagName === "SELECT") el.selectedIndex = 0;
-        else el.value = "";
+        // Blanking a numeric field while readForm() silently substitutes a default
+        // makes the protocol assert a number the form is not showing (a cleared
+        // form still printed "90-day window"). Put the markup default back.
+        else el.value = el.getAttribute("value") || "";
       });
       render();
       setMsg("Cleared.");
@@ -416,10 +510,14 @@ ${window.PC.tailMd(pcOf(s))}
       if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
       children.push(p([text(or(s.title, "(Untitled case-control study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
       children.push(p([text("Study protocol · " + (isMatched(s) ? "matched " : "") + "case-control study · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      const miss = missing(s);
+      if (miss.length) children.push(p([text("This draft is incomplete. Still to be specified: " + miss.join("; ") + ".", { bold: true, color: "9E3A2C" })], { spacing: { after: 160 } }));
       window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
-      children.push(para("This " + (isMatched(s) ? "matched " : "") + "case-control study estimates the association between " + E + " and " + O + " in " + P + ". Enrolling on the outcome makes it efficient for a rare outcome; sampling controls from the source population and ascertaining exposure before the index date yields the exposure odds ratio."));
+      children.push(para("This " + (isMatched(s) ? "matched " : "") + "case-control study estimates the effect of " + E + " on " + O + " in " + P + "."));
+      children.push(para("In plain terms: we identify everyone in " + P + " who developed " + O + ", take a comparable sample of people who did not, and look backwards to see who had " + E + ". Sampling rather than following the whole population is what makes the design efficient when " + O + " is uncommon."));
+      children.push(para("Precisely: the design samples the study base — the person-time of the source population that gave rise to the cases. The controls are a sample of that denominator, not a healthy comparison group: a control who had developed " + O + " would have been captured as one of our cases. Exposure is ascertained identically in cases and controls, and only from the window before the index date."));
 
       children.push(h1("2. Design summary"));
       children.push(labelTable([
@@ -428,29 +526,32 @@ ${window.PC.tailMd(pcOf(s))}
         ["Source population", P],
         ["Exposure", E],
         ["Outcome (cases)", O],
-        ["Control sampling", ({ riskset: "Incidence-density (risk-set)", cumulative: "Cumulative (survivor)", casecohort: "Case-cohort" })[s.sampling] || "-"],
-        ["Controls per case", String(s.nControls)],
+        ["Control sampling", samplingShort(s.sampling)],
+        ["Controls per case", s.sampling === "casecohort" ? s.nControls + " (state the subcohort sampling fraction instead)" : String(s.nControls)],
         ["Matching", match.length ? match.join("; ") : "None (unmatched)"],
         ["Exposure look-back", s.lookback + " days"],
         ["Covariate look-back", s.covlookback + " days"],
-        ["Analysis", isMatched(s) ? "Conditional logistic regression → OR" : "Unconditional logistic regression → OR"],
+        ["Analysis", analysisText(s)],
+        ["The odds ratio estimates", orMeansPlain(s.sampling)],
       ]));
 
       children.push(h1("3. Cases and index date"));
-      children.push(p([text("Case definition. ", { bold: true }), text(or(s.casedef, "(define)"))]));
-      children.push(p([text("Index date. ", { bold: true }), text(or(s.indexdate, "The case's event date; matched controls take the same date."))]));
+      children.push(p([text("Case definition. ", { bold: true }), text(or(s.casedef, "(not yet specified — define the outcome that identifies cases, with the code set and care setting)"))]));
+      children.push(p([text("Index date. ", { bold: true }), text(or(s.indexdate, "(not yet specified — the case's event date, and the rule that assigns the same date to their controls)"))]));
 
       children.push(h1("4. Control selection" + (isMatched(s) ? " and matching" : "")));
-      children.push(para("Controls are selected by " + samplingText(s.sampling) + ", at " + s.nControls + ":1." + (isMatched(s) ? " Matched on: " + match.join("; ") + "." : " No matching; confounders adjusted in the analysis.")));
+      children.push(p([text("The principle. ", { bold: true }), text("Controls must represent the source population — the person-time — that produced the cases. If a sampled control had developed " + O + ", they would have been ascertained as a case in this study. Failure of this condition biases the estimate whatever the analysis does about it (Wacholder 1992; Vandenbroucke & Pearce 2012).")]));
+      children.push(p([text("The scheme. ", { bold: true }), text("Controls are selected by " + samplingText(s.sampling) + ", at " + s.nControls + ":1." + (isMatched(s) ? " Matched on: " + match.join("; ") + "." : " No matching; confounders adjusted in the analysis."))]));
+      children.push(p([text("What this buys. ", { bold: true }), text("Under this scheme the exposure odds ratio estimates " + orMeansPlain(s.sampling) + ".")]));
 
       children.push(h1("5. Exposure ascertainment"));
-      children.push(para(or(s.expdef, "At least one qualifying record in the ascertainment window before the index date.") + " Exposure window: " + s.lookback + " days before index; covariate window: " + s.covlookback + " days before index."));
+      children.push(para(or(s.expdef, "(not yet specified — e.g. at least one qualifying dispensing record in the ascertainment window before the index date)") + " Exposure window: " + s.lookback + " days before index; covariate window: " + s.covlookback + " days before index. Exposure is ascertained by the same procedure, from the same data, over the same window relative to index, for cases and for controls."));
 
       children.push(h1("6. Covariates"));
       (covs.length ? covs : ["(none specified)"]).forEach((l) => children.push(bullet(l)));
 
       children.push(h1("7. Estimand and analysis"));
-      children.push(para("The estimand is the exposure odds ratio (95% CI), estimated by " + analysisText(s) + "." + (s.sampling === "riskset" ? " With risk-set sampling the OR estimates the incidence-rate ratio directly." : "") + " Crude and adjusted ORs are reported."));
+      children.push(para("The estimand is the effect of " + E + " on " + O + ". It is estimated as the exposure odds ratio (95% CI) by " + analysisText(s) + ", and — because of the control-sampling scheme above — that odds ratio estimates " + orMeansPlain(s.sampling) + ". It is reported under that name, not merely as 'an odds ratio' (Knol 2008; Labrecque 2021). Crude and covariate-adjusted estimates are both reported." + (isMatched(s) && s.sampling !== "casecohort" ? " Because the design is matched, the matching factors are not additionally entered as covariates." : "")));
 
       children.push(h1("8. Subgroup analyses"));
       (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
@@ -460,8 +561,11 @@ ${window.PC.tailMd(pcOf(s))}
       window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("References"));
-      ["Vandenbroucke JP, Pearce N. Case-control studies: basic concepts. Int J Epidemiol 2012;41(5):1480-1489.",
-       "Wacholder S, Silverman DT, McLaughlin JK, Mandel JS. Selection of controls in case-control studies. Am J Epidemiol 1992;135(9):1019-1050."].forEach((l) => children.push(bullet(l)));
+      ["Vandenbroucke JP, Pearce N. Case-control studies: basic concepts. Int J Epidemiol 2012;41(5):1480-1489. doi:10.1093/ije/dys147",
+       "Wacholder S, McLaughlin JK, Silverman DT, Mandel JS. Selection of controls in case-control studies. I. Principles. Am J Epidemiol 1992;135(9):1019-1028. doi:10.1093/oxfordjournals.aje.a116396 (II. Types of controls, 1029-1041; III. Design options, 1042-1050)",
+       "Knol MJ, Vandenbroucke JP, Scott P, Egger M. What do case-control studies estimate? Survey of methods and assumptions in published case-control research. Am J Epidemiol 2008;168(9):1073-1081. doi:10.1093/aje/kwn217",
+       "Labrecque JA, Hunink MGM, Ikram MA, Ikram MK. Do case-control studies always estimate odds ratios? Am J Epidemiol 2021;190(2):318-321. doi:10.1093/aje/kwaa167",
+       "Essebag V, Genest J, Suissa S, Pilote L. The nested case-control study in cardiology. Am Heart J 2003;146(4):581-590. doi:10.1016/S0002-8703(03)00512-X"].forEach((l) => children.push(bullet(l)));
 
       children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
 
