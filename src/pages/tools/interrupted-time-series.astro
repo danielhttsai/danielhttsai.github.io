@@ -542,6 +542,10 @@ ${window.PC.tailMd(pcOf(s))}
       try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
     });
 
+    // Set by buildDocx when the figure could not be made, so the download
+    // handler can tell the user which of the two documents they got.
+    let lastFigNote = "";
+
     const actionMsg = document.querySelector("[data-action-msg]");
     const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
     document.querySelector("[data-action='reset']").addEventListener("click", () => {
@@ -617,6 +621,32 @@ ${window.PC.tailMd(pcOf(s))}
         ["Control series", s.controlled ? or(s.controlSeries, "(specify)") : "None (uncontrolled)"],
       ]));
 
+
+      // HARPER item 7.2 — the study design diagram. The picture alone does not
+      // satisfy it: an image-stripping extractor, and a reviewer reading the
+      // .docx as text, see nothing. designDiagramDocx emits the picture, a
+      // numbered caption and a written description together, and that text is
+      // what carries the item. It never throws; on failure it returns a visible
+      // amber note rather than a silently absent figure, so the protocol still
+      // exports and the page can say which of the two you got.
+      lastFigNote = "";
+      const __cap = "Figure 1. Study design diagram — segmented regression on a calendar-time axis: the pre-intervention trend, the interruption, the post-intervention trend, and the pre-intervention trend extrapolated forward as the counterfactual.";
+      const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: __cap });
+      // This page draws its own SVG rather than calling renderDesignDiagram, so
+      // the shared component holds no window spec for it and fig.lines comes back
+      // empty. Supply the written description here, or the figure would reach a
+      // text-only reader as a caption with nothing under it.
+      if (!fig.lines || !fig.lines.length) fig.lines = [
+        "Time axis: " + s.unit + " intervals of calendar time (this design is not anchored to a person-level day 0).",
+        "Pre-intervention segment: " + s.prePoints + " " + s.unit + " point(s) before the interruption; the trend fitted here is extrapolated forward as the counterfactual.",
+        "Interruption: " + Dt + (I ? " — " + I : "") + (s.lag ? " (transition / phase-in: " + s.lag + ")" : ""),
+        "Post-intervention segment: " + s.postPoints + " " + s.unit + " point(s) from the interruption onward.",
+        "Estimated at the interruption: the change in level (immediate step) and the change in slope (trend).",
+      ].concat(s.controlled ? ["Control series: " + or(s.controlSeries, "(a comparison series unaffected by the intervention)") + " — same calendar periods, differenced against the intervention series."] : []);
+      const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: __cap });
+      figParas.forEach((c) => children.push(c));
+      if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
+
       children.push(h1("4. Time series construction"));
       children.push(para("The outcome is aggregated per " + s.unit + " interval (" + s.prePoints + " pre + " + s.postPoints + " post points)." + (s.model === "poisson" ? " Denominator / offset: " + or(s.denom, "(person-time / eligible population, entered as a log offset).") : "") + " Each interval is indexed by a continuous time variable; an interruption indicator marks intervals from " + Dt + " onward; and a time-since-interruption variable captures the post-intervention slope." + (s.lag ? " Transition / phase-in: " + s.lag + "." : "")));
 
@@ -662,9 +692,23 @@ ${window.PC.tailMd(pcOf(s))}
       return await D.Packer.toBlob(doc);
     };
 
+    // A failed Word export used to do nothing and say nothing: `catch (e) {}`
+    // around the whole thing, and a bare `return` when the docx library had not
+    // loaded. The button simply appeared not to work.
     document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
-      if (!window.docx) return;
-      try { dl(await buildDocx(readForm()), fname("docx")); } catch (e) {}
+      if (!window.docx) {
+        setMsg("The Word library has not loaded, so the .docx cannot be built. Check your connection and reload the page — the Markdown export still works meanwhile.", true);
+        return;
+      }
+      setMsg("Building the Word document…");
+      try {
+        const name = fname("docx");
+        dl(await buildDocx(readForm()), name);
+        setMsg("Downloaded " + name + "." + lastFigNote, !!lastFigNote);
+      } catch (err) {
+        console.error("[ITS] Word export failed", err);
+        setMsg("Could not build the Word file: " + ((err && err.message) || err) + ". Nothing was downloaded.", true);
+      }
     });
   </script>
 </BaseLayout>

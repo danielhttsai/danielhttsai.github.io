@@ -474,6 +474,11 @@ ${window.PC.tailMd(pcOf(s))}
       try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
     });
 
+    // Caption for the exported figure, and the note buildDocx leaves behind when
+    // the picture could not be made, so the click handler can tell the user.
+    const FIG_CAPTION = "Figure 1. Study design diagram — the index date (day 0) and the exposure and covariate ascertainment windows that precede it, on a day axis.";
+    let lastFigNote = "";
+
     const actionMsg = document.querySelector("[data-action-msg]");
     const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
     document.querySelector("[data-action='reset']").addEventListener("click", () => {
@@ -546,6 +551,19 @@ ${window.PC.tailMd(pcOf(s))}
         ["The odds ratio estimates", orMeansPlain(s.sampling)],
       ]));
 
+      // HARPER item 7.2 — the study design diagram. The picture alone does not
+      // satisfy it: an image-stripping extractor, and a reviewer reading the
+      // .docx as text, see nothing. designDiagramDocx emits the picture, a
+      // numbered caption and the written window list together, and that text is
+      // what carries the item. It never throws; on failure it returns a visible
+      // amber note instead of a silently absent figure, so the protocol still
+      // exports and the page can say which of the two you got.
+      lastFigNote = "";
+      const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: FIG_CAPTION });
+      const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: FIG_CAPTION });
+      figParas.forEach((c) => children.push(c));
+      if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
+
       children.push(h1("3. Cases and index date"));
       children.push(p([text("Case definition. ", { bold: true }), text(or(s.casedef, "(not yet specified — define the outcome that identifies cases, with the code set and care setting)"))]));
       children.push(p([text("Index date. ", { bold: true }), text(or(s.indexdate, "(not yet specified — the case's event date, and the rule that assigns the same date to their controls)"))]));
@@ -592,9 +610,23 @@ ${window.PC.tailMd(pcOf(s))}
       return await D.Packer.toBlob(doc);
     };
 
+    // A failed Word export used to do nothing and say nothing: `catch (e) {}`
+    // around the whole thing, and a bare `return` when the docx library had not
+    // loaded. The button simply appeared not to work.
     document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
-      if (!window.docx) return;
-      try { dl(await buildDocx(readForm()), fname("docx")); } catch (e) {}
+      if (!window.docx) {
+        setMsg("The Word library has not loaded, so the .docx cannot be built. Check your connection and reload the page — the Markdown export still works meanwhile.", true);
+        return;
+      }
+      setMsg("Building the Word document…");
+      try {
+        const name = fname("docx");
+        dl(await buildDocx(readForm()), name);
+        setMsg("Downloaded " + name + "." + lastFigNote, !!lastFigNote);
+      } catch (err) {
+        console.error("[case-control] Word export failed", err);
+        setMsg("Could not build the Word file: " + ((err && err.message) || err) + ". Nothing was downloaded.", true);
+      }
     });
   </script>
 </BaseLayout>

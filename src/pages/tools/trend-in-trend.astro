@@ -484,6 +484,10 @@ ${window.PC.tailMd(pcOf(s))}
       try { await navigator.clipboard.writeText(preview.textContent || ""); e.target.textContent = "Copied ✓"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch {}
     });
 
+    // Set by buildDocx when the figure could not be made, so the download
+    // handler can tell the user which of the two documents they got.
+    let lastFigNote = "";
+
     const actionMsg = document.querySelector("[data-action-msg]");
     const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
     document.querySelector("[data-action='reset']").addEventListener("click", () => {
@@ -553,6 +557,31 @@ ${window.PC.tailMd(pcOf(s))}
         ["Effect measure", effectShort(s.effect)],
       ]));
 
+
+      // HARPER item 7.2 — the study design diagram. The picture alone does not
+      // satisfy it: an image-stripping extractor, and a reviewer reading the
+      // .docx as text, see nothing. designDiagramDocx emits the picture, a
+      // numbered caption and a written description together, and that text is
+      // what carries the item. It never throws; on failure it returns a visible
+      // amber note rather than a silently absent figure, so the protocol still
+      // exports and the page can say which of the two you got.
+      lastFigNote = "";
+      const __cap = "Figure 1. Study design diagram — the exposure-prevalence trend across calendar periods, and the outcome trend within each stratum of the cumulative probability of exposure.";
+      const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: __cap });
+      // This page draws its own SVG rather than calling renderDesignDiagram, so
+      // the shared component holds no window spec for it and fig.lines comes back
+      // empty. Supply the written description here, or the figure would reach a
+      // text-only reader as a caption with nothing under it.
+      if (!fig.lines || !fig.lines.length) fig.lines = [
+        "Time axis: " + s.nperiods + " " + s.period + " calendar period(s) from " + or(s.first, "(first)") + " to " + or(s.last, "(last)") + " (this design is not anchored to a person-level day 0).",
+        "Exposure-prevalence trend: the proportion exposed in each calendar period; a strong time trend is required for the design to identify anything.",
+        "CPE strata: " + s.nstrata + " quantile(s) of the cumulative probability of exposure, from the stage-1 model" + (s.cpecov ? " fitted on " + s.cpecov : "") + "; each person keeps one stratum for the whole study.",
+        "Read-out: the outcome trend is compared across CPE strata — a steeper outcome trend where exposure rose faster is what identifies the effect.",
+      ];
+      const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: __cap });
+      figParas.forEach((c) => children.push(c));
+      if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
+
       children.push(h1("3. Exposure-prevalence trend"));
       children.push(para(or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure.") + " A strong time trend in exposure is a requirement of the design, not a convenience: without one there is nothing for the likelihood to identify the effect from. The observed prevalence trend is reported before any effect estimate is interpreted, overall and within each CPE stratum."));
 
@@ -599,9 +628,23 @@ ${window.PC.tailMd(pcOf(s))}
       return await D.Packer.toBlob(doc);
     };
 
+    // A failed Word export used to do nothing and say nothing: `catch (e) {}`
+    // around the whole thing, and a bare `return` when the docx library had not
+    // loaded. The button simply appeared not to work.
     document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
-      if (!window.docx) return;
-      try { dl(await buildDocx(readForm()), fname("docx")); } catch (e) {}
+      if (!window.docx) {
+        setMsg("The Word library has not loaded, so the .docx cannot be built. Check your connection and reload the page — the Markdown export still works meanwhile.", true);
+        return;
+      }
+      setMsg("Building the Word document…");
+      try {
+        const name = fname("docx");
+        dl(await buildDocx(readForm()), name);
+        setMsg("Downloaded " + name + "." + lastFigNote, !!lastFigNote);
+      } catch (err) {
+        console.error("[TIT] Word export failed", err);
+        setMsg("Could not build the Word file: " + ((err && err.message) || err) + ". Nothing was downloaded.", true);
+      }
     });
   </script>
 </BaseLayout>

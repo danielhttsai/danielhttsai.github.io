@@ -758,6 +758,9 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const STORAGE_CITATIONS_KEY = "aspen.protocol-builder.desc.citations";
       const form = document.querySelector("[data-builder]");
       const preview = document.querySelector("[data-preview]");
+      // Set by buildDocx when the figure could not be made, so the download
+      // handler can tell the user which of the two documents they got.
+      let lastFigNote = "";
       const actionMsg = document.querySelector("[data-action-msg]");
       const setMsg = (msg, isError = false) => {
         if (!actionMsg) return;
@@ -1350,8 +1353,8 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
           a.href = url; a.download = buildFilename("docx");
           document.body.appendChild(a); a.click(); a.remove();
           URL.revokeObjectURL(url);
-          setMsg("Downloaded " + a.download);
-        } catch (e) { console.error(e); setMsg("Couldn't build the Word file: " + String(e), true); }
+          setMsg("Downloaded " + a.download + "." + lastFigNote, !!lastFigNote);
+        } catch (e) { console.error(e); setMsg("Couldn't build the Word file: " + String(e) + ". Nothing was downloaded.", true); }
       });
 
       // ── STROBE checklist (.docx) ──────────────────────────
@@ -1521,6 +1524,20 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         ]));
         if (inclusion.length) { children.push(h2("Inclusion criteria")); inclusion.forEach((l) => children.push(bullet(l))); }
         if (exclusion.length) { children.push(h2("Exclusion criteria")); exclusion.forEach((l) => children.push(bullet(l))); }
+
+        // HARPER item 7.2 — the study design diagram. The picture alone does not
+        // satisfy it: an image-stripping extractor, and a reviewer reading the
+        // .docx as text, see nothing. designDiagramDocx emits the picture, a
+        // numbered caption and the written window list together, and that text is
+        // what carries the item. It never throws; on failure it returns a visible
+        // amber note rather than a silently absent figure, so the protocol still
+        // exports and the page can say which of the two you got.
+        lastFigNote = "";
+        const __cap = "Figure 1. Study design diagram — cohort entry (day 0), the baseline look-back that precedes it, and the person-time / measurement window that follows, on a day axis.";
+        const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: __cap });
+        const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: __cap });
+        figParas.forEach((c) => children.push(c));
+        if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
 
         children.push(h1("4. Numerator phenotypes"));
         children.push(labelTable([
