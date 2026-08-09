@@ -243,6 +243,10 @@ const SENSITIVITY = [
     // and is printed as "(not specified)" and flagged in the checks panel.
     const daysTxt = (v) => { const t = String(v == null ? "" : v).trim(); return t === "" ? "(not specified)" : t + " day" + (t === "1" ? "" : "s"); };
     const blank = (v) => String(v == null ? "" : v).trim() === "";
+    // Free text the user typed is followed by more of our prose. Without this the
+    // exported Word ran the two together ("…or 5 years Maximum follow-up per trial…");
+    // with a naive "." appended it double-punctuated anyone who typed one.
+    const stop = (t) => { const s = String(t == null ? "" : t).trim(); return s && !/[.!?:;)]$/.test(s) ? s + "." : s; };
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
@@ -393,7 +397,7 @@ ${or(s.confounding, "The propensity score is estimated within each trial (or poo
 Covariates are re-measured at **each** origin, over the look-back windows above. A patient who enters several trials therefore carries a different covariate vector — and a different propensity score — in each. Balance (standardised mean differences) is assessed **within trial**, not only in the pooled dataset, because a pooled table can appear balanced while individual trials are not.
 
 ## 8. Follow-up and outcome
-${or(s.followup, "Within each trial, follow-up runs from the origin to the outcome, death, disenrolment, or the maximum follow-up, whichever comes first.")} Maximum follow-up per trial: **${daysTxt(s.futrial)}**. Outcome: **${or(s.outcome, "(outcome)")}**.
+${stop(or(s.followup, "Within each trial, follow-up runs from the origin to the outcome, death, disenrolment, or the maximum follow-up, whichever comes first."))} Maximum follow-up per trial: **${daysTxt(s.futrial)}**. Outcome: **${or(s.outcome, "(outcome)")}**.
 
 Trials with later origins have less calendar time remaining before the data end, so they are administratively censored earlier. Long-term contrasts are therefore informed mainly by the earliest trials; we report how many trials are still contributing at each follow-up time.
 
@@ -636,7 +640,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       children.push(para("Every nested trial is itself a new-user trial started at that origin, so the same windows as an active-comparator new-user design are applied at each origin, all measured before that origin: a new-user washout of " + daysTxt(s.washout) + " with no prior exposure or comparator, and a covariate / eligibility look-back of " + covLbText(s) + ". Because these windows move with the origin, eligibility, treatment assignment and the start of follow-up remain aligned at every trial's time zero — which is what prevents immortal-time bias. A patient who is ineligible at one origin may become eligible at a later one."));
 
       children.push(h1("5. Time zero and treatment assignment"));
-      children.push(para("For each trial, time zero is that trial's origin, and each trial has a maximum follow-up of " + daysTxt(s.futrial) + ". " + or(s.assignment, "Within each trial, patients initiating the index treatment in that interval form the treated arm; eligible comparator initiators form the control arm.")));
+      children.push(para("For each trial, time zero is that trial's origin, and each trial has a maximum follow-up of " + daysTxt(s.futrial) + ". " + stop(or(s.assignment, "Within each trial, patients initiating the index treatment in that interval form the treated arm; eligible comparator initiators form the control arm."))));
       children.push(para("Assignment is determined by what happens at the origin. Nothing after the origin may enter the eligibility or assignment rule — a rule that looks forward (for example, “initiated within the next 90 days”) reintroduces immortal time, because it can only be evaluated in patients who survived long enough for it to be evaluated."));
 
       children.push(h1("6. Enrolment across trials"));
@@ -648,7 +652,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       children.push(para("Covariates are re-measured at each origin, over the look-back windows above. A patient who enters several trials therefore carries a different covariate vector — and a different propensity score — in each. Balance (standardised mean differences) is assessed within trial, not only in the pooled dataset, because a pooled table can appear balanced while individual trials are not."));
 
       children.push(h1("8. Follow-up and outcome"));
-      children.push(para(or(s.followup, "Within each trial, from the origin to outcome, death, disenrolment, or the maximum follow-up.") + " Maximum follow-up per trial: " + daysTxt(s.futrial) + ". Outcome: " + or(s.outcome, "(outcome)") + "."));
+      children.push(para(stop(or(s.followup, "Within each trial, from the origin to outcome, death, disenrolment, or the maximum follow-up.")) + " Maximum follow-up per trial: " + daysTxt(s.futrial) + ". Outcome: " + or(s.outcome, "(outcome)") + "."));
       children.push(para("Trials with later origins have less calendar time remaining before the data end, so they are administratively censored earlier. Long-term contrasts are therefore informed mainly by the earliest trials; we report how many trials are still contributing at each follow-up time."));
 
       children.push(h1("9. Estimand"));

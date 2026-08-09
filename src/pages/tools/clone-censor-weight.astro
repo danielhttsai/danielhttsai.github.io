@@ -264,6 +264,10 @@ Comedications | 180</textarea>
     // "14 days" / "(not specified)" — never a number the user did not type.
     const daysTxt = (v) => { const t = String(v == null ? "" : v).trim(); return t === "" ? "(not specified)" : t + " day" + (t === "1" ? "" : "s"); };
     const blank = (v) => String(v == null ? "" : v).trim() === "";
+    // Free text the user typed is followed by more of our prose. Without this the
+    // exported Word ran the two together ("…whichever comes first Maximum follow-up…");
+    // with a naive "." appended it double-punctuated anyone who typed one.
+    const stop = (t) => { const s = String(t == null ? "" : t).trim(); return s && !/[.!?:;)]$/.test(s) ? s + "." : s; };
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     function renderScheme(s) {
@@ -361,7 +365,7 @@ Among **${or(s.population, "(population)")}**, what is the effect of **${A}** ve
 A **clone-censor-weight** emulation of the target trial, using observational data from **${or(s.data, "(data source)")}**.
 
 ## 4. Time zero
-${or(s.timezero, "(define time zero — a point at which every patient is compatible with, and eligible for, all strategies)")}. Eligibility, strategy assignment, and the start of follow-up are all aligned at time zero.
+${stop(or(s.timezero, "(define time zero — a point at which every patient is compatible with, and eligible for, all strategies)"))} Eligibility, strategy assignment, and the start of follow-up are all aligned at time zero.
 
 ## 5. Treatment strategies
 - **${A}**
@@ -390,7 +394,7 @@ Weights are cumulative over follow-up. We report the distribution of the weights
 **Identifying assumptions** (Maringe 2020): (i) every predictor of deviation from the assigned strategy is measured and included; (ii) the weight models are correctly specified; (iii) positivity — the probability of deviating is non-zero at every time within the grace period, for every patient; and (iv) consistency. Assumption (i) is not testable; assumption (iii) fails silently if the grace period is long enough that some covariate pattern always (or never) initiates, so we inspect the weight distribution for extreme values as a diagnostic.
 
 ## 9. Follow-up and outcome
-${or(s.followup, "Follow-up runs from time zero until the outcome, death, disenrolment, or the end of the study period, whichever comes first.")} Maximum follow-up per patient: **${daysTxt(s.fudays)}** from time zero. Outcome: **${or(s.outcome, "(outcome)")}**.
+${stop(or(s.followup, "Follow-up runs from time zero until the outcome, death, disenrolment, or the end of the study period, whichever comes first."))} Maximum follow-up per patient: **${daysTxt(s.fudays)}** from time zero. Outcome: **${or(s.outcome, "(outcome)")}**.
 
 ## 10. Estimand and effect measure
 The primary estimand is the **per-protocol effect** — what would have happened had every patient received and adhered to the assigned strategy. For comparison we also report an **as-started (intention-to-treat-analogue) effect** from a conventional analysis (Section 11). We report ${effectText(s.effect)}, with 95% confidence intervals from a **non-parametric bootstrap**.
@@ -637,7 +641,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       children.push(para("Identifying assumptions carried by the weights (Maringe 2020): (i) every predictor of deviation is measured and included; (ii) the weight models are correctly specified; (iii) positivity — the probability of deviating is non-zero at every time within the grace period, for every patient; (iv) consistency. Assumption (i) is not testable; assumption (iii) fails silently when the grace period is long enough that some covariate pattern always or never initiates, so extreme weights are inspected as a diagnostic."));
 
       children.push(h1("7. Follow-up and outcome"));
-      children.push(para(or(s.followup, "From time zero to outcome, death, disenrolment, or end of study.") + " Maximum follow-up per patient: " + daysTxt(s.fudays) + " from time zero. Outcome: " + or(s.outcome, "(outcome)") + "."));
+      children.push(para(stop(or(s.followup, "From time zero to outcome, death, disenrolment, or end of study.")) + " Maximum follow-up per patient: " + daysTxt(s.fudays) + " from time zero. Outcome: " + or(s.outcome, "(outcome)") + "."));
 
       children.push(h1("8. Estimand and effect measure"));
       children.push(para("Primary estimand: the per-protocol effect — what would have happened had every patient received and adhered to the assigned strategy. A conventional as-started (intention-to-treat-analogue) analysis is reported for comparison. We report " + effectText(s.effect) + ", with 95% CIs from a non-parametric bootstrap."));
