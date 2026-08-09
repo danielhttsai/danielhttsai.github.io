@@ -221,8 +221,11 @@ const TIMELINE_PRESETS: Record<string, string> = {
           <li class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
             <p class="text-sm font-bold text-slate-900"><span class="text-brand-700">{i + 1}.</span> {a.t}</p>
             <p class="mt-1 text-sm text-slate-700">{a.plain}</p>
-            <p class="mt-2 text-xs text-slate-600 leading-relaxed"><span class="uppercase tracking-widest font-bold text-slate-500 text-[10px]">Why</span> · {a.precise}</p>
-            <p class="mt-1.5 text-xs text-slate-600 leading-relaxed"><span class="uppercase tracking-widest font-bold text-slate-500 text-[10px]">What to do</span> · {a.check} <span class="text-slate-400">[{a.cite}]</span></p>
+            <details class="mt-2">
+              <summary class="cursor-pointer select-none text-[11px] font-bold uppercase tracking-widest text-brand-700 hover:underline">Why it matters, and what to do</summary>
+              <p class="mt-2 text-xs text-slate-600 leading-relaxed"><span class="uppercase tracking-widest font-bold text-slate-500 text-[10px]">Why</span> · {a.precise}</p>
+              <p class="mt-1.5 text-xs text-slate-600 leading-relaxed"><span class="uppercase tracking-widest font-bold text-slate-500 text-[10px]">What to do</span> · {a.check} <span class="text-slate-400">[{a.cite}]</span></p>
+            </details>
           </li>
         ))}
       </ol>
@@ -1172,22 +1175,27 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       });
 
       const doReset = () => {
-        if (!confirm("Clear every field and forget the saved draft?")) return;
+        if (!confirm("Reset every field to its default and forget the saved draft?")) return;
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_CITATIONS_KEY);
         pickedCitations = {};
+        // "Start over" means exactly the page a first-time visitor sees, not an
+        // empty one. Emptying instead of resetting used to leave the timeline
+        // anchor with no radio ticked, and stripped defaults the protocol goes
+        // on asserting anyway (the period strip, the primary model, the
+        // reference list) — a blank field that the export silently refills is
+        // the same trap as a blank field that silently becomes a default.
         form.querySelectorAll("input, textarea, select").forEach((el) => {
-          // Radios and selects have no "empty" state. Unchecking every radio left
-          // the timeline anchor with neither option ticked — a state the UI cannot
-          // display and the user cannot reach by clicking — so restore each
-          // control's own HTML default instead.
-          if (el.type === "radio") el.checked = el.defaultChecked;
-          else if (el.type === "checkbox") el.checked = false;
+          if (el.type === "checkbox" || el.type === "radio") el.checked = el.defaultChecked;
           else if (el.tagName === "SELECT") { const i = [...el.options].findIndex((o) => o.defaultSelected); el.selectedIndex = i < 0 ? 0 : i; }
-          else el.value = "";
+          else el.value = el.defaultValue;
         });
+        // The timeline preset is applied by script, not by markup, so it has no
+        // defaultValue to come back from.
+        const tl = form.querySelector('[name="timeline"]');
+        if (tl && !tl.value) tl.value = TIMELINE_PRESETS["12-month"];
         render();
-        setMsg("Cleared.");
+        setMsg("Reset to defaults.");
       };
       document.querySelector("[data-action='reset']")?.addEventListener("click", doReset);
       document.querySelector("[data-action='reset-top']")?.addEventListener("click", doReset);
