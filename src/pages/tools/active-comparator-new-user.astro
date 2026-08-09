@@ -398,7 +398,7 @@ const PHENOTYPES = {
       name: "GI bleeding",
       codes: "ICD-10 K25.0, K25.2, K25.4, K25.6, K26.0, K26.2, K26.4, K26.6, K27.*, K28.*, K29.0, K92.0, K92.1, K92.2 (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge diagnosis of GI bleeding.",
-      validation: "Used in AsPEN PSSA studies on NSAID and PPI safety; see Andersen M, Pratt N, Sanfélix-Gimeno G et al. Pharmacoepidemiol Drug Saf 2013 (founding AsPEN methods paper).",
+      validation: "Used in AsPEN PSSA studies on NSAID and PPI safety; see Andersen M, Bergman U, Choi NK, et al. The Asian Pharmacoepidemiology Network (AsPEN): promoting multi-national collaboration for pharmacoepidemiologic research in Asia. Pharmacoepidemiol Drug Saf 2013;22(7):700-704. doi:10.1002/pds.3439. PMID: 23653370.",
     },
     {
       name: "Intracranial haemorrhage",
@@ -2576,21 +2576,45 @@ _Drafted with the AsPEN protocol builder (${today})._
       };
 
       // ── Render preview from current form state ──────
-      const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
+      // `parseInt(x) || 0` turned "Comorbidities | one year" into a 0-day
+      // look-back and exported it as "Comorbidities 0 d" — a plausible number
+      // meaning "no baseline window at all", with nothing on screen to say the
+      // text was never read. Distinguish unreadable from a deliberate 0.
+      const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+        const p = l.split("|");
+        const raw = (p[1] === undefined ? "" : String(p[1])).trim();
+        const n = parseInt(raw, 10);
+        const bad = raw === "" || !isFinite(n) || n < 0 || !/^\s*\d/.test(raw);
+        return { name: (p[0] || "").trim(), days: bad ? 0 : n, bad: bad, raw: raw };
+      }).filter((r) => r.name);
       const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
-      const covLbText = (s) => { const r = parseRows(s.covWindows); return r.length ? r.map((x) => x.name + " " + x.days + " d").join("; ") : ((s.lookback || "365") + " days prior to index date"); };
+      const covLbText = (s) => { const r = parseRows(s.covWindows); return r.length ? r.map((x) => x.name + (x.bad ? " (look-back not specified)" : " " + x.days + " d")).join("; ") : ((s.lookback || "365") + " days prior to index date"); };
+      // The diagram used to fall back to five years whenever it could not read a
+      // duration, so a protocol saying "18 months" was drawn as 5 years — the
+      // text and the picture in the same export disagreeing, with the picture
+      // wrong. Read months and weeks too, and report when it still cannot tell.
+      const resolveFollowupDays = (s) => {
+        const mfc = (s.maxFollowupChoice || "") + " " + (s.maxFollowupCustom || "");
+        const y = mfc.match(/(\d+(?:\.\d+)?)\s*(?:years?|yrs?|y)\b/i);
+        if (y) return { days: Math.round(parseFloat(y[1]) * 365), known: true };
+        const mo = mfc.match(/(\d+(?:\.\d+)?)\s*(?:months?|mos?|mth)\b/i);
+        if (mo) return { days: Math.round(parseFloat(mo[1]) * 30.44), known: true };
+        const w = mfc.match(/(\d+(?:\.\d+)?)\s*(?:weeks?|wks?|w)\b/i);
+        if (w) return { days: Math.round(parseFloat(w[1]) * 7), known: true };
+        const d = mfc.match(/(\d+)\s*(?:days?|d)\b/i);
+        if (d) return { days: parseInt(d[1], 10), known: true };
+        return { days: 1825, known: false };
+      };
       const renderScheme = (s) => {
         const wash = Math.max(0, parseInt(s.washout) || 0);
         const lb = Math.max(0, parseInt(s.lookback) || 0);
         const grace = Math.max(0, parseInt(s.grace) || 0);
-        let fu = 1825;
-        const mfc = (s.maxFollowupChoice || "") + " " + (s.maxFollowupCustom || "");
-        const ym = mfc.match(/(\d+(?:\.\d+)?)\s*year/i), dm = mfc.match(/(\d+)\s*day/i);
-        if (ym) fu = Math.round(parseFloat(ym[1]) * 365); else if (dm) fu = parseInt(dm[1]);
+        const fuR = resolveFollowupDays(s);
+        const fu = fuR.days;
         const covRows = parseRows(s.covWindows);
         const wins = [];
         // Per-covariate look-back windows if listed; else a single shared look-back — like the clone builder.
-        if (covRows.length) covRows.forEach((r, i) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }));
+        if (covRows.length) covRows.forEach((r, i) => wins.push({ label: r.name + (r.bad ? " (window not specified)" : ""), kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }));
         else if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
         if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
         wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "maxFollowup", edge: "end" } });
@@ -2620,6 +2644,10 @@ _Drafted with the AsPEN protocol builder (${today})._
         if (wash <= 0) checks.push({ level: "warn", msg: "Washout is 0 — prevalent (non-new) users may be included. A new-user design needs a washout window with no prior exposure or comparator." });
         else if (wash < 180) checks.push({ level: "info", msg: "Washout < 180 days — consider a longer washout to be confident users are truly new." });
         if (lb <= 0) checks.push({ level: "warn", msg: "No covariate look-back — baseline confounders are unmeasured. Set a look-back window before index." });
+        const badLb = parseRows(s.covWindows).filter((r) => r.bad);
+        if (badLb.length) checks.push({ level: "warn", msg: "No readable look-back for " + badLb.map((r) => "“" + r.name + "”").join(", ") + " — the number after the “|” could not be read" + (badLb.some((r) => r.raw) ? " (got “" + badLb.filter((r) => r.raw).map((r) => r.raw).join("”, “") + "”)" : "") + ". These are shown as “not specified” rather than as a 0-day window; write the value in whole days, e.g. “" + badLb[0].name + " | 365”." });
+        const fuChk = resolveFollowupDays(s);
+        if (!fuChk.known) checks.push({ level: "warn", msg: "The maximum follow-up could not be read as a duration, so the study-design diagram is drawing a 5-year default. The protocol text still says what you typed, so the words and the picture disagree — write a duration the diagram can read, e.g. “18 months”, “90 days”, “2 years”." });
         if (grace <= 0) checks.push({ level: "info", msg: "Grace period 0 — the on-treatment analysis will censor at the first dispensing gap." });
         if (!s.exposureName || !s.comparatorName) checks.push({ level: "info", msg: "Specify the exposure and the active comparator." });
         if (!s.picoO && !s.outcomeDef) checks.push({ level: "info", msg: "Specify the outcome." });
