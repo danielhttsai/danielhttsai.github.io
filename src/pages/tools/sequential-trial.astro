@@ -136,6 +136,17 @@ const SENSITIVITY = [
               <option value="both">Both ITT and per-protocol</option>
             </select>
             <span class="mt-1 block text-[11px] text-slate-500">ITT here means <em>as assigned at the origin</em>: whatever the patient does afterwards is ignored, so switching and discontinuation pull the estimate toward the null. Per-protocol requires censoring at deviation, and that censoring is informative — it needs inverse-probability-of-censoring weights, which is the <a class="underline" href={`${base}/tools/clone-censor-weight`}>clone-censor-weight</a> machinery applied inside each trial.</span></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Effect measure</span>
+            <select name="effect" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
+              {/* Plain text only in an option label: an inline tag here (an <em>) makes the
+                  HTML parser leave the select, and the four options below it vanished. */}
+              <option value="RDRMST">Survival difference at the per-trial horizon + RMST difference</option>
+              <option value="RD">Survival / risk difference at the per-trial horizon (with the risk ratio)</option>
+              <option value="RMST">Restricted mean survival time (RMST) difference only</option>
+              <option value="HR">Hazard ratio from the pooled model</option>
+              <option value="both">Both absolute (RD/RR) and relative (HR)</option>
+            </select>
+            <span class="mt-1 block text-[11px] text-slate-500">A hazard ratio is the conventional report in this design and is available above. Note that it is pooled over trials with different amounts of remaining follow-up, and it cannot be read as a risk — so state an absolute contrast alongside it. Unlike the cloned design, the arms within one nested trial are different people, so proportional hazards is not violated by construction here; the reason to prefer an absolute measure is interpretability, not a broken assumption.</span></label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Follow-up window (per trial)</span>
             <input name="followup" placeholder="e.g. From each origin to outcome, death, disenrolment, or 8 years" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
           <div class="grid grid-cols-3 gap-3">
@@ -232,7 +243,7 @@ const SENSITIVITY = [
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), comparator: V("comparator"),
       outcome: V("outcome"), first: V("first"), last: V("last"), interval: V("interval"), eligibility: V("eligibility"),
-      assignment: V("assignment"), multiple: V("multiple"), confounding: V("confounding"), estimand: V("estimand"),
+      assignment: V("assignment"), multiple: V("multiple"), confounding: V("confounding"), estimand: V("estimand"), effect: V("effect"),
       followup: V("followup"), washout: V("washout"), covlookback: V("covlookback"), covWindows: V("covWindows"), futrial: V("futrial"),
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
@@ -331,6 +342,19 @@ const SENSITIVITY = [
       PP: "the **per-protocol effect** — the effect of receiving and adhering to the assigned strategy, with censoring at deviation and inverse-probability-of-censoring weights (a clone-censor-weight step within each trial)",
       both: "both the **intention-to-treat** and the **per-protocol** effects (the latter using censoring at deviation with inverse-probability-of-censoring weights)",
     })[e] || "the treatment effect";
+    // The horizon τ for the absolute measures is the per-trial maximum follow-up.
+    const horizon = (s) => (blank(s.futrial) ? "the per-trial horizon (length not yet specified)" : "the per-trial horizon (τ = " + daysTxt(s.futrial) + " from each origin)");
+    const effectText = (s) => {
+      const H = horizon(s);
+      return ({
+        RD: "the difference in survival at " + H + " — equivalently the risk difference — together with the risk ratio, from the weighted survival / cumulative-incidence curves",
+        RMST: "the difference in restricted mean survival time (RMST) up to " + H + ", as the area between the weighted survival curves",
+        RDRMST: "two absolute contrasts of the weighted survival curves — the difference in survival at " + H + ", which is equivalently the risk difference, and the difference in restricted mean survival time (RMST) up to that same horizon",
+        HR: "the pooled hazard ratio from the outcome model",
+        both: "both absolute effects (the difference in survival at " + H + ", the risk difference and the risk ratio) and the relative effect (the pooled hazard ratio), the absolute contrast being the primary measure",
+      })[s.effect] || "the pooled treatment effect";
+    };
+    const usesRMST = (e) => e === "RMST" || e === "RDRMST";
 
     // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
     const pcOf = (s) => ({
@@ -341,7 +365,7 @@ const SENSITIVITY = [
       comparator: or(s.comparator, "(comparator)"),
       outcome: or(s.outcome, "(outcome)"),
       data: s.data,
-      analysis: "a sequence of nested trials emulated at each eligible origin and pooled across trials, with the uncertainty from patients entering several trials handled as in Section 10, estimating " + estimandText(s.estimand).replace(/\*\*/g, ""),
+      analysis: "a sequence of nested trials emulated at each eligible origin and pooled across trials, with the uncertainty from patients entering several trials handled as in Section 10, estimating " + estimandText(s.estimand).replace(/\*\*/g, "") + ", reported as " + effectText(s),
       groupBy: "treatment arm",
       limitations: "The same patient contributes to several trials, often with overlapping follow-up, so the nested trials are not independent: standard errors that ignore this are too small, and per-trial estimates cannot be treated as separate studies. Residual and unmeasured confounding within each trial cannot be excluded, and confounders are measured only up to each origin.",
       plannedOutputs: ["Number of trials, and the number of patients and of patient-trial records enrolled in each — with the distribution of how many trials each patient enters.", "Per-trial and pooled effect estimates, the per-trial estimates read as a descriptive check rather than as independent studies.", "Within-trial covariate-balance (SMD) diagnostics, before and after weighting or matching.", "Cumulative-incidence or survival curves by arm."],
@@ -401,15 +425,16 @@ ${stop(or(s.followup, "Within each trial, follow-up runs from the origin to the 
 
 Trials with later origins have less calendar time remaining before the data end, so they are administratively censored earlier. Long-term contrasts are therefore informed mainly by the earliest trials; we report how many trials are still contributing at each follow-up time.
 
-## 9. Estimand
-The target estimand is ${estimandText(s.estimand)}.
+## 9. Estimand and effect measure
+The target estimand is ${estimandText(s.estimand)}. We report ${effectText(s)}.
 ${s.estimand === "ITT" || s.estimand === "both" ? "\nThe intention-to-treat contrast here is a contrast of *initiation* strategies. If control-arm patients later start the index treatment, or treated patients stop, the ITT effect is attenuated toward the null by an amount the ITT estimate alone cannot reveal. We therefore report the observed switching and discontinuation over follow-up alongside it.\n" : ""}${s.estimand === "PP" || s.estimand === "both" ? "\nThe per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. This is the same machinery as a clone-censor-weight analysis, applied inside each trial.\n" : ""}
 ## 10. Statistical analysis
 1. Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset (one record per patient per trial they enter).
 2. Within each trial, estimate the propensity score from covariates measured at that origin and apply weighting (or matching); check balance within trial.
 3. Fit a **pooled logistic (or weighted Cox) model** across all trials for the outcome hazard, with terms for the assigned treatment, follow-up time, and trial; ${s.estimand === "ITT" ? "no deviation censoring (ITT)." : s.estimand === "PP" ? "censor at deviation and apply inverse-probability-of-censoring weights (per-protocol)." : "run ITT and per-protocol (deviation censoring + IPCW) variants."}
 4. **Uncertainty.** Because patients enter several trials, the reference method is a **non-parametric bootstrap that resamples patients** (not patient-trial records), repeating trial construction, propensity-score and censoring-weight estimation, and the outcome model inside every replicate (Keogh 2023). A **robust (sandwich) variance clustered on the patient** is the cheaper alternative; Danaei et al. (2013) used it in exactly this design and described the resulting intervals as *conservative*. State which was used. Model-based standard errors are not appropriate under either choice.
-5. Report the **pooled** effect as the primary result. Per-trial estimates are presented as a descriptive check on stability across calendar time — not as independent studies: because the trials share patients, a conventional heterogeneity statistic (I², Cochran's Q) does not carry its usual meaning here.
+5. Derive the effect measure from the fitted model — ${effectText(s)}${usesRMST(s.effect) ? ", taking the RMST in each arm as the area under its weighted survival curve from the origin to the horizon" : ""}.
+6. Report the **pooled** effect as the primary result. Per-trial estimates are presented as a descriptive check on stability across calendar time — not as independent studies: because the trials share patients, a conventional heterogeneity statistic (I², Cochran's Q) does not carry its usual meaning here.
 
 ## 11. Subgroup analyses
 ${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsPick, s.subgroupsCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
@@ -449,6 +474,8 @@ ${REFS.map((r) => "- " + r).join("\n")}
       const est = s.estimand;
       if (est === "ITT" || est === "both") checks.push({ level: "info", msg: "ITT (assignment at each origin): the strategy is fixed at the origin — later switching or add-on is ignored (no deviation censoring). Switching attenuates this estimate toward the null by an amount the ITT estimate itself cannot tell you, so report how much switching occurred." });
       if (est === "PP" || est === "both") checks.push({ level: "info", msg: "Per-protocol: within each trial, censor at deviation and apply IPCW (a clone-censor-weight step) — fit the weights separately per arm, and list the predictors of deviation. Without the weights, censoring at deviation is itself a source of selection bias." });
+      if (usesRMST(s.effect) && blank(s.futrial)) checks.push({ level: "error", msg: "RMST is selected but no per-trial maximum follow-up is set. Restricted mean survival time is the area under the survival curve up to a horizon τ, so it has no value until τ is fixed — and τ must be pre-specified rather than chosen after seeing the curves." });
+      if (s.effect === "HR") checks.push({ level: "info", msg: "The hazard ratio is the conventional report in this design, and unlike a cloned design the arms within one nested trial are different people, so proportional hazards is not violated by construction. It is still pooled over trials with different amounts of remaining follow-up, and it cannot be read as a risk — report an absolute contrast alongside it." });
       if (mergeList(s.sensitivityPick, s.sensitivityCustom).some((x) => /I²|I2|heterogen/i.test(x))) checks.push({ level: "warn", msg: "A trial-stratified estimate with I² is planned. Nested trials share patients, so they are not independent studies and I² does not carry its usual meaning here. Report the per-trial estimates as a descriptive check on stability over calendar time rather than as a meta-analysis." });
       checks.push({ level: "info", msg: "Uncertainty: the reference method is a bootstrap resampling patients, re-running trial construction and weighting inside each replicate (Keogh 2023). A robust variance clustered on patient is the cheaper alternative and was described by Danaei et al. (2013) as conservative. Model-based standard errors are wrong in either case." });
       return checks;
@@ -542,7 +569,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
           "Outcome: " + or(s.outcome, "(specify)") + "."],
         ["f. Causal contrasts",
           "Effect of being assigned (and, optionally, adhering to) the treatment strategy at the origin.",
-          "Target estimand: " + estPlain + "."],
+          "Target estimand: " + estPlain + ".\nReported as: " + effectText(s) + "."],
         ["g. Identifying assumptions",
           "Exchangeability, positivity, and consistency within each nested trial.",
           "Conditional exchangeability within each trial via " + or(s.confounding, "propensity-score methods at each origin") + ", with covariates re-measured at each origin (a patient in several trials has a different propensity score in each). Positivity and consistency are assumed within each trial." + (s.estimand === "PP" || s.estimand === "both" ? " Per-protocol contrasts censor at deviation and apply inverse-probability-of-censoring weights within each trial, which additionally assumes every predictor of deviation is measured." : "") + " Because a patient can appear in several trials, often with overlapping follow-up, the nested trials are not independent and the uncertainty must account for that (see h)."],
@@ -655,13 +682,13 @@ ${REFS.map((r) => "- " + r).join("\n")}
       children.push(para(stop(or(s.followup, "Within each trial, from the origin to outcome, death, disenrolment, or the maximum follow-up.")) + " Maximum follow-up per trial: " + daysTxt(s.futrial) + ". Outcome: " + or(s.outcome, "(outcome)") + "."));
       children.push(para("Trials with later origins have less calendar time remaining before the data end, so they are administratively censored earlier. Long-term contrasts are therefore informed mainly by the earliest trials; we report how many trials are still contributing at each follow-up time."));
 
-      children.push(h1("9. Estimand"));
-      children.push(para("The target estimand is " + estPlain + "."));
+      children.push(h1("9. Estimand and effect measure"));
+      children.push(para("The target estimand is " + estPlain + ". We report " + effectText(s) + "."));
       if (s.estimand === "ITT" || s.estimand === "both") children.push(para("The intention-to-treat contrast here is a contrast of initiation strategies. If control-arm patients later start the index treatment, or treated patients stop, the ITT effect is attenuated toward the null by an amount the ITT estimate alone cannot reveal. We therefore report the observed switching and discontinuation over follow-up alongside it."));
       if (s.estimand === "PP" || s.estimand === "both") children.push(para("The per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. This is the same machinery as a clone-censor-weight analysis, applied inside each trial."));
 
       children.push(h1("10. Statistical analysis"));
-      ["Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset (one record per patient per trial they enter).", "Within each trial, estimate the propensity score from covariates measured at that origin and apply weighting (or matching); check balance within trial.", "Fit a pooled logistic (or weighted Cox) model across all trials with terms for the assigned treatment, follow-up time, and trial.", "Uncertainty: because patients enter several trials, the reference method is a non-parametric bootstrap resampling PATIENTS (not patient-trial records), repeating trial construction, propensity-score and censoring-weight estimation, and the outcome model inside every replicate (Keogh 2023). A robust (sandwich) variance clustered on the patient is the cheaper alternative; Danaei et al. (2013) used it in this design and described the resulting intervals as conservative. State which was used; model-based standard errors are not appropriate under either choice.", "Report the pooled effect as the primary result. Per-trial estimates are a descriptive check on stability across calendar time, not independent studies: because the trials share patients, I-squared and Cochran's Q do not carry their usual meaning."].forEach((l) => children.push(numItem(l)));
+      ["Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset (one record per patient per trial they enter).", "Within each trial, estimate the propensity score from covariates measured at that origin and apply weighting (or matching); check balance within trial.", "Fit a pooled logistic (or weighted Cox) model across all trials with terms for the assigned treatment, follow-up time, and trial.", "Derive the effect measure from the fitted model: " + effectText(s) + (usesRMST(s.effect) ? ", taking the RMST in each arm as the area under its weighted survival curve from the origin to the horizon" : "") + ".", "Uncertainty: because patients enter several trials, the reference method is a non-parametric bootstrap resampling PATIENTS (not patient-trial records), repeating trial construction, propensity-score and censoring-weight estimation, and the outcome model inside every replicate (Keogh 2023). A robust (sandwich) variance clustered on the patient is the cheaper alternative; Danaei et al. (2013) used it in this design and described the resulting intervals as conservative. State which was used; model-based standard errors are not appropriate under either choice.", "Report the pooled effect as the primary result. Per-trial estimates are a descriptive check on stability across calendar time, not independent studies: because the trials share patients, I-squared and Cochran's Q do not carry their usual meaning."].forEach((l) => children.push(numItem(l)));
 
       children.push(h1("11. Subgroup analyses"));
       (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));

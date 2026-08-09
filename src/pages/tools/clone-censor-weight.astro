@@ -171,11 +171,15 @@ Comedications | 180</textarea>
           </div>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Effect measure</span>
             <select name="effect" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
-              <option value="RD">Risk difference &amp; risk ratio from weighted cumulative incidence</option>
+              {/* Plain text only in an option label: an inline tag here (an <em>) makes the
+                  HTML parser leave the select, and the four options below it vanished. */}
+              <option value="RDRMST">Survival difference at the end of follow-up + RMST difference — the pair Maringe et al. report</option>
+              <option value="RD">Survival / risk difference at the end of follow-up (with the risk ratio)</option>
+              <option value="RMST">Restricted mean survival time (RMST) difference only</option>
               <option value="HR">Hazard ratio from a weighted pooled logistic / Cox model</option>
               <option value="both">Both absolute (RD/RR) and relative (HR)</option>
             </select>
-            <span class="mt-1 block text-[11px] text-slate-500">Prefer an absolute contrast here. In a cloned design the two arms are <em>the same people</em> during the grace period, so the hazards cannot be proportional; Maringe et al. advise against a simple Cox model for these data and against giving the hazard ratio a causal reading. A difference in survival at a fixed time, or in restricted mean survival time, is the safer primary measure.</span></label>
+            <span class="mt-1 block text-[11px] text-slate-500">Prefer an absolute contrast here. In a cloned design the two arms are <em>the same people</em> during the grace period, so the hazards cannot be proportional; Maringe et al. advise against a simple Cox model for these data and against giving the hazard ratio a causal reading. Their worked example reports the difference in survival at one year and the difference in RMST at one year — the two measures above the line.</span></label>
           <div>
             <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Subgroup analyses (tick to perform)</span>
             <div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
@@ -310,12 +314,21 @@ Comedications | 180</textarea>
     }
 
     const or = (s, d) => (s && s.length ? s : d);
-    const effectText = (e) => ({
-      RD: "the risk difference and risk ratio, obtained by contrasting weighted cumulative-incidence (risk) curves at the end of follow-up (and, alongside them, the difference in restricted mean survival time)",
-      HR: "the hazard ratio from a weighted pooled logistic regression (discrete-time hazards) model with the assigned strategy as the exposure, reported with the caveat in Section 10 that proportional hazards cannot hold in a cloned design",
-      both: "both absolute effects (risk difference and risk ratio from weighted cumulative-incidence curves) and the relative effect (hazard ratio from a weighted pooled logistic model), the absolute contrast being the primary measure",
-    })[e] || "the per-protocol effect on the risk of the outcome";
+    // The horizon τ that both absolute measures are evaluated at is the study's own
+    // maximum follow-up, so name it rather than leaving "at the end of follow-up" vague.
+    const horizon = (s) => (blank(s.fudays) ? "the end of follow-up (length not yet specified)" : "the end of follow-up (τ = " + daysTxt(s.fudays) + ")");
+    const effectText = (s) => {
+      const H = horizon(s);
+      return ({
+        RD: "the difference in survival at " + H + " — equivalently the risk difference — together with the risk ratio, obtained by contrasting the weighted survival / cumulative-incidence curves",
+        RMST: "the difference in restricted mean survival time (RMST) up to " + H + ", obtained as the area between the weighted survival curves",
+        RDRMST: "two absolute contrasts of the weighted survival curves — the difference in survival at " + H + ", which is equivalently the risk difference, and the difference in restricted mean survival time (RMST) up to that same horizon. This is the pair reported in the worked example of Maringe et al. (2020)",
+        HR: "the hazard ratio from a weighted pooled logistic regression (discrete-time hazards) model with the assigned strategy as the exposure, reported with the caveat in Section 10 that proportional hazards cannot hold in a cloned design",
+        both: "both absolute effects (the difference in survival at " + H + ", the risk difference and the risk ratio from the weighted curves) and the relative effect (hazard ratio from a weighted pooled logistic model), the absolute contrast being the primary measure",
+      })[s.effect] || "the per-protocol effect on the risk of the outcome";
+    };
     const usesHR = (e) => e === "HR" || e === "both";
+    const usesRMST = (e) => e === "RMST" || e === "RDRMST";
 
     // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
     const pcOf = (s) => ({
@@ -326,7 +339,7 @@ Comedications | 180</textarea>
       comparator: or(s.stratB, "(strategy B)"),
       outcome: or(s.outcome, "(outcome)"),
       data: s.data,
-      analysis: "a clone-censor-weight per-protocol analysis estimating " + effectText(s.effect) + ", with 95% CIs from a non-parametric bootstrap that re-runs cloning, censoring and weight estimation inside each replicate",
+      analysis: "a clone-censor-weight per-protocol analysis estimating " + effectText(s) + ", with 95% CIs from a non-parametric bootstrap that re-runs cloning, censoring and weight estimation inside each replicate",
       groupBy: "treatment strategy",
       limitations: "Artificial censoring is informative and adjusted with inverse-probability-of-censoring weights, which assume that every predictor of deviation is measured, that the weight models are correctly specified, and that the probability of deviating is non-zero at every time in the grace period for every patient (Maringe 2020). Cloning removes confounding of the assigned strategy at time zero, but only the observed covariates enter the weight models, so residual confounding of adherence remains possible.",
       plannedOutputs: ["Weighted cumulative-incidence (risk) curves by strategy, with the difference in survival at the end of follow-up and in restricted mean survival time.", "Weight-distribution diagnostics (mean, range, extreme percentiles) and weighted covariate balance (SMD) between arms.", "Number of clones censored, and when, in each arm.", "Comparison of the CCW estimate with a conventional as-started analysis."],
@@ -397,14 +410,14 @@ Weights are cumulative over follow-up. We report the distribution of the weights
 ${stop(or(s.followup, "Follow-up runs from time zero until the outcome, death, disenrolment, or the end of the study period, whichever comes first."))} Maximum follow-up per patient: **${daysTxt(s.fudays)}** from time zero. Outcome: **${or(s.outcome, "(outcome)")}**.
 
 ## 10. Estimand and effect measure
-The primary estimand is the **per-protocol effect** — what would have happened had every patient received and adhered to the assigned strategy. For comparison we also report an **as-started (intention-to-treat-analogue) effect** from a conventional analysis (Section 11). We report ${effectText(s.effect)}, with 95% confidence intervals from a **non-parametric bootstrap**.
+The primary estimand is the **per-protocol effect** — what would have happened had every patient received and adhered to the assigned strategy. For comparison we also report an **as-started (intention-to-treat-analogue) effect** from a conventional analysis (Section 11). We report ${effectText(s)}, with 95% confidence intervals from a **non-parametric bootstrap**.
 ${usesHR(s.effect) ? "\n> **Caveat on the hazard ratio.** During the grace period the two arms contain the same people, so their hazards are equal by construction and the proportional-hazards assumption is violated by design. Maringe et al. (2020) advise against analysing cloned data with a simple Cox model, and against reading the hazard ratio causally, because it averages conditional time-specific effects over a risk set whose composition changes. The absolute contrast (difference in survival at the end of follow-up, or in restricted mean survival time) is the interpretable measure here.\n" : ""}
 ## 11. Statistical analysis
 **Primary — clone-censor-weight (per-protocol):**
 1. Clone the eligible cohort into the strategy arms and apply the censoring rule.
 2. Fit the arm-specific censoring model(s) and compute the stabilised IPCW.
 3. Estimate the weighted survival / cumulative-incidence curve in each arm (weighted Kaplan–Meier, or a **weighted pooled logistic regression** for the discrete-time hazard with the assigned strategy, follow-up time, its quadratic term, and a strategy × time interaction).
-4. Contrast the curves for the effect measure(s).
+4. Contrast the curves for the effect measure(s)${usesRMST(s.effect) ? ", taking the RMST in each arm as the area under its weighted survival curve from time zero to " + horizon(s).replace(/^the end of follow-up/, "the horizon") + " and reporting the difference" : ""}.
 5. Obtain 95% CIs by **non-parametric bootstrap**: resample **patients** (not clones) with replacement, then repeat steps 1–4 — cloning, censoring, weight estimation and outcome modelling — inside every replicate. Model-based standard errors must not be used: cloning inflates the apparent number of events, so they are too small (Maringe 2020).
 
 **Comparison — conventional analysis (as-started, ITT-analogue):** start follow-up at the index date, balance the arms by **propensity-score matching** (standardised mean difference < 0.1 as the balance criterion), and handle the competing risk of death with **Fine–Gray sub-distribution** and **cause-specific Cox** models. The gap between this and the CCW estimate indexes the time-lag / immortal-time bias removed.${mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).some((x) => /^death/i.test(x)) ? "\n\n**Note on death.** Death is listed above as an event censored and weighted by IPCW. Censoring at death and weighting for it estimates a *hypothetical* effect — the effect that would be seen if death could not occur — which is a different estimand from the total effect in a world where death competes with the outcome. State which of the two is intended, and report the competing-risk analysis alongside it (Young 2020)." : ""}
@@ -437,6 +450,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (!s.censor || !s.censor.trim()) checks.push({ level: "warn", msg: "No deviation / censoring rule — clones must be censored when their data stop matching the assigned strategy. State the rule for each arm separately; they are not symmetric." });
       if (!s.ipcw || !s.ipcw.trim()) checks.push({ level: "warn", msg: "No IPCW covariates listed. Cloning removes confounding of the assigned strategy, but the censoring it introduces is informative; without the weights the CCW estimate is not less biased than the naive one, only differently biased." });
       if (!reasons.length) checks.push({ level: "warn", msg: "No censoring events selected for IPCW — pick the events (discontinuation, switch, add-on…) that create informative censoring under each strategy." });
+      if (usesRMST(s.effect) && blank(s.fudays)) checks.push({ level: "error", msg: "RMST is selected but no maximum follow-up is set. Restricted mean survival time is the area under the survival curve up to a horizon τ, so it has no value until τ is fixed — and because τ must be pre-specified rather than chosen after seeing the curves, set it here." });
       if (usesHR(s.effect)) checks.push({ level: "warn", msg: "You have chosen the hazard ratio. In a cloned design the arms contain the same people during the grace period, so their hazards are equal by construction and proportional hazards cannot hold. Maringe et al. (2020) recommend against a simple Cox model here and against a causal reading of the HR. Prefer the difference in survival at the end of follow-up, or in restricted mean survival time." });
       if (reasons.some((x) => /^death/i.test(x))) checks.push({ level: "warn", msg: "Death is marked as a censoring event weighted by IPCW. That targets a hypothetical estimand — the effect if death could not occur — not the total effect in a world where death competes with the outcome (Young 2020). If death is a competing event rather than a loss of information, say so and analyse it as one. If the outcome is death, it should not appear here at all." });
       checks.push({ level: "info", msg: "CCW targets the per-protocol effect: what would have happened had everyone received and adhered to the assigned strategy. It is not the intention-to-treat effect, and it is not what a conventional as-started analysis estimates." });
@@ -528,7 +542,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
           "Outcome: " + or(s.outcome, "(specify)") + "."],
         ["f. Causal contrasts",
           "Per-protocol effect — the effect of receiving and adhering to the assigned strategy.",
-          "Primary estimand: the per-protocol effect via clone-censor-weight; " + effectText(s.effect) + ". A conventional as-started (ITT-analogue) analysis is reported for comparison."],
+          "Primary estimand: the per-protocol effect via clone-censor-weight; " + effectText(s) + ". A conventional as-started (ITT-analogue) analysis is reported for comparison."],
         ["g. Identifying assumptions",
           "Exchangeability, positivity, and consistency; and — because artificial censoring is informative — no unmeasured predictors of deviation.",
           "Baseline exchangeability of the assigned strategy holds by construction, because cloning assigns every patient to every arm. The informative censoring introduced at deviation is addressed with stabilised inverse-probability-of-censoring weights fitted SEPARATELY per arm (the arms deviate on different schedules), over: " + or(s.ipcw, "(covariates)") + ". Censoring events weighted (each mapped to the assigned strategy): " + ipcwReasons + ".\nAssumptions carried by the weights (Maringe 2020): all predictors of deviation measured; weight models correctly specified; positivity of deviation at every time within the grace period for every patient; consistency. Weight distribution and weighted SMDs are reported as diagnostics."],
@@ -644,12 +658,12 @@ ${REFS.map((r) => "- " + r).join("\n")}
       children.push(para(stop(or(s.followup, "From time zero to outcome, death, disenrolment, or end of study.")) + " Maximum follow-up per patient: " + daysTxt(s.fudays) + " from time zero. Outcome: " + or(s.outcome, "(outcome)") + "."));
 
       children.push(h1("8. Estimand and effect measure"));
-      children.push(para("Primary estimand: the per-protocol effect — what would have happened had every patient received and adhered to the assigned strategy. A conventional as-started (intention-to-treat-analogue) analysis is reported for comparison. We report " + effectText(s.effect) + ", with 95% CIs from a non-parametric bootstrap."));
+      children.push(para("Primary estimand: the per-protocol effect — what would have happened had every patient received and adhered to the assigned strategy. A conventional as-started (intention-to-treat-analogue) analysis is reported for comparison. We report " + effectText(s) + ", with 95% CIs from a non-parametric bootstrap."));
       if (usesHR(s.effect)) children.push(para("Caveat on the hazard ratio. During the grace period the two arms contain the same people, so their hazards are equal by construction and proportional hazards is violated by design. Maringe et al. (2020) advise against analysing cloned data with a simple Cox model, and against a causal reading of the hazard ratio, because it averages conditional time-specific effects over a risk set whose composition changes. The absolute contrast — difference in survival at the end of follow-up, or in restricted mean survival time — is the interpretable measure here."));
 
       children.push(h1("9. Statistical analysis"));
       children.push(para("Primary — clone-censor-weight (per-protocol):"));
-      ["Clone the eligible cohort into the strategy arms and apply the censoring rule.", "Fit the arm-specific censoring model(s) and compute the stabilised IPCW.", "Estimate the weighted survival / cumulative-incidence curve in each arm (weighted Kaplan-Meier, or a weighted pooled logistic regression for the discrete-time hazard with the assigned strategy, follow-up time, its quadratic term, and a strategy x time interaction).", "Contrast the curves for the effect measure(s).", "Obtain 95% CIs by non-parametric bootstrap: resample PATIENTS (not clones) with replacement, then repeat steps 1-4 — cloning, censoring, weight estimation and outcome modelling — inside every replicate. Model-based standard errors are not used: cloning inflates the apparent number of events, so they are too small (Maringe 2020)."].forEach((l) => children.push(numItem(l)));
+      ["Clone the eligible cohort into the strategy arms and apply the censoring rule.", "Fit the arm-specific censoring model(s) and compute the stabilised IPCW.", "Estimate the weighted survival / cumulative-incidence curve in each arm (weighted Kaplan-Meier, or a weighted pooled logistic regression for the discrete-time hazard with the assigned strategy, follow-up time, its quadratic term, and a strategy x time interaction).", "Contrast the curves for the effect measure(s)" + (usesRMST(s.effect) ? ", taking the RMST in each arm as the area under its weighted survival curve from time zero to the horizon (" + daysTxt(s.fudays) + ") and reporting the difference" : "") + ".", "Obtain 95% CIs by non-parametric bootstrap: resample PATIENTS (not clones) with replacement, then repeat steps 1-4 — cloning, censoring, weight estimation and outcome modelling — inside every replicate. Model-based standard errors are not used: cloning inflates the apparent number of events, so they are too small (Maringe 2020)."].forEach((l) => children.push(numItem(l)));
       children.push(para("Comparison — conventional analysis (as-started, ITT-analogue): start follow-up at the index date, balance the arms by propensity-score matching (standardised mean difference < 0.1), and handle the competing risk of death with Fine–Gray sub-distribution and cause-specific Cox models."));
       if (mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).some((x) => /^death/i.test(x))) children.push(para("Note on death. Death is listed above as an event censored and weighted by IPCW. Censoring at death and weighting for it estimates a hypothetical effect — the effect that would be seen if death could not occur — which is a different estimand from the total effect in a world where death competes with the outcome. State which of the two is intended, and report the competing-risk analysis alongside it (Young 2020)."));
 
