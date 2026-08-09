@@ -157,6 +157,17 @@ const SENSITIVITY = [
           </label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Control series (if controlled)</span>
             <input name="controlSeries" placeholder="e.g. Same outcome in a region where the policy did not apply" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <p class="text-[11px] text-slate-500 border-t border-slate-100 pt-3">
+            <strong>If you intend to run this in RWE Studio.</strong> Every option here is a legitimate protocol
+            choice — you may well execute the analysis in R, SAS or Stata. But the Studio's in-browser ITS does not
+            implement all of them, so pick deliberately rather than being surprised later. It runs: the segmented
+            Poisson / negative-binomial and linear models, calendar-period and harmonic seasonality, a control series
+            with group-by-segment interactions, and Newey–West (HAC) standard errors.
+            It does <strong>not</strong> implement <strong>Prais–Winsten or ARIMA errors</strong>; it has no way to
+            <strong>exclude a transition / phase-in period</strong> around the interruption; and it reports the
+            difference from the counterfactual <strong>at the end of follow-up</strong> rather than at a time point
+            you nominate.
+          </p>
         </fieldset>
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
@@ -465,6 +476,9 @@ ${window.PC.tailMd(pcOf(s))}
       if (!s.controlled) checks.push({ level: "info", msg: "Single-group ITS assumes no co-intervention or secular change coincides with the interruption. A control series (controlled ITS) lets you difference those out and strengthens causal inference." });
       if (s.model === "poisson" && !s.denom) checks.push({ level: "warn", msg: "A Poisson model with no denominator / offset models the raw COUNT per period, and so assumes the population at risk is identical in every period. If the population grew or shrank, that change is read as a trend. Specify person-time or the eligible population as a log offset." });
       if (s.controlled && !s.controlSeries) checks.push({ level: "warn", msg: "Controlled ITS is ticked but no control series is named. A control series only helps if it shares the secular environment and is genuinely unaffected by the intervention — say which series that is and why it qualifies." });
+      if (s.autocorr === "prais" || s.autocorr === "arima")
+        checks.push({ level: "info", msg: (s.autocorr === "prais" ? "Prais–Winsten" : "ARIMA errors") + " is a sound choice for this protocol, but RWE Studio's in-browser ITS does not implement it — it offers Newey–West (HAC) or model-based standard errors only. Plan to run this analysis in R, SAS or Stata, or switch to Newey–West if you want the Studio to execute it." });
+      if (s.lag) checks.push({ level: "info", msg: "You have specified a transition / phase-in period. RWE Studio cannot exclude periods around the interruption, so that part of the protocol would have to be done in your own analysis code (or by excluding those rows before upload)." });
       checks.push({ level: "info", msg: "Report BOTH estimates. Level change and slope change answer different questions and can point in opposite directions — a one-off drop that then drifts back up is level down, slope up. Reporting only one describes it wrongly." });
       checks.push({ level: "info", msg: "Two conventions exist for coding time-since-interruption. Under the Wagner (2002) convention it is 0 at the first affected period, so the level-change coefficient IS the immediate step and the slope change accrues from the following period. State which convention you used — the coefficients are not interchangeable." });
       return checks;
