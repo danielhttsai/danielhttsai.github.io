@@ -121,6 +121,8 @@ const DESIGNS = [
           <button data-demo="sccs" type="button" class="text-brand-700 font-semibold hover:underline">self-controlled case series</button>
           <span class="mx-1 text-slate-300">·</span>
           <button data-demo="cco" type="button" class="text-brand-700 font-semibold hover:underline">case-crossover</button>
+          <span class="mx-1 text-slate-300">·</span>
+          <button data-demo="overlap" type="button" class="text-rose-700 font-semibold hover:underline">a cohort that should not be analysed</button>
         </span>
       </div>
       <div id="demonote" class="hidden mt-3 rounded-xl border border-brand-200 bg-brand-50/60 p-3 text-xs text-slate-700"></div>
@@ -207,6 +209,21 @@ const DESIGNS = [
                 <select id="m_nstrata" class="rounded border border-slate-300 px-1 py-0.5 text-[11px]"><option>5</option><option selected>10</option><option>20</option><option>50</option></select> strata</label>
             </div>
             <p class="text-[11px] text-slate-400">Crude is always shown alongside.</p>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Weights</span>
+              <select id="m_wts" class="mt-1 w-full rounded border border-slate-300 p-1.5 text-xs">
+                <option value="stab" selected>Stabilised (recommended)</option>
+                <option value="unstab">Unstabilised</option>
+              </select>
+              <span class="text-[11px] text-slate-500">Numerator is the marginal chance of the treatment received, not 1. Same estimand; how much it actually buys depends on the data and is reported with the results.</span></label>
+            <label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">Truncate extreme weights</span>
+              <select id="m_trunc" class="mt-1 w-full rounded border border-slate-300 p-1.5 text-xs">
+                <option value="none" selected>None</option>
+                <option value="p1">Cap at the 1st / 99th percentile</option>
+                <option value="p5">Cap at the 5th / 95th percentile</option>
+              </select>
+              <span class="text-[11px] text-slate-500">The fallback when stabilising is not enough. Trades a little bias for precision; the shift is reported.</span></label>
           </div>
           <div>
             <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Positivity — restrict the cohort before estimating</span>
@@ -1083,8 +1100,37 @@ const DESIGNS = [
       "One caveat this demo does <em>not</em> contain: if drug use had been trending over calendar time, control windows taken " +
       "earlier would understate exposure and the matched OR would be biased upward. Exposure here is flat over time.</p>";
 
+    // ── A cohort that should not be analysed ────────────────────────────────
+    // Treatment is almost decided by one covariate, so the two arms barely meet.
+    // The true effect is exactly nothing. Every diagnostic added for positivity
+    // fires here, which is the only way anyone will find them.
+    const OVL = { seed: 20200731, n: 800, slope: 9, outLHR: 1.0, trueHR: 1.0, base: 0.0018 };
+    function buildOverlap() {
+      const rand = lcg(OVL.seed);
+      const nrm = () => (rand() + rand() + rand() + rand() - 2) * 0.87;
+      const rows = [];
+      for (let i = 1; i <= OVL.n; i++) {
+        const x = nrm();
+        const T = rand() < 1 / (1 + Math.exp(-OVL.slope * x)) ? 1 : 0;
+        const t = -Math.log(rand() || 1e-9) / (OVL.base * Math.exp(OVL.outLHR * x + Math.log(OVL.trueHR) * T));
+        rows.push({
+          patient_id: "O" + String(30000 + i), frailty_index: Math.round(x * 1000) / 1000,
+          new_drug: T, followup_days: Math.round(Math.min(t, 365) * 10) / 10, outcome: t <= 365 ? 1 : 0,
+        });
+      }
+      return { cols: ["patient_id", "frailty_index", "new_drug", "followup_days", "outcome"], rows: rows, name: "demo-no-overlap" };
+    }
+    const OVL_STORY =
+      "<strong>Fabricated data — not real patients, and deliberately not analysable.</strong> " + OVL.n + " rows, one fixed seed:" +
+      "<ul class='mt-1 ml-4 list-disc space-y-0.5'>" +
+      "<li>A single <code>frailty_index</code> almost decides who gets the drug — the log-odds move by " + OVL.slope + " per unit — so the frailest are nearly all treated and the fittest nearly all untreated.</li>" +
+      "<li>The same index strongly raises the hazard. The <strong>true treatment effect is exactly HR 1.00</strong>: the drug does nothing.</li></ul>" +
+      "<p class='mt-1'>Run it as an active-comparator cohort with <code>frailty_index</code> as the only covariate. A crude comparison says the drug is harmful (HR ≈ 1.7) because it is given to frail people. That much a propensity score can fix. What it cannot fix is that <strong>for a large share of these patients there is nobody in the other arm to compare with at all</strong> — and the tool will say so, refuse the IPTW estimate, and offer the routes out.</p>" +
+      "<p class='mt-1 text-slate-500'>This demo exists because a diagnostic nobody ever sees fire is a diagnostic nobody trusts. Try it with stabilised weights, then with truncation, then with common-support restriction, and watch which numbers move and which do not.</p>";
+
     const DEMOS = {
       cohort: { build: buildCohort, story: () => DEMO_STORY },
+      overlap: { build: buildOverlap, story: () => OVL_STORY },
       sccs: { build: buildSccs, story: () => SCCS_STORY },
       cco: { build: buildCco, story: () => CCO_STORY },
     };
@@ -1240,14 +1286,39 @@ const DESIGNS = [
           r += "ntrim<-sum(!keep)\n";
           r += "if(ntrim>0){ cat('RESULT_NOTE|Cohort ',trimlab,': ',ntrim,' of ',n,' row(s) removed before every estimate below, so all rows are comparable. This changes the population the effect refers to.\\n',sep='')\n";
           r += "  d<-d[keep,,drop=FALSE]; ps<-ps[keep]; tr<-tr[keep]; n<-nrow(d); d$lp<-qlogis(ps); psT<-ps[tr]; psC<-ps[!tr] }\n";
-          // Weight diagnostics on the weights actually used for IPTW.
-          r += "wI<-ifelse(tr,1/ps,1/(1-ps))\n";
-          r += "ess<-sum(wI)^2/sum(wI^2); essPct<-100*ess/n; maxw<-max(wI)\n";
-          r += "k1<-max(1,ceiling(0.01*n)); top1<-100*sum(sort(wI,decreasing=TRUE)[1:k1])/sum(wI)\n";
-          r += "unstable<-(essPct<10) || (top1>25) || (maxw>100)\n";
+          // ── Weights ───────────────────────────────────────────────────────
+          // Stabilised by default: the numerator is the marginal probability of the
+          // treatment actually received rather than 1. Same estimand, far tamer
+          // weight distribution. Truncation is the fallback, and only on request.
+          // NOTE: neither of these touches positivity. They make an unstable number
+          // stable; they cannot manufacture a comparator who does not exist, which
+          // is why the common-support check above is reported on its own terms and
+          // is never satisfied by a healthy weight profile.
+          r += "wtmode<-'" + (opts.wts || "stab") + "'; truncmode<-'" + (opts.trunc || "none") + "'\n";
+          r += "pT<-mean(tr)\n";
+          r += "wU<-ifelse(tr,1/ps,1/(1-ps))\n";
+          r += "wS<-ifelse(tr,pT/ps,(1-pT)/(1-ps))\n";
+          r += "w0<-if(wtmode=='unstab') wU else wS\n";
+          r += "qq<-if(truncmode=='p1') 0.01 else if(truncmode=='p5') 0.05 else NA_real_\n";
+          r += "wI<-w0; ntrunc<-0; trunclab<-'none'\n";
+          r += "if(!is.na(qq)){ tlo<-as.numeric(quantile(w0,qq)); thi<-as.numeric(quantile(w0,1-qq)); ntrunc<-sum(w0<tlo | w0>thi); wI<-pmin(pmax(w0,tlo),thi); trunclab<-sprintf('%.0f/%.0f percentile',100*qq,100*(1-qq)) }\n";
+          r += "wdiag<-function(w){ e<-sum(w)^2/sum(w^2); k<-max(1,ceiling(0.01*length(w))); c(e, 100*e/length(w), max(w), 100*sum(sort(w,decreasing=TRUE)[1:k])/sum(w)) }\n";
+          r += "dU<-wdiag(wU); dS<-wdiag(wS); dF<-wdiag(wI)\n";
+          r += "essPct<-dF[2]; maxw<-dF[3]; top1<-dF[4]\n";
+          // Refusal is now the last resort, not the first: stabilisation and
+          // truncation are both on the table before anything is withheld.
+          r += "unstable<-(essPct<10) || (top1>25)\n";
+          r += "rescuable<-unstable && truncmode=='none'\n";
+          // Non-overlap has to reach the estimates table too. Someone reading only
+          // the hazard ratios must not be able to miss that a large share of the
+          // cohort has no counterpart — the weights can look perfect regardless.
+          r += "outPct<-100*(outT+outC)/n\n";
+          r += "if(ntrim==0 && (outT+outC)>0) cat(sprintf('RESULT_NOTE|%d of %d patient(s) (%.1f%%) have no counterpart in the other arm at their propensity score. Every weighted estimate above extrapolates for them rather than comparing them with anyone. Stabilising or truncating the weights does not change this - restricting to common support does.\\n', outT+outC, n, outPct))\n";
+          r += "if(ntrunc>0 && outPct>5) cat('RESULT_NOTE|Truncation was applied while a substantial part of the cohort has no overlap. Truncation tidies the arithmetic; it does not create the missing comparators, so the weight diagnostics will look far healthier than the comparison actually is. Restrict to common support before trusting a truncated estimate here.\\n')\n";
           r += "bi<-function(v) tabulate(pmin(20,pmax(1,ceiling(v*20))),nbins=20)\n";
           r += "cat('PSHIST|',paste(bi(psT),collapse=','),'|',paste(bi(psC),collapse=','),'\\n',sep='')\n";
-          r += "cat('PSDIAG|nT=',sum(tr),'|nC=',sum(!tr),'|csLo=',sprintf('%.4f',csLo),'|csHi=',sprintf('%.4f',csHi),'|outT=',outT,'|outC=',outC,'|ess=',sprintf('%.1f',ess),'|essPct=',sprintf('%.1f',essPct),'|maxw=',sprintf('%.1f',maxw),'|top1=',sprintf('%.1f',top1),'|minps=',sprintf('%.4f',min(ps)),'|maxps=',sprintf('%.4f',max(ps)),'|ntrim=',ntrim,'|trim=',trimlab,'|unstable=',if(unstable) 1 else 0,'\\n',sep='')\n";
+          r += "fmw<-function(v) paste(sprintf('%.1f',v),collapse=',')\n";
+          r += "cat('PSDIAG|nT=',sum(tr),'|nC=',sum(!tr),'|csLo=',sprintf('%.4f',csLo),'|csHi=',sprintf('%.4f',csHi),'|outT=',outT,'|outC=',outC,'|dU=',fmw(dU),'|dS=',fmw(dS),'|dF=',fmw(dF),'|wtmode=',wtmode,'|trunc=',trunclab,'|ntrunc=',ntrunc,'|minps=',sprintf('%.4f',min(ps)),'|maxps=',sprintf('%.4f',max(ps)),'|ntrim=',ntrim,'|trim=',trimlab,'|unstable=',if(unstable) 1 else 0,'|rescuable=',if(rescuable) 1 else 0,'\\n',sep='')\n";
           r += "cat(sprintf('N = %d; exposure = %d; comparator = %d; events = %d\\n\\n', n, sum(tr), sum(!tr), sum(d$EVENT==1,na.rm=TRUE)))\n";
           r += "cat('RESULT_NOTE|Propensity model: ',sum(covkind=='numeric'),' continuous, ',sum(covkind=='binary'),' binary 0/1, ',sum(covkind=='factor'),' categorical entered as dummy-coded factors',if(any(covkind=='factor')) paste0(' (',paste(covsrc[covkind=='factor'],collapse=', '),')') else '','.\\n',sep='')\n";
           if (dropped.length) r += "cat(" + q("RESULT_NOTE|" + dropped.length + " ticked covariate(s) were left out of the model: " + dropped.map((x) => x.src + " — " + x.why).join("; ") + ".") + ",'\\n',sep='')\n";
@@ -1274,14 +1345,15 @@ const DESIGNS = [
           r += "cat('PSBAL|mx1=',sprintf('%.3f',mx1),'|mx2=',sprintf('%.3f',mx2),'|nbad=',sum(abs(smd2)>0.1,na.rm=TRUE),'|ncov=',length(covs),'\\n',sep='')\n";
           r += "ET<-list(); EE<-list(); ET[['ITT']]<-d$TIME; EE[['ITT']]<-d$EVENT\n";
           if (E.indexOf("PP") >= 0) r += "if('DISC' %in% names(d)){ disc<-ifelse(is.na(d$DISC), Inf, as.numeric(d$DISC)); ET[['PP']]<-pmin(d$TIME, disc); EE[['PP']]<-d$EVENT*(d$TIME<=disc) }\n";
-          r += "fitw<-function(t,e,w,idx,label){ dd<-data.frame(t=t[idx],e=e[idx],TREAT=d$TREAT[idx],w=w[idx]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd,weights=w,robust=TRUE),error=function(x)NULL); if(is.null(fit)){cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label));return(invisible())}; s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', label, s$conf.int[1,'exp(coef)'], s$conf.int[1,'lower .95'], s$conf.int[1,'upper .95'])) }\n";
+          r += "fitw<-function(t,e,w,idx,label,quiet=FALSE){ dd<-data.frame(t=t[idx],e=e[idx],TREAT=d$TREAT[idx],w=w[idx]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd,weights=w,robust=TRUE),error=function(x)NULL); if(is.null(fit)){ if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label)); return(NA_real_)}; s<-summary(fit); if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', label, s$conf.int[1,'exp(coef)'], s$conf.int[1,'lower .95'], s$conf.int[1,'upper .95'])); invisible(as.numeric(s$conf.int[1,'exp(coef)'])) }\n";
           if (M.indexOf("matching") >= 0) r += "matchidx<-function(){ ci<-which(!tr); ti<-which(tr); used<-logical(n); cal<-0.2*sd(d$lp); out<-integer(0); ord<-ti[order(d$lp[ti])]; for(i in ord){ cand<-ci[!used[ci]]; if(!length(cand))next; dd<-abs(d$lp[cand]-d$lp[i]); o<-order(dd); k<-0; for(j in o){ if(dd[j]<=cal){ out<-c(out,i,cand[j]); used[cand[j]]<-TRUE; k<-k+1; if(k>=" + ratio + ")break } } }; unique(out) }\n";
           r += "for(est in names(ET)){ t<-ET[[est]]; e<-EE[[est]]; all<-1:n\n";
           r += "  fitw(t,e,rep(1,n),all, paste0('Crude - ',est,' HR'))\n";
           // An IPTW estimate built on collapsed weights is not a weak estimate, it
           // is an arbitrary one: a handful of subjects carry the answer. Refuse it
           // and say which diagnostic failed, rather than print a confident number.
-          if (M.indexOf("iptw") >= 0) r += "  if(unstable){ cat(sprintf('RESULT_ESTIMATE|IPTW (ATE) - %s HR|withheld - weights unstable\\n',est)) } else fitw(t,e,wI,all, paste0('IPTW (ATE) - ',est,' HR'))\n";
+          if (M.indexOf("iptw") >= 0) r += "  if(unstable){ cat(sprintf('RESULT_ESTIMATE|IPTW (ATE) - %s HR|withheld - weights unstable\\n',est)) } else { hrT<-fitw(t,e,wI,all, paste0('IPTW (ATE)',if(wtmode=='stab') ', stabilised' else ', unstabilised', if(ntrunc>0) paste0(', truncated at the ',trunclab) else '',' - ',est,' HR'))\n" +
+            "    if(ntrunc>0){ hr0<-fitw(t,e,w0,all,'',TRUE); if(is.finite(hr0) && is.finite(hrT)) cat(sprintf('RESULT_NOTE|Truncation moved the %s IPTW hazard ratio from %.3f (untruncated) to %.3f, by capping %d weight(s) at the %s. Truncation buys precision by accepting a little bias - the capped patients are no longer counted at their full weight - so report the untruncated estimate alongside it.\\n', est, hr0, hrT, ntrunc, trunclab)) } }\n";
           if (M.indexOf("smrw") >= 0) r += "  fitw(t,e,ifelse(tr,1,ps/(1-ps)),all, paste0('SMR weighting (ATT) - ',est,' HR'))\n";
           if (M.indexOf("overlap") >= 0) r += "  fitw(t,e,ifelse(tr,1-ps,ps),all, paste0('Overlap weighting - ',est,' HR'))\n";
           if (M.indexOf("finestrat") >= 0) r += "  { br<-unique(quantile(ps,probs=seq(0,1,length.out=" + (ns + 1) + "))); if(length(br)>=3){ q<-cut(ps,breaks=br,include.lowest=TRUE,labels=FALSE); keep<-ave(as.integer(tr),q,FUN=function(z)length(unique(z)))==2; ok<-which(keep); dd<-data.frame(t=t[ok],e=e[ok],TREAT=d$TREAT[ok],st=q[ok]); fit<-tryCatch(coxph(Surv(t,e)~TREAT+strata(st),data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|Fine stratification (" + ns + " strata) - %s HR|%.2f (95%% CI %.2f-%.2f)\\n',est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))} } }\n";
@@ -2063,7 +2135,7 @@ const DESIGNS = [
       const estimands = [];
       if ($("est_itt").checked) estimands.push("ITT");
       if ($("est_pp").checked) estimands.push("PP");
-      return { methods: methods, estimands: estimands.length ? estimands : ["ITT"], ratio: parseInt($("m_ratio").value) || 2, nstrata: parseInt($("m_nstrata").value) || 10, trim: $("m_trim").value };
+      return { methods: methods, estimands: estimands.length ? estimands : ["ITT"], ratio: parseInt($("m_ratio").value) || 2, nstrata: parseInt($("m_nstrata").value) || 10, trim: $("m_trim").value, wts: $("m_wts").value, trunc: $("m_trunc").value };
     }
     function itsOpts() {
       return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: parseInt($("its_cycle").value) || 12, ac: $("its_ac").value, order: $("its_order").value, denomcomb: $("its_denomcomb").value };
@@ -2173,8 +2245,11 @@ const DESIGNS = [
     function renderPsDiag(dg, hist, bal) {
       const el = $("psdiag"); if (!el || !dg) return;
       const num = (k) => { const v = parseFloat(dg[k]); return isFinite(v) ? v : null; };
-      const nT = num("nT"), nC = num("nC"), outT = num("outT"), outC = num("outC");
-      const essPct = num("essPct"), maxw = num("maxw"), top1 = num("top1"), ntrim = num("ntrim");
+      const nT = num("nT"), nC = num("nC"), outT = num("outT"), outC = num("outC"), ntrim = num("ntrim");
+      // The weight diagnostics travel as one triple per scheme; the "used" scheme
+      // is what every verdict below is about.
+      const dU = (dg.dU || "").split(",").map(Number), dS = (dg.dS || "").split(",").map(Number), dF = (dg.dF || "").split(",").map(Number);
+      const ess = dF[0], essPct = dF[1], maxw = dF[2], top1 = dF[3];
       const unstable = dg.unstable === "1";
       let g = "";
       if (hist) {
@@ -2201,13 +2276,8 @@ const DESIGNS = [
         '<td class="py-1.5 pr-3 font-semibold text-slate-900 whitespace-nowrap">' + esc(value) + "</td>" +
         '<td class="py-1.5 text-[11px] text-slate-600">' + meaning + "</td></tr>";
       const rows = [];
-      const outPct = (outT + outC) / Math.max(1, nT + nC) * 100;
-      rows.push(row(outT + outC === 0 ? true : (outPct < 5 ? null : false),
-        "Common support", (outT + outC) + " of " + (nT + nC) + " outside (" + outPct.toFixed(1) + "%)",
-        outT + outC === 0 ? "Every patient has a counterpart in the other arm across the whole propensity range. Positivity is satisfied here."
-          : "<strong>" + outT + " exposed and " + outC + " comparator patients sit outside the range the other arm occupies</strong> — for them there is no one to compare with, and the model is extrapolating rather than contrasting. Restrict to common support above, or narrow the eligibility criteria."));
       rows.push(row(essPct >= 50 ? true : (essPct >= 10 ? null : false),
-        "Effective sample size after weighting", num("ess").toFixed(0) + " of " + (nT + nC) + " (" + essPct.toFixed(0) + "%)",
+        "Effective sample size", (isFinite(ess) ? ess.toFixed(0) : "—") + " of " + (nT + nC) + " (" + essPct.toFixed(0) + "%)",
         "Weighting spends precision. This is how many patients your weighted analysis is really worth. " +
         (essPct >= 50 ? "Comfortable." : essPct >= 10 ? "A substantial loss — the confidence interval is wider than the row count suggests." : "<strong>The weighted analysis is worth a small fraction of the cohort.</strong>")));
       rows.push(row(top1 <= 10 ? true : (top1 <= 25 ? null : false),
@@ -2223,14 +2293,48 @@ const DESIGNS = [
           "Standardised differences below 0.10 are the usual bar for saying the arms are comparable on a covariate. Before weighting the largest was " + (isFinite(parseFloat(bal.mx1)) ? parseFloat(bal.mx1).toFixed(3) : "—") +
           ". " + (mx2 > 0.1 ? "<strong>Weighting has not balanced everything</strong> — add the unbalanced covariates to the model, or use matching." : "Weighting did its job.")));
       }
+      // ── Section 1: overlap, on its own terms and BEFORE the weights ──
+      // Stabilising and truncating fix arithmetic. They cannot invent a comparator
+      // for a patient who has none, and a healthy weight profile must never be
+      // allowed to read as an answer to that. So this verdict stands alone and is
+      // never softened by what the weight table says.
+      const outN = outT + outC, outPct = outN / Math.max(1, nT + nC) * 100;
+      const okOverlap = outN === 0, mildOverlap = outPct < 5;
+      const ovTone = okOverlap ? "border-emerald-300 bg-emerald-50 text-emerald-900" : (mildOverlap ? "border-amber-300 bg-amber-50 text-amber-900" : "border-rose-300 bg-rose-50 text-rose-900");
       let h = '<div class="flex flex-wrap items-baseline justify-between gap-2"><div class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Positivity &amp; overlap — can these arms be compared at all?</div>' +
         (unstable ? '<span class="text-[11px] font-bold text-rose-700">IPTW withheld</span>' : "") + "</div>";
-      h += '<p class="mt-1 text-[11px] text-slate-600">A propensity model returns a number even when the two arms barely overlap. These are the checks that tell you whether that number means anything.</p>';
-      if (unstable) h += '<div class="mt-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900"><strong>The IPTW estimate was not reported.</strong> ' +
-        (essPct < 10 ? "The effective sample size fell to " + essPct.toFixed(0) + "% of the cohort. " : "") + (top1 > 25 ? "The heaviest 1% of patients hold " + top1.toFixed(0) + "% of the weight. " : "") +
-        'A weighted hazard ratio computed here would be an artefact of a few patients, not an effect. Restrict to common support or trim the score above, then re-run — the other estimators are unaffected and are still shown.</div>';
-      if (ntrim) h += '<p class="mt-2 text-[11px] text-amber-700">' + ntrim + " row(s) were removed before estimating (" + esc(dg.trim) + "). The estimates below refer to the remaining patients.</p>";
+      h += '<p class="mt-1 text-[11px] text-slate-600">Two separate questions, in order. First: is there anyone to compare with? Second: are the weights that answer it stable? The first cannot be fixed by fixing the second.</p>';
+      h += '<div class="mt-2 rounded-lg border px-3 py-2 text-xs ' + ovTone + '"><strong>1 · Common support</strong> — ' +
+        (okOverlap
+          ? "every patient has a counterpart in the other arm across the whole propensity range. Positivity is satisfied here."
+          : "<strong>" + outN + " of " + (nT + nC) + " patients (" + outPct.toFixed(1) + "%) — " + outT + " exposed and " + outC + " comparator — lie outside the propensity range the other arm occupies.</strong> For them there is nobody to compare with, so the model is extrapolating rather than contrasting. " +
+            "<span class='block mt-1'>Stabilising or truncating the weights will <em>not</em> repair this: they make the arithmetic behave, and a tidy weight profile below is not evidence that this is resolved. The honest routes are to restrict to common support, or to narrow the eligibility criteria so the question is one the data can answer.</span>") + "</div>";
+      if (ntrim) h += '<p class="mt-1 text-[11px] text-amber-700">' + ntrim + " row(s) were removed before estimating (" + esc(dg.trim) + "). The estimates refer to the remaining patients.</p>";
       h += g ? '<div class="mt-2">' + g + "</div>" : "";
+      // ── Section 2: weights ──
+      h += '<div class="mt-3 text-xs font-semibold text-slate-800">2 · Weight stability <span class="font-normal text-slate-500">— ' +
+        (dg.wtmode === "stab" ? "stabilised" : "unstabilised") + (num("ntrunc") ? ", truncated at the " + esc(dg.trunc) : "") + " weights, as used for the IPTW row above</span></div>";
+      if (unstable) h += '<div class="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900"><strong>The IPTW estimate was not reported.</strong> ' +
+        (essPct < 10 ? "The effective sample size fell to " + essPct.toFixed(0) + "% of the cohort. " : "") + (top1 > 25 ? "The heaviest 1% of patients hold " + top1.toFixed(0) + "% of the weight. " : "") +
+        "A weighted hazard ratio here would be an artefact of a few patients rather than an effect. " +
+        (dg.rescuable !== "1"
+          ? "Truncation has already been applied and did not rescue it, which points at the overlap problem above rather than at the arithmetic — restrict to common support, or narrow the eligibility criteria."
+          : (okOverlap
+            ? "The arms do overlap, so this is an arithmetic problem: <strong>truncate at the 1st/99th percentile</strong> first, and restrict to common support only if that is not enough. Both controls are in step 3."
+            : "<strong>Restrict to common support first</strong> — the overlap problem above is the likelier cause, and truncating would tidy these numbers without fixing it. Both controls are in step 3.")) +
+        " The other estimators are unaffected and are still shown.</div>";
+      // What stabilisation actually bought, side by side.
+      if (dU.length === 4 && dS.length === 4) {
+        const cell = (v, d) => '<td class="py-1 pr-3 text-right tabular-nums">' + (isFinite(v) ? v.toFixed(d) : "—") + "</td>";
+        h += '<div class="mt-1 overflow-x-auto"><table class="w-full text-[11px] border-collapse"><thead><tr class="text-slate-500 border-b border-slate-200">' +
+          '<th class="py-1 pr-3 text-left font-semibold">Weight scheme</th><th class="py-1 pr-3 text-right font-semibold">Effective n</th><th class="py-1 pr-3 text-right font-semibold">% of cohort</th><th class="py-1 pr-3 text-right font-semibold">Largest weight</th><th class="py-1 pr-3 text-right font-semibold">Top 1% share</th></tr></thead><tbody>' +
+          '<tr class="border-b border-slate-100"><td class="py-1 pr-3">Unstabilised</td>' + cell(dU[0], 0) + cell(dU[1], 1) + cell(dU[2], 1) + cell(dU[3], 1) + "</tr>" +
+          '<tr class="border-b border-slate-100"><td class="py-1 pr-3">Stabilised</td>' + cell(dS[0], 0) + cell(dS[1], 1) + cell(dS[2], 1) + cell(dS[3], 1) + "</tr>" +
+          (num("ntrunc") ? '<tr class="border-b border-slate-100 font-semibold"><td class="py-1 pr-3">Used (truncated ' + esc(dg.trunc) + ", " + num("ntrunc") + " capped)</td>" + cell(dF[0], 0) + cell(dF[1], 1) + cell(dF[2], 1) + cell(dF[3], 1) + "</tr>" : "") +
+          "</tbody></table></div>";
+        h += '<p class="mt-1 text-[11px] text-slate-500">Stabilising took the effective sample from ' + (isFinite(dU[1]) ? dU[1].toFixed(0) : "—") + "% to " + (isFinite(dS[1]) ? dS[1].toFixed(0) : "—") +
+          "% of the cohort and the largest weight from " + (isFinite(dU[2]) ? dU[2].toFixed(0) : "—") + "× to " + (isFinite(dS[2]) ? dS[2].toFixed(0) : "—") + "×. It changes the estimand not at all — only the arithmetic.</p>";
+      }
       h += '<div class="mt-1 overflow-x-auto"><table class="w-full text-xs border-collapse"><tbody>' + rows.join("") + "</tbody></table></div>";
       el.classList.remove("hidden");
       el.innerHTML = h;
