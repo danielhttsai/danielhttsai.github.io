@@ -3,135 +3,365 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// The questions that actually decide the design. `q` is plain language; `a`
+// carries the methodological detail underneath it. Nothing is hidden — the
+// layering is by reading order and weight, so a beginner can stop after the
+// question and an expert can skip straight to the grid.
+const questions = [
+  {
+    q: "Do you have an active comparator — another drug, not 'nobody'?",
+    a: "That means a drug used for the same indication, at the same point in the treatment pathway, with no a-priori link to your outcome. If one exists, a cohort design is available and is usually the better choice: people who get drug A and people who get drug B are far more alike than people who get a drug and people who get nothing, so confounding by indication is much smaller to begin with. If no such comparator exists, you are pushed towards a self-controlled or calendar-time design.",
+    to: ["ACNU", "CCW", "ST"],
+  },
+  {
+    q: "Can you tell the two strategies apart on day one?",
+    a: "If your strategies are 'start within 90 days', 'stay on treatment', or 'treat to target', then on day one nobody has yet declared which arm they are in. Sorting patients by what they later did credits one arm with follow-up during which they could not yet have had the event — immortal time — and that alone can manufacture a protective effect. Cloning every patient into both strategies, or emulating a fresh trial at each eligible date, is what prevents it.",
+    to: ["CCW", "ST"],
+  },
+  {
+    q: "Is the exposure short-lived and the outcome sudden?",
+    a: "A transient exposure plus an acute, datable onset is what makes a self-controlled design work: exposed and unexposed time both exist within the same person, so the comparison can be made inside them. Choose SCCS if you can lay out each case's whole observation period as exposed and unexposed person-time; choose case-crossover if you can only look back a short way from the event.",
+    to: ["SCCS", "CCO"],
+  },
+  {
+    q: "Is the confounding you are worried about fixed, or does it change over time?",
+    a: "Genetics, lifelong habits, stable frailty — self-controlled designs remove all of these by construction, and trend-in-trend removes them through the trend contrast, in both cases without your ever having to measure them. That is a genuinely strong property. It does not extend to time-varying confounding: ageing, season, worsening disease and calendar trends in prescribing all survive, and must still be modelled explicitly.",
+    to: ["SCCS", "CCO", "TIT"],
+  },
+  {
+    q: "Was there a date — or a gradual change over the years?",
+    a: "A policy, reimbursement or label change with a clear start date makes interrupted time series available: the outcome's own pre-intervention trend, extrapolated forward, becomes the counterfactual. If uptake was gradual rather than a step, there is no date to interrupt at, and trend-in-trend uses the gradient of uptake instead.",
+    to: ["ITS", "TIT"],
+  },
+  {
+    q: "Is the outcome rare — or are you not really comparing anything?",
+    a: "For a rare outcome, following an entire cohort spends most of its effort on people who never have the event; sampling controls from the source population instead is far more efficient for the same precision. And if what you want is a rate, a trend or a utilisation pattern rather than an effect, that is a descriptive analysis — legitimate and often the most useful output, provided it is not written up as though it were causal.",
+    to: ["CC", "DA"],
+  },
+];
+
+const families = [
+  {
+    id: "cohort",
+    name: "Cohort designs with a comparator",
+    plain: "Follow two groups of patients forward in time from the day they start treatment.",
+    lede: "You can define a common time zero and follow comparable groups forward. Strongest when a genuine active comparator exists; all three are framed as target-trial emulations, which forces you to state the trial you would have run.",
+  },
+  {
+    id: "self-controlled",
+    name: "Self-controlled designs",
+    plain: "No comparison group at all — each patient is compared with themselves at a different time.",
+    lede: "Cases only. Every time-invariant between-person confounder is removed by construction, measured or not. The price is a strong assumption about how exposure and the event relate in time.",
+  },
+  {
+    id: "outcome-sampled",
+    name: "Outcome-sampled designs",
+    plain: "Start from the people who already had the outcome, and work backwards.",
+    lede: "Enrol on the outcome, sample a comparison group from the population that produced the cases, then look back for exposure. Efficient when the outcome is rare.",
+  },
+  {
+    id: "calendar",
+    name: "Calendar-time quasi-experiments",
+    plain: "The comparison runs across calendar time rather than between individual patients.",
+    lede: "The contrast comes from how an outcome moves over calendar time — around an intervention date, or across groups that took a drug up at different speeds. No individual-level comparator is needed.",
+  },
+  {
+    id: "descriptive",
+    name: "Descriptive",
+    plain: "Counting and describing, not comparing treatments.",
+    lede: "No causal contrast is attempted. Characterise a population — and supply the denominators that causal studies depend on.",
+  },
+];
+
 const designs = [
   {
+    family: "cohort",
     slug: "active-comparator-new-user",
     short: "ACNU",
     title: "Active-Comparator New-User Design",
-    when: "When you have two drugs from the same indication and want to compare a clinical outcome between them as users start therapy.",
+    studio: true,
+    plain: "Two drugs for the same condition, compared from the day each patient starts.",
+    when: "The comparator behaves as an 'emulated placebo' drawn from the same therapeutic context, so confounding by indication is minimised. Aligning eligibility, treatment assignment and follow-up at time zero is what avoids immortal-time bias; requiring a washout with no prior use of either drug is what avoids prevalent-user bias.",
+    assumes: "The comparator shares the indication and has no a-priori association with the outcome; no unmeasured confounding remains after propensity-score adjustment; and under an on-treatment analysis, censoring at switch or discontinuation is informative, so it needs IPCW.",
+    fails: "No genuine comparator exists and the honest question is 'drug vs nothing'; the comparator is chosen by disease severity; or the washout is too short, so prevalent users leak in and bring their already-survived early risk with them.",
     example: "SGLT2 inhibitors vs DPP-4 inhibitors and risk of MACE",
-    strengths: "Minimises confounding by indication and addresses immortal-time / prevalent-user bias.",
+    cite: "Lund JL, Richardson DB, Stürmer T. Curr Epidemiol Rep 2015;2:221–228.",
+    doi: "10.1007/s40471-015-0053-5",
   },
   {
-    slug: "self-controlled-case-series",
-    short: "SCCS",
-    title: "Self-Controlled Case Series",
-    when: "When you have transient exposures and acute outcomes, and want each case to act as their own control (eliminating time-invariant confounding).",
-    example: "Antipsychotic dispensing and risk of falls in older adults",
-    strengths: "Removes between-person confounding (genetics, lifelong habits). Efficient when cases are easier to identify than the source population.",
-  },
-  {
-    slug: "case-crossover",
-    short: "CCO",
-    title: "Case-crossover",
-    when: "Outcome-anchored: enrol patients on the acute event itself, then look back to compare exposure prevalence in a short hazard window vs matched control windows. Best when the outcome is abrupt-onset and the exposure is transient.",
-    example: "Triggers of acute MI in the 24 hours before onset",
-    strengths: "Each case is their own control across time; matched analysis automatically removes time-invariant within-person confounding (genetics, lifelong habits, persistent comorbidities).",
-  },
-  {
-    slug: "descriptive-analysis",
-    short: "DA",
-    title: "Descriptive analysis",
-    when: "When you want to characterise a population; how common a disease is, how a drug is used, who dies; rather than test a causal hypothesis. The standard output for multi-country comparisons.",
-    example: "DDD/1000/day for anticonvulsants across Asian sites, 2010–2023, with joinpoint break detection",
-    strengths: "Provides the denominator causal studies depend on. Covers incidence / prevalence / mortality / drug-utilisation / switching with age-standardisation + joinpoint trend analysis built in.",
-  },
-  {
+    family: "cohort",
     slug: "clone-censor-weight",
     short: "CCW",
     title: "Clone-Censor-Weight",
-    when: "When the strategies you compare can't be told apart at time zero — grace periods ('start within X days'), sustained use, or treat-to-target — so a naïve baseline analysis creates immortal-time bias.",
+    plain: "The strategies differ only in what happens after treatment starts, so everyone is counted in both — then dropped when they stop matching.",
+    when: "Use when the strategies cannot be distinguished at time zero: grace periods ('start within X days'), sustained use, or treat-to-target. Each patient is cloned into every strategy at time zero, censored when their data stop matching the assigned strategy, and reweighted by inverse-probability-of-censoring weights to recover the per-protocol effect.",
+    assumes: "Exchangeability, positivity and consistency — plus, because the artificial censoring is informative by design, no unmeasured predictors of deviation.",
+    fails: "The grace period is zero, so there is nothing to clone and the strategies coincide; the grace period swallows most of the follow-up; or deviation is driven by something you never measured, in which case the weights cannot repair it.",
     example: "Statin vs no statin within 90 days of MI (90-day grace period)",
-    strengths: "Clones each patient into every strategy at time zero (no baseline confounding of assignment), censors at deviation, and reweights with IPCW to recover the per-protocol effect without immortal-time bias.",
+    cite: "Maringe C, Benitez Majano S, Exarchakou A, et al. Int J Epidemiol 2020;49:1719–1729.",
+    doi: "10.1093/ije/dyaa057",
   },
   {
+    family: "cohort",
     slug: "sequential-trial",
     short: "ST",
     title: "Sequential Trial Emulation",
-    when: "When eligibility is time-varying and a single index date wastes person-time — patients who qualify later should still contribute. Emulate one nested trial at each eligible origin and pool.",
+    plain: "Run the same small trial again and again — once at every date a patient becomes eligible — then pool the results.",
+    when: "Use when eligibility is time-varying and a single index date discards everyone who qualifies later. Patients who stay eligible enter several nested trials, so no eligible person-time is wasted, and the prevalent-user problem is handled trial by trial.",
+    assumes: "Exchangeability, positivity and consistency within each nested trial; and because patients are re-used across trials, a variance clustered on the patient.",
+    fails: "The variance is not patient-clustered, so precision is overstated and confidence intervals are too narrow; or there is no washout at each origin, so prevalent users are enrolled again at every trial.",
     example: "Benzodiazepine vs no use in pregnancy, a trial at each gestational week",
-    strengths: "Uses every eligible time origin (mitigates prevalent-user / selection bias), lets patients enter multiple nested trials, and pools with a patient-clustered robust variance.",
+    cite: "Hernán MA, Alonso A, Logan R, et al. Epidemiology 2008;19:766–779.",
+    doi: "10.1097/EDE.0b013e3181875e61",
   },
   {
-    slug: "interrupted-time-series",
-    short: "ITS",
-    title: "Interrupted Time Series",
-    when: "When a population-level intervention or policy has a clear date, and you want to know whether it changed the level and/or trend of an outcome over time — using the pre-intervention trend as the counterfactual.",
-    example: "Effect of a 2019 reimbursement policy on monthly SGLT2-inhibitor initiation rates",
-    strengths: "Strong quasi-experiment when randomisation is impossible; separates an immediate level change from a change in slope via segmented regression, with an optional control series to guard against co-interventions and secular trends.",
+    family: "self-controlled",
+    slug: "self-controlled-case-series",
+    short: "SCCS",
+    title: "Self-Controlled Case Series",
+    studio: true,
+    plain: "Only people who had the event; compare their risk during exposed and unexposed stretches of their own lives.",
+    when: "Use for transient exposures and acute outcomes, especially where cases are far easier to identify than the source population. Each case's observation period is split into exposed and unexposed person-time and the incidence-rate ratio is estimated within the person, so all time-invariant between-person confounding disappears.",
+    assumes: "The event does not alter the probability of subsequent exposure, and does not end observation; time-varying confounders such as age and season are modelled explicitly. A pre-exposure window is conventionally separated out to absorb confounding by indication.",
+    fails: "The outcome is fatal or otherwise censors follow-up; the event itself changes prescribing (event-dependent exposure — e.g. the drug is stopped after the event); or the exposure is chronic and continuous, leaving no unexposed person-time to contrast.",
+    example: "Antipsychotic dispensing and risk of falls in older adults",
+    cite: "Petersen I, Douglas I, Whitaker H. BMJ 2016;354:i4515.",
+    doi: "10.1136/bmj.i4515",
   },
   {
-    slug: "trend-in-trend",
-    short: "TIT",
-    title: "Trend-in-Trend",
-    when: "When a drug's prevalence of use changes markedly over calendar time and you want an estimate robust to time-invariant unmeasured confounding — comparing the outcome trend across strata that took up the drug at different speeds.",
-    example: "Statins and incident diabetes, using the rise in statin prevalence 2005–2018",
-    strengths: "Exploits the calendar trend in exposure prevalence (Ji & Hennessy 2017): removes time-invariant unmeasured confounding without needing to measure the confounders, by contrasting outcome trends across cumulative-percentage-exposed strata.",
+    family: "self-controlled",
+    slug: "case-crossover",
+    short: "CCO",
+    title: "Case-crossover",
+    studio: true,
+    plain: "Only people who had the event; ask whether they were exposed just before it more often than at earlier moments.",
+    when: "Outcome-anchored: enrol patients on the acute event itself, then look back and compare exposure prevalence in a short hazard window immediately before onset with prevalence in matched control windows further back. The matched analysis removes time-invariant within-person confounding automatically.",
+    assumes: "Exposure is transient with no time trend in its prevalence, the outcome has abrupt onset, and there is no carry-over from the control windows into the hazard window.",
+    fails: "Exposure prevalence trends over calendar time — exposure-time-trend bias, which a time-stratified referent or the case-time-control / case-case-time-control variant mitigates. Chronic exposure or insidious onset breaks the design outright.",
+    example: "Triggers of acute MI in the 24 hours before onset",
+    cite: "Maclure M. Am J Epidemiol 1991;133:144–153.",
+    doi: "10.1093/oxfordjournals.aje.a115853",
   },
   {
+    family: "outcome-sampled",
     slug: "case-control",
     short: "CC",
     title: "Case-Control",
-    when: "When the outcome is rare and you want an efficient design: enrol on the outcome (cases), sample controls from the source population, and look back for exposure — matched or unmatched.",
+    plain: "Take the people who had the outcome and similar people who did not, then look back at who was exposed.",
+    when: "Use when the outcome is rare and following a whole cohort is wasteful. Enrol on the outcome, sample controls from the source population — risk-set, cumulative, or case-cohort — optionally match, and ascertain exposure before the index date.",
+    assumes: "Controls come from the same source population that produced the cases, and exposure is ascertained identically in both. Under risk-set (incidence-density) sampling the odds ratio estimates the incidence-rate ratio with no rare-disease assumption; under cumulative sampling it approximates the risk ratio only if the outcome is rare.",
+    fails: "Controls are drawn from a different population (selection bias), or exposure is measured differently in cases and controls. Matched sets must be analysed by conditional logistic regression — and the matching factors must not then also be adjusted as covariates.",
     example: "NSAIDs and hospitalised upper-GI bleeding, 4:1 risk-set-matched controls",
-    strengths: "Efficient for rare outcomes; risk-set (incidence-density) sampling estimates the incidence-rate ratio without a rare-disease assumption; matching plus conditional logistic regression controls confounding by the matched factors.",
+    cite: "Vandenbroucke JP, Pearce N. Int J Epidemiol 2012;41:1480–1489.",
+    doi: "10.1093/ije/dys147",
+  },
+  {
+    family: "calendar",
+    slug: "interrupted-time-series",
+    short: "ITS",
+    title: "Interrupted Time Series",
+    studio: true,
+    plain: "Something changed on a known date — did the outcome jump, or bend away from where it was already heading?",
+    when: "Use for a population-level intervention or policy with a clear date. Segmented regression separates an immediate change in level from a change in slope, using the extrapolated pre-intervention trend as the counterfactual. A control series turns it into a controlled ITS.",
+    assumes: "The pre-intervention trend would have continued unchanged had the intervention not happened; there are enough points either side to estimate that trend (aim for at least 8, ideally 12, before the interruption); and seasonality and autocorrelation are handled rather than ignored.",
+    fails: "A co-intervention or secular change coincides with the interruption — a control series differences that out. Too few pre-period points, or unmodelled seasonality, and the level and slope estimates are not trustworthy even when they look clean.",
+    example: "Effect of a 2019 reimbursement policy on monthly SGLT2-inhibitor initiation rates",
+    cite: "Lopez Bernal J, Cummins S, Gasparrini A. Int J Epidemiol 2017;46:348–355.",
+    doi: "10.1093/ije/dyw098",
+  },
+  {
+    family: "calendar",
+    slug: "trend-in-trend",
+    short: "TIT",
+    title: "Trend-in-Trend",
+    plain: "A drug's use climbed over the years — did the outcome climb faster in the groups where it caught on faster?",
+    when: "Use when there is no single intervention date, but the drug's prevalence of use rises or falls markedly over calendar time. Strata are defined by their cumulative percentage exposed (CPE); if the outcome tracks the exposure trend more steeply where uptake was faster, that supports a causal effect — and the estimate is robust to time-invariant unmeasured confounding.",
+    assumes: "Exposure prevalence genuinely trends over calendar time; the unmeasured confounding is time-invariant; and the outcome trend is otherwise stable across CPE strata.",
+    fails: "The prevalence trend is flat or weak, so the design has no power; or a differential secular trend or co-intervention tracks faster uptake, which biases it — pre-specify a negative-control outcome or a pseudo-period to check.",
+    example: "Statins and incident diabetes, using the rise in statin prevalence 2005–2018",
+    cite: "Ji X, Small DS, Leonard CE, Hennessy S. Epidemiology 2017;28:529–536.",
+    doi: "10.1097/EDE.0000000000000579",
+  },
+  {
+    family: "descriptive",
+    slug: "descriptive-analysis",
+    short: "DA",
+    title: "Descriptive analysis",
+    plain: "How common is it, who gets it, how is the drug used — and is that changing? No treatments are compared.",
+    when: "Use when you want to characterise a population rather than test a causal hypothesis. Covers incidence, prevalence, mortality, drug utilisation and switching, with age-standardisation and joinpoint trend detection built in. The standard output for multi-country comparisons, and the denominator that causal studies depend on.",
+    assumes: "Case ascertainment and denominator definitions are comparable across the sites and periods you compare, and the denominator is built on the same rule as the numerator. No causal interpretation is intended, and none should be written in.",
+    fails: "Coding and capture practices differ between databases and the difference is read as a real one; or the denominator is aggregated by a different rule from the outcome, which manufactures a trend that is not there.",
+    example: "DDD/1000/day for anticonvulsants across Asian sites, 2010–2023, with joinpoint break detection",
+    cite: "Lai EC, Stang P, Yang YHK, et al. Curr Epidemiol Rep 2015;2:229–238.",
+    doi: "10.1007/s40471-015-0059-z",
   },
 ];
+
+const byFamily = families.map((f) => ({
+  ...f,
+  items: designs.filter((d) => d.family === f.id),
+}));
+
+const studioShorts = designs.filter((d) => d.studio).map((d) => d.short);
+const studioDesigns = studioShorts.slice(0, -1).join(", ") + " and " + studioShorts[studioShorts.length - 1];
 ---
 
 <BaseLayout
   title="Protocol Generator — Daniel Tsai"
-  description="A free, in-browser protocol generator for multi-national pharmacoepidemiology study designs, with a validated phenotype library and one-click Word / Markdown export."
+  description="A free, in-browser protocol generator for multi-national pharmacoepidemiology study designs — nine designs, a guide to choosing between them, a validated phenotype library, and one-click Word / Markdown export."
 >
   <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
     <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-14">
       <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">RWE Tools</p>
       <h1 class="text-4xl md:text-5xl font-bold text-slate-900">Protocol Generator</h1>
       <p class="mt-4 text-lg text-slate-600 max-w-3xl">
-        Pick a study design to draft a multi-country pharmacoepidemiology protocol with a library of validated
-        phenotypes, feasibility checks across Asian databases, and one-click Word / Markdown export. Everything runs
-        in your browser — nothing is uploaded.
+        Nine pharmacoepidemiology study designs, each with a guided form that drafts a multi-country protocol —
+        a library of validated phenotypes, feasibility checks across Asian databases, consistency checks that flag
+        design errors as you type, and one-click Word / Markdown export. Everything runs in your browser; nothing
+        is uploaded.
       </p>
-      <p class="mt-3 text-sm text-slate-500 max-w-3xl">
+      <p class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <a href="#choosing" class="font-semibold text-brand-700 hover:underline">Help me choose a design ↓</a>
+        <a href="#designs" class="font-semibold text-slate-600 hover:underline">I know what I want — go to the nine designs ↓</a>
+      </p>
+      <p class="mt-4 text-sm text-slate-500 max-w-3xl">
         Templates curated from <a href="https://ocean-dev.phdcenter.org.tw" target="_blank" rel="noopener" class="text-brand-700 font-semibold hover:underline">OCEAN</a>,
-        the Open Casual Effect Analysis Network operated by the
+        the Open Causal Effect Analysis Network operated by the
         <a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener" class="text-brand-700 hover:underline">PHDc</a>, NCKU.
         Maintained by Daniel Tsai.
       </p>
     </div>
   </header>
 
-  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 space-y-6">
+  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 space-y-12">
     <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools`}>← All RWE tools</a>
 
-    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {designs.map((d) => (
-        <a href={`${base}/tools/${d.slug}`}
-           class="group flex flex-col border border-slate-200 rounded-2xl p-6 bg-white hover:shadow-md hover:border-brand-400 transition">
-          <p class="text-[10px] uppercase tracking-[0.2em] text-brand-700 font-bold">{d.short}</p>
-          <h2 class="mt-2 text-lg font-bold text-slate-900 group-hover:text-brand-700 transition leading-snug">{d.title}</h2>
-          <p class="mt-3 text-xs text-slate-600 leading-relaxed">{d.when}</p>
-          <p class="mt-3 text-[11px] font-semibold text-brand-700">Typical example</p>
-          <p class="text-xs text-slate-700 italic leading-relaxed">{d.example}</p>
-          <p class="mt-3 text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Strengths</p>
-          <p class="text-xs text-slate-600 leading-relaxed">{d.strengths}</p>
-          <p class="mt-4 text-xs text-brand-700 font-semibold group-hover:underline">Open this template →</p>
-        </a>
+    <div id="choosing" class="scroll-mt-6">
+      <h2 class="text-2xl font-bold text-slate-900">Which design does my question need?</h2>
+
+      <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6">
+        <p class="text-sm font-semibold text-slate-900">If study design is new to you, start here</p>
+        <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+          A study design is the recipe for three things: who gets counted, when each person's clock starts, and what
+          they are compared with. In pharmacoepidemiology, most serious errors are design errors rather than
+          statistical ones — people already taking the drug get counted as new starters, follow-up during which an
+          event could not yet have been recorded gets credited to one arm, or two groups turn out to differ by how
+          sick they were rather than by the drug. Each design below arranges the data so that one particular error
+          cannot happen, and pays for it with an assumption you then have to defend. The six questions narrow nine
+          designs down to one or two.
+        </p>
+      </div>
+
+      <p class="mt-5 text-sm text-slate-600 max-w-3xl leading-relaxed">
+        These are not a decision tree. More than one design is often defensible, and a good protocol names the design
+        it did <em>not</em> choose and says why.
+      </p>
+
+      <ol class="mt-5 space-y-3">
+        {questions.map((q, i) => (
+          <li class="rounded-2xl border border-slate-200 bg-white p-5">
+            <div class="flex items-start gap-4">
+              <span class="shrink-0 mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-brand-700 text-xs font-bold">{i + 1}</span>
+              <div class="min-w-0 flex-1">
+                <p class="font-semibold text-slate-900">{q.q}</p>
+                <p class="mt-1.5 text-sm text-slate-600 leading-relaxed">{q.a}</p>
+                <p class="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span class="text-[11px] uppercase tracking-widest text-slate-400 font-semibold mr-1">Points to</span>
+                  {q.to.map((s) => (
+                    <a href={`#${s}`}
+                       class="inline-block rounded-full border border-brand-200 bg-brand-50 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-brand-700 hover:bg-brand-100 transition">{s}</a>
+                  ))}
+                </p>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <p class="mt-5 rounded-2xl border border-amber-200 bg-amber-50/70 p-5 text-sm text-slate-700 leading-relaxed">
+        <span class="font-semibold text-slate-900">One caution.</span> Every design here removes some confounding and
+        leaves the rest. The self-controlled designs remove time-invariant confounding without measuring it, but are
+        unusable if the event changes later exposure. The cohort designs handle time-varying confounding, but only for
+        what you actually measured. Choose on the assumption you can defend, not on the estimate you would prefer —
+        and pre-specify the analysis that would show you were wrong.
+      </p>
+    </div>
+
+    <div id="designs" class="scroll-mt-6 space-y-12">
+      {byFamily.map((f) => (
+        <div>
+          <h2 class="text-2xl font-bold text-slate-900">{f.name}</h2>
+          <p class="mt-1.5 text-base text-slate-700 max-w-3xl leading-relaxed">{f.plain}</p>
+          <p class="mt-1.5 text-sm text-slate-500 max-w-3xl leading-relaxed">{f.lede}</p>
+
+          <div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {f.items.map((d) => (
+              <div id={d.short}
+                   class="scroll-mt-6 flex flex-col border border-slate-200 rounded-2xl p-6 bg-white hover:shadow-md hover:border-brand-400 transition">
+                <div class="flex items-center justify-between gap-2">
+                  <p class="text-[10px] uppercase tracking-[0.2em] text-brand-700 font-bold">{d.short}</p>
+                  {d.studio && (
+                    <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">Runs in Studio</span>
+                  )}
+                </div>
+
+                <h3 class="mt-2 text-lg font-bold text-slate-900 leading-snug">
+                  <a href={`${base}/tools/${d.slug}`} class="hover:text-brand-700 hover:underline transition">{d.title}</a>
+                </h3>
+
+                <p class="mt-2 text-sm text-slate-800 leading-relaxed">{d.plain}</p>
+
+                <p class="mt-4 text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Use when</p>
+                <p class="text-xs text-slate-600 leading-relaxed">{d.when}</p>
+
+                <p class="mt-3 text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Assumes</p>
+                <p class="text-xs text-slate-600 leading-relaxed">{d.assumes}</p>
+
+                <p class="mt-3 text-[11px] font-semibold text-rose-700 uppercase tracking-widest">Breaks when</p>
+                <p class="text-xs text-slate-600 leading-relaxed">{d.fails}</p>
+
+                <p class="mt-3 text-[11px] font-semibold text-brand-700">Typical example</p>
+                <p class="text-xs text-slate-700 italic leading-relaxed">{d.example}</p>
+
+                <p class="mt-3 text-[11px] text-slate-500 leading-relaxed flex-1">
+                  {d.cite}{" "}
+                  <a href={`https://doi.org/${d.doi}`} target="_blank" rel="noopener"
+                     class="text-brand-700 hover:underline break-all">doi:{d.doi}</a>
+                </p>
+
+                <a href={`${base}/tools/${d.slug}`}
+                   class="mt-4 text-xs text-brand-700 font-semibold hover:underline">Open this template →</a>
+              </div>
+            ))}
+          </div>
+        </div>
       ))}
     </div>
 
-    <a href={`${base}/tools/protocol-checker`}
-       class="group flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50/60 p-6 hover:shadow-md hover:border-brand-400 transition">
-      <div class="flex-1">
+    <div class="grid gap-5 lg:grid-cols-2">
+      <a href={`${base}/tools/protocol-checker`}
+         class="group flex flex-col rounded-2xl border border-brand-200 bg-brand-50/60 p-6 hover:shadow-md hover:border-brand-400 transition">
         <p class="text-[10px] uppercase tracking-[0.2em] text-brand-700 font-bold">Already have a protocol?</p>
         <h2 class="mt-1 text-lg font-bold text-slate-900 group-hover:text-brand-700 transition">Check it against HARPER or TARGET</h2>
-        <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+        <p class="mt-2 text-sm text-slate-600 leading-relaxed flex-1">
           The flip side of the generator. Upload an existing protocol and get an AI-assisted, item-by-item read on
           whether it conforms to HARPER (the ISPE/ISPOR protocol template) or TARGET — with an auto-drawn study-design
           scheme, a planned-outputs review, and fixes for anything missing.
         </p>
-      </div>
-      <span class="shrink-0 text-sm font-semibold text-brand-700 group-hover:underline">Open the checker →</span>
-    </a>
+        <span class="mt-4 text-sm font-semibold text-brand-700 group-hover:underline">Open the checker →</span>
+      </a>
+
+      <a href={`${base}/tools/rwe-studio`}
+         class="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 hover:shadow-md hover:border-brand-400 transition">
+        <p class="text-[10px] uppercase tracking-[0.2em] text-brand-700 font-bold">Already have the data?</p>
+        <h2 class="mt-1 text-lg font-bold text-slate-900 group-hover:text-brand-700 transition">Run the analysis in RWE Studio</h2>
+        <p class="mt-2 text-sm text-slate-600 leading-relaxed flex-1">
+          The templates above draft the protocol. RWE Studio takes a small, messy dataset, profiles and cleans it,
+          maps your columns to a design and runs the analysis in real R via WebR — in the browser, with nothing
+          uploaded. It currently runs {studioDesigns}; the other templates here are protocol builders only.
+        </p>
+        <span class="mt-4 text-sm font-semibold text-brand-700 group-hover:underline">Open RWE Studio →</span>
+      </a>
+    </div>
   </section>
 </BaseLayout>
