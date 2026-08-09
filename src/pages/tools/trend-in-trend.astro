@@ -16,11 +16,11 @@ const SUBGROUPS = [
   "Comorbidity burden",
 ];
 const SENSITIVITY = [
-  "Number of CPE strata (e.g. 3 vs 5 vs 10)",
+  "Number of CPE strata (e.g. 3 vs 5 vs 10 quantiles)",
+  "Alternative covariate set in the stage-1 exposure model that defines CPE",
   "Alternative exposure-prevalence definition",
   "Restrict to periods with a strong prevalence trend",
-  "Alternative outcome model / link function",
-  "Negative-control outcome",
+  "Negative-control outcome (should show no trend-in-trend signal)",
   "Exclude the early-adoption period",
   "Alternative calendar-period length",
 ];
@@ -28,19 +28,38 @@ const SENSITIVITY = [
 
 <BaseLayout
   title="Trend-in-Trend (TIT) protocol — Daniel Tsai"
-  description="A free, in-browser protocol builder for the trend-in-trend design (Ji & Hennessy 2017), which exploits calendar trends in exposure prevalence to estimate effects robust to time-invariant unmeasured confounding. One-click Word / Markdown export."
+  description="A free, in-browser protocol builder for the trend-in-trend design (Ji et al, Epidemiology 2017), which compares outcome trends across strata of the cumulative probability of exposure. One-click Word / Markdown export."
 >
   <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
     <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
       <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">Protocol Generator · TIT</p>
       <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Trend-in-Trend protocol</h1>
       <p class="mt-3 text-base text-slate-600 max-w-3xl">
-        Draft a <strong>trend-in-trend (TIT)</strong> protocol (Ji &amp; Hennessy 2017). When a drug's <strong>prevalence
-        of use rises (or falls) over calendar time</strong>, TIT compares the outcome trend across strata defined by
-        each subgroup's <strong>cumulative percentage exposed (CPE)</strong>: if the outcome tracks the exposure trend
-        more steeply where uptake is faster, that supports a causal effect — and the estimate is
-        <strong>robust to time-invariant unmeasured confounding</strong>. Everything runs in your browser.
+        <strong>In plain terms.</strong> A drug's use rises steeply in some kinds of patient and barely at all in others.
+        If the drug really causes the outcome, the outcome should rise fastest exactly where the drug's use rose
+        fastest. Trend-in-trend reads the effect off that co-movement rather than off a comparison of treated with
+        untreated people — so a confounder that sits still over time cannot produce it.
       </p>
+      <details class="mt-3 max-w-3xl text-sm text-slate-600">
+        <summary class="cursor-pointer font-semibold text-brand-700">How that is done precisely (Ji et al, <em>Epidemiology</em> 2017)</summary>
+        <p class="mt-2">
+          Stage 1 fits a logistic model of <strong>exposure</strong> on covariates that affect exposure but are not
+          affected by it, and takes each person's predicted probability of being exposed at any point in the study
+          period — the <strong>cumulative probability of exposure (CPE)</strong>. Covariates are treated as
+          time-invariant, so each person sits in one CPE stratum for the whole study. The population is then cut into
+          quantiles of CPE (quintiles in the original paper), which sorts people by <em>how steeply their exposure
+          prevalence trends</em>. Stage 2 tabulates, for every CPE stratum and calendar period, a 2 × 2 table of
+          exposed / unexposed × case / non-case, and maximises the trend-in-trend likelihood over those tables. The
+          estimate is <strong>exp(β₁), an odds ratio</strong>.
+        </p>
+        <p class="mt-2">
+          <strong>When it fails.</strong> The design is unbiased <em>unless</em> there are unmeasured factors affecting
+          the outcome whose prevalence trends over calendar time in a way that is correlated with the exposure trend
+          across CPE strata. A confounder that is stable over time therefore cannot bias it; a co-intervention or a
+          secular change that arrives alongside uptake can. It also needs a genuinely strong time trend in exposure —
+          without one there is nothing to read the effect off, and the likelihood may not be identified.
+        </p>
+      </details>
       <a class="mt-4 inline-block text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>← All designs</a>
     </div>
   </header>
@@ -99,28 +118,39 @@ const SENSITIVITY = [
           <div class="grid grid-cols-2 gap-3">
             <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Number of calendar periods</span>
               <input type="number" name="nperiods" value="10" min="3" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Number of CPE strata</span>
-              <input type="number" name="nstrata" value="5" min="2" max="10" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Number of CPE strata (quantiles)</span>
+              <input type="number" name="nstrata" value="5" min="2" max="10" step="1" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+              <span class="text-[11px] text-slate-500">Ji et al used quintiles (5).</span></label>
           </div>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure-prevalence definition (per period)</span>
             <input name="prevdef" placeholder="e.g. Proportion of the population dispensed the exposure in the period" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Stage-1 model: covariates that predict exposure</span>
+            <input name="cpecov" placeholder="e.g. Age, sex, comorbidity index, prior healthcare use, region — measured before the study period" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+            <span class="text-[11px] text-slate-500">CPE is each person's predicted probability of exposure from this model. Use variables that <strong>affect</strong> exposure and are not <strong>affected by</strong> it (no post-exposure variables, no mediators).</span></label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">CPE strata definition</span>
-            <input name="cpedef" placeholder="e.g. Quintiles of each subgroup's cumulative percentage exposed by the end of follow-up" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <input name="cpedef" placeholder="e.g. Quintiles of the stage-1 predicted probability of exposure; each person keeps one stratum for the whole study" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
         </fieldset>
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
           <legend class="px-2 text-sm font-bold text-brand-700">4 · Estimator &amp; assumptions</legend>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Estimator</span>
             <select name="estimator" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
-              <option value="ml">Trend-in-trend maximum-likelihood (Ji &amp; Hennessy 2017)</option>
-              <option value="logistic">Logistic-regression approximation (outcome on CPE-stratum × time)</option>
-            </select></label>
-          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Effect measure</span>
+              <option value="ml">Trend-in-trend maximum likelihood on the stratum × period tables (Ji et al 2017)</option>
+            </select>
+            <span class="text-[11px] text-slate-500">This is the estimator the design defines; the reference implementation is the <code>TrendInTrend</code> R package (<code>OR()</code>), with bootstrap confidence intervals.</span></label>
+          <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Effect measure to report</span>
             <select name="effect" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
-              <option value="OR">Odds ratio (95% CI)</option>
-              <option value="RR">Risk ratio (95% CI)</option>
-            </select></label>
-          <p class="text-[11px] text-slate-500">Key assumptions: exposure prevalence changes over calendar time; unmeasured confounding is <strong>time-invariant</strong>; and the outcome trend is otherwise stable across CPE strata (no differential secular trend or co-intervention).</p>
+              <option value="OR">Odds ratio — exp(β₁), what the likelihood estimates</option>
+              <option value="RR">Odds ratio, additionally interpreted as a risk ratio (rare outcome only)</option>
+            </select>
+            <span class="text-[11px] text-slate-500">The trend-in-trend likelihood returns an odds ratio. It approximates a risk ratio only when the outcome is rare; say so explicitly if you report it that way.</span></label>
+          <p class="text-[11px] text-slate-500">
+            <strong>Assumptions, stated as the paper states them.</strong> (1) There is a strong time trend in exposure —
+            without one there is nothing to identify. (2) The estimate is unbiased unless unmeasured factors affecting
+            the outcome have prevalence trends over calendar time that are correlated with the exposure trends across
+            CPE strata; a time-stable confounder therefore cannot bias it. (3) Covariates in the stage-1 exposure model
+            are treated as time-invariant, so each person stays in one CPE stratum throughout.
+          </p>
         </fieldset>
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
@@ -198,29 +228,52 @@ const SENSITIVITY = [
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), outcome: V("outcome"),
       period: V("period") || "yearly", first: V("first"), last: V("last"),
-      nperiods: V("nperiods") || "10", nstrata: V("nstrata") || "5", prevdef: V("prevdef"), cpedef: V("cpedef"),
+      nperiods: V("nperiods") || "10", nstrata: V("nstrata") || "5", prevdef: V("prevdef"), cpedef: V("cpedef"), cpecov: V("cpecov"),
       estimator: V("estimator") || "ml", effect: V("effect") || "OR",
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
 
-    const estimatorText = (e) => e === "logistic"
-      ? "a logistic-regression approximation, regressing the individual outcome on calendar time interacted with the CPE stratum (the interaction estimates the trend-in-trend effect)"
-      : "the trend-in-trend maximum-likelihood estimator (Ji & Hennessy 2017), which models the joint distribution of exposure prevalence and outcome across CPE strata over calendar time";
-    const effectText = (e) => e === "RR" ? "risk ratio" : "odds ratio";
+    // The design defines one estimator: the two-stage procedure of Ji et al 2017.
+    // An earlier version of this page also offered a "logistic-regression
+    // approximation (outcome on CPE-stratum × time)". No such estimator appears in
+    // the paper or in the TrendInTrend package, so it was removed rather than left
+    // asserting a method that cannot be cited.
+    const estimatorText = () =>
+      "the two-stage trend-in-trend estimator (Ji et al, Epidemiology 2017): stage 1 fits a logistic model of exposure on covariates that affect exposure but are not affected by it, and each person's predicted probability of exposure over the study period (the cumulative probability of exposure, CPE) assigns them to a CPE stratum; stage 2 tabulates, for every CPE stratum and calendar period, the counts of exposed/unexposed by case/non-case, and maximises the trend-in-trend likelihood over those tables";
+    const effectText = (e) => e === "RR"
+      ? "odds ratio, exp(β₁), additionally interpreted as a risk ratio (an approximation that holds only for a rare outcome)"
+      : "odds ratio, exp(β₁)";
+    const effectShort = (e) => e === "RR" ? "odds ratio (reported also as a risk ratio)" : "odds ratio";
 
     const pcOf = (s) => ({
-      design: "trend-in-trend design (Ji & Hennessy 2017)",
+      design: "trend-in-trend design (Ji et al, Epidemiology 2017)",
       tte: false,
       population: or(s.population, "(population)"),
       exposure: or(s.exposure, "(exposure)"),
       comparator: "",
       outcome: or(s.outcome, "(outcome)"),
       data: s.data,
-      analysis: estimatorText(s.estimator) + ", reporting the " + effectText(s.effect) + " with 95% confidence intervals",
-      groupBy: "cumulative-percentage-exposed (CPE) stratum",
-      limitations: "Trend-in-trend is robust to time-invariant unmeasured confounding but assumes exposure prevalence changes over time and that no differential secular trend or co-intervention coincides with faster uptake across CPE strata; it needs a meaningful prevalence trend to have power.",
-      plannedOutputs: ["Exposure-prevalence trend by calendar period.", "Outcome trend by CPE stratum (the trend-in-trend figure).", "Effect estimate with 95% CI, and CPE-stratum-specific trends."],
+      analysis: estimatorText() + ", reporting the " + effectText(s.effect) + " with 95% confidence intervals (bootstrap)",
+      groupBy: "cumulative-probability-of-exposure (CPE) stratum",
+      limitations: "Trend-in-trend requires a strong time trend in exposure, and is unbiased only if no unmeasured factor affecting the outcome has a prevalence trend over calendar time that is correlated with the exposure trend across CPE strata — so a time-stable confounder cannot bias it, but a co-intervention or secular change arriving alongside uptake can. Stage-1 covariates are treated as time-invariant, so each person keeps one CPE stratum throughout.",
+      plannedOutputs: ["Exposure-prevalence trend by calendar period, and by CPE stratum (evidence that the strata really do differ in exposure trend).", "Outcome trend by CPE stratum (the trend-in-trend figure).", "The stratum × period 2 × 2 tables that enter the likelihood.", "Effect estimate with 95% CI."],
     });
+
+    // What is still blank. A protocol that reads as finished while its defining
+    // elements are placeholders is worse than one that says so, so the gap list
+    // travels into the preview, the Markdown and the Word file alike.
+    const missing = (s) => [
+      [!s.population, "the population"],
+      [!s.exposure, "the exposure whose use trends over calendar time"],
+      [!s.outcome, "the outcome"],
+      [!s.data, "the data source"],
+      [!s.cpecov, "the stage-1 covariates that define CPE — without them the strata are undefined"],
+      [!s.prevdef, "how exposure prevalence is measured in each period"],
+    ].filter((x) => x[0]).map((x) => x[1]);
+    const missingMd = (s) => {
+      const m = missing(s);
+      return m.length ? "> **This draft is incomplete.** Still to be specified: " + m.join("; ") + ".\n\n" : "";
+    };
 
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
@@ -229,33 +282,37 @@ const SENSITIVITY = [
 
 _Study protocol · trend-in-trend design · drafted ${today}_
 
-${window.PC.abstractMd(pcOf(s))}
+${missingMd(s)}${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
-This study uses the **trend-in-trend (TIT)** design (Ji & Hennessy 2017) to estimate the effect of **${E}** on **${O}** in **${P}**. When the **prevalence of ${E} changes over calendar time**, TIT contrasts the outcome trend across strata defined by each subgroup's **cumulative percentage exposed (CPE)**: if the outcome trend tracks the exposure-prevalence trend more strongly where uptake is faster, that supports a causal effect. Because the comparison is *within* the same calendar trend, the estimate is **robust to time-invariant unmeasured confounding** — its key advantage over a conventional cohort.
+This study uses the **trend-in-trend (TIT)** design (Ji et al, *Epidemiology* 2017) to estimate the effect of **${E}** on **${O}** in **${P}**.
+
+*In plain terms:* the use of ${E} rises steeply in some kinds of patient and barely at all in others. If ${E} really causes ${O}, then ${O} should rise fastest exactly where the use of ${E} rose fastest. The design reads the effect off that co-movement rather than off a comparison of treated with untreated people.
+
+*Precisely:* the population is stratified by the **cumulative probability of exposure (CPE)** — each person's predicted probability of being exposed at some point in the study period, from a model fitted to covariates that affect exposure but are not affected by it. Because exposure trends differ across those strata, the outcome trends across strata identify the effect. The design is **unbiased unless there are unmeasured factors affecting ${O} whose prevalence trends over calendar time in a way correlated with the exposure trend across CPE strata** — so a confounder that is stable over time cannot bias it, which is its advantage over a conventional cohort. The conditions under which trend-in-trend is biased are a subset of those under which a cohort study is biased.
 
 ## 2. Question
-Among **${P}**, does **${E}** affect the incidence of **${O}**, as inferred from the co-movement of the exposure-prevalence trend and the outcome trend across CPE strata?
+Among **${P}**, does **${E}** affect the incidence of **${O}**, as identified by the co-movement of exposure trends and outcome trends across CPE strata?
 
 ## 3. Study design
 A **trend-in-trend** analysis using observational data from **${or(s.data, "(data source)")}**, over **${or(s.first, "(first)")}–${or(s.last, "(last)")}** in **${or(s.period, "yearly")}** periods (**${s.nperiods}** periods), with **${s.nstrata}** CPE strata.
 
 ## 4. Exposure-prevalence trend
-${or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure.")} A meaningful monotone trend in prevalence is required for the design to have power.
+${or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure.")} A **strong time trend in exposure is a requirement of the design, not a convenience**: without one there is nothing for the likelihood to identify the effect from. The observed prevalence trend is reported before any effect estimate is interpreted, overall and within each CPE stratum.
 
-## 5. CPE strata
-${or(s.cpedef, "The population is divided into " + s.nstrata + " strata by cumulative percentage exposed (CPE) — the fraction of each subgroup ever exposed by the end of follow-up — so strata differ in how fast exposure was taken up.")}
+## 5. CPE strata (stage 1)
+A logistic model of **exposure** is fitted on: ${or(s.cpecov, "_(specify the covariates — variables that affect exposure and are not affected by it; no mediators, no post-exposure variables)_")}. Each person's predicted probability of exposure over the study period is their **cumulative probability of exposure (CPE)**. ${or(s.cpedef, "The population is then divided into " + s.nstrata + " quantiles of CPE.")} Covariates are treated as time-invariant, so each person remains in the same CPE stratum for every calendar period.
 
-## 6. Outcome model and estimator
-The outcome is modelled with ${estimatorText(s.estimator)}. The trend-in-trend effect is identified from the **interaction between the calendar-time trend and CPE stratum**: a steeper outcome trend in higher-uptake strata indicates a causal effect.
+## 6. Outcome model and estimator (stage 2)
+For every CPE stratum and calendar period, a 2 × 2 table of exposed / unexposed by case / non-case is tabulated, and the effect is estimated by ${estimatorText()}. The reference implementation is the \`TrendInTrend\` R package (\`OR()\`), which returns the maximum-likelihood β and a bootstrap confidence interval, and flags non-identification.
 
 ## 7. Estimand and effect measure
-The estimand is the causal effect of ${E} on ${O}, reported as the **${effectText(s.effect)}** with 95% confidence intervals (bootstrap or model-based).
+The estimand is the causal effect of ${E} on ${O}, reported as the **${effectText(s.effect)}** with a 95% bootstrap confidence interval.${s.effect === "RR" ? " The risk-ratio reading is stated as an approximation and the outcome frequency that justifies it is reported alongside it." : ""}
 
 ## 8. Statistical analysis
-1. Compute exposure prevalence per calendar period and confirm a monotone trend.
-2. Assign the population to ${s.nstrata} CPE strata.
-3. Compute the outcome rate per period within each CPE stratum.
-4. Fit ${estimatorText(s.estimator)}; estimate the ${effectText(s.effect)} with 95% CI.
+1. Compute exposure prevalence per calendar period and report the trend; confirm it is strong enough to identify an effect.
+2. Fit the stage-1 exposure model and assign each person to one of ${s.nstrata} CPE strata by quantiles of the predicted probability.
+3. Report the exposure-prevalence trend **within each CPE stratum**, to demonstrate the strata really do differ in exposure trend.
+4. Tabulate the stratum × period 2 × 2 counts and maximise the trend-in-trend likelihood; report exp(β₁) with a 95% bootstrap CI, and report explicitly if the model is not identified.
 5. Plot the exposure-prevalence trend and the CPE-stratum-specific outcome trends.
 
 ## 9. Subgroup analyses
@@ -267,22 +324,26 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 ${window.PC.tailMd(pcOf(s))}
 
 ## References
-- Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-trend Research Design for Causal Inference. Epidemiology 2017;28(4):529-536.
-- Hennessy S, Leonard CE. The Trend-in-trend Research Design. Am J Epidemiol 2020 (commentary).
-- Ertefaie A, Small DS, Ji X, Leonard C, Hennessy S. Statistical Power for Trend-in-trend design. Epidemiology 2018;29(3):e21-e23.
+- Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-trend Research Design for Causal Inference. Epidemiology 2017;28(4):529-536. doi:10.1097/EDE.0000000000000579 (PMID 27775954)
+- Ertefaie A, Small DS, Ji X, Leonard C, Hennessy S. Statistical Power for Trend-in-trend Design. Epidemiology 2018;29(3):e21-e23. doi:10.1097/EDE.0000000000000803 (PMID 29337845)
+- Dasgupta N, Schwarz J, Hennessy S, Ertefaie A, Dart RC. Causal inference for evaluating prescription opioid abuse using trend-in-trend design. Pharmacoepidemiol Drug Saf 2019;28(5):716-725. doi:10.1002/pds.4736 (PMID 30714239)
+- Ji X, Ertefaie A. TrendInTrend: Odds Ratio Estimation and Power Calculation for the Trend in Trend Model. R package, CRAN. doi:10.32614/CRAN.package.TrendInTrend
 `;
     };
 
     const computeChecks = (s) => {
       const checks = [];
       const np = parseInt(s.nperiods) || 0, ns = parseInt(s.nstrata) || 0;
-      if (!s.exposure || !s.exposure.trim()) checks.push({ level: "info", msg: "Specify the exposure whose prevalence changes over time — the trend in its use is what drives identification." });
-      if (!s.outcome || !s.outcome.trim()) checks.push({ level: "info", msg: "Specify the outcome." });
-      if (np < 5) checks.push({ level: "warn", msg: "Only " + np + " calendar periods — the exposure-prevalence trend is estimated across periods; too few weakens power. Aim for ≥ 5–10." });
-      if (ns < 3) checks.push({ level: "warn", msg: "Only " + ns + " CPE strata — trend-in-trend contrasts the outcome trend across CPE strata; use ≥ 3 (commonly 5)." });
-      checks.push({ level: "info", msg: "Core assumption: exposure prevalence genuinely trends over calendar time. Verify and report the prevalence trend before interpreting the effect." });
-      checks.push({ level: "info", msg: "Trend-in-trend removes TIME-INVARIANT unmeasured confounding, but a differential secular trend or a co-intervention correlated with uptake would bias it — pre-specify a negative-control outcome or a pseudo-period to check." });
-      if (!s.prevdef || !s.prevdef.trim()) checks.push({ level: "info", msg: "Define how exposure prevalence is measured per period." });
+      const miss = missing(s);
+      if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft below is printed with placeholders so you can see its shape — it is not a finished protocol." });
+      if (!s.cpecov || !s.cpecov.trim()) checks.push({ level: "error", msg: "CPE is a predicted probability, not an observed percentage: it comes from a stage-1 logistic model of EXPOSURE on covariates. Until you name those covariates the strata are undefined. Use variables that affect exposure and are not affected by it — no mediators, no post-exposure variables." });
+      if (np < 5) checks.push({ level: "warn", msg: "Only " + np + " calendar periods — the exposure trend is estimated across periods; too few weakens power. Aim for ≥ 5–10." });
+      if (ns < 3) checks.push({ level: "warn", msg: "Only " + ns + " CPE strata — trend-in-trend contrasts outcome trends across CPE strata; use ≥ 3. Ji et al used quintiles (5)." });
+      if (ns > 5) checks.push({ level: "info", msg: ns + " CPE strata spreads the same cases over more stratum × period cells. Sparse cells destabilise the likelihood; report the cell counts, and compare against 5 strata as a sensitivity analysis." });
+      checks.push({ level: "info", msg: "Requirement, not a nicety: exposure prevalence must trend strongly over calendar time. Report the observed prevalence trend — overall and WITHIN each CPE stratum — before interpreting any effect estimate. If the strata do not differ in exposure trend, there is nothing to identify the effect from." });
+      checks.push({ level: "info", msg: "The design is unbiased UNLESS an unmeasured factor affecting the outcome has a prevalence trend over calendar time correlated with the exposure trend across CPE strata. A time-stable confounder cannot bias it; a co-intervention or secular change arriving with uptake can. Pre-specify a negative-control outcome to probe this." });
+      if (s.effect === "RR") checks.push({ level: "warn", msg: "The trend-in-trend likelihood estimates an ODDS ratio, exp(β₁). Reporting it as a risk ratio is a rare-outcome approximation — state the outcome frequency that justifies it, or report the odds ratio." });
+      checks.push({ level: "info", msg: "The reference implementation (TrendInTrend::OR in R) returns a `not_identified` flag. If it fires, report that the model was not identified rather than the number it printed." });
       return checks;
     };
 
@@ -317,10 +378,12 @@ ${window.PC.tailMd(pcOf(s))}
       diag.innerHTML = svg + "</svg>";
       document.getElementById("dlegend").innerHTML =
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#6366f1"></span>Exposure prevalence trend</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#dc2626"></span>Outcome trend, high-CPE stratum (fast uptake)</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#94a3b8"></span>Outcome trend, low-CPE stratum (slow uptake)</span>';
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#dc2626"></span>Outcome trend, high-CPE stratum (steep rise in exposure)</span>' +
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#94a3b8"></span>Outcome trend, low-CPE stratum (flat exposure)</span>';
       document.getElementById("dcap").textContent =
-        "As exposure prevalence rises across " + s.nperiods + " " + s.period + " periods, the outcome trend is compared across " + s.nstrata + " CPE strata. A steeper outcome trend where uptake is faster (high-CPE stratum) supports a causal effect, net of time-invariant confounding. Drag the ○ handle to change the number of periods. Schematic — shapes are illustrative.";
+        "As exposure prevalence rises across " + s.nperiods + " " + s.period + " period(s), the outcome trend is compared across " + s.nstrata + " strata of the cumulative probability of exposure. A steeper outcome trend where exposure rose faster is what identifies a causal effect. Drag the ○ handle to change the number of periods. Schematic only — the shapes are illustrative, not your data" +
+        (parseInt(s.nperiods) > 24 ? ", and the drawing shows the first 24 periods" : "") +
+        (parseInt(s.nstrata) > 6 ? ", and only 6 of the strata are drawn" : "") + ".";
 
       // drag (frozen px/period)
       const svgXof = (clientX) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = clientX; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
@@ -346,8 +409,15 @@ ${window.PC.tailMd(pcOf(s))}
       const s = readForm();
       preview.textContent = buildMarkdown(s);
       renderScheme(s);
-      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch {}
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
+      // Never swallow a render failure silently: a blank checks panel that looks
+      // like "no issues" is exactly the failure mode this page is meant to avoid.
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); }
+      catch (err) {
+        console.error("[TIT] consistency checks failed to render", err);
+        const el = document.getElementById("checks");
+        if (el) el.innerHTML = '<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">The consistency checks could not be rendered, so this panel is showing nothing rather than showing "no issues". Details are in the browser console.</div>';
+      }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (err) { console.warn("[TIT] could not save draft", err); }
     };
 
     (() => {
@@ -389,7 +459,10 @@ ${window.PC.tailMd(pcOf(s))}
       form.querySelectorAll("input, textarea, select").forEach((el) => {
         if (el.type === "checkbox" || el.type === "radio") el.checked = false;
         else if (el.tagName === "SELECT") el.selectedIndex = 0;
-        else el.value = "";
+        // Blanking a numeric field while readForm() silently substitutes a default
+        // makes the protocol assert a number the form is not showing. Put the
+        // markup default back instead.
+        else el.value = el.getAttribute("value") || "";
       });
       render();
       setMsg("Cleared.");
@@ -424,41 +497,46 @@ ${window.PC.tailMd(pcOf(s))}
       if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
       children.push(p([text(or(s.title, "(Untitled trend-in-trend study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
       children.push(p([text("Study protocol · trend-in-trend design · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      const miss = missing(s);
+      if (miss.length) children.push(p([text("This draft is incomplete. Still to be specified: " + miss.join("; ") + ".", { bold: true, color: "9E3A2C" })], { spacing: { after: 160 } }));
       window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
-      children.push(para("This study uses the trend-in-trend design (Ji & Hennessy 2017) to estimate the effect of " + E + " on " + O + " in " + P + ". When the prevalence of " + E + " changes over calendar time, the outcome trend is contrasted across CPE strata; because the comparison is within the same calendar trend, the estimate is robust to time-invariant unmeasured confounding."));
+      children.push(para("This study uses the trend-in-trend design (Ji et al, Epidemiology 2017) to estimate the effect of " + E + " on " + O + " in " + P + "."));
+      children.push(para("In plain terms: the use of " + E + " rises steeply in some kinds of patient and barely at all in others. If " + E + " really causes " + O + ", then " + O + " should rise fastest exactly where the use of " + E + " rose fastest. The design reads the effect off that co-movement rather than off a comparison of treated with untreated people."));
+      children.push(para("Precisely: the population is stratified by the cumulative probability of exposure (CPE) — each person's predicted probability of being exposed at some point in the study period, from a model fitted to covariates that affect exposure but are not affected by it. Because exposure trends differ across those strata, the outcome trends across strata identify the effect. The design is unbiased unless there are unmeasured factors affecting " + O + " whose prevalence trends over calendar time in a way correlated with the exposure trend across CPE strata; a confounder that is stable over time therefore cannot bias it. The conditions under which trend-in-trend is biased are a subset of those under which a cohort study is biased."));
 
       children.push(h1("2. Design summary"));
       children.push(labelTable([
-        ["Design", "Trend-in-trend (Ji & Hennessy 2017)"],
+        ["Design", "Trend-in-trend (Ji et al, Epidemiology 2017)"],
         ["Data source(s)", or(s.data, "-")],
         ["Population", P],
         ["Exposure", E],
         ["Outcome", O],
         ["Calendar range", or(s.first, "(first)") + "–" + or(s.last, "(last)") + " (" + or(s.period, "yearly") + ", " + s.nperiods + " periods)"],
-        ["CPE strata", String(s.nstrata)],
-        ["Estimator", s.estimator === "logistic" ? "Logistic-regression approximation" : "Trend-in-trend maximum likelihood"],
-        ["Effect measure", effectText(s.effect)],
+        ["CPE strata", s.nstrata + " quantiles of the cumulative probability of exposure"],
+        ["Stage-1 covariates (define CPE)", or(s.cpecov, "(to be specified)")],
+        ["Estimator", "Trend-in-trend maximum likelihood on the stratum × period tables"],
+        ["Effect measure", effectShort(s.effect)],
       ]));
 
       children.push(h1("3. Exposure-prevalence trend"));
-      children.push(para(or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure. A meaningful monotone trend is required for power.")));
+      children.push(para(or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure.") + " A strong time trend in exposure is a requirement of the design, not a convenience: without one there is nothing for the likelihood to identify the effect from. The observed prevalence trend is reported before any effect estimate is interpreted, overall and within each CPE stratum."));
 
-      children.push(h1("4. CPE strata"));
-      children.push(para(or(s.cpedef, "The population is divided into " + s.nstrata + " strata by cumulative percentage exposed (CPE), so strata differ in how fast exposure was taken up.")));
+      children.push(h1("4. CPE strata (stage 1)"));
+      children.push(para("A logistic model of exposure is fitted on: " + or(s.cpecov, "(specify the covariates — variables that affect exposure and are not affected by it; no mediators, no post-exposure variables)") + ". Each person's predicted probability of exposure over the study period is their cumulative probability of exposure (CPE). " + or(s.cpedef, "The population is then divided into " + s.nstrata + " quantiles of CPE.") + " Covariates are treated as time-invariant, so each person remains in the same CPE stratum for every calendar period."));
 
-      children.push(h1("5. Outcome model and estimator"));
-      children.push(para("The outcome is modelled with " + estimatorText(s.estimator) + ". The effect is identified from the interaction between the calendar-time trend and CPE stratum: a steeper outcome trend in higher-uptake strata indicates a causal effect."));
+      children.push(h1("5. Outcome model and estimator (stage 2)"));
+      children.push(para("For every CPE stratum and calendar period, a 2 x 2 table of exposed / unexposed by case / non-case is tabulated, and the effect is estimated by " + estimatorText() + ". The reference implementation is the TrendInTrend R package (OR()), which returns the maximum-likelihood beta and a bootstrap confidence interval, and flags non-identification."));
 
       children.push(h1("6. Estimand and effect measure"));
-      children.push(para("The estimand is the causal effect of " + E + " on " + O + ", reported as the " + effectText(s.effect) + " with 95% confidence intervals."));
+      children.push(para("The estimand is the causal effect of " + E + " on " + O + ", reported as the " + effectText(s.effect) + " with a 95% bootstrap confidence interval." + (s.effect === "RR" ? " The risk-ratio reading is stated as an approximation and the outcome frequency that justifies it is reported alongside it." : "")));
 
       children.push(h1("7. Statistical analysis"));
-      ["Compute exposure prevalence per period and confirm a monotone trend.",
-       "Assign the population to " + s.nstrata + " CPE strata.",
-       "Compute the outcome rate per period within each CPE stratum.",
-       "Fit " + estimatorText(s.estimator) + "; estimate the " + effectText(s.effect) + " with 95% CI.",
+      ["Compute exposure prevalence per calendar period and report the trend; confirm it is strong enough to identify an effect.",
+       "Fit the stage-1 exposure model and assign each person to one of " + s.nstrata + " CPE strata by quantiles of the predicted probability.",
+       "Report the exposure-prevalence trend within each CPE stratum, to demonstrate the strata really do differ in exposure trend.",
+       "Tabulate the stratum x period 2 x 2 counts and maximise the trend-in-trend likelihood; report exp(beta1) with a 95% bootstrap CI, and report explicitly if the model is not identified.",
        "Plot the exposure-prevalence trend and the CPE-stratum-specific outcome trends."].forEach((l) => children.push(numItem(l)));
 
       children.push(h1("8. Subgroup analyses"));
@@ -469,8 +547,10 @@ ${window.PC.tailMd(pcOf(s))}
       window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("References"));
-      ["Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-trend Research Design for Causal Inference. Epidemiology 2017;28(4):529-536.",
-       "Ertefaie A, Small DS, Ji X, Leonard C, Hennessy S. Statistical power for trend-in-trend. Epidemiology 2018;29(3):e21-e23."].forEach((l) => children.push(bullet(l)));
+      ["Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-trend Research Design for Causal Inference. Epidemiology 2017;28(4):529-536. doi:10.1097/EDE.0000000000000579 (PMID 27775954)",
+       "Ertefaie A, Small DS, Ji X, Leonard C, Hennessy S. Statistical Power for Trend-in-trend Design. Epidemiology 2018;29(3):e21-e23. doi:10.1097/EDE.0000000000000803 (PMID 29337845)",
+       "Dasgupta N, Schwarz J, Hennessy S, Ertefaie A, Dart RC. Causal inference for evaluating prescription opioid abuse using trend-in-trend design. Pharmacoepidemiol Drug Saf 2019;28(5):716-725. doi:10.1002/pds.4736 (PMID 30714239)",
+       "Ji X, Ertefaie A. TrendInTrend: Odds Ratio Estimation and Power Calculation for the Trend in Trend Model. R package, CRAN. doi:10.32614/CRAN.package.TrendInTrend"].forEach((l) => children.push(bullet(l)));
 
       children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
 
