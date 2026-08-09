@@ -32,7 +32,7 @@ The fix is to define a single **time zero** at which eligibility is met, treatme
 ## ITT vs per-protocol — pick the question, then the method
 
 - The **intention-to-treat** analogue compares strategies as assigned at time zero and ignores later deviations. It's robust and simple, but in observational data "assignment" is just initiation, so it answers "the effect of *starting* A vs B".
-- Many clinical questions are really **per-protocol**: "what if patients *sustained* the strategy?" That re-introduces selection over time — people who tolerate a drug keep taking it — which a naive per-protocol analysis can't handle. The principled fix is to clone, censor at deviation, and re-weight (**clone-censor-weight**), which I'll cover in a separate post.
+- Many clinical questions are really **per-protocol**: "what if patients *sustained* the strategy?" That re-introduces selection over time — people who tolerate a drug keep taking it — which a naive per-protocol analysis can't handle. The principled fix is to clone, censor at deviation, and re-weight — [clone-censor-weight](/writing/clone-censor-weight).
 
 ## A worked example
 
@@ -50,4 +50,4 @@ Two reasons. First, **most biases are design problems, not analysis problems** �
 
 ---
 
-*Want the slides, or a protocol template? [Get in touch](mailto:danielhttsai@gmail.com?subject=Target%20trial%20emulation) — and try the [Protocol Generator](/tools), which walks you through these components for several study designs.*
+*Want the slides, or a protocol template? [Get in touch](mailto:danielhttsai@gmail.com?subject=Target%20trial%20emulation) — and try the [Protocol Generator](/tools/protocol-generator), which walks you through these components for several study designs.*
