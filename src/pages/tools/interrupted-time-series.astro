@@ -39,11 +39,37 @@ const SENSITIVITY = [
       <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">Protocol Generator · ITS</p>
       <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Interrupted Time Series protocol</h1>
       <p class="mt-3 text-base text-slate-600 max-w-3xl">
-        Draft a quasi-experimental <strong>interrupted time series (ITS)</strong> protocol — segmented regression that
-        tests whether a policy or intervention changed the <strong>level</strong> and/or <strong>slope</strong> of an
-        outcome over time, using the pre-intervention trend as the counterfactual. Optionally add a
-        <strong>control series</strong> to guard against co-interventions and secular change. Everything runs in your browser.
+        <strong>In plain terms.</strong> Something changed on a known date. Take the outcome as it was trending
+        <em>before</em> that date, draw that trend forward as "what would have happened anyway", and ask how far the
+        outcome afterwards departs from it — both as an immediate jump and as a change of direction.
       </p>
+      <details class="mt-3 max-w-3xl text-sm text-slate-600">
+        <summary class="cursor-pointer font-semibold text-brand-700">The two things a segmented regression separates, and why it matters</summary>
+        <p class="mt-2">
+          The outcome is aggregated into equal time intervals and regressed on three terms: <strong>time</strong>
+          (the pre-intervention slope), an <strong>interruption indicator</strong> (1 from the first affected period
+          onward), and <strong>time-since-interruption</strong> (0 until the interruption, then counting up). Their
+          coefficients are the baseline trend, the <strong>change in level</strong> — the immediate step at the
+          interruption — and the <strong>change in slope</strong> — how the trend itself bends afterwards. They answer
+          different questions and can point in opposite directions: a policy can cause a sharp one-off drop that then
+          drifts back up (level change down, slope change up), and reporting only one of the two would describe it
+          wrongly (Wagner 2002; Lopez Bernal 2017).
+        </p>
+        <p class="mt-2">
+          <strong>Two things routinely break it.</strong> <em>Seasonality</em>: if the outcome has an annual cycle and
+          the interruption falls at a particular point in that cycle, the cycle is read as a step or a bend.
+          <em>Autocorrelation</em>: adjacent time points resemble each other, which does not bias the coefficients but
+          makes the standard errors too small and the confidence intervals too narrow. Neither is optional to consider.
+        </p>
+        <p class="mt-2">
+          <strong>Why a control series strengthens the claim.</strong> An uncontrolled ITS attributes <em>every</em>
+          departure from the extrapolated pre-trend to the intervention — including anything else that happened at the
+          same time, and any secular change that was already bending. A comparison series that shares the secular
+          environment but is not exposed to the intervention lets you difference those out: the estimate becomes the
+          <em>difference</em> in level and slope changes, and a co-intervention affecting both series cancels
+          (Lopez Bernal 2018).
+        </p>
+      </details>
       <a class="mt-4 inline-block text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>← All designs</a>
     </div>
   </header>
@@ -225,7 +251,7 @@ const SENSITIVITY = [
       month: "Seasonality is modelled with calendar-month (or quarter) indicator terms",
     })[s] || "No explicit seasonality adjustment";
     const autocorrText = (a) => ({
-      none: "Residual autocorrelation is assessed with the Durbin–Watson statistic and ACF/PACF plots",
+      none: "Residual autocorrelation is assessed with ACF/PACF plots and the Durbin–Watson statistic (which is read descriptively rather than as a formal test when the model is a Poisson or negative-binomial fit, where it has no standard null distribution)",
       newey: "Newey–West heteroskedasticity- and autocorrelation-consistent (HAC) standard errors are used",
       prais: "A Prais–Winsten (Cochrane–Orcutt) correction for first-order autocorrelation is applied",
       arima: "Autocorrelated errors are modelled with an ARIMA structure (order chosen by AIC and residual diagnostics)",
@@ -303,8 +329,11 @@ const SENSITIVITY = [
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#10b981"></span>Post-intervention trend</span>' +
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="border-top:2px dashed #f59e0b"></span>Counterfactual (expected without the intervention)</span>' +
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3" style="border-left:2px dashed #0f766e"></span>Interruption</span>';
+      // The drawing clamps at 36 points per segment; say so rather than letting the
+      // caption quote a number the picture is not showing.
+      const clamped = (parseInt(s.prePoints) > 36 || parseInt(s.postPoints) > 36);
       document.getElementById("dcap").textContent =
-        "Segmented regression fits the pre-intervention trend (" + s.prePoints + " " + s.unit + " points) and projects it forward as the counterfactual; the post-intervention segment (" + s.postPoints + " points) is contrasted against it to estimate the immediate level change and the change in slope" + (s.controlled ? ", differenced against the control series" : "") + ". Drag the ○ handles to change the pre / post point counts. Schematic — shapes are illustrative, not your data.";
+        "Segmented regression fits the pre-intervention trend (" + s.prePoints + " " + s.unit + " point(s)) and projects it forward as the counterfactual; the post-intervention segment (" + s.postPoints + " point(s)) is contrasted against it to estimate the immediate level change and the change in slope" + (s.controlled ? ", differenced against the control series" : "") + ". Drag the ○ handles to change the pre / post point counts. Schematic — the shapes are illustrative, not your data" + (clamped ? ", and the drawing shows at most 36 points per segment (" + pre + " before, " + post + " after)" : "") + ".";
 
       // ── Drag-to-edit (frozen px/point so the drag stays linear) ──
       const svgXof = (clientX) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = clientX; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
@@ -322,7 +351,9 @@ const SENSITIVITY = [
           const move = (e) => {
             if (e.pointerId !== pid) return;
             const x = svgXof(e.clientX); if (x == null || x0 == null) return;
-            pending = Math.max(3, Math.min(240, startVal + Math.round((x - x0) / pxPerPoint)));
+            // Clamp the drag to what the drawing can actually show (36), so the
+            // handle never keeps raising a number the picture has stopped tracking.
+            pending = Math.max(3, Math.min(36, startVal + Math.round((x - x0) / pxPerPoint)));
             if (!raf) raf = requestAnimationFrame(apply);
           };
           const end = (e) => {
@@ -342,6 +373,23 @@ const SENSITIVITY = [
       });
     }
 
+    // What is still blank. A protocol that reads as finished while its defining
+    // elements are placeholders is worse than one that says so, so the gap list
+    // travels into the preview, the Markdown and the Word file alike.
+    const missing = (s) => [
+      [!s.interruptDate, "the interruption date — the design has no pre/post segments without it"],
+      [!s.population, "the population"],
+      [!s.outcome, "the outcome"],
+      [!s.intervention, "the intervention / policy"],
+      [!s.data, "the data source"],
+      [s.model === "poisson" && !s.denom, "the denominator / offset for the rate model"],
+      [s.controlled && !s.controlSeries, "the control series (controlled ITS is ticked but no comparison series is named)"],
+    ].filter((x) => x[0]).map((x) => x[1]);
+    const missingMd = (s) => {
+      const m = missing(s);
+      return m.length ? "> **This draft is incomplete.** Still to be specified: " + m.join("; ") + ".\n\n" : "";
+    };
+
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
       const P = or(s.population, "(population)"), O = or(s.outcome, "(outcome)"), I = or(s.intervention, "(intervention/policy)");
@@ -350,9 +398,13 @@ const SENSITIVITY = [
 
 _Study protocol · interrupted time series (segmented regression) · drafted ${today}_
 
-${window.PC.abstractMd(pcOf(s))}
+${missingMd(s)}${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
-This study uses an **interrupted time series (ITS)** design to evaluate whether **${I}** changed the **level** and/or the **slope (trend)** of **${O}** in **${P}**. ITS is among the strongest quasi-experimental designs for a population-level intervention with a clear date: the pre-intervention trend, projected forward, serves as the **counterfactual** for what would have happened without the intervention (Wagner 2002; Bernal 2017).${s.controlled ? " A **controlled** series is added to separate the intervention's effect from co-interventions and secular change." : ""}
+This study uses an **interrupted time series (ITS)** design to evaluate whether **${I}** changed the **level** and/or the **slope (trend)** of **${O}** in **${P}**.
+
+*In plain terms:* ${I} took effect on a known date. We take the way ${O} was already trending before that date, draw that trend forward as what would have happened anyway, and measure how far the observed outcome departs from it.
+
+*Precisely:* the outcome is aggregated into equal ${s.unit} intervals and regressed on time, an interruption indicator, and time-since-interruption. Their coefficients separate the **baseline trend**, the **change in level** (the immediate step at the interruption) and the **change in slope** (how the trend bends afterwards). These answer different questions and can point in opposite directions — an intervention can cause a sharp one-off fall that then drifts back up — so both are reported (Wagner 2002; Lopez Bernal 2017).${s.controlled ? " A **control series** that shares the secular environment but is not exposed to the intervention is added, so the estimate becomes the *difference* in level and slope changes and any co-intervention affecting both series cancels (Lopez Bernal 2018)." : " Without a control series, every departure from the extrapolated pre-trend is attributed to the intervention, including anything else that happened at the same time."}
 
 ## 2. Question
 Among **${P}**, did **${I}** (interrupted at **${D}**) change the level and/or slope of **${O}**?
@@ -390,17 +442,19 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 ${window.PC.tailMd(pcOf(s))}
 
 ## References
-- Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27:299-309.
-- Lopez Bernal J, Cummins S, Gasparrini A. Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2017;46:348-355.
-- Lopez Bernal J, Cummins S, Gasparrini A. The use of controls in interrupted time series studies of public health interventions. Int J Epidemiol 2018;47:2082-2093.
-- Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. Regression based quasi-experimental approach when randomisation is not an option: interrupted time series analysis. BMJ 2015;350:h2750.
-- Penfold RB, Zhang F. Use of interrupted time series analysis in evaluating health care quality improvements. Acad Pediatr 2013;13(6 Suppl):S38-44.
+- Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27(4):299-309. doi:10.1046/j.1365-2710.2002.00430.x
+- Lopez Bernal J, Cummins S, Gasparrini A. Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2017;46(1):348-355. doi:10.1093/ije/dyw098
+- Lopez Bernal J, Cummins S, Gasparrini A. The use of controls in interrupted time series studies of public health interventions. Int J Epidemiol 2018;47(6):2082-2093. doi:10.1093/ije/dyy135
+- Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. Regression based quasi-experimental approach when randomisation is not an option: interrupted time series analysis. BMJ 2015;350:h2750. doi:10.1136/bmj.h2750
+- Penfold RB, Zhang F. Use of interrupted time series analysis in evaluating health care quality improvements. Acad Pediatr 2013;13(6 Suppl):S38-S44. doi:10.1016/j.acap.2013.08.002
 `;
     };
 
     const computeChecks = (s) => {
       const checks = [];
       const pre = parseInt(s.prePoints) || 0, post = parseInt(s.postPoints) || 0;
+      const miss = missing(s);
+      if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft below is printed with placeholders so you can see its shape — it is not a finished protocol." });
       if (!s.interruptDate) checks.push({ level: "error", msg: "Set the interruption date — the whole design hinges on when the intervention took effect; it defines the pre/post segments." });
       if (pre < 8) checks.push({ level: "warn", msg: "Only " + pre + " pre-intervention points — segmented regression needs a well-estimated baseline trend; aim for ≥ 8 (ideally ≥ 12) points before the interruption." });
       if (post < 8) checks.push({ level: "warn", msg: "Only " + post + " post-intervention points — the slope change is hard to detect with few post points; aim for ≥ 8 (ideally ≥ 12)." });
@@ -408,11 +462,10 @@ ${window.PC.tailMd(pcOf(s))}
         checks.push({ level: "warn", msg: "No seasonality adjustment with " + s.unit + " data — seasonal outcomes can bias the level/slope estimates. Add harmonic or calendar-period terms, or justify that the outcome is non-seasonal." });
       if (s.autocorr === "none") checks.push({ level: "warn", msg: "No autocorrelation handling — serial correlation between adjacent time points inflates precision. Check Durbin–Watson / ACF-PACF and use Newey–West, Prais–Winsten, or ARIMA errors if present." });
       if (!s.controlled) checks.push({ level: "info", msg: "Single-group ITS assumes no co-intervention or secular change coincides with the interruption. A control series (controlled ITS) lets you difference those out and strengthens causal inference." });
-      if (s.model === "poisson" && !s.denom) checks.push({ level: "info", msg: "For a Poisson rate model, specify the denominator / offset (person-time or eligible population) so the outcome is modelled as a rate, not a raw count." });
-      checks.push({ level: "info", msg: "ITS estimates two things against the extrapolated pre-trend counterfactual: an immediate change in level (step) and a change in slope (trend)." });
-      if (!s.population || !s.population.trim()) checks.push({ level: "info", msg: "Specify the population." });
-      if (!s.outcome || !s.outcome.trim()) checks.push({ level: "info", msg: "Specify the outcome (a rate, count, or level measured over time)." });
-      if (!s.intervention || !s.intervention.trim()) checks.push({ level: "info", msg: "Specify the intervention / policy that defines the interruption." });
+      if (s.model === "poisson" && !s.denom) checks.push({ level: "warn", msg: "A Poisson model with no denominator / offset models the raw COUNT per period, and so assumes the population at risk is identical in every period. If the population grew or shrank, that change is read as a trend. Specify person-time or the eligible population as a log offset." });
+      if (s.controlled && !s.controlSeries) checks.push({ level: "warn", msg: "Controlled ITS is ticked but no control series is named. A control series only helps if it shares the secular environment and is genuinely unaffected by the intervention — say which series that is and why it qualifies." });
+      checks.push({ level: "info", msg: "Report BOTH estimates. Level change and slope change answer different questions and can point in opposite directions — a one-off drop that then drifts back up is level down, slope up. Reporting only one describes it wrongly." });
+      checks.push({ level: "info", msg: "Two conventions exist for coding time-since-interruption. Under the Wagner (2002) convention it is 0 at the first affected period, so the level-change coefficient IS the immediate step and the slope change accrues from the following period. State which convention you used — the coefficients are not interchangeable." });
       return checks;
     };
 
@@ -420,8 +473,15 @@ ${window.PC.tailMd(pcOf(s))}
       const s = readForm();
       preview.textContent = buildMarkdown(s);
       renderScheme(s);
-      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch {}
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
+      // Never swallow a render failure silently: a blank checks panel that looks
+      // like "no issues" is exactly the failure mode this page is meant to avoid.
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); }
+      catch (err) {
+        console.error("[ITS] consistency checks failed to render", err);
+        const el = document.getElementById("checks");
+        if (el) el.innerHTML = '<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">The consistency checks could not be rendered, so this panel is showing nothing rather than showing "no issues". Details are in the browser console.</div>';
+      }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (err) { console.warn("[ITS] could not save draft", err); }
     };
 
     (() => {
@@ -464,7 +524,10 @@ ${window.PC.tailMd(pcOf(s))}
       form.querySelectorAll("input, textarea, select").forEach((el) => {
         if (el.type === "checkbox" || el.type === "radio") el.checked = false;
         else if (el.tagName === "SELECT") el.selectedIndex = 0;
-        else el.value = "";
+        // Blanking a numeric field while readForm() silently substitutes a default
+        // makes the protocol assert a number the form is not showing. Put the
+        // markup default back instead.
+        else el.value = el.getAttribute("value") || "";
       });
       render();
       setMsg("Cleared.");
@@ -500,10 +563,14 @@ ${window.PC.tailMd(pcOf(s))}
       if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
       children.push(p([text(or(s.title, "(Untitled interrupted time series study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
       children.push(p([text("Study protocol · interrupted time series (segmented regression) · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      const miss = missing(s);
+      if (miss.length) children.push(p([text("This draft is incomplete. Still to be specified: " + miss.join("; ") + ".", { bold: true, color: "9E3A2C" })], { spacing: { after: 160 } }));
       window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
-      children.push(para("This study uses an interrupted time series (ITS) design to evaluate whether " + I + " changed the level and/or slope of " + O + " in " + P + ". The pre-intervention trend, projected forward, is the counterfactual (Wagner 2002; Lopez Bernal 2017)." + (s.controlled ? " A controlled series separates the intervention's effect from co-interventions and secular change." : "")));
+      children.push(para("This study uses an interrupted time series (ITS) design to evaluate whether " + I + " changed the level and/or slope of " + O + " in " + P + "."));
+      children.push(para("In plain terms: " + I + " took effect on a known date. We take the way " + O + " was already trending before that date, draw that trend forward as what would have happened anyway, and measure how far the observed outcome departs from it."));
+      children.push(para("Precisely: the outcome is aggregated into equal " + s.unit + " intervals and regressed on time, an interruption indicator, and time-since-interruption. Their coefficients separate the baseline trend, the change in level (the immediate step at the interruption) and the change in slope (how the trend bends afterwards). These answer different questions and can point in opposite directions, so both are reported (Wagner 2002; Lopez Bernal 2017)." + (s.controlled ? " A control series that shares the secular environment but is not exposed to the intervention is added, so the estimate becomes the difference in level and slope changes and any co-intervention affecting both series cancels (Lopez Bernal 2018)." : " Without a control series, every departure from the extrapolated pre-trend is attributed to the intervention, including anything else that happened at the same time.")));
 
       children.push(h1("2. Question"));
       children.push(para("Among " + P + ", did " + I + " (interrupted at " + Dt + ") change the level and/or slope of " + O + "?"));
@@ -548,10 +615,11 @@ ${window.PC.tailMd(pcOf(s))}
       window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("References"));
-      ["Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27:299-309.",
-       "Lopez Bernal J, Cummins S, Gasparrini A. Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2017;46:348-355.",
-       "Lopez Bernal J, Cummins S, Gasparrini A. The use of controls in interrupted time series studies of public health interventions. Int J Epidemiol 2018;47:2082-2093.",
-       "Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. Regression based quasi-experimental approach when randomisation is not an option: interrupted time series analysis. BMJ 2015;350:h2750."].forEach((l) => children.push(bullet(l)));
+      ["Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27(4):299-309. doi:10.1046/j.1365-2710.2002.00430.x",
+       "Lopez Bernal J, Cummins S, Gasparrini A. Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2017;46(1):348-355. doi:10.1093/ije/dyw098",
+       "Lopez Bernal J, Cummins S, Gasparrini A. The use of controls in interrupted time series studies of public health interventions. Int J Epidemiol 2018;47(6):2082-2093. doi:10.1093/ije/dyy135",
+       "Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. Regression based quasi-experimental approach when randomisation is not an option: interrupted time series analysis. BMJ 2015;350:h2750. doi:10.1136/bmj.h2750",
+       "Penfold RB, Zhang F. Use of interrupted time series analysis in evaluating health care quality improvements. Acad Pediatr 2013;13(6 Suppl):S38-S44. doi:10.1016/j.acap.2013.08.002"].forEach((l) => children.push(bullet(l)));
 
       children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
 
