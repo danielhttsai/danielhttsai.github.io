@@ -240,6 +240,34 @@ const SENSITIVITY = [
     const MV = (n) => [...form.querySelectorAll('[name="' + n + '"]:checked')].map((c) => c.value);
     const mergeList = (pick, custom) => [...(pick || []), ...String(custom || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean)];
 
+    // ONE reading of a day-count, shared by the protocol text, the diagram and the
+    // checks, so they cannot tell three different stories about the same box.
+    // They used to: the prose printed the raw string while everything else ran it
+    // through parseInt. A `type=number` box hands back whatever survives its own
+    // sanitiser, which includes negatives and exponent notation —
+    //   "-5"    → prose "-5 days", checks "0", diagram no window at all
+    //   "365.7" → prose "365.7 days", diagram drawn at 365
+    //   "1e3"   → prose "1e3 days",  diagram drawn at 1  (parseInt("1e3") === 1)
+    // Declared above every user of it, so no temporal-dead-zone hazard on first paint.
+    // Returns null (blank), NaN (unusable), or a non-negative integer.
+    const numDays = (v) => {
+      const t = String(v == null ? "" : v).trim();
+      if (t === "") return null;
+      const n = Number(t);
+      if (!Number.isFinite(n) || n < 0) return NaN;
+      return Math.round(n);
+    };
+    const dayInt = (v) => { const n = numDays(v); return Number.isFinite(n) ? n : 0; };
+    const daysTxt = (v) => {
+      const n = numDays(v);
+      if (n === null) return "(not specified)";
+      if (!Number.isFinite(n)) return "(invalid — enter a whole number of days, 0 or more)";
+      return n + " day" + (n === 1 ? "" : "s");
+    };
+    const blank = (v) => String(v == null ? "" : v).trim() === "";
+    const badNum = (v) => !blank(v) && !Number.isFinite(numDays(v));
+    const rounded = (v) => { const t = String(v == null ? "" : v).trim(); return t !== "" && Number.isFinite(numDays(v)) && Number(t) !== numDays(v); };
+
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), comparator: V("comparator"),
       outcome: V("outcome"), first: V("first"), last: V("last"), interval: V("interval"), eligibility: V("eligibility"),
@@ -252,24 +280,22 @@ const SENSITIVITY = [
     // protocol, so a half-finished form (or "Clear all", which blanks every box)
     // produced a document asserting windows nobody chose. Blank now travels as ""
     // and is printed as "(not specified)" and flagged in the checks panel.
-    const daysTxt = (v) => { const t = String(v == null ? "" : v).trim(); return t === "" ? "(not specified)" : t + " day" + (t === "1" ? "" : "s"); };
-    const blank = (v) => String(v == null ? "" : v).trim() === "";
     // Free text the user typed is followed by more of our prose. Without this the
     // exported Word ran the two together ("…or 5 years Maximum follow-up per trial…");
     // with a naive "." appended it double-punctuated anyone who typed one.
     const stop = (t) => { const s = String(t == null ? "" : t).trim(); return s && !/[.!?:;)]$/.test(s) ? s + "." : s; };
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
+    const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: dayInt(p[1]) }; }).filter((r) => r.name);
     const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
     const covLbText = (s) => { const r = parseRows(s.covWindows); return r.length ? r.map((x) => x.name + " " + x.days + " d").join("; ") : (blank(s.covlookback) ? "(not specified)" : s.covlookback + " days before each origin"); };
     const fmtDays = (d) => { const a = Math.abs(d); if (a >= 365) { const y = a / 365; return (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return Math.round(a / 30) + "mo"; return a + "d"; };
 
     function renderScheme(s) {
       const interval = s.interval || "monthly";
-      const lb = Math.max(0, parseInt(s.covlookback) || 0);
-      const wash = Math.max(0, parseInt(s.washout) || 0);
-      const fu = Math.max(1, parseInt(s.futrial) || 1825);
+      const lb = dayInt(s.covlookback);
+      const wash = dayInt(s.washout);
+      const fu = Math.max(1, dayInt(s.futrial) || 1825);
 
       // ── Part 1: within one trial. Uses the SAME shared renderer (and therefore the same
       //    window kinds, colours, labels and drag behaviour) as the ACNU builder — the only
@@ -279,7 +305,7 @@ const SENSITIVITY = [
       if (covRows.length) covRows.forEach((r, i) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }));
       else if (lb > 0) wins.push({ label: "Covariate / eligibility look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "covlookback", edge: "start" } });
       if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
-      const fuSet = !blank(s.futrial) && (parseInt(s.futrial) || 0) > 0;
+      const fuSet = dayInt(s.futrial) > 0;
       wins.push(fuSet
         ? { label: "Follow-up (this trial)", kind: "followup", startDay: 0, endDay: fu, edit: { field: "futrial", edge: "end" } }
         : { label: "Follow-up (this trial)", kind: "followup", startDay: 0, endDay: fu, note: "length not set — drag to set", edit: { field: "futrial", edge: "end" } });
@@ -452,9 +478,19 @@ ${REFS.map((r) => "- " + r).join("\n")}
     const computeChecks = (s) => {
       const checks = [];
       const covRows = parseRows(s.covWindows);
-      const lb = covRows.length ? 1 : (parseInt(s.covlookback) || 0), fu = parseInt(s.futrial) || 0;
-      const wash = parseInt(s.washout) || 0;
-      if (blank(s.washout)) checks.push({ level: "error", msg: "New-user washout is empty. It is not assumed to be anything — the protocol prints “(not specified)” until you set it." });
+      const lb = covRows.length ? 1 : dayInt(s.covlookback), fu = dayInt(s.futrial);
+      const wash = dayInt(s.washout);
+      // A box that cannot be read as a day count is refused outright, not rounded
+      // into something plausible. Everything downstream then agrees on "(invalid)".
+      const NUMS = [["washout", "New-user washout"], ["covlookback", "Covariate / eligibility look-back"], ["futrial", "Maximum follow-up per trial"]];
+      const bad = NUMS.filter(([k]) => badNum(s[k]));
+      if (bad.length) checks.push({ level: "error", msg: "Not a usable number of days, so the protocol prints “(invalid)” rather than guessing: " + bad.map(([k, l]) => l + " = “" + s[k] + "”").join("; ") + ". Day counts must be whole numbers of 0 or more — a negative window has no meaning, and a value the text and the diagram would read differently is refused rather than silently rounded." });
+      const rnd = NUMS.filter(([k]) => rounded(s[k]));
+      if (rnd.length) checks.push({ level: "info", msg: "Rounded to whole days, in the protocol and the diagram alike: " + rnd.map(([k, l]) => l + " " + s[k] + " → " + numDays(s[k])).join("; ") + "." });
+      // Don't also claim the box "is 0" when it was refused as unreadable above —
+      // two messages about one box, saying different things, is worse than one.
+      if (badNum(s.washout)) { /* already reported */ }
+      else if (blank(s.washout)) checks.push({ level: "error", msg: "New-user washout is empty. It is not assumed to be anything — the protocol prints “(not specified)” until you set it." });
       else if (wash <= 0) checks.push({ level: "warn", msg: "New-user washout is 0 — each nested trial is itself a new-user trial started at its origin, so prevalent users can be enrolled at every origin. Set a washout with no prior exposure or comparator before each origin." });
       else if (wash < 180) checks.push({ level: "info", msg: "New-user washout < 180 days — consider a longer washout so that patients enrolled at each origin are truly new users." });
       if (!s.first || !s.last) checks.push({ level: "warn", msg: "Set the first and last trial origins so the sequence of nested trials is defined." });
@@ -462,7 +498,8 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (lb <= 0) checks.push({ level: "warn", msg: "No covariate / eligibility look-back — each trial would assess eligibility and covariates only on the origin day itself. Set a look-back window before the origin." });
       const zeroRows = covRows.filter((r) => !r.days).map((r) => r.name);
       if (zeroRows.length) checks.push({ level: "warn", msg: "These per-covariate rows have a look-back of 0 days, so the covariate is measured only on the origin day: " + zeroRows.join("; ") + ". A row is read as “Name | days” — check for a missing or non-numeric value after the “|”." });
-      if (blank(s.futrial)) checks.push({ level: "error", msg: "Maximum follow-up per trial is empty. The diagram shows a placeholder bar labelled “length not set” and the protocol prints “(not specified)” — nothing is assumed." });
+      if (badNum(s.futrial)) { /* already reported */ }
+      else if (blank(s.futrial)) checks.push({ level: "error", msg: "Maximum follow-up per trial is empty. The diagram shows a placeholder bar labelled “length not set” and the protocol prints “(not specified)” — nothing is assumed." });
       else if (fu <= 0) checks.push({ level: "warn", msg: "Set the per-trial follow-up window." });
       if (!s.multiple || !s.multiple.trim()) checks.push({ level: "warn", msg: "Patients can enter multiple trials — say so, and say how the re-use is handled. If it is ignored, precision is over-stated: the analysis behaves as though there were as many people as there are patient-trial records." });
       if (!s.eligibility || !s.eligibility.trim()) checks.push({ level: "warn", msg: "State the eligibility rule applied at each origin, including whether a patient already enrolled as an index initiator can re-enter a later trial. Without it, the same person can be counted as a new initiator more than once." });
@@ -486,7 +523,17 @@ ${REFS.map((r) => "- " + r).join("\n")}
     // so one broken panel cannot take the others down with it.
     const render = () => {
       const s = readForm();
-      preview.textContent = buildMarkdown(s);
+      // buildMarkdown depends on window.PC, which a sibling component defines. If
+      // that component ever fails to load, an unguarded call here would throw
+      // before the diagram, the checks and the autosave ever ran — one missing
+      // script silently taking the whole page with it. Say so on screen instead.
+      try {
+        preview.textContent = buildMarkdown(s);
+      } catch (e) {
+        console.error("[st] protocol text failed", e);
+        preview.textContent = "The protocol text could not be built: " + (e && e.message ? e.message : e) +
+          "\n\nYour entries are safe and still saved in this browser. Reload the page; if it keeps happening, the shared protocol component (window.PC) did not load.";
+      }
       try { renderScheme(s); } catch (e) { console.error("[st] diagram failed", e); }
       try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch (e) { console.error("[st] checks failed", e); }
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) { console.warn("[st] autosave failed", e); }

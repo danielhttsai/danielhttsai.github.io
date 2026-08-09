@@ -250,7 +250,33 @@ Comedications | 180</textarea>
     const V = (n) => (form.elements[n]?.value || "").trim();
     const MV = (n) => [...form.querySelectorAll('[name="' + n + '"]:checked')].map((c) => c.value);
     const mergeList = (pick, custom) => [...(pick || []), ...String(custom || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean)];
-    const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(0, parseInt(p[1]) || 0) }; }).filter((r) => r.name);
+    // ONE reading of a day-count, shared by the protocol text, the diagram and the
+    // checks, so they cannot tell three different stories about the same box.
+    // They used to: the prose printed the raw string while everything else ran it
+    // through parseInt. A `type=number` box hands back whatever survives its own
+    // sanitiser, which includes negatives and exponent notation —
+    //   "-5"    → prose "-5 days", checks "0", diagram no band at all
+    //   "365.7" → prose "365.7 days", diagram drawn at 365
+    //   "1e3"   → prose "1e3 days",  diagram drawn at 1  (parseInt("1e3") === 1)
+    // Returns null (blank), NaN (unusable), or a non-negative integer.
+    const numDays = (v) => {
+      const t = String(v == null ? "" : v).trim();
+      if (t === "") return null;
+      const n = Number(t);
+      if (!Number.isFinite(n) || n < 0) return NaN;
+      return Math.round(n);
+    };
+    const dayInt = (v) => { const n = numDays(v); return Number.isFinite(n) ? n : 0; };
+    const daysTxt = (v) => {
+      const n = numDays(v);
+      if (n === null) return "(not specified)";
+      if (!Number.isFinite(n)) return "(invalid — enter a whole number of days, 0 or more)";
+      return n + " day" + (n === 1 ? "" : "s");
+    };
+    const blank = (v) => String(v == null ? "" : v).trim() === "";
+    const badNum = (v) => !blank(v) && !Number.isFinite(numDays(v));
+    const rounded = (v) => { const t = String(v == null ? "" : v).trim(); return t !== "" && Number.isFinite(numDays(v)) && Number(t) !== numDays(v); };
+    const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: dayInt(p[1]) }; }).filter((r) => r.name);
     const rowsText = (txt) => parseRows(txt).map((r) => r.name + " (" + r.days + " d)").join("; ") || "none";
     const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
 
@@ -265,9 +291,6 @@ Comedications | 180</textarea>
       censor: V("censor"), ipcw: V("ipcw"), ipcwReasonsPick: MV("ipcwReasonsPick"), ipcwReasonsCustom: V("ipcwReasonsCustom"), incllookback: V("incllookback"), excllist: V("excllist"), covlist: V("covlist"), followup: V("followup"), fudays: V("fudays"), effect: V("effect"),
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
-    // "14 days" / "(not specified)" — never a number the user did not type.
-    const daysTxt = (v) => { const t = String(v == null ? "" : v).trim(); return t === "" ? "(not specified)" : t + " day" + (t === "1" ? "" : "s"); };
-    const blank = (v) => String(v == null ? "" : v).trim() === "";
     // Free text the user typed is followed by more of our prose. Without this the
     // exported Word ran the two together ("…whichever comes first Maximum follow-up…");
     // with a naive "." appended it double-punctuated anyone who typed one.
@@ -275,15 +298,15 @@ Comedications | 180</textarea>
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     function renderScheme(s) {
-      const grace = Math.max(0, parseInt(s.grace) || 0);
+      const grace = dayInt(s.grace);
       // The follow-up bar shows the field's own value. It used to be inflated to
       // grace+1 whenever the grace period ran past follow-up, so the bar read
       // "+101d" while the box said 90 — a diagram that disagreed with the
       // protocol it was illustrating. Now the grace band simply overruns the bar,
       // which is what the (error-level) consistency check is telling you about.
-      const fuSet = !blank(s.fudays) && (parseInt(s.fudays) || 0) > 0;
-      const fu = fuSet ? parseInt(s.fudays) : 90;
-      const incl = Math.max(0, parseInt(s.incllookback) || 0);
+      const fuSet = dayInt(s.fudays) > 0;
+      const fu = fuSet ? dayInt(s.fudays) : 90;
+      const incl = dayInt(s.incllookback);
       const exRows = parseRows(s.excllist);
       const covRows = parseRows(s.covlist);
       const wins = [];
@@ -437,12 +460,22 @@ ${REFS.map((r) => "- " + r).join("\n")}
 
     const computeChecks = (s) => {
       const checks = [];
-      const grace = parseInt(s.grace) || 0, fu = parseInt(s.fudays) || 0, covRows = parseRows(s.covlist), lb = covRows.length;
+      const grace = dayInt(s.grace), fu = dayInt(s.fudays), covRows = parseRows(s.covlist), lb = covRows.length;
       const reasons = mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom);
-      if (blank(s.grace)) checks.push({ level: "error", msg: "Grace period is empty. It is not assumed to be anything — the protocol will print “(not specified)” until you set it. With no grace window the two strategies cannot be distinguished by cloning." });
+      // A box that cannot be read as a day count is refused outright, not rounded
+      // into something plausible. Everything downstream then agrees on "(invalid)".
+      const bad = [["grace", "Grace period"], ["fudays", "Maximum follow-up"], ["incllookback", "Inclusion look-back"]].filter(([k]) => badNum(s[k]));
+      if (bad.length) checks.push({ level: "error", msg: "Not a usable number of days, so the protocol prints “(invalid)” rather than guessing: " + bad.map(([k, l]) => l + " = “" + s[k] + "”").join("; ") + ". Day counts must be whole numbers of 0 or more — a negative window has no meaning, and a value the text and the diagram would read differently is refused rather than silently rounded." });
+      const rnd = [["grace", "Grace period"], ["fudays", "Maximum follow-up"], ["incllookback", "Inclusion look-back"]].filter(([k]) => rounded(s[k]));
+      if (rnd.length) checks.push({ level: "info", msg: "Rounded to whole days, in the protocol and the diagram alike: " + rnd.map(([k, l]) => l + " " + s[k] + " → " + numDays(s[k])).join("; ") + "." });
+      // Don't also claim the box "is 0" when it was refused as unreadable above —
+      // two messages about one box, saying different things, is worse than one.
+      if (badNum(s.grace)) { /* already reported */ }
+      else if (blank(s.grace)) checks.push({ level: "error", msg: "Grace period is empty. It is not assumed to be anything — the protocol will print “(not specified)” until you set it. With no grace window the two strategies cannot be distinguished by cloning." });
       else if (grace <= 0) checks.push({ level: "error", msg: "Grace period is 0 — with no grace window the two strategies cannot be distinguished by cloning, and every clone deviates at time zero. Set a grace period > 0." });
-      if (blank(s.fudays)) checks.push({ level: "error", msg: "Maximum follow-up is empty. The diagram shows a placeholder bar labelled “length not set”, and the protocol prints “(not specified)” — nothing is assumed." });
-      else if (fu > 0 && grace >= fu) checks.push({ level: "error", msg: "The grace period (" + grace + " d) is ≥ the maximum follow-up (" + fu + " d), so the arms are identical for the whole of follow-up and there is no post-grace period in which they can differ. The grace band in the diagram now overruns the follow-up bar to show this. Shorten the grace period or lengthen follow-up." });
+      if (badNum(s.fudays)) { /* already reported */ }
+      else if (blank(s.fudays)) checks.push({ level: "error", msg: "Maximum follow-up is empty. The diagram shows a placeholder bar labelled “length not set”, and the protocol prints “(not specified)” — nothing is assumed." });
+      else if (!badNum(s.grace) && fu > 0 && grace >= fu) checks.push({ level: "error", msg: "The grace period (" + grace + " d) is ≥ the maximum follow-up (" + fu + " d), so the arms are identical for the whole of follow-up and there is no post-grace period in which they can differ. The grace band in the diagram now overruns the follow-up bar to show this. Shorten the grace period or lengthen follow-up." });
       if (lb <= 0) checks.push({ level: "warn", msg: "No covariate look-back — baseline confounders and eligibility are assessed only at time zero. The IPCW models need these covariates, so without them the weights cannot adjust the artificial censoring." });
       const zeroRows = [...covRows, ...parseRows(s.excllist)].filter((r) => !r.days).map((r) => r.name);
       if (zeroRows.length) checks.push({ level: "warn", msg: "These rows have a look-back of 0 days, which means the criterion is assessed only on the index day itself: " + zeroRows.join("; ") + ". A row is read as “Name | days” — check for a missing or non-numeric value after the “|”." });
@@ -466,7 +499,17 @@ ${REFS.map((r) => "- " + r).join("\n")}
     // isolated so one broken panel cannot take the others down with it.
     const render = () => {
       const s = readForm();
-      preview.textContent = buildMarkdown(s);
+      // buildMarkdown depends on window.PC, which a sibling component defines. If
+      // that component ever fails to load, an unguarded call here would throw
+      // before the diagram, the checks and the autosave ever ran — one missing
+      // script silently taking the whole page with it. Say so on screen instead.
+      try {
+        preview.textContent = buildMarkdown(s);
+      } catch (e) {
+        console.error("[ccw] protocol text failed", e);
+        preview.textContent = "The protocol text could not be built: " + (e && e.message ? e.message : e) +
+          "\n\nYour entries are safe and still saved in this browser. Reload the page; if it keeps happening, the shared protocol component (window.PC) did not load.";
+      }
       try { renderScheme(s); } catch (e) { console.error("[ccw] diagram failed", e); }
       try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch (e) { console.error("[ccw] checks failed", e); }
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) { console.warn("[ccw] autosave failed", e); }
