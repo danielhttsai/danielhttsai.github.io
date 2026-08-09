@@ -2388,6 +2388,14 @@ ${numbered(PSC_REFERENCES)}
         return c;
       };
 
+      // HARPER 7.2 requires a study design diagram. The picture is embedded at
+      // EXPORT time only — rasterising on the keystroke-driven render path would
+      // put canvas work in front of the consistency checks and the autosave. The
+      // live preview carries this marker instead, and the download swaps the real
+      // figure block in. The caption and the window list matter as much as the
+      // image: an extractor reading the file as text cannot see an embedded PNG.
+      const FIG1_MARK = "_Figure 1 (study design diagram) is embedded in the downloaded Word (.docx) and Markdown files._";
+
       // ── Markdown template ───────────────────────────
       const buildMarkdown = (s) => {
         const today    = new Date().toISOString().slice(0, 10);
@@ -2460,6 +2468,8 @@ The active comparator is used as an emulated placebo arm; a drug class with simi
 ---
 
 ${window.PC.abstractMd(pcOf(s))}
+${FIG1_MARK}
+
 ## 1. Research question
 
 | | |
@@ -2588,7 +2598,26 @@ _Drafted with the AsPEN protocol builder (${today})._
         return { name: (p[0] || "").trim(), days: bad ? 0 : n, bad: bad, raw: raw };
       }).filter((r) => r.name);
       const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
-      const covLbText = (s) => { const r = parseRows(s.covWindows); return r.length ? r.map((x) => x.name + (x.bad ? " (look-back not specified)" : " " + x.days + " d")).join("; ") : ((s.lookback || "365") + " days prior to index date"); };
+      // A line in the per-covariate box with no readable "| days" is prose, not
+      // a window. It used to be pushed into the diagram anyway with startDay 0
+      // and endDay 0 — drawn as a zero-width covariate look-back and exported as
+      // "day 0 to 0", which reads as "no baseline period at all". Worse, having
+      // any line at all suppressed the single look-back window, so a protocol
+      // with lookback = 365 showed a 0-day baseline in both the figure and the
+      // prose. Plan the windows once so the figure and the text cannot diverge,
+      // and let prose stay prose.
+      const covWindowPlan = (s) => {
+        const rows = parseRows(s.covWindows).map((r, i) => Object.assign({}, r, { idx: i }));
+        const usable = rows.filter((r) => !r.bad && r.days > 0);
+        return { rows: rows, usable: usable, notes: rows.filter((r) => r.bad || r.days <= 0),
+                 lb: Math.max(0, parseInt(s.lookback) || 0), mode: usable.length ? "rows" : "single" };
+      };
+      const covLbText = (s) => {
+        const p = covWindowPlan(s);
+        const noteTail = p.notes.length ? " (" + p.notes.length + " line(s) in the per-covariate box carry no readable “| days” and are treated as notes, not windows)" : "";
+        if (p.mode === "single") return (s.lookback || "365") + " days prior to index date" + noteTail;
+        return p.usable.map((x) => x.name + " " + x.days + " d").join("; ") + noteTail;
+      };
       // The diagram used to fall back to five years whenever it could not read a
       // duration, so a protocol saying "18 months" was drawn as 5 years — the
       // text and the picture in the same export disagreeing, with the picture
@@ -2611,10 +2640,11 @@ _Drafted with the AsPEN protocol builder (${today})._
         const grace = Math.max(0, parseInt(s.grace) || 0);
         const fuR = resolveFollowupDays(s);
         const fu = fuR.days;
-        const covRows = parseRows(s.covWindows);
+        const plan = covWindowPlan(s);
         const wins = [];
-        // Per-covariate look-back windows if listed; else a single shared look-back — like the clone builder.
-        if (covRows.length) covRows.forEach((r, i) => wins.push({ label: r.name + (r.bad ? " (window not specified)" : ""), kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }));
+        // Per-covariate look-back windows only when they are actually readable;
+        // otherwise the single shared look-back the user set.
+        if (plan.mode === "rows") plan.usable.forEach((r) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: r.idx } }));
         else if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
         if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
         wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "maxFollowup", edge: "end" } });
@@ -2635,7 +2665,12 @@ _Drafted with the AsPEN protocol builder (${today})._
           el.value = Math.round(Math.max(0, -day));
           render();
         };
-        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Index (day 0) — treatment start", onEdit: onEdit, snap: 5 });
+        // Belt and braces: nothing degenerate reaches the figure or any export
+        // path built from it. A window whose start equals its end is not a
+        // window, and drawing one states a methodological fact — a zero-day
+        // baseline period — that no user ever asked for.
+        const drawn = wins.filter((w) => w.endDay > w.startDay);
+        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: drawn, indexLabel: "Index (day 0) — treatment start", onEdit: onEdit, snap: 5 });
       };
 
       const computeChecks = (s) => {
@@ -2644,8 +2679,8 @@ _Drafted with the AsPEN protocol builder (${today})._
         if (wash <= 0) checks.push({ level: "warn", msg: "Washout is 0 — prevalent (non-new) users may be included. A new-user design needs a washout window with no prior exposure or comparator." });
         else if (wash < 180) checks.push({ level: "info", msg: "Washout < 180 days — consider a longer washout to be confident users are truly new." });
         if (lb <= 0) checks.push({ level: "warn", msg: "No covariate look-back — baseline confounders are unmeasured. Set a look-back window before index." });
-        const badLb = parseRows(s.covWindows).filter((r) => r.bad);
-        if (badLb.length) checks.push({ level: "warn", msg: "No readable look-back for " + badLb.map((r) => "“" + r.name + "”").join(", ") + " — the number after the “|” could not be read" + (badLb.some((r) => r.raw) ? " (got “" + badLb.filter((r) => r.raw).map((r) => r.raw).join("”, “") + "”)" : "") + ". These are shown as “not specified” rather than as a 0-day window; write the value in whole days, e.g. “" + badLb[0].name + " | 365”." });
+        const cwp = covWindowPlan(s);
+        if (cwp.notes.length) checks.push({ level: "info", msg: cwp.notes.length + " line(s) in the per-covariate look-back box carry no readable “| days” — " + cwp.notes.slice(0, 3).map((r) => "“" + r.name.slice(0, 48) + (r.name.length > 48 ? "…" : "") + "”").join(", ") + ". They are treated as notes, not windows, so the diagram shows " + (cwp.mode === "rows" ? "only the " + cwp.usable.length + " window(s) it could read" : "the shared " + (s.lookback || "365") + "-day look-back instead") + ". To make one a window, write it as “Name | 365”." });
         const fuChk = resolveFollowupDays(s);
         if (!fuChk.known) checks.push({ level: "warn", msg: "The maximum follow-up could not be read as a duration, so the study-design diagram is drawing a 5-year default. The protocol text still says what you typed, so the words and the picture disagree — write a duration the diagram can read, e.g. “18 months”, “90 days”, “2 years”." });
         if (grace <= 0) checks.push({ level: "info", msg: "Grace period 0 — the on-treatment analysis will censor at the first dispensing gap." });
@@ -3058,8 +3093,14 @@ _Drafted with the AsPEN protocol builder (${today})._
       };
 
       // ── Markdown download / copy ─────────────────────
-      document.querySelector("[data-action='download-md']")?.addEventListener("click", () => {
-        const blob = new Blob([preview.textContent || ""], { type: "text/markdown;charset=utf-8" });
+      document.querySelector("[data-action='download-md']")?.addEventListener("click", async () => {
+        let body = preview.textContent || "";
+        try {
+          const fig = await window.designDiagramFigure(document.getElementById("diagram"));
+          body = body.replace(FIG1_MARK, window.designDiagramMd(fig).trimEnd());
+          if (!fig.ok) setMsg("Downloaded without the design diagram image: " + (fig.reason || "unknown reason") + ". The caption and window list are still there, and the file says the picture is missing.", true);
+        } catch (e) { console.error(e); }
+        const blob = new Blob([body], { type: "text/markdown;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url; a.download = buildFilename("md");
@@ -3307,6 +3348,15 @@ _Drafted with the AsPEN protocol builder (${today})._
         )]));
 
         window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
+        // HARPER 7.2. designDiagramDocx emits picture + numbered caption +
+        // window list together, and on failure a visible note rather than a
+        // silently missing figure, so use it rather than an ImageRun here.
+        try {
+          const fig = await window.designDiagramFigure(document.getElementById("diagram"));
+          const figParas = window.designDiagramDocx(D, fig, { font: FONT });
+          figParas.forEach((c) => children.push(c));
+          if (!figParas.placed) setMsg("Exported without the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.", true);
+        } catch (e) { console.error(e); }
         children.push(h1("1. Research question"));
         children.push(labelTable([
           ["Population", s.picoP || ""],
