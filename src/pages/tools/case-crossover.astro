@@ -127,6 +127,41 @@ const SUBGROUPS = [
   "Concomitant exposure (yes vs no)",
 ];
 
+// The four assumptions a case-crossover stands on. Layered on purpose: `plain`
+// is what a beginner needs to decide whether this design fits at all; `precise`
+// is what a reviewer needs; `check` is the thing you actually do about it.
+// Every claim here is traceable to the cited paper — see the References field.
+const ASSUMPTIONS = [
+  {
+    t: "The exposure has to be transient",
+    plain: "Something people start and stop — a short course, an as-needed drug, a dose change. Not a drug they simply stay on.",
+    precise: "Only cases whose exposure status differs between the hazard window and at least one control window contribute to the conditional likelihood. A case exposed throughout, or unexposed throughout, contributes nothing; if most of the cohort is a continuous user, the estimate rests on an unrepresentative discordant minority.",
+    check: "Report the number and proportion of exposure-discordant cases. If it is small, say so, and consider a cohort or SCCS design instead.",
+    cite: "Maclure 1991",
+  },
+  {
+    t: "The outcome has to be abrupt in onset, and uncommon",
+    plain: "A single identifiable moment — an MI, a fall, a bleed — not the slow onset of a chronic condition.",
+    precise: "Maclure derived the design for a brief exposure producing a transient change in the risk of a rare, acute-onset disease, and it is in that setting that the case-only conditional odds ratio estimates the incidence rate ratio for the hypothesised effect period. Gradual onset makes the index date arbitrary, which mis-places every window relative to the true event time.",
+    check: "State how the index date is defined and how well it approximates onset (admission date is a proxy, not onset).",
+    cite: "Maclure 1991",
+  },
+  {
+    t: "Exposure prevalence must not trend over time within a person",
+    plain: "If people were simply becoming more (or less) likely to be on the drug as time went on, the design finds an effect that is not there.",
+    precise: "The hazard window is always more recent than the control windows, so any monotone within-person trend in exposure probability — a drug being adopted, a dose being escalated as prognosis worsens, a treatment being stopped as a patient becomes frail — is confounded with the effect of interest. This is exposure-time-trend bias, and it does not shrink with sample size.",
+    check: "Choose a variant that removes it: time-stratified referent selection (Janes 2005), case-time-control using a matched non-case series (Suissa 1995), or case-case-time-control using future cases (Wang 2011; Huang/Yang/Tsai BMJ 2023). Report the uncorrected and corrected estimates side by side.",
+    cite: "Suissa 1995; Janes 2005; Wang 2011",
+  },
+  {
+    t: "The windows must not overlap, and control time must be eligible person-time",
+    plain: "Hazard and control windows have to be separate stretches of time in which the person was alive, enrolled, and could have been dispensed the drug.",
+    precise: "Overlapping windows double-count person-time and break the conditioning; control windows falling before database enrolment, before the drug was marketed, or before the person entered the age band produce a structural zero that is read as 'unexposed'. Immeasurable time (in-hospital days with no outpatient dispensing record) has the same effect.",
+    check: "Require continuous enrolment covering the earliest control window; report how in-hospital time was handled. The builder checks window overlap for you below.",
+    cite: "Maclure 1991; Mittleman 1995",
+  },
+];
+
 const SENSITIVITY = [
   "Alternative hazard window length (e.g., 1 d, 7 d, 14 d, 30 d)",
   "Alternative control window offset (30, 60, 90, 180 d before)",
@@ -159,21 +194,38 @@ const TIMELINE_PRESETS: Record<string, string> = {
 ---
 
 <BaseLayout
-  title="Protocol template · Case-crossover · AsPEN members"
+  title="Case-crossover protocol template"
   description="Guided form for drafting a multi-national case-crossover protocol."
 >
   <PageHeader
-    eyebrow="Members → Templates → Case-crossover"
+    eyebrow="Protocol templates → Case-crossover"
     title="Multi-national case-crossover builder"
     description="Each case acts as their own control across time. Compare exposure prevalence in a short hazard window immediately before the event with prevalence in matched control windows further back."
   />
 
   <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
     <div class="flex items-center justify-between gap-3 flex-wrap">
-      <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator/`}>← All templates</a>
+      <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator/`}>← All designs</a>
       <button type="button" data-action="reset-top" class="text-xs font-semibold text-rose-700 border border-rose-300 hover:bg-rose-50 px-3 py-1.5 rounded transition">
         ⟲ Clear &amp; start over
       </button>
+    </div>
+
+    <!-- Assumptions first: this design fails silently, not loudly. -->
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
+      <h2 class="text-lg font-bold text-slate-900">Before you use this design</h2>
+      <p class="mt-1 text-sm text-slate-600">A case-crossover that breaks one of these four assumptions still returns an odds ratio with a confidence interval. Nothing warns you. Read the plain line first; the paragraph under it is the version for a methods section or a reviewer.</p>
+      <ol class="mt-4 space-y-3">
+        {ASSUMPTIONS.map((a, i) => (
+          <li class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <p class="text-sm font-bold text-slate-900"><span class="text-brand-700">{i + 1}.</span> {a.t}</p>
+            <p class="mt-1 text-sm text-slate-700">{a.plain}</p>
+            <p class="mt-2 text-xs text-slate-600 leading-relaxed"><span class="uppercase tracking-widest font-bold text-slate-500 text-[10px]">Why</span> · {a.precise}</p>
+            <p class="mt-1.5 text-xs text-slate-600 leading-relaxed"><span class="uppercase tracking-widest font-bold text-slate-500 text-[10px]">What to do</span> · {a.check} <span class="text-slate-400">[{a.cite}]</span></p>
+          </li>
+        ))}
+      </ol>
+      <div data-checks class="mt-4 hidden"></div>
     </div>
 
     <div data-state="ready" class="grid gap-8 lg:grid-cols-[1fr,1fr] items-start">
@@ -321,7 +373,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Gap before event (days)</span>
               <input type="number" name="hazardEnd" value="1" min="0" step="1" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
-              <span class="text-[11px] text-slate-500">1 (hazard window ends at day −1) avoids reverse causation where the exposure is dispensed because the event occurred; 0 includes the event day.</span>
+              <span class="text-[11px] text-slate-500">1 = the hazard window's most recent day is day −1, so the event day itself is excluded; this avoids counting a dispensing that happened <em>because</em> of the event. 0 includes the event day. With length <em>L</em> and gap <em>g</em>, the hazard window is days −(g+L−1) … −g inclusive.</span>
             </label>
           </div>
         </details>
@@ -341,7 +393,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Offset to first control (days before event)</span>
               <input type="number" name="controlOffset" value="60" min="1" step="1" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
-              <span class="text-[11px] text-slate-500">e.g. 30, 60, 90, or 365 (annual recurrence control). Drag control window 1 to adjust.</span>
+              <span class="text-[11px] text-slate-500">Control window <em>k</em>'s most recent day is day −<em>k</em>×offset, so the windows are evenly spaced by this many days. e.g. 30, 60, 90, or 365 (annual recurrence control). Drag control window 1 to adjust.</span>
             </label>
             <label class="flex flex-col gap-1 sm:col-span-2">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Length of each control window (days)</span>
@@ -461,11 +513,12 @@ const TIMELINE_PRESETS: Record<string, string> = {
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Key references (one per line)</span>
-              <textarea name="references" rows="8" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Maclure M. The case-crossover design: a method for studying transient effects on the risk of acute events. Am J Epidemiol 1991;133(2):144-53.
-Mittleman MA, Maclure M, Robins JM. Control sampling strategies for the case-crossover design: an assessment of relative efficiency. Am J Epidemiol 1995;142(1):91-8.
-Janes H, Sheppard L, Lumley T. Case-crossover analyses of air pollution exposure data: referent selection strategies and their implications for bias. Epidemiology 2005;16(6):717-26.
-Huang WC, Yang ASH, Tsai DHT, Shao SC, Lin SJ, Lai ECC. Association between recently raised anticholinergic burden and risk of acute cardiovascular events: nationwide case-case-time-control study. BMJ 2023;382:e076045. PMID: 37758279. (AsPEN exemplar of the CCTC variant; hazard day -1 to -30, four 30-d reference periods in -61 to -180, 60-d washout.)
-Wang SV, Schneeweiss S. A general propensity score for signal identification using tree-based scan statistics. Am J Epidemiol 2018 (case-case-time-control discussion).
+              <textarea name="references" rows="8" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Maclure M. The case-crossover design: a method for studying transient effects on the risk of acute events. Am J Epidemiol 1991;133(2):144-53. doi:10.1093/oxfordjournals.aje.a115853
+Mittleman MA, Maclure M, Robins JM. Control sampling strategies for case-crossover studies: an assessment of relative efficiency. Am J Epidemiol 1995;142(1):91-8. doi:10.1093/oxfordjournals.aje.a117550
+Janes H, Sheppard L, Lumley T. Case-crossover analyses of air pollution exposure data: referent selection strategies and their implications for bias. Epidemiology 2005;16(6):717-26. doi:10.1097/01.ede.0000181315.18836.9d
+Suissa S. The case-time-control design. Epidemiology 1995;6(3):248-53. doi:10.1097/00001648-199505000-00010 (adjusts for exposure-time trend using a matched non-case control series.)
+Wang S, Linkletter C, Maclure M, Dore D, Mor V, Buka S, Wellenius GA. Future cases as present controls to adjust for exposure trend bias in case-only studies. Epidemiology 2011;22(4):568-74. doi:10.1097/EDE.0b013e31821d09cd (the case-case-time-control method.)
+Huang WC, Yang ASH, Tsai DHT, Shao SC, Lin SJ, Lai ECC. Association between recently raised anticholinergic burden and risk of acute cardiovascular events: nationwide case-case-time-control study. BMJ 2023;382:e076045. doi:10.1136/bmj-2023-076045; PMID 37758279. (AsPEN exemplar of the CCTC variant; hazard days -1 to -30, 30-day referent periods sampled from days -61 to -180.)
 Hsieh CY, Su CC, Shao SC, Sung SF, Lin SJ, Kao Yang YH, Lai EC. Taiwan's NHIRD: past and future. Clin Epidemiol 2019;11:349-358.
 Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database. Pharmacoepidemiol Drug Saf 2019;28(5):593-600.</textarea>
             </label>
@@ -496,9 +549,10 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
     <!-- Study design diagram -->
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
-      <p class="mt-1 text-xs text-slate-500">Outcome-anchored: the hazard window immediately before the event vs the matched control (referent) window(s) further back — updates with the form.</p>
+      <p class="mt-1 text-xs text-slate-500">Outcome-anchored: the hazard window immediately before the event vs the matched control (referent) window(s) further back — updates with the form. Days are <strong>inclusive day indices</strong> relative to the event (day 0); the exact spans are listed under the chart and carried into the exported protocol.</p>
       <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
+      <div id="dscheme" class="mt-3 text-xs text-slate-700"></div>
     </div>
     <DesignDiagram />
     <ProtocolCommon />
@@ -522,7 +576,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
 
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js" is:inline></script>
 
-  <script is:inline define:vars={{ BASE: base, SITES_DETAIL_MAP, FEATURES, PHENOTYPES, TIMELINE_PRESETS, STROBE_ITEMS }}>
+  <script is:inline define:vars={{ BASE: base, SITES_DETAIL_MAP, FEATURES, PHENOTYPES, TIMELINE_PRESETS, STROBE_ITEMS, ASSUMPTIONS }}>
     (() => {
       const setState = (name) => { document.querySelectorAll("[data-state]").forEach((el) => el.classList.toggle("hidden", el.dataset.state !== name)); };
 
@@ -535,6 +589,9 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       let pickedCitations = {};
       try { pickedCitations = JSON.parse(localStorage.getItem(STORAGE_CITATIONS_KEY) || "{}") || {}; } catch {}
       const savePickedCitations = () => { try { localStorage.setItem(STORAGE_CITATIONS_KEY, JSON.stringify(pickedCitations)); } catch {} };
+      // Declared up here, not next to the library modal: renderChecks() runs on
+      // first paint, and a const used above its declaration is a dead-zone throw.
+      const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       // Format a site id into "Country · Short [Rx Dx ...]".
       const formatSiteFull = (id) => {
         const d = SITES_DETAIL_MAP[id];
@@ -619,8 +676,34 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         for (const el of form.querySelectorAll("input, textarea, select")) {
           const name = el.name; if (!name) continue;
           if (el.type === "checkbox" && multi.has(name)) el.checked = (state[name] || []).includes(el.value);
+          // A radio's .value IS the option it stands for; assigning to it would
+          // rewrite the option and collapse the group. Tick the match instead.
+          else if (el.type === "radio") { if (state[name] !== undefined) el.checked = String(state[name]) === el.value; }
           else if (state[name] !== undefined) el.value = state[name];
         }
+      };
+
+      // ── Window geometry ────────────────────────────────────
+      // One definition of where the windows sit, used by the diagram, the
+      // overlap checks and both exports, so the picture and the protocol can
+      // never disagree. Convention: INCLUSIVE day indices relative to the event
+      // (day 0). Hazard = days -(g+L-1) … -g. Control k = days -(k*off+C-1) … -(k*off).
+      const dTxt = (d) => d === 0 ? "0" : (d < 0 ? "−" + (-d) : "+" + d);
+      const spanTxt = (w) => (w.first === w.last ? "day " + dTxt(w.first) : "days " + dTxt(w.first) + " to " + dTxt(w.last)) + " (" + w.len + " d)";
+      const ccoGeom = (s) => {
+        const L = Math.max(1, parseInt(s.hazardLen) || 1);
+        const g = Math.max(0, parseInt(s.hazardEnd) || 0);
+        const C = Math.max(1, parseInt(s.controlLen) || L);
+        const off = Math.max(1, parseInt(s.controlOffset) || (L + g));
+        const n = Math.min(6, Math.max(1, parseInt(s.nControls) || 1));
+        const haz = { label: "Hazard window", kind: "hazard", first: -(g + L - 1), last: -g, len: L };
+        const ctrls = [];
+        for (let k = 1; k <= n; k++) ctrls.push({ label: "Control window " + k, kind: "control", first: -(k * off + C - 1), last: -(k * off), len: C });
+        const issues = [];
+        if (off <= g + L - 1) issues.push("Control window 1 overlaps the hazard window. The hazard window reaches back to " + dTxt(haz.first) + " but control window 1's most recent day is " + dTxt(-off) + ". Overlapping windows double-count person-time and the conditional logistic model is not valid. Set the offset to at least " + (g + L) + " days.");
+        if (n > 1 && off < C) issues.push("The control windows overlap each other: " + C + "-day windows spaced only " + off + " days apart. Space them at least " + C + " days apart, or shorten the control window.");
+        if (C !== L) issues.push("Control windows (" + C + " d) are a different length from the hazard window (" + L + " d). This is allowed, but the windows are then no longer matched on duration; state explicitly in the analysis plan how unequal person-time is handled.");
+        return { L, g, C, off, n, haz, ctrls, wins: [haz].concat(ctrls), issues };
       };
       const mergeList = (picks, customText) => { const lines = (customText || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean); return [...(picks || []), ...lines]; };
       const bullets = (arr) => arr.length === 0 ? "_(none specified)_" : arr.map((l) => "- " + l).join("\n");
@@ -652,9 +735,10 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const buildMarkdown = (s) => {
         const today = new Date().toISOString().slice(0, 10);
         const title = orFb(s.title, "(Untitled multi-national case-crossover study)");
-        const _gap = Math.max(0, parseInt(s.hazardEnd) || 0); const hazardEnd = _gap <= 0 ? "Day 0 (event day inclusive)" : ("Day -" + _gap + " (" + _gap + " day(s) before the event)");
+        const G = ccoGeom(s);
+        const hazardEnd = G.g <= 0 ? "Day 0 (event day inclusive)" : ("Day −" + G.g + " (" + G.g + " day(s) before the event)");
         const variant = ({ standard: "Standard (Maclure 1991); fixed offset(s) before event", "time-stratified": "Time-stratified (Janes 2005); controls drawn from same calendar stratum", symmetric: "Symmetric bidirectional; controls before AND after event", cctc: "Case-case-time-control (CCTC, Huang/Yang/Tsai BMJ 2023; PMID 37758279); current-case crossover paired with a future-case control crossover; OR_CCTC = OR_Case / OR_Control" })[s.ccoVariant] || "Standard";
-        const controlLenText = (parseInt(s.controlLen) > 0) ? (parseInt(s.controlLen) + " days") : ("Same as hazard window (" + (s.hazardLen || "7") + " days, matched)");
+        const controlLenText = (parseInt(s.controlLen) > 0) ? (parseInt(s.controlLen) + " days") : ("Same as hazard window (" + G.L + " days, matched)");
         const meta = ({ re: "Random-effects (DerSimonian-Laird) meta-analysis pooling site-specific ORs; report I² and τ². Forest plot per outcome.", "re-reml": "Random-effects (REML) meta-analysis; report I² and τ²; forest plot per outcome.", fe: "Fixed-effects (inverse-variance) meta-analysis; forest plot per outcome." })[s.metaMethod] || "Random-effects meta-analysis.";
         const arch = ({ federated: "Federated; each AsPEN site executes a common analytic package locally and shares aggregate ORs.", cdm: "Common Data Model; each site transforms data into agreed CDM, runs shared package.", centralised: "Centralised; site-level individual data pooled under DUA." })[s.arch] || "Federated";
 
@@ -706,22 +790,32 @@ ${sitesLine(s.sites, s.sitesOther)}
 
 | | |
 |---|---|
-| **Length** | ${s.hazardLen || "7"} days |
+| **Length** | ${G.L} days |
 | **End anchor** | ${hazardEnd} |
+| **Days covered** | ${spanTxt(G.haz)}, inclusive, relative to the event (day 0) |
 
-## 6. Control window(s)
+## 6. Control (referent) window(s)
 
 | | |
 |---|---|
-| **Number of control windows** | ${s.nControls || "3"} |
-| **Offset to first control** | ${s.controlOffset || "60"} days before event |
+| **Number of control windows** | ${G.n} |
+| **Offset** | ${G.off} days; control window *k* has its most recent day on day −*k*×${G.off} |
 | **Length** | ${controlLenText} |
+| **Days covered** | ${G.ctrls.map((c, i) => "Control " + (i + 1) + ": " + spanTxt(c)).join("; ")} |
+
+Cases must have continuous data coverage over the whole span from day ${dTxt(G.ctrls[G.ctrls.length - 1].first)} to day ${dTxt(G.haz.last)}; a control window that falls before database enrolment, before the drug was marketed, or outside the eligible age band is a structural zero and would be misread as unexposed.
 
 ## 7. Design variant
 
 ${variant}
 
-## 8. Statistical analysis
+## 8. Design assumptions and checks
+
+${ASSUMPTIONS.map((a, i) => (i + 1) + ". **" + a.t + ".** " + a.plain + "\n\n   *Why it matters.* " + a.precise + "\n\n   *What we do about it.* " + a.check + " [" + a.cite + "]").join("\n\n")}
+
+${G.issues.length ? "**Outstanding issues with the window scheme in this draft**\n\n" + G.issues.map((i) => "- " + i).join("\n") : "_The window scheme in this draft has no overlapping or mismatched windows._"}
+
+## 9. Statistical analysis
 
 - **Primary model:** ${orFb(s.primaryModel, "Conditional logistic regression with the case as the conditioning stratum.")}
 - **Effect estimate:** ${orFb(s.effectMeasure, "Odds ratio (OR); interpreted as IRR under the rare-disease assumption.")}
@@ -735,7 +829,7 @@ ${bullets(subgroups)}
 
 ${bullets(sensitivity)}
 
-## 9. Execution and timeline
+## 10. Execution and timeline
 
 **Architecture.** ${arch}
 
@@ -743,7 +837,7 @@ ${bullets(sensitivity)}
 
 ${numbered(milestones)}
 
-## 10. Ethics, data sharing, dissemination
+## 11. Ethics, data sharing, dissemination
 
 **Ethics.** ${orFb(s.ethics, "Each participating site obtains local IRB / ethics approval before data extraction.")}
 
@@ -751,7 +845,7 @@ ${numbered(milestones)}
 
 ${window.PC.tailMd(pcOf(s))}
 
-## 11. Key references
+## 12. Key references
 
 ${numbered(refs)}
 
@@ -762,33 +856,68 @@ _Drafted with the AsPEN case-crossover builder (${today})._
       };
 
       const renderScheme = (s) => {
-        const hlen = Math.max(1, parseInt(s.hazardLen) || 1);
-        const hend = Math.max(0, parseInt(s.hazardEnd) || 0);
-        const clen = Math.max(1, parseInt(s.controlLen) || hlen);
-        const off = Math.max(1, parseInt(s.controlOffset) || (hlen + 1));
-        const n = Math.min(6, Math.max(1, parseInt(s.nControls) || 1));
-        const wins = [{ label: "Hazard window", kind: "hazard", startDay: -(hend + hlen), endDay: -hend, edits: [{ field: "hazardLen", edge: "start", allowPast: true }, { field: "hazardEnd", edge: "end", allowPast: true }] }];
-        for (let k = 1; k <= n; k++) {
-          const end = -hend - k * off;
-          wins.push({ label: "Control window " + k, kind: "control", startDay: end - clen, endDay: end, edits: k === 1 ? [{ field: "controlLen", edge: "start", allowPast: true }, { field: "controlOffset", edge: "end", allowPast: true }] : undefined });
-        }
+        const G = ccoGeom(s);
+        // The shared diagram's default bar caption renders a 7-day window sitting
+        // 60+ days back as "−2mo → −2mo" (its day formatter rounds to months), i.e.
+        // a window of apparently zero length. Pass an explicit note so the caption
+        // is the real length, and print the exact inclusive spans underneath.
+        const wins = G.wins.map((w, i) => ({
+          label: w.label, kind: w.kind, startDay: w.first, endDay: w.last, note: w.len + " d",
+          edits: i === 0 ? [{ field: "hazardLen", edge: "start", allowPast: true }, { field: "hazardEnd", edge: "end", allowPast: true }]
+               : i === 1 ? [{ field: "controlLen", edge: "start", allowPast: true }, { field: "controlOffset", edge: "end", allowPast: true }]
+               : undefined,
+        }));
         const onEdit = (field, day) => {
           const el = form.elements[field]; if (!el) return;
-          const cHend = Math.max(0, parseInt(form.elements.hazardEnd && form.elements.hazardEnd.value) || 0);
-          const cOff = Math.max(1, parseInt(form.elements.controlOffset && form.elements.controlOffset.value) || 60);
+          const cur = ccoGeom(readForm());
           let v;
-          if (field === "hazardLen") v = Math.max(1, (-day) - cHend);          // hazard spans -(hend+hlen) … -hend
-          else if (field === "hazardEnd") v = Math.max(0, -day);               // gap before the event
-          else if (field === "controlOffset") v = Math.max(1, (-day) - cHend); // control 1 ends at -hend-off
-          else if (field === "controlLen") v = Math.max(1, (-cHend - cOff) - day); // control 1 starts at -hend-off-clen
+          if (field === "hazardLen") v = (-day) - cur.g + 1;        // start edge sits at -(g+L-1)
+          else if (field === "hazardEnd") v = -day;                 // end edge sits at -g
+          else if (field === "controlOffset") v = -day;             // control 1's end edge sits at -off
+          else if (field === "controlLen") v = (-day) - cur.off + 1; // control 1's start edge sits at -(off+C-1)
           else return;
-          el.value = Math.round(v);
+          v = Math.round(v);
+          el.value = String(field === "hazardEnd" ? Math.max(0, v) : Math.max(1, v));
           render();
         };
-        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Event (day 0)", onEdit: onEdit, snap: 5 });
+        window.renderDesignDiagram(document.getElementById("diagram"), document.getElementById("dlegend"), { windows: wins, indexLabel: "Event (day 0)", onEdit: onEdit, snap: 1 });
+        const chip = (c, t) => '<span class="inline-flex items-center gap-1.5 mr-4"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:' + c + '"></span>' + t + '</span>';
+        const scheme = document.getElementById("dscheme");
+        if (scheme) scheme.innerHTML =
+          '<p class="font-semibold text-slate-800">Windows, as inclusive days relative to the event</p><p class="mt-1 leading-relaxed">' +
+          chip("#ef4444", "Hazard: " + spanTxt(G.haz)) +
+          G.ctrls.map((c) => chip("#94a3b8", "Control " + c.label.replace(/\D+/g, "") + ": " + spanTxt(c))).join("") + "</p>";
+        renderChecks(G, s);
       };
-      const render = () => { const state = readForm(); preview.textContent = buildMarkdown(state); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {} renderFeasibility(state); try { renderScheme(state); } catch {} };
-      try { window.PC && PC.restore ? PC.restore(form, STORAGE_KEY, writeForm) : (localStorage.getItem(STORAGE_KEY) && writeForm(JSON.parse(localStorage.getItem(STORAGE_KEY)))); } catch {}
+
+      // Assumption checks that depend on what the user actually entered. These
+      // never block; they say what is wrong and what number to change.
+      const renderChecks = (G, s) => {
+        const box = document.querySelector("[data-checks]"); if (!box) return;
+        const notes = [];
+        if (s.ccoVariant === "standard" || !s.ccoVariant) notes.push({ lvl: "warn", t: "No correction for exposure-time trend", d: "The standard (Maclure) variant compares a recent hazard window with older control windows, so any within-person drift in the probability of being on the drug is read as an effect. If the exposure is one whose use changes with worsening prognosis, pick a variant under section 8 — time-stratified, or case-case-time-control — or state in the protocol why a trend is implausible here." });
+        if (s.ccoVariant === "symmetric") notes.push({ lvl: "warn", t: "Bidirectional sampling assumes the event does not change later exposure", d: "Control windows drawn from after the event require exposure in that period to be unaffected by having had the event. For dispensed medicines that is usually false — an MI changes what is prescribed the next day. Bidirectional referents are standard for environmental exposures, not for drugs." });
+        for (const i of G.issues) notes.push({ lvl: /allowed, but/.test(i) ? "info" : "stop", t: "Window scheme", d: i });
+        if (notes.length === 0) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+        const style = { stop: ["bg-rose-50 border-rose-300", "text-rose-900", "⛔"], warn: ["bg-amber-50 border-amber-300", "text-amber-900", "⚠"], info: ["bg-slate-50 border-slate-300", "text-slate-700", "ℹ"] };
+        box.innerHTML = '<p class="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500">Checks against what you entered</p><div class="mt-2 space-y-2">' +
+          notes.map((n) => { const st = style[n.lvl]; return '<div class="rounded-lg border ' + st[0] + ' p-3 text-xs ' + st[1] + '"><p class="font-bold">' + st[2] + " " + esc(n.t) + '</p><p class="mt-1 leading-relaxed">' + esc(n.d) + "</p></div>"; }).join("") + "</div>";
+        box.classList.remove("hidden");
+      };
+
+      const render = () => {
+        const state = readForm();
+        preview.textContent = buildMarkdown(state);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn("draft not saved", e); }
+        renderFeasibility(state);
+        // Never a bare catch here: a throw in the diagram used to blank it silently.
+        try { renderScheme(state); } catch (e) { console.error("renderScheme failed", e); }
+      };
+      // Never a bare catch here: this is the only path that restores a saved
+      // draft or a ?seed= link, and swallowing its failure loses the user's work
+      // with no trace on screen or in the console.
+      try { window.PC && PC.restore ? PC.restore(form, STORAGE_KEY, writeForm) : (localStorage.getItem(STORAGE_KEY) && writeForm(JSON.parse(localStorage.getItem(STORAGE_KEY)))); }
+      catch (e) { console.error("could not restore the saved draft", e); setMsg("Your saved draft could not be restored; the form has been left at its defaults.", true); }
       const timelineTa = form.querySelector('[name="timeline"]');
       if (timelineTa && !timelineTa.value) timelineTa.value = TIMELINE_PRESETS["12-month"];
       render();
@@ -820,8 +949,12 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         if (!confirm("Clear every field and forget the saved draft?")) return;
         localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_CITATIONS_KEY); pickedCitations = {};
         form.querySelectorAll("input, textarea, select").forEach((el) => {
-          if (el.type === "checkbox" || el.type === "radio") el.checked = false;
-          else if (el.tagName === "SELECT") el.selectedIndex = 0;
+          // Radios and selects have no "empty": clearing a radio group leaves the
+          // form in a state the UI cannot show and the user cannot reach by
+          // clicking, so restore each control's own HTML default instead.
+          if (el.type === "radio") el.checked = el.defaultChecked;
+          else if (el.type === "checkbox") el.checked = false;
+          else if (el.tagName === "SELECT") { const i = [...el.options].findIndex((o) => o.defaultSelected); el.selectedIndex = i < 0 ? 0 : i; }
           else el.value = "";
         });
         render();
@@ -872,19 +1005,20 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         const subg = mergeList(s.subgroupsPick, s.subgroupsCustom);
         const variant = ({ standard: "Standard (Maclure 1991)", "time-stratified": "Time-stratified (Janes 2005)", symmetric: "Symmetric bidirectional", cctc: "Case-case-time-control (Huang/Yang/Tsai BMJ 2023)" })[s.ccoVariant] || "Standard (Maclure 1991)";
         const isCctc = s.ccoVariant === "cctc";
+        const GG = ccoGeom(s);
         const metaTxt = ({ re: "random-effects (DerSimonian-Laird)", "re-reml": "random-effects (REML)", fe: "fixed-effects (inverse-variance)" })[s.metaMethod] || "random-effects";
         return {
           "1a": "Multi-national case-crossover study" + (isCctc ? " (case-case-time-control variant)." : "."),
           "3": "Among cases of " + (s.picoO || "(outcome)") + ", is " + (s.picoI || s.exposureName || "(exposure)") + " more likely during the pre-event hazard window than during matched referent windows in the same person?",
           "4": "Case-crossover (" + variant + "). Each case serves as their own control; exposure in a pre-event hazard window is compared with matched referent window(s) in the same individual, removing all time-invariant between-person confounding." + (isCctc ? " A future-case control series corrects for exposure-time trend: OR_CCTC = OR_case / OR_control." : ""),
-          "5": "AsPEN sites: " + sitesPlain + ". Hazard and referent windows (and washout) as defined in the protocol.",
+          "5": "AsPEN sites: " + sitesPlain + ". Windows, as inclusive days relative to the event (day 0): hazard " + spanTxt(GG.haz) + "; " + GG.ctrls.map((c, i) => "control " + (i + 1) + " " + spanTxt(c)).join("; ") + ". Cases require continuous data coverage from day " + dTxt(GG.ctrls[GG.ctrls.length - 1].first) + " onwards.",
           "6": "Cases experiencing " + (s.picoO || "the outcome") + " during the study period. Case definition: " + (s.outcomeDef || "(case definition)") + " (" + (s.outcomeCodes || "codes TBD") + ").",
           "7": "Exposure: " + (s.exposureName || s.picoI || "(exposure)") + " (" + (s.exposureCodes || "codes TBD") + "). Outcome (case): " + (s.picoO || "(outcome)") + ". Hazard-vs-referent window scheme per the protocol.",
           "8": "Routinely-collected health data from the contributing databases (" + sitesPlain + "). Exposure and outcome ascertained from dispensing / diagnosis records by the protocol code sets.",
           "9": "Self-matched design removes fixed confounders. Exposure-time-trend bias addressed by the referent-window scheme" + (isCctc ? " and the case-case-time-control correction" : "") + "; further sensitivity analyses:\n" + bul(sens),
           "12": "Conditional logistic regression for the odds ratio, matching each case's hazard window to their referent window(s)" + (isCctc ? "; the control (future-case) crossover OR is divided out (CCTC)" : "") + ". Site-specific ORs pooled by " + metaTxt + " meta-analysis (report I², τ²). Subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
           "17": "Pre-specified subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
-          "19": "The case-crossover design controls time-invariant confounding but is susceptible to exposure-time-trend bias if exposure prevalence changes over time (mitigated by referent selection / the CCTC variant); it assumes transient exposure and abrupt outcome onset; outcome misclassification is possible.",
+          "19": "The case-crossover design controls time-invariant confounding but is susceptible to exposure-time-trend bias if exposure prevalence changes over time (mitigated by referent selection / the CCTC variant); it assumes transient exposure and abrupt, uncommon outcome onset, and that hazard and referent windows are non-overlapping eligible person-time; outcome misclassification is possible." + (GG.issues.length ? " Outstanding window-scheme issues in the current draft: " + GG.issues.join(" ") : ""),
           "21": "Results generalise to the source populations of the contributing AsPEN databases: " + sitesPlain + ".",
         };
       };
@@ -955,9 +1089,10 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         const sitesPart = (s.sites && s.sites.length > 0) ? s.sites.map((c) => formatSiteFull(c)).join("; ") : "";
         const sitesOthersList = (s.sitesOther || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const sitesText = !sitesPart && sitesOthersList.length === 0 ? "(no sites selected)" : [sitesPart, sitesOthersList.length > 0 ? ("Others: " + sitesOthersList.join("; ")) : ""].filter(Boolean).join(" | ");
-        const _gap = Math.max(0, parseInt(s.hazardEnd) || 0); const hazardEnd = _gap <= 0 ? "Day 0 (event day inclusive)" : ("Day -" + _gap + " (" + _gap + " day(s) before the event)");
+        const G = ccoGeom(s);
+        const hazardEnd = G.g <= 0 ? "Day 0 (event day inclusive)" : ("Day −" + G.g + " (" + G.g + " day(s) before the event)");
         const variant = ({ standard: "Standard (Maclure 1991)", "time-stratified": "Time-stratified (Janes 2005)", symmetric: "Symmetric bidirectional", cctc: "Case-case-time-control (Huang/Yang/Tsai BMJ 2023; PMID 37758279)" })[s.ccoVariant] || "Standard";
-        const controlLenText = (parseInt(s.controlLen) > 0) ? (parseInt(s.controlLen) + " days") : ("Same as hazard window (" + (s.hazardLen || "7") + " days, matched)");
+        const controlLenText = (parseInt(s.controlLen) > 0) ? (parseInt(s.controlLen) + " days") : ("Same as hazard window (" + G.L + " days, matched)");
         const meta = ({ re: "Random-effects (DerSimonian-Laird)", "re-reml": "Random-effects (REML)", fe: "Fixed-effects (inverse-variance)" })[s.metaMethod] || "Random-effects";
         const arch = ({ federated: "Federated; each AsPEN site executes locally; aggregate ORs leave.", cdm: "Common Data Model; transforms to OMOP/Sentinel, runs shared package.", centralised: "Centralised; pooled individual data under DUA." })[s.arch] || "Federated";
 
@@ -992,19 +1127,34 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         ]));
 
         children.push(h1("5. Hazard (case) window"));
-        children.push(labelTable([["Length", (s.hazardLen || "7") + " days"], ["End anchor", hazardEnd]]));
+        children.push(labelTable([["Length", G.L + " days"], ["End anchor", hazardEnd], ["Days covered", spanTxt(G.haz) + ", inclusive, relative to the event (day 0)"]]));
 
-        children.push(h1("6. Control window(s)"));
+        children.push(h1("6. Control (referent) window(s)"));
         children.push(labelTable([
-          ["Number of control windows", s.nControls || "3"],
-          ["Offset to first control", (s.controlOffset || "60") + " days before event"],
+          ["Number of control windows", String(G.n)],
+          ["Offset", G.off + " days; control window k has its most recent day on day −k×" + G.off],
           ["Length", controlLenText],
+          ["Days covered", G.ctrls.map((c, i) => "Control " + (i + 1) + ": " + spanTxt(c)).join("; ")],
         ]));
+        children.push(para("Cases must have continuous data coverage over the whole span from day " + dTxt(G.ctrls[G.ctrls.length - 1].first) + " to day " + dTxt(G.haz.last) + "; a control window falling before database enrolment, before the drug was marketed, or outside the eligible age band is a structural zero and would be misread as unexposed."));
 
         children.push(h1("7. Design variant"));
         children.push(para(variant));
 
-        children.push(h1("8. Statistical analysis"));
+        children.push(h1("8. Design assumptions and checks"));
+        ASSUMPTIONS.forEach((a, i) => {
+          children.push(p([text((i + 1) + ". " + a.t + ". ", { bold: true }), text(a.plain)]));
+          children.push(p([text("Why it matters. ", { italics: true }), text(a.precise)]));
+          children.push(p([text("What we do about it. ", { italics: true }), text(a.check + " [" + a.cite + "]")]));
+        });
+        if (G.issues.length) {
+          children.push(h2("Outstanding issues with the window scheme in this draft"));
+          G.issues.forEach((i) => children.push(bullet(i)));
+        } else {
+          children.push(para("The window scheme in this draft has no overlapping or mismatched windows."));
+        }
+
+        children.push(h1("9. Statistical analysis"));
         children.push(labelTable([
           ["Primary model", s.primaryModel || "Conditional logistic regression with case as conditioning stratum"],
           ["Effect estimate", s.effectMeasure || "Odds ratio (OR); interpreted as IRR under rare-disease assumption"],
@@ -1015,17 +1165,17 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         children.push(h2("Sensitivity analyses"));
         sensitivity.length ? sensitivity.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
 
-        children.push(h1("9. Execution and timeline"));
+        children.push(h1("10. Execution and timeline"));
         children.push(labelTable([["Architecture", arch]]));
         children.push(h2("Timeline milestones"));
         milestones.length ? milestones.forEach((l) => children.push(numItem(l))) : children.push(para("(none)"));
 
-        children.push(h1("10. Ethics, data sharing, dissemination"));
+        children.push(h1("11. Ethics, data sharing, dissemination"));
         children.push(p([text("Ethics. ", { bold: true }), text(s.ethics || "Each participating site obtains local IRB / ethics approval before data extraction.")]));
         children.push(p([text("Dissemination. ", { bold: true }), text(s.dissemination || "Primary manuscript to a peer-reviewed pharmacoepidemiology journal.")]));
 
         window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
-        children.push(h1("11. Key references"));
+        children.push(h1("12. Key references"));
         refs.length ? refs.forEach((l) => children.push(numItem(l))) : children.push(para("(none)"));
 
         children.push(p([new D.TextRun({ text: "Drafted with the AsPEN case-crossover builder (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
@@ -1050,7 +1200,6 @@ _Drafted with the AsPEN case-crossover builder (${today})._
       const modalSearch = document.querySelector("[data-library-search]");
       let currentCategory = "outcomes";
       let currentTargets = {};
-      const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
       const renderLibrary = (filter = "") => {
         const items = PHENOTYPES[currentCategory] || [];
