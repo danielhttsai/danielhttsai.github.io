@@ -1975,9 +1975,16 @@ const DESIGNS = [
       const needCov = spec.covariates && COVS.length === 0;
       const noUsable = spec.covariates && COVS.length > 0 && DATA.rows.length > 0 && covPlan(MASTER || DATA.rows).info.length === 0;
       const needCut = getDesign() === "its" && !$("its_cut").value.trim();
-      const ok = missing.length === 0 && !needCov && !needCut && !noUsable;
+      const bt = missing.length ? [] : binTrouble();
+      const ok = missing.length === 0 && !needCov && !needCut && !noUsable && !bt.length;
       const m = $("mapmsg");
-      if (missing.length) { m.textContent = "Map the required roles (*): " + missing.join(", "); m.className = "mt-3 text-xs text-amber-700"; }
+      if (bt.length) {
+        m.innerHTML = bt.map((b) => "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but holds " +
+          esc(b.bad.join(", ")) + " — value(s) this tool cannot read as yes or no.").join(" ") +
+          " A 0/1 role must be unambiguous: if the column has exactly two levels, say which one means yes under <strong>Coded flags</strong> in the structure panel above; if it has three or more (1 = yes, 2 = no, 9 = unknown, say), recode it before uploading. It is not treated as “yes” just because it is not zero.";
+        m.className = "mt-3 text-xs text-rose-700";
+      }
+      else if (missing.length) { m.textContent = "Map the required roles (*): " + missing.join(", "); m.className = "mt-3 text-xs text-amber-700"; }
       else if (needCut) { m.textContent = "Give the interruption point — the first period affected by the intervention."; m.className = "mt-3 text-xs text-amber-700"; }
       else if (needCov) { m.textContent = "Tick at least one baseline covariate for the propensity score."; m.className = "mt-3 text-xs text-amber-700"; }
       else if (noUsable) { m.textContent = "None of the ticked covariates can be used — see the note under the list."; m.className = "mt-3 text-xs text-rose-700"; }
@@ -1995,8 +2002,31 @@ const DESIGNS = [
       if (l in ym) return ym[l];
       if (YES_TOKENS.indexOf(l) >= 0) return 1;
       if (NO_TOKENS.indexOf(l) >= 0) return 0;
-      const n = Number(l); return isNaN(n) ? null : (n > 0 ? 1 : 0);
+      // "Any positive number means yes" is how an outcome coded 1=yes, 2=no,
+      // 9=unknown — an ordinary registry coding — became 400 events out of 400.
+      // Three or more levels never reach the "Coded flags" vocabulary (it is built
+      // from two-level columns only), so nothing on screen mentioned the column,
+      // and chk01 in R then saw a variable whose only value was 1 and passed it.
+      // A number that is not already 0 or 1 is unreadable as a flag: return null,
+      // leave the original value in place, and let the guard refuse it by name.
+      const n = Number(l); return (n === 0 || n === 1) ? n : null;
     };
+    // Which mapped 0/1 roles hold values that cannot be read as a flag. Reported on
+    // screen before the run, so the refusal is not a raw R error at the end of it.
+    function binTrouble() {
+      const spec = SPEC[getDesign()]; if (!spec || !DATA.rows.length) return [];
+      const out = [];
+      spec.roles.filter((r) => BIN_ROLES.indexOf(r.k) >= 0 && MAP[r.k]).forEach((r) => {
+        const col = MAP[r.k], bad = [];
+        for (let i = 0; i < DATA.rows.length && bad.length < 6; i++) {
+          const v = DATA.rows[i][col];
+          if (isBlank(v)) continue;
+          if (toBin(v) == null) { const s = String(v).trim(); if (bad.indexOf(s) < 0) bad.push(s); }
+        }
+        if (bad.length) out.push({ label: r.label, col: col, bad: bad });
+      });
+      return out;
+    }
 
     function buildMaster() {
       const spec = SPEC[getDesign()]; if (!spec || !validateMap()) return;
