@@ -1724,7 +1724,17 @@ const DESIGNS = [
           L.push("");
           L.push("rhs<-if(HASG) 'g + t + level + tsince + g:t + g:level + g:tsince' else 't + level + tsince'");
           L.push("if(seasok && SEASON=='dummies') rhs<-paste(rhs,'+ factor(seas)')");
-          L.push("if(seasok && SEASON=='harmonic') rhs<-paste0(rhs,' + sin(2*pi*t/',CYC,') + cos(2*pi*t/',CYC,')')");
+          // A harmonic term whose column is numerically constant is not a season.
+          // sin(2*pi*t/2) is sin(pi*t), which is zero for every whole t — but in
+          // double precision it is ~1e-16 rather than 0, so R's rank detection does
+          // NOT alias it and fits it instead, giving a coefficient of the order
+          // 1e13 with a standard error and a p-value, printed in the coefficient
+          // table that goes into the exported report. CYC=2 is the input's own
+          // documented minimum and a legitimate choice for a biweekly or
+          // semiannual cycle, so the guard has to be on the column, not the number.
+          L.push("if(seasok && SEASON=='harmonic'){ hterm<-c(); for(hn in c('sin','cos')){ hv<-if(hn=='sin') sin(2*pi*a$t/CYC) else cos(2*pi*a$t/CYC)");
+          L.push("  if(sd(hv)>1e-8) hterm<-c(hterm,paste0(hn,'(2*pi*t/',CYC,')')) else cat(sprintf('RESULT_NOTE|The %s term of a %g-period cycle takes the same value in every period of this series, so it carries no seasonal information. It was left out rather than fitted: in floating point it is not exactly constant, and R would estimate it as a coefficient of the order 1e13 on rounding error rather than refusing it.\\n', hn, CYC)) }");
+          L.push("  if(length(hterm)) rhs<-paste0(rhs,' + ',paste(hterm,collapse=' + ')) else { seasok<-FALSE; cat('RESULT_NOTE|Neither harmonic term varies over this series, so no seasonality was fitted at all.\\n') } }");
           L.push("if(HASN){ bad<-is.na(a$N)|a$N<=0; if(any(bad)){ cat(sprintf('Dropped %d period(s) with a missing or non-positive denominator.\\n',sum(bad))); a<-a[!bad,,drop=FALSE] } }");
           // Counted after the drop above, so the summary describes what was fitted
           // rather than what was collected.
