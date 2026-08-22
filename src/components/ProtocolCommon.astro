@@ -583,8 +583,24 @@
       }
       var seeded = readSeed();
       if (seeded) {
+        /* Copy the saved draft aside BEFORE the seed lands on top of it.
+           Without this the banner below was simply untrue: a builder's first
+           render() autosaves the form to the very same storage key, and that
+           happens within a few milliseconds of the seed being applied — before
+           the document has even finished parsing. So by the time the user read
+           "your previous draft is still in the browser, reload without the seed
+           parameter to get it back" and did exactly that, what came back was
+           the seed. One key, no copy, nothing typed surviving: a draft built
+           over an afternoon could be destroyed by opening a colleague's link,
+           with the page asserting the opposite on screen. */
+        var backup = null;
+        try { backup = localStorage.getItem(storageKey); } catch (e) { console.warn("[PC] could not read the saved draft", e); }
+        if (backup) {
+          try { localStorage.setItem(storageKey + ".before-seed", backup); }
+          catch (e) { console.warn("[PC] could not set the draft aside", e); backup = null; }
+        }
         write(seeded);
-        banner();
+        banner(backup ? storageKey : null);
         return "seed";
       }
       try {
@@ -596,9 +612,14 @@
       return "none";
     }
 
-    /* Say where the values came from. Silently overwriting someone's saved
-       draft with values from a link would be the worse failure. */
-    function banner() {
+    /* Say where the values came from, and — when there was a draft to lose —
+       give back the only thing that can actually recover it. The previous
+       version told the user in Chinese, on pages written in English, to do
+       something that did not work (see restore() above). It now states what
+       happened and offers a button that puts the draft back and reloads
+       without the seed. `storageKey` is null when there was no draft to
+       displace, in which case there is nothing to offer. */
+    function banner(storageKey) {
       if (document.getElementById("pc-seed-note")) return;
       var d = document.createElement("div");
       d.id = "pc-seed-note";
@@ -606,8 +627,37 @@
       d.style.cssText =
         "margin:0 0 1rem;padding:.6rem .85rem;border-radius:8px;font-size:.85rem;" +
         "background:#E8F3EC;border:1px solid #9CC9AE;color:#1E5B3A;";
-      d.textContent =
-        "此表單由連結預先填入。你的上一份草稿仍留在瀏覽器中,重新整理(移除網址中的 seed 參數)即可取回。";
+
+      var p = document.createElement("p");
+      p.style.cssText = "margin:0";
+      p.textContent = storageKey
+        ? "This form was pre-filled from a link. Your previous draft has been set aside — it is NOT recoverable by reloading, because the link's values are saved over it. 此表單由連結預先填入,你原本的草稿已另存備份。"
+        : "This form was pre-filled from a link. 此表單由連結預先填入。";
+      d.appendChild(p);
+
+      if (storageKey) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = "Restore my previous draft / 取回我原本的草稿";
+        b.style.cssText =
+          "margin-top:.5rem;font:inherit;cursor:pointer;background:#3F8C6E;color:#fff;" +
+          "border:0;border-radius:6px;padding:.35rem .9rem";
+        b.addEventListener("click", function () {
+          try {
+            var saved = localStorage.getItem(storageKey + ".before-seed");
+            if (saved == null) { b.textContent = "The backup could not be read."; return; }
+            localStorage.setItem(storageKey, saved);
+          } catch (e) {
+            console.warn("[PC] could not restore the draft", e);
+            b.textContent = "This browser would not let the draft be restored.";
+            return;
+          }
+          // Reload WITHOUT the seed, so the restored draft is what loads.
+          location.replace(location.pathname + location.hash);
+        });
+        d.appendChild(b);
+      }
+
       var f = document.querySelector("form");
       if (f && f.parentNode) f.parentNode.insertBefore(d, f);
     }
