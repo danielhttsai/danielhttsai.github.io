@@ -1672,7 +1672,17 @@ const DESIGNS = [
           // establishes it, the run stops and asks, rather than sorting text.
           L.push("ukey<-unique(a$key); kd<-pdate(ukey); kn<-suppressWarnings(as.numeric(ukey)); ordmode<-''");
           // Kept on one line: in R a top-level `else` beginning a new line is a parse error.
-          L.push("if(ORDER=='file'){ ord<-seq_along(ukey); ordmode<-'the order the periods first appear in the file (you confirmed it is chronological)' } else if(ORDER=='alpha'){ ord<-order(ukey); ordmode<-'alphabetical order of the labels (you confirmed that is chronological)' } else if(all(!is.na(kd))){ ord<-order(kd); ordmode<-'dates parsed from the period labels' } else if(all(!is.na(kn))){ ord<-order(kn); ordmode<-'the numeric value of each label' } else { stub<-gsub('[0-9]+','#',ukey); num<-suppressWarnings(as.numeric(gsub('[^0-9]','',ukey))); if(length(unique(stub))==1 && !any(is.na(num)) && !any(duplicated(num))){ ord<-order(num); ordmode<-'the number inside each label' } }");
+          // The last branch used to strip every non-digit and sort the concatenation.
+          // For "Q1 2015 … Q4 2020" that is quarter-then-year: the order came out
+          // Q1 2015, Q1 2016, … Q1 2020, Q2 2015, and a monotonically rising series
+          // reported a significant 42% immediate drop, under a note stating the
+          // periods had been "ordered by the number inside each label". Unpadded
+          // week labels scramble the same way. Concatenating two numbers only
+          // preserves order if you know which one is the more significant, and
+          // nothing here does — so a label with more than one number is now refused
+          // rather than guessed at, which is what the panel above the control says
+          // this branch does.
+          L.push("if(ORDER=='file'){ ord<-seq_along(ukey); ordmode<-'the order the periods first appear in the file (which you told the tool is chronological)' } else if(ORDER=='alpha'){ ord<-order(ukey); ordmode<-'alphabetical order of the labels (which you told the tool is chronological)' } else if(all(!is.na(kd))){ ord<-order(kd); ordmode<-'dates parsed from the period labels' } else if(all(!is.na(kn))){ ord<-order(kn); ordmode<-'the numeric value of each label' } else { stub<-gsub('[0-9]+','#',ukey); ngrp<-vapply(gregexpr('[0-9]+',ukey), function(m) if(m[1]==-1) 0L else length(m), 0L); num<-suppressWarnings(as.numeric(gsub('[^0-9]','',ukey))); if(length(unique(stub))==1 && all(ngrp==1) && !any(is.na(num)) && !any(duplicated(num))){ ord<-order(num); ordmode<-'the single number inside each label' } }");
           L.push("if(ordmode==''){ stop(paste0('Cannot work out the chronological order of the period labels: they do not parse as dates, they are not numbers, and they do not share a single numbered pattern. Sorting them as text would give ', paste(head(sort(ukey),5),collapse=' -> '), ' ... which is very unlikely to be chronological, and analysing periods in the wrong order can reverse the direction of the estimate. Set \"Period order\" to \"the order they appear in the file\" if the file is already sorted, or map a numeric period index instead.')) }");
           L.push("ukey<-ukey[ord]; a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey)");
           // Period labels are data, and they end up inside pipe-delimited estimate
