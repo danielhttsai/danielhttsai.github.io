@@ -794,3 +794,254 @@ warning's trigger* rather than read it.
   every real case. Left alone: harmless, and it is a guard against a real if
   rare pathology. Its threshold (`dg < 1e-6*dm`) is six orders of magnitude,
   so a factor-4 variance collapse passes it. Worth tightening some day.
+
+### Found 2026-08-22 by a sixth run — the Protocol Checker, which no run had opened
+
+Five consecutive runs had worked the protocol builders and RWE Studio. This one
+rotated to `src/pages/tools/protocol-checker.astro` and its Cloudflare Worker
+(`workers/target-checker/worker.js`), which together had four commits ever and
+no deep pass. Two reviewers ran concurrently and converged independently on
+three of the defects below, which is good evidence they were real.
+
+#### Environment: the checker can be made fully deterministic
+
+- **The worker is unreachable** (`target-checker.danielhttsai.workers.dev` → proxy
+  403), and the AI is non-deterministic anyway, so **do not try to run it**. Drive
+  the built page in Chromium and route the worker URL to a canned JSON response:
+  `page.route('**/target-checker.danielhttsai.workers.dev/**', r => r.fulfill({...}))`.
+  Every claim in this section was executed that way. This is strictly better than
+  a live run: you choose the model's answer, so you can test the answer shapes
+  that matter (a missing id, an en dash, prose where an array was asked for) and
+  get the same result twice.
+- The reusable harness is small: serve `dist-check/` from a `node:http` server,
+  `page.evaluate` to set `#text` and dispatch `input`, click `#check`, wait for
+  `#results:not(.hidden), #runerror:not(.hidden)`, then read the DOM. Capture the
+  Markdown by monkey-patching `URL.createObjectURL` and `HTMLAnchorElement.click`
+  before clicking `#download`; the same trick plus `npm pack docx@8.5.0` and a
+  `page.route` on `**unpkg.com/**` gives you a **real `.docx`** to unzip and read
+  (`word/document.xml`). Both were used here.
+- **`page.setInputFiles` works** for the upload path, and `.txt`/`.md` need no CDN
+  at all — only `.docx`/`.pdf`/`.xlsx` need the blocked `cdnjs.cloudflare.com`.
+- The session starts on a **detached HEAD**; push with `git push origin HEAD:main`.
+- `dist-check/` is **not** in `.gitignore`. Never `git add -A` (you were told).
+
+#### Fixed this run
+
+All executed before and after, in Chromium against a local build, and — where
+the exports are involved — asserted in a generated `.docx`, not inferred.
+
+- ~~**`Number(null) === 0`, so a window the AI could not place was drawn at day
+  0.**~~ `cleanTimeline` exists to catch unusable windows and says so in its own
+  comment, but tested `Number.isFinite(Number(v))`. `Number(null)`, `Number("")`,
+  `Number(false)` and `Number([])` are all finite `0`, so a covariate look-back
+  returned with `startDay: null` was drawn as **"0 → 0"** — and a 365-day
+  new-user washout returned as `null → null` became a zero-day washout, which is
+  a different study. Only a non-numeric *string* was ever caught. Days are read
+  now (`readDay`/`DAY_RE`), and a dropped window names the value that could not
+  be read.
+- ~~**Both exports printed the raw timeline, contradicting the screen.**~~ A
+  report could caveat that a window had no usable days and then print
+  "Exposure window: day 0 → 90 days" three sections later, or print the literal
+  word `null` as a day number. And when the screen **refused** to show a scheme
+  at all, both exports printed the section anyway — six em-dashes and three
+  "none stated" lines that read as findings. `renderScheme` now returns
+  `{kept, dropped, lists}` and both exporters consume it. **One computation,
+  three surfaces** — the pattern this brief keeps asking for.
+- ~~**The AI is told to invent durations and the invention was invisible.**~~ The
+  worker prompt says "If a duration is not stated, choose a reasonable default
+  and set note to 'assumed'", and `note` never reached the screen. A window the
+  AI *declares* it assumed is now dashed and hollow, marked `*`, named under the
+  diagram and carried into both reports via the caveats channel. **The converse
+  is deliberately not claimed**: `note` is optional in the worker's schema, so
+  the caption says a solid bar is not a guarantee the duration was stated.
+  Reviewer A caught that over-claim in this run's own fix.
+- ~~**`unclear` was aliased to `partial`.**~~ Both reviewers, independently. On
+  this page Partial means something specific and accusatory ("the topic is
+  raised but a key element … is missing"); a model answering "unclear" made no
+  such finding. Four "unclear" items produced four amber chips, their evidence
+  printed as if it were a deficiency, all four inside the denominator, and no
+  caveat. They are "Not assessed" now, keep the model's sentence, and are
+  caveated. The conflation sat four lines below the comment warning against it.
+- ~~**The score's denominator moved with what the model chose to answer.**~~
+  N/A and Not assessed are excluded from it, so the *same* protocol with the
+  *same* thirteen met items reads 13 of 23, 13 of 17 (six omitted) or **13 of 13
+  — 100%** (the rest marked `na`). The summary now names the checklist's own
+  size whenever the denominator is smaller, and says what was taken out. The
+  legend also claimed only "Not assessed" is excluded, when N/A is too.
+- ~~**The model's free-text `summary` was printed in the tool's voice.**~~ It is
+  unvalidated prose and routinely states a total of its own: one run opened
+  "satisfies 21 of the 23 HARPER items" directly above a tally of 13, and named
+  as missing two items the tool had explicitly refused to judge. Now quoted and
+  attributed, below the computed count, on all three surfaces.
+- ~~**Neither export carried the frame around the number.**~~ The legend and the
+  "this score is one sample, not a measurement — 19, 20, 21 and 22 of 23 across
+  four unchanged runs" paragraph were on screen only, while the `.docx` — logo,
+  date, colour-coded verdicts, a tally — is the artefact that most resembles a
+  measurement. Both exporters now **read those paragraphs out of the DOM**
+  (`frameText()`), so they cannot drift from what the user read. A third was
+  added: neither HARPER nor TARGET defines a conformance score.
+- ~~**Criteria returned as prose were reported as "none stated".**~~ The worker
+  presses hardest on exactly these three fields ("EXTRACT THESE EVEN IF THEY ARE
+  WRITTEN AS PROSE", "MUST be populated") — in prose, which is what elicits a
+  prose answer. The panel and both exports rendered any non-array as
+  "— none stated —", so a protocol whose eligibility the AI had extracted in
+  full was reported to its author as having none; object entries reached the
+  Word file as `[object Object]`. Prose is shown as written and **not split**,
+  with a note; unreadable entries are counted and named.
+- ~~**One en dash erased a verdict and invented an off-list one.**~~ The
+  planned-outputs panel matched names by raw lowercase equality. "Cumulative
+  incidence / Kaplan–Meier curve" (en dash — the typographically correct form of
+  the eponym, and what a model returns) missed the worker's ASCII-hyphen name,
+  so the row said "the AI returned no verdict" (false — it said `present` and
+  quoted the section) *and* the same figure reappeared at the foot of the list
+  under a caveat saying it was "not on the list it was asked about". A repeated
+  name rendered twice with opposite verdicts. `reconcile()` thirty lines up
+  already normalises ids and already handles duplicates; this now follows the
+  same rules.
+- ~~**`.txt` was the one upload with no parser behind it.**~~ `extractPlain` was
+  `file.text()`. A gzip renamed `protocol_v3.txt` was accepted as "37,873
+  characters extracted · ready to check", sent to Gemini and scored; so was a
+  renamed `.docx`. UTF-16 (Notepad's "Unicode", and several Windows stats
+  packages) is half NULs. UTF-16 with a BOM is decoded properly now — the BOM
+  makes that a fact, not a guess — and anything still >2% unreadable bytes is
+  refused by name with the percentage. Verified on six real files.
+- ~~**The Word button could fail forever in silence, naming the wrong host.**~~
+  Its failure went only to `#status`, in the input card ~1,300px above the
+  button, up to 20s later; the button stayed enabled and unchanged. And the
+  message hardcoded `cdnjs.cloudflare.com` because three of `loadScript`'s four
+  callers use it — the Word export loads from **unpkg.com**, so a user behind a
+  proxy blocking unpkg was sent to IT to unblock the wrong domain.
+- ~~**`fmtDay` rounded a window into a different window.**~~ A 100-day look-back
+  was drawn "−3mo" (90 days) and 400 days of follow-up "+1.1y" (401.5) while the
+  exports printed the raw numbers. It abbreviates only exact conversions now.
+- ~~**A timeline answered in prose produced "No analysis windows could be placed
+  on a day axis from this text"**~~ — a claim about the protocol, for a failure
+  in the shape of the answer.
+
+#### Checked and clean (do not re-derive)
+
+- The worker's `HARPER_ITEMS`/`TARGET_ITEMS` ids match `src/data/harper.ts` (23)
+  and `src/data/target.ts` (31) exactly, `DELIVERABLES` matches
+  `DELIVERABLE_NAMES`, and `MAX_CHARS` is 60000 in both. All three "keep in
+  lock-step" comments are currently true.
+- `reconcile`/`normId` are solid: `Item 7.3.1.`, `7A`, trailing `)` all
+  normalise; unknown ids are reported, not guessed; duplicates keep the first
+  and are named.
+- `escapeHtml` covers every model-controlled string reaching `innerHTML`; the
+  `.docx` escapes correctly.
+- Empty file, `.docx` containing only a table, file-plus-paste precedence, a
+  207,227-character paste's truncation arithmetic, and Clear-then-Check were all
+  executed and are correct.
+- `src/data/strobe.ts` is not in the `FRAMEWORKS` registry — dead data, not a bug.
+
+#### Open, examined this run, deliberately left
+
+Ranked by damage. The first three need a source this sandbox cannot reach; do
+**not** act on them from memory or from a search snippet.
+
+- **TARGET's target-trial SPECIFICATION items (6a-6h) appear to be missing
+  entirely.** The published statement is built on a side-by-side pair —
+  specification (6a-h: the causal estimand) beside emulation (7a-h: how it is
+  estimated). This repo ships 7a-7h and a single undivided item 6 ("Specify the
+  target trial"), so an emulation is scored on the emulation column alone and
+  item 6 is a line a model will mark "met" for any paper containing the phrase.
+  **Snippet evidence only** (JAMA 2025;334(12):1084-1093, doi
+  10.1001/jama.2025.13350). Adding eight checklist items with invented wording is
+  exactly the fabrication this repo has already been burned by. Check the record,
+  then add `harper.ts`-style entries to `target.ts` **and** `worker.js` together.
+- **HARPER's Table 1-13 mapping is asserted item by item and is unverified.**
+  Those numbers go into the Gemini prompt *and* onto the user's screen ("7.3.3.
+  Exclusion criteria … (Table 5)"), so a wrong number sends an author to the
+  wrong table in the real template. One search summary suggested HARPER's Table 1
+  is the *amendments* log, not milestones — which would put every later number
+  out by one — and tellingly item 3 (Amendments) is the only item here with no
+  table number. That snippet may equally describe the *article's* tables. Check
+  the template PDF; fix `harper.ts` and `worker.js` together, they are one map.
+- **HARPER's top-level section number is uncertain.** Two search summaries
+  disagree: one puts Research methods at 7 (supporting the repo), one at 5 with
+  identical sub-numbering (5.1 design, 5.2 diagram, …), which would make every
+  `7.x` id wrong. Same check, same two files.
+- **Citations are real but incomplete.** Both papers were confirmed from search
+  snippets — HARPER PDS 2023;32(1):44-55, doi 10.1002/pds.5507, PMID 36215113;
+  TARGET JAMA 2025;334(12):1084-1093, doi 10.1001/jama.2025.13350, PMID 40899949
+  — and **both author lists match the repo exactly**. No fabricated reference was
+  found. But `HARPER_CITATION`/`TARGET_CITATION` omit volume, issue, pages and
+  DOI, and they are the only citation a reader of the exported `.docx` gets; the
+  HARPER title as rendered is a paraphrase (the published title has no "(HARPER)"
+  and includes "of hypothesis evaluating real-world evidence studies on treatment
+  effects" — the file's own header comment has it right); HARPER was co-published
+  in *Value in Health* and only one journal is cited; and `target.ts:6` asserts
+  "(CC BY-ND 4.0)", which was not checkable and matters, because ND would
+  restrict the reworded item labels this file ships.
+- **The planned-outputs check has no "not applicable" verdict, and the worker
+  orders genuinely-N/A outputs recorded as "Absent".** The deliverables enum is
+  `present|partial|absent` while the item checklist in the same response has
+  `na`. A design where a Love plot, a KM curve and a by-treatment Table 1 do not
+  apply draws **four red "Absent" chips for four non-defects** — which is exactly
+  what SCCS, case-crossover, ITS and descriptive protocols from this site's own
+  generator will produce. The fix is client aliases plus a worker enum and prompt
+  change; the client half alone is inert, and the **worker is deployed
+  separately, so nothing changed in `worker.js` can be verified from here**. Left
+  for that reason, not because it is wrong.
+- **TARGET is described as "the canonical 21-item framework" and scored out of
+  31.** Splitting 1→1a/1b/1c and 7→7a-7h is a legitimate finer audit, but nothing
+  on screen says the denominator is the tool's own sub-division, so "28 of 31
+  TARGET items" reads as a fraction of the published checklist. Item 7 is also
+  scored *alongside* 7a-7h, so satisfying every sub-element necessarily satisfies
+  the parent — and by the page's own comment item 7 is the one the model most
+  often omits, which then moves the denominator.
+- **A finished report stays on screen, unmarked, after the input changes.**
+  `runCheck` hides stale results on the *run* boundary, deliberately; the input
+  boundary has no equivalent. Edit the pasted text and the previous report stays,
+  both download buttons live, no staleness marker — and the exported `.docx`
+  carries today's date. Switching the framework radio leaves the picker saying
+  TARGET while the results still say "HARPER conformance". Fix: hash the input
+  into `lastReport`, compare on `input`/`handleFile`, show an amber "generated
+  from different text — re-run" bar. Do not auto-hide the report; that reads as
+  data loss.
+- **"Also check against TARGET" spends a request 779px below the warning written
+  to be seen before it is spent.** Measured. The button ticks the radio, calls
+  `refreshFrameworkNote()` and immediately runs, so the "expect a near-perfect
+  score that means very little" note is rendered correctly and never on screen on
+  that path. The post-run caveat does fire and does reach both exports, so
+  nothing false is printed. General pattern worth one fix: **every immediate
+  warning this page emits lives in the input card at the top, while the user
+  lives in the results card ~1,300px down** — including the Clear-then-Check
+  refusal. The Word-export failure was moved for this reason; the others were not.
+- **`RESPONSE_SCHEMA` lacks `propertyOrdering`** while the other two worker modes
+  carry it with a comment recording that `required` alone made Gemini silently
+  omit the field on every item. The failure was simulated (every item missing
+  `id`) and is handled honestly — "0 of 0 assessable items met", 23 Not assessed,
+  two caveats — so this is robustness, not a defect. Still, the asymmetry with
+  the file's own hard-won fix is worth closing when the worker is next deployed.
+- **The prompt tells the model to prefer "missing" over "na"**, naming results
+  items in a pre-study protocol as the example, while the UI caveat says the
+  opposite treatment is intended. Both are documented as correct, and the choice
+  moves the denominator.
+- **`inclusion`, `exclusion` and `covariates` have no provenance channel.** The
+  timeline now marks what the AI assumed; these three get the same "MUST be
+  populated" pressure in the prompt and have no `note` field in the schema, so a
+  paraphrased or inferred criterion is typographically identical to a quoted one
+  in the Word file.
+
+#### What the two reviewers disagreed about, and who was right
+
+- **The moving denominator.** The methodologist ranked it second-worst in the
+  tool; the applied reviewer met the same behaviour (a run answering 1 of 31
+  items reads "1 of 1 assessable, 100%"), called it adequately disclosed in the
+  same sentence, and said **leave it**. The methodologist won, but the applied
+  reviewer's objection shaped the fix: the score was not restructured, the
+  checklist's own size was simply named beside it. The decisive case was the
+  all-`na` run, where there is no "could not be assessed" clause at all and the
+  headline is a clean 100%.
+- **The dashed-window fix was attacked by the reviewer, not defended by him.**
+  The methodologist accepted the fix and then pointed out that its marking is
+  *self-reported by the fabricator* — `note` is optional in the schema, so an
+  unmarked window proves nothing. The caption now says so explicitly. **This is
+  the second run in a row where the sharpest methodological finding was against
+  the run's own fix.** Keep doing that.
+- Both reviewers independently reproduced the `Number()` coercion and the
+  export-vs-screen divergence from `HEAD` before either was fixed, from different
+  constructed data. That is the strongest evidence available here that a finding
+  is real, and it is cheap to get: give two reviewers the same file and let them
+  build their own fixtures.
