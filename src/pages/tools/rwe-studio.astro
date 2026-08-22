@@ -1684,7 +1684,14 @@ const DESIGNS = [
           L.push("# --- place the interruption: exact period label, then date, then index ---");
           L.push("cut<-trimws(CUT); t0<-NA");
           L.push("if(cut!=''){ m<-match(cut,ukey); if(!is.na(m)) t0<-m");
-          L.push("  if(is.na(t0)){ cd<-pdate(cut); if(!is.na(cd) && all(!is.na(kd))){ w<-which(kd[ord]>=cd); if(length(w)) t0<-min(w) } }");
+          // The comparison used to be against the raw date while kd holds period
+          // STARTS, so any interruption date after the 1st of its month selected the
+          // NEXT month, and the month the intervention actually happened in was
+          // analysed as a pre-intervention period. The field asks for "the first
+          // period affected", and 15 January is in it. Floor the date to the period
+          // unit first, and say below when the date given was not a period start.
+          L.push("cutmoved<-''");
+          L.push("  if(is.na(t0)){ cd<-pdate(cut); if(!is.na(cd) && all(!is.na(kd))){ cdf<-if(UNIT!='none') floorp(cd,UNIT) else cd; w<-which(kd[ord]>=cdf); if(length(w)){ t0<-min(w); if(cd!=kd[ord][t0]) cutmoved<-format(cd,'%Y-%m-%d') } } }");
           L.push("  if(is.na(t0)){ ci<-suppressWarnings(as.integer(cut)); if(!is.na(ci) && ci>=2 && ci<=np) t0<-ci } }");
           L.push("if(is.na(t0)) stop(paste0(\"Could not place the interruption '\",cut,\"' in this series. The \",np,\" periods run from \",ukey[1],\" to \",ukey[np],\". Give a date inside that range, one of those exact period labels, or a period number between 2 and \",np,\".\"))");
           // Wagner (2002) convention: time-since-intervention is 0 at the first
@@ -1848,6 +1855,7 @@ const DESIGNS = [
           L.push("dwt<-if(is.na(dw)) 'not computable' else sprintf('%.2f (lag-1 residual autocorrelation %+.2f)',dw,r1)");
           L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s) fitted: %d before and %d from %s onward%s. Inference uses %s, with %s for the 95%% intervals. Durbin-Watson %s (descriptive only - on GLM Pearson residuals it has no standard null distribution).\\n', famlab, nfit, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, critlab, dwt))");
           L.push("cat(sprintf('RESULT_NOTE|Periods were ordered by %s. Level change is the immediate step at %s; slope change accrues from the period after it (Wagner 2002 convention, time-since-intervention = 0 at the first affected period).\\n', ordmode, ukey[t0]))");
+          L.push("if(cutmoved!='') cat(sprintf('RESULT_NOTE|The interruption you gave (%s) falls inside period %s rather than at its start, so that whole period is treated as the first affected one. If the intervention only applied to part of it, that period is partly pre-intervention and the step will be diluted; consider dropping it or using a finer period unit.\\n', cutmoved, ukey[t0]))");
           L.push("if(HASN) cat(sprintf('RESULT_NOTE|The denominator was combined within each period by taking the %s of the rows in that period%s.\\n', dmode, if(DCOMB=='auto' && dmode=='first') ' (chosen automatically because it is constant within every period)' else ''))");
           // A count model with no offset silently assumes a constant population.
           L.push("if(hacdeg) cat('RESULT_NOTE|The Newey-West correction was skipped: the model fits the series so closely that the sandwich estimator degenerates to zero variance, which would print impossibly narrow intervals. Model-based standard errors are reported instead.\\n')");
