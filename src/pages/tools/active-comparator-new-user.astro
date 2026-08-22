@@ -1591,8 +1591,10 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
           + ", pooled across sites by meta-analysis",
         groupBy: "treatment group",
         skip: ["studySize", "ethics"],
-        limitations: "The active comparator must share the indication and have no a-priori association with the outcome; residual confounding by unmeasured indication severity and informative censoring under the on-treatment analysis remain possible.",
-        plannedOutputs: ["Cohort-attrition / participant-flow diagram.", "Table 1 with standardised mean differences before/after PS adjustment (Love plot).", "Kaplan–Meier / cumulative-incidence curves and a forest plot of site-specific and pooled effects."],
+        limitations: "The active comparator must share the indication and have no a-priori association with the outcome; residual confounding by unmeasured indication severity and informative censoring — where follow-up is censored at treatment deviation — remain possible.",
+        plannedOutputs: ["Cohort-attrition / participant-flow diagram.", NO_PS_METHODS.indexOf(s.psMethod) !== -1
+            ? "Covariate-balance table — standardised mean differences between treatment groups; this method applies no propensity-score adjustment, so there is no after-adjustment column."
+            : "Table 1 with standardised mean differences before/after PS adjustment (Love plot).", "Kaplan–Meier / cumulative-incidence curves and a forest plot of site-specific and pooled effects."],
       });
       const sitesLine = (ids, otherText) => {
         const parts = (ids || []).map((c) => "- " + formatSiteFull(c));
@@ -2538,7 +2540,7 @@ ${numbered(PSC_REFERENCES)}
           RR: "Risk ratio (95% CI) from Poisson regression",
           RD: "Risk difference (95% CI)",
           IRR: "Incidence rate ratio (95% CI)",
-        })[s.effectMeasure] || "Hazard ratio";
+        })[s.effectMeasure] || "(effect measure not specified)";
         const meta     = ({
           re: "Random-effects (DerSimonian-Laird) meta-analysis pooling site-specific estimates; report I² and τ². Forest plot per outcome.",
           "re-reml": "Random-effects (REML) meta-analysis pooling site-specific estimates; report I² and τ². Forest plot per outcome.",
@@ -2637,10 +2639,12 @@ ${bullets(secondary)}
 ## 6. Follow-up and censoring
 
 - **Primary analysis:** ${primAn}
-- **Grace period:** ${daysText(s.grace)}
+- **Grace period:** ${graceText(s)}
 - **Maximum follow-up:** ${resolvedMaxFu}
 
 **Censoring rules**
+
+${censoringScope(s)}
 
 ${bullets(censoring)}
 
@@ -2654,7 +2658,7 @@ ${s.psMethodDetails ? `**Method operational details.** ${s.psMethodDetails}\n` :
 
 ${bullets(covariates)}
 
-PS model performance is assessed via standardised mean differences (SMDs) before/after weighting/matching (target < 0.1 across all covariates) and the c-statistic of the PS model.
+${psPerformanceText(s)}
 
 ${pscMarkdownSection(s)}
 ## 8. Statistical analysis
@@ -2744,6 +2748,49 @@ _Drafted with the AsPEN protocol builder (${today})._
         return { days: parseInt(t, 10), ok: true, empty: false, raw: t };
       };
       // What a document may say about a duration it could not read.
+      // Methods that fit no propensity score. The protocol promised,
+      // unconditionally, SMDs before and after weighting or matching "and the
+      // c-statistic of the PS model" — including for multivariable outcome
+      // regression, whose own definition in this file reads "No PS used".
+      // TMLE is deliberately not in this group: it does estimate a propensity
+      // score, so its c-statistic is a real quantity; only the
+      // before/after-weighting half is wrong there.
+      const NO_PS_METHODS = ["outcome-reg", "iv", "gformula", "drs"];
+      // The first two censoring rules — censor at discontinuation, censor at
+      // switching — are ticked by default, so an ITT protocol exported an
+      // as-assigned analysis alongside an as-treated censoring scheme with
+      // nothing to say which governed which. Refusing would be wrong: "ITT vs
+      // on-treatment (whichever is not the primary)" is itself a default-ticked
+      // sensitivity analysis, so that combination is a correct protocol. Say
+      // which analysis the rules belong to instead.
+      const censoringScope = (s) => {
+        const pa = s.primaryAnalysisType;
+        if (pa === "ITT") return "The primary analysis is intention-to-treat, so it does not censor for treatment deviation: any rule below concerning discontinuation or switching governs the on-treatment sensitivity analysis, not the primary analysis.";
+        if (pa === "both") return "Rules below concerning discontinuation or switching govern the on-treatment analysis only; the intention-to-treat analysis applies the remaining rules.";
+        if (pa === "landmark") return "Follow-up in the primary analysis begins at the landmark time; state in the analysis plan how deviation before the landmark is handled.";
+        if (pa === "OT") return "These rules govern the on-treatment (per-protocol) primary analysis.";
+        return "The primary analysis is not specified, so it is not stated which of these rules govern it.";
+      };
+      // A grace period is how long a dispensing gap is tolerated before an
+      // on-treatment analysis censors. Under ITT nothing is censored for
+      // deviation, and a landmark analysis is defined by its landmark time, so
+      // printing "Grace period: 30 days" beside either states a rule the
+      // analysis does not use.
+      const graceText = (s) => {
+        const pa = s.primaryAnalysisType;
+        if (pa === "ITT") return "not applicable — an as-assigned (ITT) analysis does not censor at treatment deviation";
+        if (pa === "landmark") return "not applicable to a landmark analysis; state the landmark time in the analysis plan";
+        return daysText(s.grace);
+      };
+      const psPerformanceText = (s) => {
+        if (NO_PS_METHODS.indexOf(s.psMethod) !== -1) {
+          return "This analysis fits no propensity score, so no PS c-statistic and no before/after-weighting balance table is reported. Report instead the baseline covariate distributions by treatment group with standardised mean differences, and the diagnostics belonging to the model actually fitted.";
+        }
+        if (s.psMethod === "tmle") {
+          return "PS model performance is assessed via the c-statistic of the propensity model and the distribution of the estimated propensity scores by treatment group. TMLE does not reweight or match the cohort, so there is no before/after balance table.";
+        }
+        return "PS model performance is assessed via standardised mean differences (SMDs) before/after weighting/matching (target < 0.1 across all covariates) and the c-statistic of the PS model.";
+      };
       const daysText = (raw) => {
         const r = readDays(raw);
         if (r.ok) return r.days + " days";
@@ -2789,14 +2836,23 @@ _Drafted with the AsPEN protocol builder (${today})._
       // wrong. Read months and weeks too, and report when it still cannot tell.
       const resolveFollowupDays = (s) => {
         const mfc = (s.maxFollowupChoice || "") + " " + (s.maxFollowupCustom || "");
+        // "Until end of database availability (no cap)" is an option this page
+        // puts in its own dropdown and it holds no digits, so every pattern
+        // below missed it: the figure drew a flat five-year bar and the panel
+        // told the user to "write a duration the diagram can read" about a
+        // choice the tool had offered them. No cap is not an unreadable
+        // duration — draw a bar for scale and say on it that it is only that.
+        if (/no cap|end of database|until end of data/i.test(mfc)) return { days: 1825, known: true, openEnded: true };
         const y = mfc.match(/(\d+(?:\.\d+)?)\s*(?:years?|yrs?|y)\b/i);
         if (y) return { days: Math.round(parseFloat(y[1]) * 365), known: true };
         const mo = mfc.match(/(\d+(?:\.\d+)?)\s*(?:months?|mos?|mth)\b/i);
         if (mo) return { days: Math.round(parseFloat(mo[1]) * 30.44), known: true };
         const w = mfc.match(/(\d+(?:\.\d+)?)\s*(?:weeks?|wks?|w)\b/i);
         if (w) return { days: Math.round(parseFloat(w[1]) * 7), known: true };
-        const d = mfc.match(/(\d+)\s*(?:days?|d)\b/i);
-        if (d) return { days: parseInt(d[1], 10), known: true };
+        // The days pattern lacked the decimal group its year, month and week
+        // neighbours all have, so "2.5 days" matched the 5 and reported it read.
+        const d = mfc.match(/(\d+(?:\.\d+)?)\s*(?:days?|d)\b/i);
+        if (d) return { days: Math.round(parseFloat(d[1])), known: true };
         return { days: 1825, known: false };
       };
       const renderScheme = (s) => {
@@ -2812,7 +2868,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         if (plan.mode === "rows") plan.usable.forEach((r) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: r.idx } }));
         else if (lb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
         if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
-        wins.push({ label: "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "maxFollowup", edge: "end" } });
+        wins.push({ label: fuR.openEnded ? "Follow-up (no cap — bar drawn to 5 y for scale only)" : "Follow-up", kind: "followup", startDay: 0, endDay: fu, edit: { field: "maxFollowup", edge: "end" } });
         const onEdit = (field, day, meta) => {
           if (field === "covWindows") {
             const el = form.elements.covWindows; const rows = parseRows(el.value);
@@ -3528,7 +3584,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         const sex      = ({ both: "both sexes", female: "female only", male: "male only" })[s.sex] || "both sexes";
         const primAn   = primaryAnalysisLabel(s.primaryAnalysisType);
         const psM      = PS_METHOD_DESCRIPTIONS[s.psMethod] || "PS-based adjustment";
-        const eff      = ({ HR: "Hazard ratio (95% CI) from Cox proportional-hazards models", RR: "Risk ratio (95% CI) from Poisson regression", RD: "Risk difference (95% CI)", IRR: "Incidence rate ratio (95% CI)" })[s.effectMeasure] || "Hazard ratio";
+        const eff      = ({ HR: "Hazard ratio (95% CI) from Cox proportional-hazards models", RR: "Risk ratio (95% CI) from Poisson regression", RD: "Risk difference (95% CI)", IRR: "Incidence rate ratio (95% CI)" })[s.effectMeasure] || "(effect measure not specified)";
         const meta     = ({
           re: "Random-effects (DerSimonian-Laird) meta-analysis pooling site-specific estimates; report I² and τ². Forest plot per outcome.",
           "re-reml": "Random-effects (REML) meta-analysis pooling site-specific estimates; report I² and τ². Forest plot per outcome.",
@@ -3620,10 +3676,11 @@ _Drafted with the AsPEN protocol builder (${today})._
         children.push(h1("6. Follow-up and censoring"));
         children.push(labelTable([
           ["Primary analysis", primAn],
-          ["Grace period", daysText(s.grace)],
+          ["Grace period", graceText(s)],
           ["Maximum follow-up", resolvedMaxFu],
         ]));
         children.push(h2("Censoring rules"));
+        children.push(para(censoringScope(s)));
         censoring.length ? censoring.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
 
         children.push(h1("7. Confounding control"));
@@ -3636,7 +3693,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         }
         children.push(h2("Baseline covariates"));
         covariates.length ? covariates.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
-        children.push(para("PS model performance is assessed via standardised mean differences (SMDs) before/after weighting/matching (target < 0.1 across all covariates) and the c-statistic of the PS model."));
+        children.push(para(psPerformanceText(s)));
 
         pscDocxSection(D, { text, p, h1, h2, para, bullet, labelTable }, s).forEach((el) => children.push(el));
 
@@ -3767,7 +3824,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         const covariates = mergeList(s.covariatesPick, s.covariatesCustom);
         const sensitivity = mergeList(s.sensitivityPick, s.sensitivityCustom);
         const psM   = PS_METHOD_DESCRIPTIONS[s.psMethod] || "PS-based adjustment";
-        const eff   = ({ HR: "Hazard ratio (95% CI) from Cox PH models", RR: "Risk ratio (95% CI) from Poisson regression", RD: "Risk difference (95% CI)", IRR: "Incidence rate ratio (95% CI)" })[s.effectMeasure] || "Hazard ratio";
+        const eff   = ({ HR: "Hazard ratio (95% CI) from Cox PH models", RR: "Risk ratio (95% CI) from Poisson regression", RD: "Risk difference (95% CI)", IRR: "Incidence rate ratio (95% CI)" })[s.effectMeasure] || "(effect measure not specified)";
         const primAn= primaryAnalysisLabel(s.primaryAnalysisType);
         const sitesPlain = (s.sites && s.sites.length > 0)
           ? s.sites.map((c) => formatSiteFull(c)).join("; ")
@@ -3831,8 +3888,8 @@ _Drafted with the AsPEN protocol builder (${today})._
               "Follow-up begins at the time of assignment to treatment strategies and ends at outcome, death, or end of study period.",
               "Index date: " + resolvedIndexDate + ".\n" +
               "Follow-up window: " + resolvedMaxFu + ".\n" +
-              "Censoring rules:\n" + bulletText(censoring) + ".\n" +
-              "Primary analysis: " + primAn + " (grace period " + daysText(s.grace) + ")."),
+              "Censoring rules:\n" + bulletText(censoring) + "\n" + censoringScope(s) + "\n" +
+              "Primary analysis: " + primAn + " (grace period: " + graceText(s) + ")."),
             row7("e. Outcomes",
               "Primary outcome: " + (s.picoO || "(specify)") + ".",
               "Operational definition: " + (s.outcomeDef || "(specify)") + "\n" +
