@@ -163,7 +163,11 @@ const fwList = Object.values(FRAMEWORKS);
           <!-- Study design scheme -->
           <div id="scheme" class="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 class="text-lg font-bold text-slate-900">Study design scheme</h2>
-            <p class="mt-1 text-xs text-slate-500">Reconstructed by the AI from the text — verify against your protocol; assumed durations are the AI's best guess.</p>
+            <p class="mt-1 text-xs text-slate-500">
+              <strong class="text-slate-600">This diagram was drawn by this tool from your text.</strong> It is not evidence that your protocol contains a study-design diagram — that is item 7.2, judged separately below.
+              A window the AI <strong>declared</strong> it had assumed is drawn dashed and marked <strong>*</strong>; a window it could not place on a day axis is not drawn and is named under the diagram.
+              The AI does not always declare an assumption, so a solid bar is not a guarantee that the duration was stated in your protocol — check every window against it.
+            </p>
             <dl id="designgrid" class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3"></dl>
             <div class="mt-5 overflow-x-auto">
               <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Timeline (days relative to index date)</p>
@@ -552,15 +556,39 @@ const fwList = Object.values(FRAMEWORKS);
         return s + a + "d";
       }
 
+      // Read a day the way a day must be read: a number, or a string that IS a
+      // number — never a coercion. `Number()` turns null, "", false and [] into
+      // 0, all finite, so the guard below used to accept a window the model
+      // could not place and draw it as a real window sitting on the index date:
+      // "Covariate look-back  0 → 0" for a look-back whose start came back null.
+      // A look-back the tool cannot read is not a zero-day look-back.
+      const DAY_RE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+      function readDay(v) {
+        if (typeof v === "number") return Number.isFinite(v) ? v : null;
+        if (typeof v === "string" && DAY_RE.test(v.trim())) return Number(v.trim());
+        return null;
+      }
+      const showRaw = (v) => (v === undefined ? "no value" : typeof v === "string" ? "“" + (v.length > 40 ? v.slice(0, 40) + "…" : v) + "”" : String(v));
+
+      // The model is instructed to guess a duration it cannot find ("choose a
+      // reasonable default and set note to 'assumed'"), so `note` is the only
+      // thing separating a window read from the protocol from one invented for
+      // it. It has to reach the screen, not just the exported file.
+      const assumedNote = (w) => {
+        const n = String((w && w.note) || "").trim();
+        return n && /assum|not stated|unstated|default|guess|inferred|approx/i.test(n) ? n : "";
+      };
+
       // A window whose days are not finite numbers produces NaN geometry, which
       // SVG renders as nothing at all — a diagram that silently loses a row is
       // worse than one that says a row was unusable.
       function cleanTimeline(tl) {
         const kept = [], dropped = [];
         for (const w of (Array.isArray(tl) ? tl : [])) {
-          const a = Number(w && w.startDay), b = Number(w && w.endDay);
-          if (Number.isFinite(a) && Number.isFinite(b)) kept.push({ ...w, startDay: a, endDay: b });
-          else dropped.push((w && (w.label || w.kind)) || "unnamed window");
+          const a = readDay(w && w.startDay), b = readDay(w && w.endDay);
+          if (a !== null && b !== null) { kept.push({ ...w, startDay: a, endDay: b }); continue; }
+          const why = [a === null ? "start day " + showRaw(w && w.startDay) : "", b === null ? "end day " + showRaw(w && w.endDay) : ""].filter(Boolean).join(", ");
+          dropped.push({ name: (w && (w.label || w.kind)) || "unnamed window", why });
         }
         return { kept, dropped };
       }
@@ -587,10 +615,18 @@ const fwList = Object.values(FRAMEWORKS);
           const y = top + i * rowH;
           const xa = x(Math.min(w.startDay, w.endDay)), xb = x(Math.max(w.startDay, w.endDay));
           const ww = Math.max(3, xb - xa), col = KIND_COLOR[w.kind] || "#64748b";
-          svg += '<text x="' + (plotL - 10) + '" y="' + (y + 15) + '" text-anchor="end" font-size="11" fill="#334155">' + escapeHtml(w.label || KIND_LABEL[w.kind] || w.kind) + '</text>';
-          svg += '<rect x="' + xa + '" y="' + (y + 3) + '" width="' + ww + '" height="18" rx="4" fill="' + col + '" fill-opacity="0.88"/>';
+          // A duration the AI DECLARED it assumed is drawn hollow and dashed, so
+          // it cannot be read as one the protocol stated. The converse does not
+          // hold — `note` is optional in the worker's schema and the model does
+          // not always volunteer it — so the caption says a solid bar is not a
+          // guarantee either. Marking what we know beats marking nothing.
+          const asm = assumedNote(w);
+          svg += '<text x="' + (plotL - 10) + '" y="' + (y + 15) + '" text-anchor="end" font-size="11" fill="#334155">' + escapeHtml(w.label || KIND_LABEL[w.kind] || w.kind) + (asm ? " *" : "") + '</text>';
+          svg += asm
+            ? '<rect x="' + xa + '" y="' + (y + 3) + '" width="' + ww + '" height="18" rx="4" fill="' + col + '" fill-opacity="0.18" stroke="' + col + '" stroke-width="1.2" stroke-dasharray="4 3"/>'
+            : '<rect x="' + xa + '" y="' + (y + 3) + '" width="' + ww + '" height="18" rx="4" fill="' + col + '" fill-opacity="0.88"/>';
           const dur = fmtDay(w.startDay) + " → " + fmtDay(w.endDay);
-          if (ww > 78) svg += '<text x="' + (xa + ww / 2) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="600">' + escapeHtml(dur) + '</text>';
+          if (ww > 78) svg += '<text x="' + (xa + ww / 2) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="9.5" fill="' + (asm ? col : "#fff") + '" font-weight="600">' + escapeHtml(dur) + '</text>';
           else svg += '<text x="' + (xb + 5) + '" y="' + (y + 16) + '" font-size="9.5" fill="#64748b">' + escapeHtml(dur) + '</text>';
         });
         return svg + "</svg>";
@@ -606,20 +642,30 @@ const fwList = Object.values(FRAMEWORKS);
         if (!d || (!anyField && !anyList && !kept.length)) {
           schemeEl.classList.add("hidden");
           if (caveats) caveats.push("No study-design scheme could be reconstructed from this text, so the design diagram and criteria panel are not shown.");
-          return;
+          return null;
         }
         designGrid.innerHTML = fields.map(([k, v]) =>
           '<div><dt class="text-[11px] uppercase tracking-wider font-semibold text-slate-500">' + escapeHtml(k) + '</dt><dd class="text-sm text-slate-800 leading-snug">' + escapeHtml(v || "—") + '</dd></div>').join("");
         timelineEl.innerHTML = kept.length ? renderTimeline(kept)
           : '<p class="text-xs text-slate-500 italic">No analysis windows could be placed on a day axis from this text.</p>';
         const tlNotes = [];
-        if (dropped.length) tlNotes.push("⚠ " + dropped.length + " window(s) were returned without usable start/end days and are not drawn: " + dropped.map(escapeHtml).join(", ") + ".");
+        const assumed = kept.filter(assumedNote);
+        if (dropped.length) tlNotes.push("⚠ " + dropped.length + " window(s) were returned without usable start/end days and are not drawn: " +
+          dropped.map((x) => escapeHtml(x.name) + (x.why ? " (" + escapeHtml(x.why) + ")" : "")).join("; ") + ".");
+        if (assumed.length) tlNotes.push("* " + assumed.length + " window(s) are drawn dashed because their duration is <strong>not stated in the text</strong> — the AI assumed it: " +
+          assumed.map((w) => escapeHtml(w.label || KIND_LABEL[w.kind] || w.kind) + " (" + escapeHtml(assumedNote(w)) + ")").join("; ") + ". Check these against your protocol before using the diagram.");
         timelineNote.innerHTML = tlNotes.join("<br>");
         timelineNote.classList.toggle("hidden", !tlNotes.length);
-        if (dropped.length && caveats) caveats.push(dropped.length + " timeline window(s) had no usable start/end day and were left out of the design diagram.");
+        if (dropped.length && caveats) caveats.push(dropped.length + " timeline window(s) had no usable start/end day and were left out of the design diagram: " +
+          dropped.map((x) => x.name + (x.why ? " (" + x.why + ")" : "")).join("; ") + ".");
+        // Said in the caveats too, because that is the only channel that reaches
+        // the Markdown and Word reports.
+        if (assumed.length && caveats) caveats.push(assumed.length + " timeline window(s) are drawn from a duration the AI assumed rather than read from the text (" +
+          assumed.map((w) => w.label || KIND_LABEL[w.kind] || w.kind).join(", ") + "). Verify them before treating the diagram as your study design.");
         const kinds = [...new Set(kept.map((w) => w.kind))];
         legendEl.innerHTML = kinds.map((k) =>
-          '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + (KIND_COLOR[k] || "#64748b") + '"></span>' + escapeHtml(KIND_LABEL[k] || k) + '</span>').join("");
+          '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + (KIND_COLOR[k] || "#64748b") + '"></span>' + escapeHtml(KIND_LABEL[k] || k) + '</span>').join("") +
+          (assumed.length ? '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm border border-dashed border-slate-500"></span>dashed = duration assumed by the AI, not stated</span>' : "");
 
         // Explicit inclusion / exclusion / covariates, colour-keyed to the diagram
         const col = (title, dot, items, emptyTxt) => {
@@ -634,6 +680,8 @@ const fwList = Object.values(FRAMEWORKS);
           col("Covariates", "#f59e0b", d.covariates, "— none stated —");
 
         schemeEl.classList.remove("hidden");
+        // Handed back so the exports describe the SAME timeline the screen drew.
+        return { kept, dropped };
       }
 
       const DELIV_META = {
@@ -790,7 +838,7 @@ const fwList = Object.values(FRAMEWORKS);
           caveats.push(fw.name + " is a reporting guideline for a completed study. If you are checking a protocol, the results and discussion items describe what you will have to report later — a verdict of “met” there means the protocol says it plans to, not that it has been done.");
         }
 
-        renderScheme(data.design, caveats);
+        const scheme = renderScheme(data.design, caveats);
         const delivRows = renderDeliverables(data.deliverables, caveats);
 
         caveatsEl.innerHTML = caveats.map((c) => '<li class="flex gap-1.5"><span class="shrink-0">⚠</span><span>' + escapeHtml(c) + "</span></li>").join("");
@@ -804,7 +852,7 @@ const fwList = Object.values(FRAMEWORKS);
           tteEl.classList.add("hidden");
         }
 
-        lastReport = { data, counts, fw, byId, caveats, delivRows };
+        lastReport = { data, counts, fw, byId, caveats, delivRows, scheme };
         runErrEl.classList.add("hidden");
         resultsEl.classList.remove("hidden");
         resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -853,7 +901,7 @@ const fwList = Object.values(FRAMEWORKS);
 
       function downloadReport() {
         if (!lastReport) return;
-        const { data, counts, fw, byId, caveats, delivRows } = lastReport;
+        const { data, counts, fw, byId, caveats, delivRows, scheme } = lastReport;
         const date = new Date().toISOString().slice(0, 10);
         let md = "![Population Health Data Center](" + LOGO_ABS + ")\n\n# " + fw.name + " conformance report\n\n_Population Health Data Center · generated " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
         if (data.summary) md += data.summary + "\n\n";
@@ -866,13 +914,25 @@ const fwList = Object.values(FRAMEWORKS);
           for (const c of caveats) md += "- " + c + "\n";
           md += "\n";
         }
-        const d = data.design;
+        // `scheme` is null when the screen refused to show a scheme at all. The
+        // report must refuse it too, rather than printing a table of em-dashes
+        // the reader will take for an answer.
+        const d = scheme ? data.design : null;
         if (d) {
           md += "## Study design scheme\n\n";
+          md += "_Drawn by this tool from the text. It is not evidence that the protocol contains a study-design diagram — see the verdict on that item. A window marked as assumed was not read from the protocol; the AI does not always declare an assumption, so an unmarked window is not a guarantee either._\n\n";
           md += "- **Design:** " + (d.designType || "—") + "\n- **Population:** " + (d.population || "—") + "\n- **Exposure:** " + (d.exposure || "—") + "\n- **Comparator:** " + (d.comparator || "—") + "\n- **Outcome:** " + (d.outcome || "—") + "\n- **Index date:** " + (d.indexDate || "—") + "\n\n";
-          if (Array.isArray(d.timeline) && d.timeline.length) {
+          if (scheme.kept.length || scheme.dropped.length) {
             md += "Timeline (days relative to index):\n\n";
-            for (const w of d.timeline) md += "- " + (w.label || w.kind) + ": day " + w.startDay + " → " + w.endDay + (w.note ? " (" + w.note + ")" : "") + "\n";
+            // The windows the diagram drew, and the ones it could not — never the
+            // raw list, which prints "day null → 0" for a window the report's own
+            // caveats say was unusable.
+            for (const w of scheme.kept) {
+              const asm = assumedNote(w);
+              md += "- " + (w.label || w.kind) + ": day " + w.startDay + " → " + w.endDay +
+                (asm ? " — DURATION ASSUMED BY THE AI (“" + asm + "”), not stated in the text" : (w.note ? " (" + w.note + ")" : "")) + "\n";
+            }
+            for (const x of scheme.dropped) md += "- " + x.name + ": NOT USABLE — " + (x.why || "no start/end day") + "; this window was not drawn and is not part of the scheme\n";
             md += "\n";
           }
           const critList = (title, arr) => { md += "**" + title + ":** " + (Array.isArray(arr) && arr.length ? "\n" + arr.map((x) => "  - " + x).join("\n") : "none stated") + "\n\n"; };
@@ -920,7 +980,7 @@ const fwList = Object.values(FRAMEWORKS);
         try {
           await loadScript(DOCX);
           const D = window.docx;
-          const { data, counts, fw, byId, caveats, delivRows } = lastReport;
+          const { data, counts, fw, byId, caveats, delivRows, scheme } = lastReport;
           const date = new Date().toISOString().slice(0, 10);
           const FONT = "Calibri";
           const logo = await loadLogo();
@@ -951,9 +1011,10 @@ const fwList = Object.values(FRAMEWORKS);
             for (const c of caveats) children.push(para([text("•  " + c, { size: 18, color: "8A5A00" })]));
           }
 
-          const d = data.design;
+          const d = scheme ? data.design : null;
           if (d) {
             children.push(h1("Study design scheme"));
+            children.push(para([text("Drawn by this tool from the text. It is not evidence that the protocol contains a study-design diagram — see the verdict on that item. A window marked as assumed was not read from the protocol; the AI does not always declare an assumption, so an unmarked window is not a guarantee either.", { italics: true, size: 16, color: "777777" })]));
             const field = (k, v) => para([text(k + ": ", { bold: true }), text(v || "—")]);
             children.push(field("Design", d.designType));
             children.push(field("Population", d.population));
@@ -961,9 +1022,21 @@ const fwList = Object.values(FRAMEWORKS);
             children.push(field("Comparator", d.comparator));
             children.push(field("Outcome", d.outcome));
             children.push(field("Index date (time zero)", d.indexDate));
-            if (Array.isArray(d.timeline) && d.timeline.length) {
+            if (scheme.kept.length || scheme.dropped.length) {
               children.push(h2("Timeline (days relative to index)"));
-              for (const w of d.timeline) children.push(para([text("•  " + (w.label || w.kind) + ": day " + w.startDay + " → " + w.endDay + (w.note ? " (" + w.note + ")" : ""))]));
+              for (const w of scheme.kept) {
+                const asm = assumedNote(w);
+                children.push(para([
+                  text("•  " + (w.label || w.kind) + ": day " + w.startDay + " → " + w.endDay + (!asm && w.note ? " (" + w.note + ")" : "")),
+                  ...(asm ? [text("  — duration assumed by the AI (“" + asm + "”), not stated in the text", { color: "8A5A00", bold: true })] : []),
+                ]));
+              }
+              for (const x of scheme.dropped) {
+                children.push(para([
+                  text("•  " + x.name + ": "),
+                  text("NOT USABLE — " + (x.why || "no start/end day") + "; not drawn and not part of the scheme", { color: "DC2626", bold: true }),
+                ]));
+              }
             }
             const critBlock = (title, arr) => {
               children.push(h2(title));
