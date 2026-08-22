@@ -151,14 +151,14 @@ const ASSUMPTIONS = [
     t: "Repeat events in the same person must be independent",
     plain: "If one event makes the next one more likely, counting them all makes the study look more precise than it is.",
     precise: "The Poisson likelihood treats a person's events as independent given their exposure and age. For clustered outcomes — repeat falls in the same frail patient, repeat admissions for the same episode — that fails, and confidence intervals are too narrow.",
-    check: "Either restrict to the first event per person (Event handling, section 4) or justify independence explicitly. If the outcome can only happen once, first-event handling is the only coherent choice.",
+    check: "Either restrict to the first event per person (the Event handling field, under the case definition) or justify independence explicitly. If the outcome can only happen once, first-event handling is the only coherent choice.",
     cite: "Whitaker 2006",
   },
   {
     t: "Only time-invariant confounding is removed; time-varying confounding is not",
     plain: "Being your own control removes anything about you that does not change — genes, sex, lifelong habits. It does nothing about things that change while you are being observed.",
     precise: "Age and season are the two that change in every study and are handled by splitting person-time into age bands and calendar strata inside the same conditional Poisson model. Anything else that varies within a person over the observation period — an intercurrent illness, a concomitant drug, a change in care setting — remains a confounder unless it is modelled as time-varying.",
-    check: "Set age bands and season in section 9, and list any other time-varying covariate explicitly. If you leave season unadjusted for a seasonal outcome, state why.",
+    check: "Set age bands and season in the time-varying confounders section, and list any other time-varying covariate explicitly. If you leave season unadjusted for a seasonal outcome, state why.",
     cite: "Whitaker 2006; Petersen 2016",
   },
 ];
@@ -710,13 +710,28 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // Permissive regex so a heads-up appears even on a quick first draft.
       // SCCS still leans on Rx (exposure) + Dx (outcome) almost universally;
       // those two are added at the top.
+      // Every group but `labs` was wrapped `\b( … )\b`, which makes the TRAILING
+      // boundary mandatory and so kills every stem in it: `carcinom\b` cannot
+      // match "carcinoma", and executed in Chromium neither did "malignancy",
+      // "malignant", "tumours", "tumors", "pregnancy", "pregnant women",
+      // "gestational age", "births", "echocardiogram", "angiography",
+      // "radiology", "genomics" or "deaths". `labs` was the one group written
+      // without the trailing `\b` and the one group that worked. Same defect,
+      // same fix, as descriptive-analysis.astro.
+      //
+      // Two deliberate narrowings carried over from that file: "angio" matches
+      // nothing with the boundary and matches "angiotensin" — an entire drug
+      // class, and one an SCCS is very likely to be studying — without it, so
+      // the imaging cue is the narrower "angiograph"; and `leuk[ae]mia` covered
+      // "leukemia" and "leukamia", i.e. neither the British spelling nor
+      // anything else anyone writes, so it is `leuk[ae]?[ae]mia`.
       const FEATURE_TRIGGERS = {
-        labs:      /\b(hba1c|egfr|creatinine|bmi|blood\s*pressure|systolic|diastolic|ldl|hdl|cholesterol|glucose|albumin|hemoglobin|haemoglobin|inr|tsh|lipid|biochemical|biochemist|labora?tor[yi]|lab[s]?\b)/i,
-        mortality: /\b(mortality|all-?cause death|cv death|cardiovascular death|cause of death|died|fatal|death|survival)\b/i,
-        cancer:    /\b(cancer|carcinom|malignan|neoplasm|tumou?r|sarcoma|leuk[ae]mia|lymphoma|registr[yi].*cancer|cancer.*registr[yi])\b/i,
-        pregnancy: /\b(pregnan|birth|neonatal|gestation|trimester|maternal|fetal|foetal|infant)\b/i,
-        imaging:   /\b(imaging|mri|ct\s*scan|x-?ray|ultrasound|echocardio|angio|radiolog)\b/i,
-        genomics:  /\b(genomic|snp|gwas|biobank|genotype|exome|gene(?:tic)?\b)\b/i,
+        labs:      /\bhba1c|\begfr|\bcreatinine|\bbmi\b|\bblood\s*pressure|\bsystolic|\bdiastolic|\bldl\b|\bhdl\b|\bcholesterol|\bglucose|\balbumin|\bh[ae]?emoglobin|\binr\b|\btsh\b|\blipid|\bbiochemi|\blabora?tor[yi]|\blabs?\b/i,
+        mortality: /\bmortality|\ball-?cause\s+death|\bcv\s+death|\bcardiovascular\s+death|\bcause[\s-]of[\s-]death|\bdied\b|\bfatal|\bdeath|\bsurvival/i,
+        cancer:    /\bcancer|\bcarcinom|\bmalignan|\bneoplas|\btumou?r|\bsarcoma|\bleuk[ae]?[ae]mia|\blymphom|\bmyeloma|\boncolog/i,
+        pregnancy: /\bpregnan|\bbirth|\bneonat|\bgestation|\btrimester|\bmaternal|\bfo?etal|\binfant|\bmother/i,
+        imaging:   /\bimaging|\bmri\b|\bct\s*scan|\bx-?ray|\bultrasound|\bechocardio|\bangiograph|\bradiolog/i,
+        genomics:  /\bgenomic|\bsnp\b|\bgwas\b|\bbiobank|\bgenotyp|\bexome|\bgene\b|\bgenetic/i,
       };
       const FEATURE_TEXT_FIELDS = [
         "outcomeDef","outcomeCodes",
@@ -800,6 +815,43 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const bullets = (arr) => arr.length === 0 ? "_(none specified)_" : arr.map((l) => "- " + l).join("\n");
       const numbered = (arr) => arr.length === 0 ? "_(none)_" : arr.map((l, i) => (i + 1) + ". " + l).join("\n");
       const orFb = (s, fb) => (s && s.trim()) ? s : fb;
+      // What the abstract is allowed to say the analysis was.
+      //
+      // This used to be one hard-coded sentence — "a conditional Poisson
+      // (self-controlled) model contrasting exposed vs unexposed person-time
+      // within each case, pooled across sites" — printed whatever the form
+      // said. Under the active-comparator variant that sentence is false, and
+      // the variant's own option text says so: it promises "no reliance on a
+      // 'no-drug' baseline", so there is no unexposed time in the contrast at
+      // all. The sentence also outlived the primary model, the effect measure
+      // and the meta-analysis method, all three of which the user can change:
+      // typing "Conditional logistic regression" in section 10 left the
+      // abstract still claiming a conditional Poisson model.
+      //
+      // Each clause is now read from the form, and an unset field names the
+      // section it should have come from rather than being replaced by a
+      // plausible constant. An unrecognised variant returns "" and lets
+      // ProtocolCommon fall back to naming the pre-specified analysis, which
+      // is the one thing that stays true whatever the variant is.
+      const SCCS_CONTRAST = {
+        "standard":           "exposed against unexposed person-time within each case",
+        "extended-unexposed": "exposed against unexposed person-time within each case, augmented with never-exposed reference cases",
+        "active-comparator":  "person-time on the index drug against person-time on the comparator drug within each case",
+      };
+      const lcFirst = (t) => t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+      const analysisSentence = (s) => {
+        const contrast = SCCS_CONTRAST[s.sccsVariant];
+        if (!contrast) return "";
+        const model   = (s.primaryModel  || "").trim();
+        const measure = (s.effectMeasure || "").trim();
+        const pool    = ({ re: "random-effects (DerSimonian-Laird) meta-analysis", "re-reml": "random-effects (REML) meta-analysis", fe: "fixed-effects (inverse-variance) meta-analysis" })[s.metaMethod];
+        return [
+          model ? lcFirst(model) : "the primary model named in section 10",
+          "contrasting " + contrast,
+          measure ? "reporting " + lcFirst(measure) : "reporting the effect measure named in section 10",
+          pool ? "pooled across sites by " + pool : "pooled across sites as described in section 10",
+        ].join(", ");
+      };
       const pcOf = (s) => ({
         design: "self-controlled case series",
         tte: false,
@@ -808,7 +860,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         comparator: "",
         outcome: orFb(s.picoO, "(outcome)"),
         data: (s.sites && s.sites.length ? s.sites.length + " AsPEN data source(s)" : "multi-national AsPEN data sources"),
-        analysis: "a conditional Poisson (self-controlled) model contrasting exposed vs unexposed person-time within each case, pooled across sites",
+        analysis: analysisSentence(s),
         groupBy: "risk vs baseline period",
         skip: ["ethics"],
         amendments: s.amendments,
@@ -915,7 +967,7 @@ ${sccsVariantText}
 
 ${ASSUMPTIONS.map((a, i) => (i + 1) + ". **" + a.t + ".** " + a.plain + "\n\n   *Why it matters.* " + a.precise + "\n\n   *What we do about it.* " + a.check + " [" + a.cite + "]").join("\n\n")}
 
-${(() => { const c = sccsChecks(s); return c.length ? "**Outstanding issues in this draft**\n\n" + c.map((x) => "- " + (x.lvl === "stop" ? "**" + x.t + ".** " : x.t + ". ") + x.d).join("\n") : "_No assumption checks are outstanding for this draft._"; })()}
+${(() => { const c = sccsChecks(s); return c.length ? "**Outstanding issues in this draft**\n\n" + c.map((x) => "- " + (x.lvl === "stop" ? "**" + x.t + ".** " : x.t + ". ") + x.d).join("\n") : "_The automated checks found nothing outstanding. They test only what this form can see — the structure of the period strip, the censoring rule, the season setting and the wording of the outcome — and are not a substitute for your own judgement on assumptions 1-4 above._"; })()}
 
 ## 9. Time-varying confounders
 
@@ -1011,8 +1063,23 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       const parsePeriods = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
         const { name, raw } = splitRow(l); const r = readDays(raw); const n = name.toLowerCase();
         let kind = "custom";
-        if (/pre.*(risk|expos)/.test(n)) kind = "pre";
-        else if (/post.*(risk|expos)|washout/.test(n)) kind = "post";
+        // "Pretreatment" is what this page's own header tells the user to call
+        // this window — "separate a short pretreatment window (e.g., 14 days)" —
+        // and it did not match `/pre.*(risk|expos)/`, so typing it produced a
+        // "Custom period" and then the panel told the user, correctly by its own
+        // lights and falsely by theirs, that there was no pre-exposure window.
+        if (/pre.*(risk|expos)|pre-?treat/.test(n)) kind = "pre";
+        // A washout is not a post-exposure risk window. A post-risk window is a
+        // parameter the conditional Poisson model estimates; a washout is
+        // person-time removed from the likelihood so that carry-over does not
+        // contaminate the reference rate. Both were folded into one kind, so a
+        // segment the user labelled "Washout" was drawn in the colour the legend
+        // named "Post-exposure risk" — the figure's own key disagreeing with the
+        // label written on the bar. Which of the two the user means is not
+        // something this tool can infer, so it is drawn as its own thing and the
+        // checks panel asks for it to be stated.
+        else if (/washout|carry-?over/.test(n)) kind = "washout";
+        else if (/post.*(risk|expos)/.test(n)) kind = "post";
         else if (/exposure|risk\s*window|^risk\b/.test(n)) kind = "exposure";
         else if (/reference|baseline|control|unexpos/.test(n)) kind = "reference";
         return { name, days: r.days, ok: r.ok, empty: r.empty, raw: raw, kind };
@@ -1024,7 +1091,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         : r.empty ? "(no length given)"
         : "(not specified — “" + r.raw + "” could not be read as a number of days)";
       const badRows = (rows) => rows.filter((r) => !r.ok);
-      const PKIND = { reference: { c: "#94a3b8", l: "Reference (baseline)" }, exposure: { c: "#14b8a6", l: "Exposure risk" }, pre: { c: "#f59e0b", l: "Pre-exposure risk" }, post: { c: "#fb923c", l: "Post-exposure risk" }, custom: { c: "#8b5cf6", l: "Custom period" } };
+      const PKIND = { reference: { c: "#94a3b8", l: "Reference (baseline)" }, exposure: { c: "#14b8a6", l: "Exposure risk" }, pre: { c: "#f59e0b", l: "Pre-exposure risk" }, post: { c: "#fb923c", l: "Post-exposure risk" }, washout: { c: "#78716c", l: "Washout / carry-over" }, custom: { c: "#8b5cf6", l: "Custom period" } };
       const fmtD = (d) => { const a = Math.abs(d), s = d < 0 ? "−" : "+"; if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return s + Math.round(a / 30) + "mo"; return s + a + "d"; };
 
       let dragAxis = null;   // {lo, hi} pinned for the life of one edge drag
@@ -1112,7 +1179,12 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           svg += '<circle cx="' + xb + '" cy="' + (stripY + 13) + '" r="4.5" fill="#fff" stroke="' + meta.c + '" stroke-width="2" class="sccs-h" data-kind="seg" data-idx="' + i + '" style="cursor:ew-resize;touch-action:none"/>';
         });
         const diag = document.getElementById("diagram"); diag.innerHTML = svg + "</svg>";
-        document.getElementById("dlegend").innerHTML = ["reference", "exposure", "pre", "post"].map((k) => '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + PKIND[k].c + '"></span>' + PKIND[k].l + '</span>').join("") + '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Covariate look-back</span>' +
+        // Only show a key for the kinds actually on the strip, plus the four
+        // base ones — a legend entry for a colour that is not drawn is as
+        // confusing as a drawn colour with no entry, which is what "Washout"
+        // used to be.
+        const legendKinds = ["reference", "exposure", "pre", "post"].concat(["washout", "custom"].filter((k) => segs.some((x) => x.kind === k)));
+        document.getElementById("dlegend").innerHTML = legendKinds.map((k) => '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + PKIND[k].c + '"></span>' + PKIND[k].l + '</span>').join("") +'<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Covariate look-back</span>' +
           (badRows(covRows).length ? '<span class="text-rose-700 font-semibold">Not drawn: ' + badRows(covRows).map((r) => esc(r.name)).join(", ") + ' (no readable length)</span>' : "");
 
         const svgXof = (cx) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = cx; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
@@ -1179,17 +1251,43 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         if (periods.length && !periods.some((p) => p.kind === "pre")) {
           out.push({ lvl: "warn", t: "No pre-exposure risk window", d: "Assumption 1. Without a pre-exposure (pretreatment) window the strip gives you no way to see whether the event, or the illness behind it, changed the chance of being treated — the exposed period simply absorbs it. Add one from the chips under the period strip; the AsPEN antipsychotic-falls series used 14 days." });
         }
+        // §6 prints the period strip and the risk-window dropdown in the same
+        // table, and nothing has ever compared them: a strip saying "Exposure
+        // risk 30 d" was exported directly above "Risk window definition: Days
+        // 0-180 after exposure start". Both are statements of the estimand, and
+        // they cannot both be the estimand.
+        //
+        // Deliberately silent on the authored defaults ("Entire exposure
+        // episode" beside a 30-day segment): there the strip is a schematic of
+        // a typical episode rather than a contradiction, and a panel that shows
+        // a red mark on a page nobody has touched yet teaches people to ignore
+        // the panel.
+        const expSegs = periods.filter((p) => p.kind === "exposure");
+        const RW_DAYS = { "0-30": 30, "0-90": 90, "0-180": 180 };
+        const rwWant = RW_DAYS[s.riskWindowDef];
+        if (rwWant && expSegs.length && expSegs.every((p) => p.ok)) {
+          const have = expSegs.reduce((a, p) => a + p.days, 0);
+          if (have !== rwWant) {
+            out.push({ lvl: "stop", t: "The period strip and the risk-window definition disagree", d: "The risk-window definition says the risk window is days 0-" + rwWant + " after exposure start, which is " + rwWant + " days, but the strip gives the exposure risk period as " + have + " day(s)" + (expSegs.length > 1 ? " across " + expSegs.length + " exposure segments" : "") + ". The protocol exports both of these in the same table, so as it stands it specifies two different risk windows and therefore two different incidence rate ratios. Change whichever one is wrong; the tool will not pick for you." });
+          }
+        }
+        if (s.riskWindowDef === "early-late" && expSegs.length === 1) {
+          out.push({ lvl: "warn", t: "An early/late split needs more than one exposure segment", d: "The risk-window definition asks for the risk window to be split into early (0-14 d) and late (15+ d), but the strip has a single exposure risk period, so the exported protocol describes a split the design does not contain. Divide the exposure segment into two lines, e.g. Exposure risk (early) | 14 and Exposure risk (late) | 16." });
+        }
+        if (periods.some((p) => p.kind === "washout")) {
+          out.push({ lvl: "warn", t: "Say what happens to the washout time", d: "The strip contains a washout / carry-over period. That is not the same thing as a post-exposure risk window: a post-risk window is a parameter the conditional Poisson model estimates, whereas washout time is normally removed from the likelihood altogether so that carry-over does not contaminate the reference rate. This tool cannot tell which you mean, and the difference changes both the reference rate and the degrees of freedom, so state it in the baseline (control) period definition." });
+        }
         if (periods.length && !periods.some((p) => p.kind === "reference")) {
-          out.push({ lvl: "stop", t: "No reference (baseline) period", d: "The strip has no unexposed reference time, so there is nothing for the risk window to be a rate ratio against. Add a Reference period, or switch to the active-comparator variant in section 6, where the comparator drug's time supplies the baseline." });
+          out.push({ lvl: "stop", t: "No reference (baseline) period", d: "The strip has no unexposed reference time, so there is nothing for the risk window to be a rate ratio against. Add a Reference period, or switch to the active-comparator variant in the design-variant section, where the comparator drug's time supplies the baseline." });
         }
         const censorsAtDeath = s.obsEnd === "death" || s.obsEnd === "earliest-of";
         if (censorsAtDeath && FATAL_RX.test(outcomeBlob)) {
-          out.push({ lvl: "stop", t: "The outcome looks fatal, and observation ends at death", d: "Assumption 2. Observation time then ends because the event happened, which is exactly the dependence the standard SCCS likelihood forbids; when the outcome is death the standard model does not apply at all. Restrict to non-fatal events, or use a method for event-dependent observation periods (Farrington et al, JASA 2011), and say which in section 8." });
+          out.push({ lvl: "stop", t: "The outcome looks fatal, and observation ends at death", d: "Assumption 2. Observation time then ends because the event happened, which is exactly the dependence the standard SCCS likelihood forbids; when the outcome is death the standard model does not apply at all. Restrict to non-fatal events, or use a method for event-dependent observation periods (Farrington et al, JASA 2011), and say which in the design assumptions section." });
         } else if (censorsAtDeath && HIGH_MORTALITY_RX.test(outcomeBlob)) {
           out.push({ lvl: "warn", t: "This outcome may raise short-term mortality, and observation ends at death", d: "Assumption 2. Case-fatal events shorten the observation period for the people who have them, which biases the standard SCCS. Report the case-fatality of the outcome in your data; if it is appreciable, either restrict to survivors of the index event or use a method for event-dependent observation periods." });
         }
         if (s.eventHandling !== "first" && FATAL_RX.test(outcomeBlob)) {
-          out.push({ lvl: "warn", t: "Recurrent-event handling with an outcome that can happen only once", d: "Assumption 3. Event handling (section 4) is set to all events per person, but the outcome as written cannot recur. Set it to first event only." });
+          out.push({ lvl: "warn", t: "Recurrent-event handling with an outcome that can happen only once", d: "Assumption 3. The Event handling field is set to all events per person, but the outcome as written cannot recur. Set it to first event only." });
         }
         if (s.seasonAdj === "none") {
           out.push({ lvl: "info", t: "Season not adjusted", d: "Assumption 4. Seasonality is a within-person time-varying confounder that the self-controlled design does not remove. If the outcome or the prescribing has any seasonal pattern, adjust for calendar month; if you leave it out, state why in the protocol." });
@@ -1347,13 +1445,28 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           "1a": "Multi-national self-controlled case series (SCCS).",
           "3": "Among " + (s.picoP || "(population)") + ", does " + (s.picoI || "(exposure)") + " change the rate of " + (s.picoO || "(outcome)") + "? Estimated within-person.",
           "4": "Self-controlled case series. Each case acts as their own control, so all time-invariant between-person confounding is removed by design.",
-          "5": "AsPEN sites: " + sitesPlain + ". Observation, exposure-risk and pre-exposure windows as defined in the protocol.",
+          // This used to end "Observation, exposure-risk and pre-exposure
+          // windows as defined in the protocol" whatever the strip contained —
+          // so a protocol carrying the outstanding issue "No pre-exposure risk
+          // window" still told STROBE item 5 that its pre-exposure windows were
+          // defined. Name the segments that are actually there.
+          "5": "AsPEN sites: " + sitesPlain + ". Study period: " + (s.studyCalendar || "(not specified)") + ". Observation period: " +
+               (({ "age-cohort": "later of the calendar start of the study period or cohort entry age", "study-start": "calendar start of the study period", "age-onset": "age at first eligibility", enrolment: "date of database registration" })[s.obsStart] || "(not specified)") + " to " +
+               (({ "earliest-of": "the earliest of end of study period, death or disenrolment", "study-end": "the calendar end of the study period", death: "death", disenrol: "disenrolment from the database" })[s.obsEnd] || "(not specified)") + ". Period strip: " +
+               (parsePeriods(s.periods).map((p) => p.name + " " + rowDays(p)).join(" → ") || "(not defined)") + ".",
           "6": "Cases experiencing the outcome during the observation period. Case definition: " + (s.outcomeDef || "(case definition)") + " (" + (s.outcomeCodes || "codes TBD") + "). Event handling: " + (s.eventHandling === "first" ? "first event only" : "all events (recurrent)") + ".",
           "7": "Exposure: " + (s.picoI || s.exposureName || "(exposure)") + ". Outcome: " + (s.picoO || "(outcome)") + " (" + (s.outcomeCodes || "codes TBD") + "). Time-varying covariates:\n" + bul(tvc),
           "8": "Routinely-collected health data from the contributing databases (" + sitesPlain + "). Outcomes ascertained by the code set " + (s.outcomeCodes || "(codes)") + ".",
           "9": "The self-controlled design removes all fixed between-person confounders. Residual (time-varying) bias addressed by pre-specified sensitivity analyses:\n" + bul(sens),
           "11": "Age modelled as a time-varying covariate in " + ageTxt + " bands; seasonality: " + seasonTxt + ".",
-          "12": "Conditional Poisson regression for the within-person incidence rate ratio (IRR), with age and season as time-varying covariates. Site-specific IRRs pooled by " + metaTxt + " meta-analysis (report I², τ²). Subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
+          // Item 11 above reports the season setting the user chose; this item
+          // used to assert "with age and season as time-varying covariates"
+          // regardless, so with season set to None the two adjacent rows of one
+          // table contradicted each other. It also named a conditional Poisson
+          // model even when section 10's primary model said otherwise.
+          "12": (s.primaryModel || "Conditional Poisson regression with offset for log person-time") + " for the within-person " + (s.effectMeasure || "incidence rate ratio (IRR)") +
+                ". Age modelled as a time-varying covariate in " + ageTxt + " bands; seasonality: " + seasonTxt +
+                ". Site-specific estimates pooled by " + metaTxt + " meta-analysis (report I², τ²). Subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
           "17": "Pre-specified subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
           "19": "The within-person design controls time-invariant confounding but not time-varying confounders; it assumes event occurrence does not alter subsequent exposure probability, does not curtail the observation period (the extreme violation being a fatal outcome), and that repeat events within a person are independent; outcome misclassification is possible." + (() => { const c = sccsChecks(s); return c.length ? " Outstanding assumption checks in the current draft: " + c.map((x) => x.t + " — " + x.d).join(" ") : ""; })(),
           "21": "Results generalise to the source populations of the contributing AsPEN databases: " + sitesPlain + ".",
@@ -1506,7 +1619,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           children.push(h2("Outstanding issues in this draft"));
           openChecks.forEach((x) => children.push(bullet(x.t + ". " + x.d)));
         } else {
-          children.push(para("No assumption checks are outstanding for this draft."));
+          children.push(para("The automated checks found nothing outstanding. They test only what the form can see — the structure of the period strip, the censoring rule, the season setting and the wording of the outcome — and are not a substitute for the investigator's judgement on assumptions 1-4 above."));
         }
 
         children.push(h1("9. Time-varying confounders"));
