@@ -77,14 +77,22 @@ const SENSITIVITY = [
           <li><strong>Cumulative (survivor) sampling</strong> — controls are drawn from those still outcome-free at the
             end of follow-up. The odds ratio approximates the risk ratio <strong>only if the outcome is rare</strong>;
             otherwise it overstates it.</li>
-          <li><strong>Case-cohort (case-base) sampling</strong> — controls are a random subcohort drawn at baseline.
-            The odds ratio estimates the <strong>risk ratio</strong>, again with no rare-disease assumption, and one
-            subcohort can serve several outcomes. It needs an analysis that accounts for subcohort members appearing
-            in several risk sets (weighted estimation with a robust variance), not a plain matched-set analysis.</li>
+          <li><strong>Case-cohort (case-base) sampling</strong> — controls are a random subcohort drawn at baseline,
+            and one subcohort can serve several outcomes. This scheme names <em>two</em> estimands and you have to say
+            which is yours. The cross-product against the subcohort estimates the <strong>risk ratio</strong> with no
+            rare-disease assumption — but over a <em>fixed cohort with complete follow-up</em>, which censoring and
+            competing risks break. The usual analysis where follow-up is incomplete is Prentice-weighted
+            (pseudo-likelihood) estimation, which is a weighted Cox partial likelihood and therefore estimates a
+            <strong>hazard ratio</strong>; its robust variance is needed because the cases and the subcohort overlap.
+            Either is defensible. Reporting one under the other's name is not.</li>
         </ul>
         <p class="mt-2">
-          Knol et al (2008) found that 90% of published case-control studies reported an "odds ratio" when their
-          sampling scheme entitled them to name a rate ratio or a risk ratio. Say which one you are estimating.
+          Knol et al (2008) surveyed 150 published case-control studies and reported that 90% gave only an "odds
+          ratio", though most of the designs they used estimated a rate ratio or a risk ratio. Note that the
+          entitlement was usually conditional — of the 125 studies with incident cases, 57 needed a stable source
+          population for the rate-ratio reading and 16 of the 17 risk-ratio cases needed the rare-disease assumption,
+          while only 48 needed no assumption at all, by virtue of time-matching or concurrent sampling. So say which
+          measure you are estimating <em>and</em> what it rests on.
         </p>
       </details>
       <a class="mt-4 inline-block text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>← All designs</a>
@@ -116,14 +124,14 @@ const SENSITIVITY = [
             <div>
               <div class="flex items-center justify-between">
                 <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Exposure</span>
-                <button type="button" data-open-library data-category="exposures" data-target-name="exposure" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
+                <button type="button" data-open-library data-category="exposures" data-target-name="exposure" data-target-def="expdef" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
               </div>
               <input name="exposure" placeholder="e.g. NSAID dispensing" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
             </div>
             <div>
               <div class="flex items-center justify-between">
                 <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Outcome (defines cases)</span>
-                <button type="button" data-open-library data-category="outcomes" data-target-name="outcome" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
+                <button type="button" data-open-library data-category="outcomes" data-target-name="outcome" data-target-def="casedef" class="text-[11px] text-brand-700 font-semibold hover:underline">📚</button>
               </div>
               <input name="outcome" placeholder="e.g. Hospitalised upper-GI bleeding" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
             </div>
@@ -339,8 +347,8 @@ const SENSITIVITY = [
       casecohort: {
         short: "Case-cohort (case-base)",
         long: "case-cohort (case-base) sampling — controls are a random subcohort of the source population drawn at baseline, so one subcohort can serve several outcomes",
-        or: "the **risk ratio** of the full cohort, with no rare-disease assumption",
-        note: { level: "warn", msg: "Case-cohort (case-base) sampling: the odds ratio relative to the subcohort estimates the RISK RATIO with no rare-disease assumption — but the subcohort contains people who later become cases and who contribute to several risk sets, so it needs weighted (pseudo-likelihood) estimation with a robust variance, not a plain matched or unmatched logistic fit." },
+        or: "the **risk ratio** of the full cohort with no rare-disease assumption — but only over a fixed cohort with complete follow-up. Where follow-up is censored, the weighted (Prentice) analysis is a weighted Cox partial likelihood and estimates a **hazard ratio** instead; the two must not be reported under one name",
+        note: { level: "warn", msg: "Case-cohort (case-base) sampling names two different estimands, and you must say which one is yours. (a) The cross-product against the subcohort estimates the RISK RATIO with no rare-disease assumption — valid over a fixed cohort with complete follow-up, which censoring and competing risks break. (b) Prentice-weighted (pseudo-likelihood) estimation is a weighted Cox partial likelihood, so it estimates a HAZARD RATIO under proportional hazards; its robust variance is needed because the cases and the subcohort overlap. Either is defensible; reporting one under the other's name is not." },
       },
     };
     // A saved draft or a ?seed= link carrying a value this <select> no longer
@@ -355,17 +363,35 @@ const SENSITIVITY = [
     const SAMPLING_DRIFT = [...document.querySelectorAll('select[name="sampling"] option')]
       .map((o) => o.value).filter((v) => !SAMPLING[v]);
 
-    const analysisText = (s) => s.sampling === "casecohort"
-      ? "a case-cohort estimator — weighted (pseudo-likelihood) estimation with a robust variance, because subcohort members contribute to several risk sets and an unweighted logistic fit would misstate the precision"
-      : (isMatched(s)
+    // The analysis has to follow the sampling scheme, not only the matching
+    // ticks. Incidence-density sampling draws each control from the risk set at
+    // its case's index date, so the data are time-matched by construction: the
+    // risk sets exist whether or not "Index / calendar date" was ticked, and it
+    // is conditioning on them that buys the rate-ratio reading with no
+    // rare-disease assumption. Routing on isMatched() alone meant unticking the
+    // three default factors — one gesture — prescribed an unconditional fit in
+    // section 8 while the panel above it still promised the incidence-rate
+    // ratio in green.
+    const analysisText = (s) => {
+      if (s.sampling === "casecohort") return "a case-cohort estimator — weighted (Prentice pseudo-likelihood) estimation with a robust variance, the robust variance being needed because the cases and the subcohort overlap. Note that this is a weighted Cox partial likelihood and so estimates a hazard ratio; the case-base cross-product against the subcohort, which estimates a risk ratio over a fixed cohort, is a different analysis. State which of the two is the primary one";
+      const extra = mergeList(s.matchingPick, s.matchingCustom);
+      if (s.sampling === "riskset") return "conditional logistic regression, conditioning on the risk sets that incidence-density sampling creates by matching each case to controls at its index date"
+        + (extra.length ? ", and on the further matching factors listed in section 5" : " (the sets exist even though no further matching factor was chosen)");
+      return isMatched(s)
         ? "conditional logistic regression (conditioning on the matched sets)"
-        : "unconditional logistic regression (adjusting for the covariates)");
+        : "unconditional logistic regression (adjusting for the covariates)";
+    };
 
-    // A matching factor is constant inside its matched set, so its coefficient
-    // is not identified — this page says so twice, in the checks panel and in
-    // section 8, and never checked whether the user had done it anyway. Only an
-    // exact match after normalising is flagged: a missed catch is much cheaper
-    // here than accusing someone of a mistake they did not make.
+    // Under INDIVIDUAL matching a matching factor is constant inside its matched
+    // set, so its coefficient is not identified — this page says so twice and
+    // never checked whether the user had done it anyway. Under FREQUENCY
+    // (category) matching the opposite is true: the correct analysis is an
+    // unconditional fit that does include the matching factors, so this is
+    // reported as a fork to resolve rather than as an error. The form cannot
+    // tell the two kinds of matching apart, and inventing a control to ask is
+    // not this run's business. Only an exact match after normalising is flagged:
+    // a missed catch is much cheaper than accusing someone of a mistake they
+    // did not make.
     const normFactor = (x) => String(x).toLowerCase().replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
     const matchedCovariates = (s) => {
       if (!isMatched(s)) return [];
@@ -385,9 +411,12 @@ const SENSITIVITY = [
       const match = mergeList(s.matchingPick, s.matchingCustom);
       if (s.sampling === "casecohort" && match.length) out.push(
         "This draft is described as a matched case-control study and analysed as a case-cohort study, and it cannot be both. A case-cohort subcohort is drawn once at baseline, so there are no case-specific matched sets to condition on and conditional logistic regression does not apply — yet " + match.length + " individual matching factor(s) are ticked (" + match.join("; ") + "). Either drop the matching factors and adjust for them in the weighted model, or switch to incidence-density (risk-set) sampling, which is what matching on index date actually implements.");
-      const dup = matchedCovariates(s);
-      if (dup.length) out.push(
-        "Section 8 states that the matching factors are not additionally entered as covariates, and section 7 lists " + dup.length + " of them as covariates (" + dup.join("; ") + "). Within a matched set a matching factor is constant, so its coefficient is not identified. Remove it from the covariate list, or stop matching on it.");
+      const nc = readCount(s.nControls);
+      if (nc.ok && nc.n < 1 && s.sampling !== "casecohort") out.push(
+        "Controls per case is " + nc.n + ", so this draft specifies a case-control study with no controls — there is nothing for the cases to be compared with, and no odds ratio can be computed. Commonly up to 4 per case; beyond about 4:1 the precision gain is small.");
+      const cvb = readDays(s.covlookback), covs = mergeList(s.covariatesPick, s.covariatesCustom);
+      if (cvb.ok && cvb.n <= 0 && covs.length) out.push(
+        "The covariate look-back is 0 days, and section 7 lists " + covs.length + " covariate(s) to adjust for. A zero-day window measures nothing, so those covariates cannot be ascertained as written and the adjusted estimate section 8 promises cannot be produced.");
       return out;
     };
     const conflictMd = (s) => {
@@ -481,7 +510,7 @@ ${or(s.expdef, "_(not yet specified — e.g. at least one qualifying dispensing 
 ${(covs.length ? covs : ["(none specified)"]).map((l) => "- " + l).join("\n")}
 
 ## 8. Estimand and analysis
-The estimand is the effect of ${E} on ${O}. It is estimated as the **exposure odds ratio** (95% CI) by ${analysisText(s)}, and — because of the control-sampling scheme above — that odds ratio estimates ${orMeans(s.sampling)}. It is reported under that name, not merely as "an odds ratio" (Knol 2008; Labrecque 2021). A crude and a covariate-adjusted estimate are both reported.${isMatched(s) && s.sampling !== "casecohort" ? " Because the design is matched, the matching factors are **not** additionally entered as covariates." : ""}
+The estimand is the effect of ${E} on ${O}. It is estimated as the **exposure odds ratio** (95% CI) by ${analysisText(s)}, and — because of the control-sampling scheme above — that odds ratio estimates ${orMeans(s.sampling)}. It is reported under that name, not merely as "an odds ratio" (Knol 2008; Labrecque 2021). A crude and a covariate-adjusted estimate are both reported.${isMatched(s) && s.sampling !== "casecohort" ? " Matching was **individual** (person-to-person), so the matching factors are **not** additionally entered as covariates: within a matched set they are constant and the coefficient is not identified. If matching was instead by **frequency** — fixing the distribution of a category across the controls rather than pairing individuals — this is reversed: the analysis is an unconditional fit that **does** include the matching factors as covariates. State which was done." : ""}
 
 ## 9. Subgroup analyses
 ${(mergeList(s.subgroupsPick, s.subgroupsCustom).length ? mergeList(s.subgroupsPick, s.subgroupsCustom) : ["(none pre-specified)"]).map((l) => "- " + l).join("\n")}
@@ -516,8 +545,13 @@ ${window.PC.tailMd(pcOf(s))}
       else checks.push({ level: "error", msg: "No control-sampling scheme is set, so the protocol cannot say what the odds ratio estimates and declines to name a rate ratio or a risk ratio. Choose one in section 3. (If you arrived by a saved draft or a shared link, it may have carried a scheme this page no longer offers.)" });
 
       if (s.sampling === "casecohort" && isMatched(s)) { /* said once, by conflicts() above */ }
-      else if (isMatched(s)) checks.push({ level: "info", msg: "Matched design → conditional logistic regression, conditioning on the matched sets. Do NOT additionally enter the matching factors as covariates: within a matched set they are constant and the coefficient is not identified." });
-      else checks.push({ level: "info", msg: "Unmatched design → unconditional logistic regression, adjusting for the confounders you listed." });
+      else if (isMatched(s)) checks.push({ level: "info", msg: "Individually matched design → conditional logistic regression, conditioning on the matched sets, and the matching factors are then NOT additionally entered as covariates: within a matched set they are constant and the coefficient is not identified. This holds for person-to-person matching. If you matched by FREQUENCY (fixed the distribution of a category across controls, rather than pairing individuals), the correct analysis is the opposite — an unconditional fit that DOES include the matching factors as covariates. Say in section 8 which kind of matching you did." });
+      else if (s.sampling !== "riskset") checks.push({ level: "info", msg: "Unmatched design → unconditional logistic regression, adjusting for the confounders you listed." });
+      if (s.sampling === "riskset" && !isMatched(s)) checks.push({ level: "info", msg: "No matching factor is ticked, but incidence-density sampling draws each control from those still at risk at its case's index date, so the data are time-matched by construction. The analysis conditions on those risk sets — that is what buys the rate-ratio reading with no rare-disease assumption. An unconditional fit that ignores them does not recover the rate ratio unless calendar and follow-up time are modelled explicitly." });
+      // Two of the six factors offered proxy prescribing behaviour rather than
+      // patient risk, and prescribing behaviour is a determinant of exposure.
+      const OVERMATCH = mergeList(s.matchingPick, s.matchingCustom).filter((f) => /region|site|practice|physician|prescrib|hospital|clinic|pharmac/i.test(f));
+      if (OVERMATCH.length) checks.push({ level: "warn", msg: "Overmatching: " + OVERMATCH.join("; ") + " — matching on the care setting matches partly on a determinant of the exposure itself, because it is where prescribing habit lives. If it is not also a cause of the outcome, matching on it costs precision without removing confounding; if it lies on the path from exposure to outcome, matching on it biases the estimate towards the null. Match on it only if you can argue it is a confounder, and say so." });
 
       if (s.sampling === "casecohort") checks.push({ level: "info", msg: "'Controls per case' is a risk-set concept. In a case-cohort study the subcohort is a fixed random sample of the cohort (a sampling fraction), so state the fraction or the subcohort size rather than a ratio per case." });
 
@@ -532,9 +566,9 @@ ${window.PC.tailMd(pcOf(s))}
         else checks.push({ level: "warn", msg: label + ": “" + r.raw + "” could not be read as a whole " + (isWin ? "number of days" : "number") + ", so " + surfaces + " decline to state one" + (isWin ? " and the figure omits the window rather than drawing a guessed one" : "") + ". Write digits — " + (isWin ? "365, or 365 days" : "4") + "; not “1e3”, “1,000”, “90.5” or “about a year”." });
       });
       if (lbR.ok && lb <= 0) checks.push({ level: "warn", msg: "Exposure look-back is 0 days — no window means no exposure can be ascertained. Set the window before the index date over which exposure is measured." });
-      if (cvbR.ok && cvb <= 0 && mergeList(s.covariatesPick, s.covariatesCustom).length) checks.push({ level: "warn", msg: "Covariate look-back is 0 days, but section 7 lists " + mergeList(s.covariatesPick, s.covariatesCustom).length + " covariate(s). A zero-day window measures nothing, so those covariates cannot be ascertained as written." });
+      const dupCov = matchedCovariates(s);
+      if (dupCov.length) checks.push({ level: "warn", msg: "Section 7 lists " + dupCov.length + " covariate(s) that section 5 also matches on (" + dupCov.join("; ") + "). Which of the two is right depends on how you matched, and this form cannot tell: under individual matching they must come OUT of the covariate list (constant within the set, coefficient not identified); under frequency matching they must stay IN. Decide which, and make sections 5, 7 and 8 agree." });
       if (lbR.ok && cvbR.ok && lb > 0 && cvb > 0 && cvb < lb) checks.push({ level: "warn", msg: "The covariate look-back (" + cvb + " d) is shorter than the exposure look-back (" + lb + " d), so some confounders are measured over a narrower history than the exposure they are meant to control. Usually the covariate window should be at least as long." });
-      if (ncR.ok && ncR.n < 1) checks.push({ level: "warn", msg: "Set at least 1 control per case (commonly up to 4; beyond about 4:1 the precision gain is small)." });
 
       checks.push({ level: "info", msg: "Ascertain exposure by the same procedure, from the same data, over the same window relative to index, for cases and for controls. Differential ascertainment is the classical case-control bias and secondary data does not make it go away." });
       checks.push({ level: "info", msg: "Protopathic bias: if early, undiagnosed symptoms of the outcome prompt the exposure, a look-back that runs right up to the index date will read that as causation. A lag (excluding exposure in the days immediately before index) is the standard probe — it is in the sensitivity list." });
@@ -660,7 +694,16 @@ ${window.PC.tailMd(pcOf(s))}
       children.push(para("In plain terms: we identify everyone in " + P + " who developed " + O + ", take a comparable sample of people who did not, and look backwards to see who had " + E + ". Sampling rather than following the whole population is what makes the design efficient when " + O + " is uncommon."));
       children.push(para("Precisely: the design samples the study base — the person-time of the source population that gave rise to the cases. The controls are a sample of that denominator, not a healthy comparison group: a control who had developed " + O + " would have been captured as one of our cases. Exposure is ascertained identically in cases and controls, and only from the window before the index date."));
 
-      children.push(h1("2. Design summary"));
+      // The Markdown has carried the PICO question as section 2 all along and
+      // the Word file had no equivalent anywhere — the one sentence a reviewer
+      // looks for first existed only in the format nobody sends. The section
+      // numbers below were one behind the Markdown for the same reason, so
+      // "as stated in section 5" meant two different sections depending on
+      // which export the reader had.
+      children.push(h1("2. Question"));
+      children.push(para("Among " + P + ", does " + E + " affect the incidence of " + O + "?"));
+
+      children.push(h1("3. Study design"));
       children.push(labelTable([
         ["Design", (isMatched(s) ? "Matched " : "") + "case-control study"],
         ["Data source(s)", or(s.data, "-")],
@@ -689,27 +732,27 @@ ${window.PC.tailMd(pcOf(s))}
       figParas.forEach((c) => children.push(c));
       if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
 
-      children.push(h1("3. Cases and index date"));
+      children.push(h1("4. Cases and index date"));
       children.push(p([text("Case definition. ", { bold: true }), text(or(s.casedef, "(not yet specified — define the outcome that identifies cases, with the code set and care setting)"))]));
       children.push(p([text("Index date. ", { bold: true }), text(or(s.indexdate, "(not yet specified — the case's event date, and the rule that assigns the same date to their controls)"))]));
 
-      children.push(h1("4. Control selection" + (isMatched(s) ? " and matching" : "")));
+      children.push(h1("5. Control selection" + (isMatched(s) ? " and matching" : "")));
       children.push(p([text("The principle. ", { bold: true }), text("Controls must represent the source population — the person-time — that produced the cases. If a sampled control had developed " + O + ", they would have been ascertained as a case in this study. Failure of this condition biases the estimate whatever the analysis does about it (Wacholder 1992; Vandenbroucke & Pearce 2012).")]));
       children.push(p([text("The scheme. ", { bold: true }), text("Controls are selected by " + samplingText(s.sampling) + ". Number of controls: " + controlsText(s).replace(/\*\*/g, "") + "." + (isMatched(s) ? " Matched on: " + match.join("; ") + "." : " No matching; confounders adjusted in the analysis."))]));
       children.push(p([text("What this buys. ", { bold: true }), text("Under this scheme the exposure odds ratio estimates " + orMeansPlain(s.sampling) + ".")]));
 
-      children.push(h1("5. Exposure ascertainment"));
+      children.push(h1("6. Exposure ascertainment"));
       children.push(para(or(s.expdef, "(not yet specified — e.g. at least one qualifying dispensing record in the ascertainment window before the index date)") + " Exposure window: " + daysText(s.lookback) + " before index; covariate window: " + daysText(s.covlookback) + " before index. Exposure is ascertained by the same procedure, from the same data, over the same window relative to index, for cases and for controls."));
 
-      children.push(h1("6. Covariates"));
+      children.push(h1("7. Covariates"));
       (covs.length ? covs : ["(none specified)"]).forEach((l) => children.push(bullet(l)));
 
-      children.push(h1("7. Estimand and analysis"));
-      children.push(para("The estimand is the effect of " + E + " on " + O + ". It is estimated as the exposure odds ratio (95% CI) by " + analysisText(s) + ", and — because of the control-sampling scheme above — that odds ratio estimates " + orMeansPlain(s.sampling) + ". It is reported under that name, not merely as 'an odds ratio' (Knol 2008; Labrecque 2021). Crude and covariate-adjusted estimates are both reported." + (isMatched(s) && s.sampling !== "casecohort" ? " Because the design is matched, the matching factors are not additionally entered as covariates." : "")));
+      children.push(h1("8. Estimand and analysis"));
+      children.push(para("The estimand is the effect of " + E + " on " + O + ". It is estimated as the exposure odds ratio (95% CI) by " + analysisText(s) + ", and — because of the control-sampling scheme above — that odds ratio estimates " + orMeansPlain(s.sampling) + ". It is reported under that name, not merely as 'an odds ratio' (Knol 2008; Labrecque 2021). Crude and covariate-adjusted estimates are both reported." + (isMatched(s) && s.sampling !== "casecohort" ? " Matching was individual (person-to-person), so the matching factors are not additionally entered as covariates: within a matched set they are constant and the coefficient is not identified. If matching was instead by frequency — fixing the distribution of a category across the controls rather than pairing individuals — this is reversed: the analysis is an unconditional fit that does include the matching factors as covariates. State which was done." : "")));
 
-      children.push(h1("8. Subgroup analyses"));
+      children.push(h1("9. Subgroup analyses"));
       (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
-      children.push(h1("9. Sensitivity analyses"));
+      children.push(h1("10. Sensitivity analyses"));
       (sens.length ? sens : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
 
       window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
