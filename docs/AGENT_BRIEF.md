@@ -294,3 +294,82 @@ Still open, examined and deliberately left this run:
   that cite by narrative ("Shao SC et al, Clinical Epidemiology series";
   "Lai EC et al, BMJ Open 2021/2023") are not checkable as written and should be
   resolved to specific records.
+
+### Found 2026-08-22 by a third run, overlapping the second
+
+Two agents worked `active-comparator-new-user.astro` at the same time and found
+much the same things; the section above is the second run's, this is what was
+left after it. **If you are one of two runs, check `git log origin/main` before
+you start and again before you commit** — a full rebase conflict across nine
+files is the cheap outcome; silently reverting someone's fix is the expensive
+one. The phone-width overflow that section closes was re-measured here on
+`origin/main` and is genuinely gone: ACNU, case-crossover, SCCS and
+descriptive-analysis all report 390/390 at a 390px viewport.
+
+Fixed by this run: the PS-performance sentence no longer promises a c-statistic
+for the four methods that fit no propensity score (TMLE is not one of them — it
+does fit a PS, so only the before/after-weighting half was wrong there); "Until
+end of database availability (no cap)" is recognised instead of drawing a flat
+five-year bar and scolding the user about the tool's own dropdown option; the
+censoring list and the grace period now name the analysis they govern, so an ITT
+protocol stops specifying as-treated censoring unlabelled; three effect-measure
+maps stopped falling back to "Hazard ratio".
+
+Still open, examined and deliberately left:
+
+- **Seven of the nine builders never call `PC.mountAmendments(form)`** — only
+  SCCS and case-crossover do. So there is no amendments editor on those pages,
+  the hidden field can only ever be empty, and `amendmentIntro` therefore emits
+  its zero-row branch every time: "This is the original version of the protocol
+  (v3.0 · 2026-08-01); no amendments have been made. Any later change is
+  recorded here…" — a positive claim about the study's history that the tool
+  cannot check, next to a version string contradicting it, followed by a promise
+  of a mechanism the page does not have. Both reviewers converged on this as the
+  sharpest thing left in the file. There is a category difference between "no
+  amendments have been made" (only the investigator can say that) and "no
+  amendments have been recorded in this protocol" (the tool can verify that),
+  and HARPER item 3 exists to keep them apart. Note the trap: the comment at the
+  top of `ProtocolCommon.astro` says "ITEM 3 IS SATISFIED WITH NO BUILDER CHANGE
+  AT ALL", which is true of the *sentence* and false of the *editor* — it is
+  what made a reviewer pass this on the first read. Mounting the editor is the
+  documented three-line change; whether that counts as a feature is Daniel's
+  call, but the sentence should not make a claim the page cannot support.
+- **The indication "📚 Pick from library" button silently drops the code set.**
+  It sets `data-target-name` but not `data-target-codes`, unlike the exposure,
+  comparator and outcome buttons, so `fill("codes", …)` returns early. Picking
+  "Type 2 diabetes (T2DM)" writes the bare phenotype name into a field whose
+  placeholder is `T2DM (ICD-10 E11.x) ever before index`, and the validated
+  codes are gone. The user believes they took a validated definition.
+- **`rowsJoin` destroys unreadable per-covariate lines.** Clicking a covariate
+  chip or dragging a look-back handle rewrites the entire textarea from parsed
+  rows, and any line the parser could not read comes back as `Name | 0` —
+  "Comedications | one year" is gone, and the textarea was the only copy. The
+  read path learnt "unreadable ≠ zero"; the write path did not.
+- **No check compares two fields.** A 730-day washout preset chip sits beside a
+  default-ticked "continuous enrolment ≥365 d" inclusion criterion — you cannot
+  establish 730 days of non-use with 365 days of observable data, and the tool
+  nudges you into it. A grace period can exceed the maximum follow-up.
+  `maxFollowupCustom = "0 days"` exports a cohort study with zero person-time,
+  and the figure quietly drops the follow-up bar because a zero-width window is
+  filtered out. Each of these should refuse, visibly.
+- **Competing risks are never mentioned** — no `competing`, `Fine-Gray`,
+  `subdistribution` or `cause-specific` anywhere — while "Death from a
+  non-outcome cause" is a default-ticked censoring rule, the default effect
+  measure is a Cox HR, and the planned outputs promise "Kaplan–Meier /
+  cumulative-incidence curves" without saying which. The reviewers split: the
+  methodologist called it a reject-and-resubmit omission for an elderly cohort;
+  the applied analyst pointed out that censoring at competing death with a Cox
+  model *is* the cause-specific hazard, a defensible primary analysis, so
+  nothing false is printed and it is a missing feature rather than a silent
+  failure. Recorded, not ranked highly.
+- **Three phenotype-library citations challenged, none verifiable here.** The
+  "Dementia (incident)" entry attributes PMID 40437158 to "Tsai DHT et al CNS
+  Drugs 2025"; a search record suggests it is Luo H et al, *Communications
+  Medicine* 2025;5:203, with no Tsai authorship. The self-harm entry cites PMID
+  39241791 as validation for ICD-10 X60-X84/Y87.0 ascertainment when it appears
+  to be a drug-utilisation study. Entries citing "Shao SC et al Cardiovascular
+  Diabetology 2019 DOAC studies" and "Hsieh CY et al Clinical Epidemiology 2019"
+  for cause-of-death accuracy may be attached to the wrong claim. **These are
+  leads, not findings** — Crossref and PubMed are blocked from a cloud run, and
+  this repo has already had a fabricated author introduced by exactly this route.
+  Do not rewrite any of them without an authoritative record.
