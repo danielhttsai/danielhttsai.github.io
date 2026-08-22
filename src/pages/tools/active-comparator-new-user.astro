@@ -173,14 +173,14 @@ const EXCLUSION = [
 const PS_METHODS: { value: string; label: string; definition: string; validation: string }[] = [
   {
     value: "iptw",
-    label: "Stabilised IPTW with PS trimming",
-    definition: "Estimate the propensity score (PS) for treatment via multivariable logistic regression on all baseline covariates (Section 7). Compute stabilised inverse-probability-of-treatment weights and trim the weight distribution at the 1st and 99th percentile. Estimate the marginal hazard ratio in a weighted Cox proportional-hazards model.",
+    label: "Stabilised IPTW with weight truncation",
+    definition: "Estimate the propensity score (PS) for treatment via multivariable logistic regression on all baseline covariates (Section 7). Compute stabilised inverse-probability-of-treatment weights and truncate the weight distribution at the 1st and 99th percentile — this caps extreme weights while keeping every patient, and so trades a little bias for a large reduction in variance. It is NOT the same operation as PS trimming, which drops patients outside the region of common support and thereby changes the population the estimate refers to; state which one was done. The estimand is the average treatment effect (ATE) in the source population. Estimate the marginal hazard ratio in a weighted Cox proportional-hazards model.",
     validation: "Robins JM, Hernán MA, Brumback B. Marginal structural models and causal inference in epidemiology. Epidemiology 2000;11(5):550-60. Cole SR, Hernán MA. Constructing inverse probability weights for marginal structural models. Am J Epidemiol 2008;168:656-64.",
   },
   {
     value: "iptw-overlap",
     label: "Overlap weights",
-    definition: "Estimate the PS; compute overlap weights as PS × (1 − PS), which down-weight units with extreme PS values. Apply weights in a marginal Cox model. Overlap weights guarantee exact mean balance on all measured covariates in the weighted population and are robust to extreme PS values.",
+    definition: "Estimate the PS (e). Weight each unit by its probability of being assigned to the OPPOSITE group: w = 1 − e for the exposed, w = e for the comparator. (The product e(1 − e) is the tilting function that defines the target population, not the weight applied to a unit; using it as the weight does not balance the covariates.) Apply the weights in a marginal Cox model. Weights are bounded by construction, so no trimming or truncation is required. The estimand is the average treatment effect in the overlap population (ATO) — patients whose characteristics leave genuine clinical equipoise between the two drugs — not the ATE or the ATT, and this should be stated when the result is reported. With the PS fitted by logistic regression these weights give exact mean balance on every covariate in that model.",
     validation: "Li F, Morgan KL, Zaslavsky AM. Balancing covariates via propensity score weighting. J Am Stat Assoc 2018;113:390-400. Li F, Thomas LE, Li F. Addressing extreme propensity scores via the overlap weights. Am J Epidemiol 2019;188:250-7.",
   },
   {
@@ -1855,6 +1855,31 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         const rv = (a) => a.length ? a.map((x) => '  "' + String(x).replace(/["\\]/g, "") + '"').join(",\n") : '  # (none listed yet)';
         const link = s.pscScale === "logit" ? "link" : "response";
         const surv = m.ratio && (s.effectMeasure === "HR" || !s.effectMeasure);
+        // One outcome model, used for the surrogacy check, the point estimate
+        // and every bootstrap replicate. These used to be written out
+        // separately: the point estimate was Poisson with a person-time offset
+        // (a rate ratio) or gaussian (a risk difference), while the bootstrap
+        // replicate was always logistic. So the printed interval was on the log
+        // odds scale while the estimate it bracketed was not — for a rare
+        // outcome an odds ratio is close enough to a risk ratio that the result
+        // looks right, and for a risk difference the bounds were log odds
+        // printed as absolute risk.
+        //
+        // "Risk ratio (Poisson)" and "Incidence rate ratio" also generated
+        // identical code. A risk ratio from Poisson regression is the modified-
+        // Poisson estimator (Zou, Am J Epidemiol 2004;159(7):702-6): a binary
+        // outcome, a log link and NO person-time offset. The offset is what
+        // makes the estimate a rate ratio, so it belongs only to IRR. Zou pairs
+        // that model with a robust error variance because the model-based SE is
+        // conservative; here the bootstrap in step 4 supplies the interval, so
+        // only the point estimate is taken from this fit.
+        const outcomeModel = (df, rhs) => {
+          if (surv) return "coxph(Surv(time, event) ~ " + rhs + ", data = " + df + ")";
+          if (s.effectMeasure === "RD") return "glm(event ~ " + rhs + ", data = " + df + ", family = gaussian)";
+          if (s.effectMeasure === "IRR") return "glm(event ~ " + rhs + ", data = " + df + ", family = poisson(link = \"log\"), offset = log(pt))";
+          if (s.effectMeasure === "RR") return "glm(event ~ " + rhs + ", data = " + df + ", family = poisson(link = \"log\"))";
+          return "glm(event ~ " + rhs + ", data = " + df + ", family = binomial)";
+        };
         return [
           "## Propensity-score calibration — Stürmer et al., Am J Epidemiol 2005;162:279-89",
           "## Study      : " + (s.title || "(untitled)"),
@@ -1903,9 +1928,12 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
           "## S = of the outcome information carried by BOTH propensity scores, the",
           "## percentage carried by the gold-standard score alone. 100% = surrogacy.",
           "## Lunt et al., Am J Epidemiol 2012;175:1294-1302, Table 2 footnote (g).",
-          "m0 <- " + (surv ? "coxph(Surv(time, event) ~ treat, data = val)" : "glm(event ~ treat, data = val, family = binomial)"),
-          "m1 <- " + (surv ? "coxph(Surv(time, event) ~ treat + ps_gs, data = val)" : "glm(event ~ treat + ps_gs, data = val, family = binomial)"),
-          "m2 <- " + (surv ? "coxph(Surv(time, event) ~ treat + ps_gs + ps_ep, data = val)" : "glm(event ~ treat + ps_gs + ps_ep, data = val, family = binomial)"),
+          "## The three nested models use the SAME outcome model as the study, so",
+          "## S is measured on the scale the calibration will actually be applied on."
+            + (s.effectMeasure === "IRR" ? " `val` needs a person-time column `pt`." : ""),
+          "m0 <- " + outcomeModel("val", "treat"),
+          "m1 <- " + outcomeModel("val", "treat + ps_gs"),
+          "m2 <- " + outcomeModel("val", "treat + ps_gs + ps_ep"),
           "ll <- function(m) if (inherits(m, \"coxph\")) m$loglik[length(m$loglik)] else as.numeric(logLik(m))",
           "S <- 100 * (ll(m1) - ll(m0)) / (ll(m2) - ll(m0))",
           "S                                            # <- publish this; enter it in Section 8b",
@@ -1922,11 +1950,7 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
           "",
           "## ── STEP 2 — claims study (this is all a later study needs to repeat) ─",
           'main$ps_ep <- predict(glm(f("treat", C), data = main, family = binomial), type = "' + link + '")',
-          surv
-            ? "naive <- coxph(Surv(time, event) ~ treat + ps_ep, data = main)"
-            : (s.effectMeasure === "RD"
-              ? "naive <- glm(event ~ treat + ps_ep, data = main, family = gaussian)"
-              : "naive <- glm(event ~ treat + ps_ep + offset(log(pt)), data = main, family = poisson)"),
+          "naive <- " + outcomeModel("main", "treat + ps_ep"),
           "## NOTE: the PS must enter LINEARLY. Matching, decile stratification or",
           "## IPT weighting do not give the b_ps this correction needs.",
           'b_t <- coef(naive)[["treat"]]; b_ps <- coef(naive)[["ps_ep"]]',
@@ -1967,10 +1991,11 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
           '  v$ps_gs <- predict(glm(f("treat", c(C, U)), data = v, family = binomial), type = "' + link + '")',
           "  cc <- coef(lm(ps_gs ~ ps_ep + treat, data = v))",
           '  m$ps_ep <- predict(glm(f("treat", C), data = m, family = binomial), type = "' + link + '")',
-          "  bb <- coef(" + (surv ? "coxph(Surv(time, event) ~ treat + ps_ep, data = m)" : "glm(event ~ treat + ps_ep, data = m, family = binomial)") + ")",
+          "  bb <- coef(" + outcomeModel("m", "treat + ps_ep") + ")",
           '  bb[["treat"]] - (cc[["treat"]] / cc[["ps_ep"]]) * bb[["ps_ep"]]',
           "})",
-          "ci <- quantile(boot, c(0.025, 0.975)); ci        # log scale — paste these in",
+          "ci <- quantile(boot, c(0.025, 0.975)); ci        # "
+            + (m.ratio ? "log " + m.measure + " scale — paste these in" : "risk-difference scale — paste these in"),
           m.ratio ? "exp(ci)                                          # " + m.measure + " scale" : "",
           "",
           "## ── REUSE — a later claims-only study skips steps 1 and 4 ─────────",
