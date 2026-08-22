@@ -2594,7 +2594,7 @@ ${bullets(exclusion)}
 | **Exposure** | ${orFb(s.exposureName, "_(exposure)_")} | ${orFb(s.exposureCodes, "_(codes)_")} |
 | **Comparator** | ${orFb(s.comparatorName, "_(comparator)_")} | ${orFb(s.comparatorCodes, "_(codes)_")} |
 
-- **Washout period:** ${s.washout || "365"} days; no prior dispensing of EITHER exposure or comparator in this window before index.
+- **Washout period:** ${daysText(s.washout)}; no prior dispensing of EITHER exposure or comparator in this window before index.
 - **Index date:** ${resolvedIndexDate}
 
 ## 5. Outcome ascertainment
@@ -2610,7 +2610,7 @@ ${bullets(secondary)}
 ## 6. Follow-up and censoring
 
 - **Primary analysis:** ${primAn}
-- **Grace period:** ${s.grace || "30"} days
+- **Grace period:** ${daysText(s.grace)}
 - **Maximum follow-up:** ${resolvedMaxFu}
 
 **Censoring rules**
@@ -2690,6 +2690,39 @@ _Drafted with the AsPEN protocol builder (${today})._
       // nothing on screen said otherwise. Require the whole field to be a
       // whole number of days, optionally with the word "days" after it.
       const DAYS_RE = /^\d+\s*(?:d|day|days)?$/i;
+      // The same tri-state reading, for the three top-level windows. The
+      // per-covariate box got this treatment already; washout, look-back and
+      // grace did not, and they were read two ways: the prose printed the raw
+      // field (`${s.washout || "365"} days`), the diagram and the checks printed
+      // `parseInt` of it.
+      //
+      // input[type=number] accepts "1e3" — it is a valid floating-point literal
+      // — so the field kept "1e3" while parseInt returned 1. One export said
+      // "Washout period: 1e3 days", which reads as a thousand, above a figure
+      // drawing a one-day window and beside a panel warning the washout was
+      // under 180 days. Three answers, and the believable one was wrong.
+      //
+      // The blank case needs no exotic input at all. Paste "30 days" or "1,000"
+      // and the browser rejects the value and empties the field while the box
+      // still looks filled; `|| "365"` then asserted a 365-day washout nobody
+      // chose, next to a check saying the washout was 0. "Clear & start over"
+      // does the same thing to all three at once.
+      //
+      // So: a whole number of days, deliberately blank, or unreadable — and the
+      // documents are allowed to say "no".
+      const readDays = (raw) => {
+        const t = String(raw == null ? "" : raw).trim();
+        if (t === "") return { days: null, ok: false, empty: true, raw: t };
+        if (!DAYS_RE.test(t)) return { days: null, ok: false, empty: false, raw: t };
+        return { days: parseInt(t, 10), ok: true, empty: false, raw: t };
+      };
+      // What a document may say about a duration it could not read.
+      const daysText = (raw) => {
+        const r = readDays(raw);
+        if (r.ok) return r.days + " days";
+        if (r.empty) return "(not specified)";
+        return "(not specified — “" + r.raw + "” could not be read as a number of days)";
+      };
       const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
         const p = l.split("|");
         const raw = (p[1] === undefined ? "" : String(p[1])).trim();
@@ -2715,12 +2748,12 @@ _Drafted with the AsPEN protocol builder (${today})._
         const rows = parseRows(s.covWindows).map((r, i) => Object.assign({}, r, { idx: i }));
         const usable = rows.filter((r) => !r.bad && r.days > 0);
         return { rows: rows, usable: usable, notes: rows.filter((r) => r.bad || r.days <= 0),
-                 lb: Math.max(0, parseInt(s.lookback) || 0), mode: usable.length ? "rows" : "single" };
+                 lb: Math.max(0, readDays(s.lookback).days || 0), mode: usable.length ? "rows" : "single" };
       };
       const covLbText = (s) => {
         const p = covWindowPlan(s);
         const noteTail = p.notes.length ? " (" + p.notes.length + " line(s) in the per-covariate box carry no readable “| days” and are treated as notes, not windows)" : "";
-        if (p.mode === "single") return (s.lookback || "365") + " days prior to index date" + noteTail;
+        if (p.mode === "single") return daysText(s.lookback) + " prior to index date" + noteTail;
         return p.usable.map((x) => x.name + " " + x.days + " d").join("; ") + noteTail;
       };
       // The diagram used to fall back to five years whenever it could not read a
@@ -2740,9 +2773,9 @@ _Drafted with the AsPEN protocol builder (${today})._
         return { days: 1825, known: false };
       };
       const renderScheme = (s) => {
-        const wash = Math.max(0, parseInt(s.washout) || 0);
-        const lb = Math.max(0, parseInt(s.lookback) || 0);
-        const grace = Math.max(0, parseInt(s.grace) || 0);
+        const wash = Math.max(0, readDays(s.washout).days || 0);
+        const lb = Math.max(0, readDays(s.lookback).days || 0);
+        const grace = Math.max(0, readDays(s.grace).days || 0);
         const fuR = resolveFollowupDays(s);
         const fu = fuR.days;
         const plan = covWindowPlan(s);
@@ -2780,15 +2813,24 @@ _Drafted with the AsPEN protocol builder (${today})._
 
       const computeChecks = (s) => {
         const checks = [];
-        const wash = parseInt(s.washout) || 0, lb = parseInt(s.lookback) || 0, grace = parseInt(s.grace) || 0;
-        if (wash <= 0) checks.push({ level: "warn", msg: "Washout is 0 — prevalent (non-new) users may be included. A new-user design needs a washout window with no prior exposure or comparator." });
-        else if (wash < 180) checks.push({ level: "info", msg: "Washout < 180 days — consider a longer washout to be confident users are truly new." });
-        if (lb <= 0) checks.push({ level: "warn", msg: "No covariate look-back — baseline confounders are unmeasured. Set a look-back window before index." });
+        const washR = readDays(s.washout), lbR = readDays(s.lookback), graceR = readDays(s.grace);
+        const wash = washR.days || 0, lb = lbR.days || 0, grace = graceR.days || 0;
+        // Name the window the protocol is declining to state, and why. A
+        // refusal nobody can see on screen is just a slower silent default.
+        [["Washout", washR], ["Covariate look-back", lbR], ["Grace period", graceR]].forEach(function (pair) {
+          const label = pair[0], r = pair[1];
+          if (r.ok) return;
+          if (r.empty) checks.push({ level: "warn", msg: label + " is blank, so the protocol prints “(not specified)” rather than filling in a default. Type the number of days you mean." });
+          else checks.push({ level: "warn", msg: label + ": “" + r.raw + "” could not be read as a number of days, so the protocol, the figure and this panel all decline to state one. Write digits — 365, or 365 days; not “1e3”, “1,000” or “about a year”." });
+        });
+        if (washR.ok && wash <= 0) checks.push({ level: "warn", msg: "Washout is 0 — prevalent (non-new) users may be included. A new-user design needs a washout window with no prior exposure or comparator." });
+        else if (washR.ok && wash < 180) checks.push({ level: "info", msg: "Washout < 180 days — consider a longer washout to be confident users are truly new." });
+        if (lbR.ok && lb <= 0) checks.push({ level: "warn", msg: "No covariate look-back — baseline confounders are unmeasured. Set a look-back window before index." });
         const cwp = covWindowPlan(s);
-        if (cwp.notes.length) checks.push({ level: "info", msg: cwp.notes.length + " line(s) in the per-covariate look-back box carry no readable “| days” — " + cwp.notes.slice(0, 3).map((r) => "“" + r.name.slice(0, 48) + (r.name.length > 48 ? "…" : "") + "”").join(", ") + ". They are treated as notes, not windows, so the diagram shows " + (cwp.mode === "rows" ? "only the " + cwp.usable.length + " window(s) it could read" : "the shared " + (s.lookback || "365") + "-day look-back instead") + ". To make one a window, write it as “Name | 365”." });
+        if (cwp.notes.length) checks.push({ level: "info", msg: cwp.notes.length + " line(s) in the per-covariate look-back box carry no readable “| days” — " + cwp.notes.slice(0, 3).map((r) => "“" + r.name.slice(0, 48) + (r.name.length > 48 ? "…" : "") + "”").join(", ") + ". They are treated as notes, not windows, so the diagram shows " + (cwp.mode === "rows" ? "only the " + cwp.usable.length + " window(s) it could read" : "the shared look-back of " + daysText(s.lookback) + " instead") + ". To make one a window, write it as “Name | 365”." });
         const fuChk = resolveFollowupDays(s);
         if (!fuChk.known) checks.push({ level: "warn", msg: "The maximum follow-up could not be read as a duration, so the study-design diagram is drawing a 5-year default. The protocol text still says what you typed, so the words and the picture disagree — write a duration the diagram can read, e.g. “18 months”, “90 days”, “2 years”." });
-        if (grace <= 0) checks.push({ level: "info", msg: "Grace period 0 — the on-treatment analysis will censor at the first dispensing gap." });
+        if (graceR.ok && grace <= 0) checks.push({ level: "info", msg: "Grace period 0 — the on-treatment analysis will censor at the first dispensing gap." });
         if (!s.exposureName || !s.comparatorName) checks.push({ level: "info", msg: "Specify the exposure and the active comparator." });
         if (!s.picoO && !s.outcomeDef) checks.push({ level: "info", msg: "Specify the outcome." });
         const pa = s.primaryAnalysisType;
@@ -3251,11 +3293,19 @@ _Drafted with the AsPEN protocol builder (${today})._
         // True blank slate; form.reset() only restores HTML defaults, which
         // leaves all the pre-checked checkboxes ticked. Walk every form
         // control and zero it out so "Clear" actually means clear.
+        //
+        // A <select> is the exception, because it has no blank state: it always
+        // contributes a value, so "cleared" can only mean the page's own
+        // default. selectedIndex = 0 was not that. Maximum follow-up is authored
+        // `selected={i === 3}`, five years, so clearing the form moved the study
+        // to one year — a design parameter changed by the one button whose whole
+        // promise is that it changes nothing.
         form.querySelectorAll("input, textarea, select").forEach((el) => {
           if (el.type === "checkbox" || el.type === "radio") {
             el.checked = false;
           } else if (el.tagName === "SELECT") {
-            el.selectedIndex = 0;
+            const def = Array.prototype.findIndex.call(el.options, (o) => o.defaultSelected);
+            el.selectedIndex = def >= 0 ? def : 0;
           } else {
             el.value = "";
           }
@@ -3509,7 +3559,7 @@ _Drafted with the AsPEN protocol builder (${today})._
             ["Comparator", s.comparatorName, s.comparatorCodes],
           ],
         ));
-        children.push(para("Washout period: " + (s.washout || "365") + " days; no prior dispensing of EITHER exposure or comparator in this window before index."));
+        children.push(para("Washout period: " + daysText(s.washout) + "; no prior dispensing of EITHER exposure or comparator in this window before index."));
         children.push(para("Index date: " + resolvedIndexDate));
 
         children.push(h1("5. Outcome ascertainment"));
@@ -3521,7 +3571,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         children.push(h1("6. Follow-up and censoring"));
         children.push(labelTable([
           ["Primary analysis", primAn],
-          ["Grace period", (s.grace || "30") + " days"],
+          ["Grace period", daysText(s.grace)],
           ["Maximum follow-up", resolvedMaxFu],
         ]));
         children.push(h2("Censoring rules"));
@@ -3724,7 +3774,7 @@ _Drafted with the AsPEN protocol builder (${today})._
               "Initiate " + (s.picoI || s.exposureName || "(exposure)") + " vs initiate " + (s.picoC || s.comparatorName || "(active comparator)") + "; drugs of the same indication that compete for use.",
               "Exposure: " + (s.exposureName || "(name)") + " (" + (s.exposureCodes || "codes TBD") + ").\n" +
               "Active comparator: " + (s.comparatorName || "(name)") + " (" + (s.comparatorCodes || "codes TBD") + ").\n" +
-              "Washout for new-user status: " + (s.washout || "365") + " days."),
+              "Washout for new-user status: " + daysText(s.washout) + "."),
             row7("c. Assignment procedures",
               "Random assignment at the start of treatment.",
               "Treatment assignment is determined by the first dispensing of either drug after the washout window. Baseline confounding addressed via " + psM + "."),
@@ -3733,7 +3783,7 @@ _Drafted with the AsPEN protocol builder (${today})._
               "Index date: " + resolvedIndexDate + ".\n" +
               "Follow-up window: " + resolvedMaxFu + ".\n" +
               "Censoring rules:\n" + bulletText(censoring) + ".\n" +
-              "Primary analysis: " + primAn + " (grace period " + (s.grace || "30") + " days)."),
+              "Primary analysis: " + primAn + " (grace period " + daysText(s.grace) + ")."),
             row7("e. Outcomes",
               "Primary outcome: " + (s.picoO || "(specify)") + ".",
               "Operational definition: " + (s.outcomeDef || "(specify)") + "\n" +
