@@ -2567,3 +2567,72 @@ tree was moving under it and to re-read the file and mark each finding LIVE /
 ALREADY FIXED before reporting. Both did, accurately, and one of them spent its
 opening section on the orchestrator's own half-finished diff — which is the
 single most valuable thing either of them produced.
+
+#### Round two: the reviewer was pointed at this run's own commits
+
+Same result the fifth and tenth runs recorded, and it is now three for three:
+**after you ship, send a reviewer back at your own diff, not at the code you
+replaced.** Seven executed findings, and the worst of them was worse than
+several this run had inherited. All seven were fixed and each was re-executed.
+
+- ~~**The new blocker survived exactly one page load.**~~ The commit is titled
+  "a document must not answer for a field the form has lost" and `staleSelects`
+  was the only record that a value had been dropped — its own comment said so.
+  But `render()` runs immediately after restore and saves `readForm()`, the
+  **substituted** state, back over the draft. First load: the red mark. Reload:
+  the value is valid, the record is empty, and the export asserts "Standard
+  (Maclure 1991)" as a deliberate choice. **The brief's own listed bug restored
+  one reload later by the commit that named it.** Carried in the saved draft
+  under a reserved key now. **General form: a check computed at restore is only
+  as durable as the thing that saves the state afterwards.**
+- ~~**A blocker nobody could dismiss.**~~ Made live by the fix above: a
+  `<select>` fires no `change` event when you re-pick the option it is already
+  showing, so a user who wanted the value it was left at had no action at all.
+  It has a "Keep what it was left at" button. The tenth run's lesson, met from
+  the other side — persisting a warning and making it answerable are one change.
+- ~~**Every section cross-reference was right in exactly one of the two places
+  the new shared checks render.**~~ The form is numbered 6 Hazard / 7 Control /
+  8 Variant; the exported protocol 5 Hazard / 6 Control / 7 Variant / 8
+  Assumptions. "Pick a variant under section 8" is right on screen and points at
+  the assumptions in the document, and it fires on the **default** page, so
+  every default export carried it. **A string rendered into both the form and
+  the export cannot name a section number.** This is the cost of the
+  compute-once-render-everywhere pattern the brief otherwise recommends, and it
+  is worth checking in the four builders that already use it.
+- ~~**The new adjacency warning stated the geometry backwards.**~~ Hazard days
+  −7…−1 with offset 8 puts control 1 at days −14…−8: it ends the day before the
+  hazard window begins, and the note said it begins where the hazard window
+  ends. Inverted against the page's own "End anchor: Day −1" vocabulary.
+- ~~**One newline instead of two.**~~ GFM continues a table until a blank line,
+  so §6's continuous-coverage requirement became a fifth row of the table above
+  it — in the Markdown only, while the `.docx` had it as a paragraph. **Check
+  this whenever a literal Markdown table is replaced by a builder function.**
+- ~~**STROBE item 19 kept the rarity assumption the same commit removed
+  everywhere else**~~, so the protocol and the checklist, from one untouched
+  form, disagreed about whether the design needs a rare outcome. It was also
+  inlining every check in full — 2,400 characters in one table cell.
+- ~~**The citation re-keying did not close the hole it was written for.**~~
+  Keyed by the definition textarea, a second library pick evicted the first —
+  but hand-editing did not. Pick MI, then type hip fracture over the name, the
+  definition and the codes, and the MI validation study stayed in the reference
+  list for an outcome appearing nowhere else: the exact sentence the fix claimed
+  to prevent, reached by the ordinary workflow. Keyed to the field carrying the
+  phenotype's **name** now, with the name stored beside the citation; a lapsed
+  citation is withheld **and** reported. Equality, not substring matching —
+  SCCS was caught by substring matching in both directions at once.
+- ~~**A refusal that gave a false reason.**~~ `DAYS_RE` has no sign, so a gap of
+  −3 was refused as "not a whole number of days". It is one; it is negative.
+
+What the reviewer verified as working, so a future run need not re-derive it:
+all four drag handles drive the form under real `PointerEvent`s and are removed
+with the diagram in the refusing state, so `onEdit`'s null `cur.g`/`cur.off` is
+unreachable; the refusing-state `.docx` builds, carries the refusal, contains no
+day index anywhere and holds the logo only in `word/media` while a healthy
+export embeds a 66 KB figure with the exact spans; `checksOf` throws nowhere;
+the citation prune keys match the write-side keys.
+
+**A note on the reviewer's own method.** It reported one finding as a LEAD
+because its test dispatched a synthetic `change` event, which cleared the
+blocker where a real re-pick would not — and said so rather than reporting it as
+executed. That honesty is what made the finding usable: it was reasoned from the
+DOM spec, it was right, and it became live only after the fix above.
