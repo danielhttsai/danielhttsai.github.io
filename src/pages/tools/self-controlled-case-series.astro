@@ -63,54 +63,97 @@ const PHENOTYPES = {
     { name: "Statins",                     codes: "ATC C10AA*" },
     { name: "Cholinesterase inhibitors",   codes: "ATC N06DA; donepezil N06DA02, galantamine N06DA04, rivastigmine N06DA03; plus memantine N06DX01" },
   ],
+  // `validation` and `provenance` are deliberately two fields.
+  //
+  // They used to be one, and the one was called `validation`, sat under a modal
+  // captioned "Validated phenotype library", and was appended verbatim to the
+  // protocol's numbered reference list. Most of the entries were not validation
+  // studies and several were not citations at all, so a reference list an IRB
+  // reads carried lines like "NHIRD-validated; CGRD-confirmed in Shao SC et al
+  // DOAC studies" — no title, no year, no journal, nothing a referee can follow.
+  //
+  // One was worse than uncheckable. The self-harm entry read "Man KKC et al
+  // Lancet Psychiatry 2024 (PMID 39241791) used a comparable composite
+  // definition". PMID 39241791 is Luo H, Chai Y, Li S, et al, "Psychotropic drug
+  // prescribing before and during the COVID-19 pandemic among people with
+  // depressive and anxiety disorders: a multinational network study", Lancet
+  // Psychiatry 2024;11(10):807-817 — a drug-utilisation trends study that
+  // defines no self-harm outcome, and whose first author is not Man. A real
+  // identifier welded to a false claim about what it contains is the most
+  // dangerous shape a citation can have, because the PMID resolves.
+  //
+  // The GI-bleeding entry cited "Andersen M, Pratt N et al. PDS 2013" for "AsPEN
+  // PSSA NSAID/PPI safety work". That record is the AsPEN network description
+  // paper (PDS 2013;22(7):700-704, PMID 23653370) — not PSSA work, not about
+  // NSAIDs or PPIs, and not a validation of anything.
+  //
+  // Both were confirmed twice, independently, from search records. Crossref,
+  // PubMed and doi.org are blocked from the sandbox these agents run in, so this
+  // is search-record evidence and not a Crossref check. NEITHER WAS REPLACED
+  // WITH A SUBSTITUTE CITATION: removing a claim that has been shown false is
+  // safe, and inventing its replacement from memory is exactly how a fabricated
+  // reference entered this repository once already.
+  //
+  // So: `validation` is a real validation study and is the only thing that
+  // reaches the reference list. `provenance` is a "used in / see also" note; it
+  // is shown in the modal and never becomes a numbered reference. An entry with
+  // no validation study says so, on screen, at the moment it is picked.
   outcomes: [
     {
       name: "Myocardial infarction (MI)",
       codes: "ICD-10 I21.*, I22.* (primary discharge diagnosis)",
       definition: "First hospitalisation with a primary discharge diagnosis of acute MI within the observation period.",
       validation: "Cheng CL et al. Validation of acute MI cases in the NHIRD. J Epidemiol 2014;24(6):500-7.",
+      provenance: "The validation study was conducted on ICD-9-CM coding; the code set above is ICD-10. Taiwan's NHIRD coded in ICD-9-CM until 2016, so confirm the mapping for your own study period.",
     },
     {
       name: "Ischemic stroke",
       codes: "ICD-10 I63.*, I64.* (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke.",
       validation: "Cheng CL et al. Pharmacoepidemiol Drug Saf 2011;20(3):236-42. Hsieh CY et al. J Formos Med Assoc 2015;114(3):254-9.",
+      provenance: "Both validation studies were conducted on ICD-9-CM coding; the code set above is ICD-10. Note also that I64 is stroke not specified as haemorrhage or infarction, and its share varies widely by country and imaging availability.",
     },
     {
       name: "Falls and/or fractures",
       codes: "Falls ICD-10 W00-W19; fracture ICD-10 S02/S12/S22/S32/S42/S52/S62/S72/S82/S92; combined for higher specificity.",
       definition: "First ED / hospital encounter with fall-injury or fracture code during the observation period.",
-      validation: "Used as primary outcome in the AsPEN antipsychotic-falls SCCS; Wang GH, Man KKC, Chang WH, Liao TC, Lai ECC. BMJ 2021;PMID 34503972.",
+      validation: "",
+      provenance: "Used as the primary outcome in Wang GH, Man KKC, Chang WH, Liao TC, Lai ECC. BMJ 2021;374:n1925 (PMID 34503972), a Taiwan NHIRD self-controlled case series. That study used this outcome; it did not validate the code set.",
     },
     {
       name: "Hip fracture",
       codes: "ICD-10 S72.0, S72.1, S72.2 (primary discharge diagnosis), ideally paired with surgical-fixation procedure code.",
       definition: "First hospitalisation with primary discharge hip-fracture diagnosis.",
-      validation: "AsPEN hip-fracture multi-country work; Lai EC et al, BMJ Open 2021/2023 (protocol & epidemiology).",
+      validation: "",
+      provenance: "Used in AsPEN multi-country hip-fracture work. No specific validation record is attached to this definition here.",
     },
     {
       name: "Acute kidney injury (AKI)",
       codes: "ICD-10 N17.* (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge AKI diagnosis in the observation period.",
-      validation: "Shao SC et al CGRD AKI work; pair with eGFR / serum-creatinine where lab linkage exists.",
+      validation: "",
+      provenance: "Pair with eGFR / serum-creatinine where lab linkage exists. No specific validation record is attached to this definition here.",
     },
     {
       name: "Suicide / self-harm",
       codes: "ICD-10 X60-X84, Y87.0; T-codes for intentional poisoning; combined with mortality-record cause of death.",
       definition: "First ED / hospital / mortality record with suicide / intentional self-harm code.",
-      validation: "Man KKC et al Lancet Psychiatry 2024 (PMID 39241791) used a comparable composite definition.",
+      validation: "",
+      provenance: "No validation record is attached to this definition. Note also that suicide and self-harm are not one outcome for a case series: self-harm recurs, suicide cannot, and the event-handling and observation-period assumptions differ accordingly.",
     },
     {
       name: "Intracranial haemorrhage",
       codes: "ICD-10 I60.*, I61.*, I62.* (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge ICH diagnosis.",
-      validation: "NHIRD-validated; CGRD-confirmed in Shao SC et al DOAC studies.",
+      validation: "",
+      provenance: "No specific validation record is attached to this definition here.",
     },
     {
       name: "GI bleeding",
       codes: "ICD-10 K25.0/.2/.4/.6, K26.0/.2/.4/.6, K27.*, K28.*, K29.0, K92.0/.1/.2 (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge GI bleeding diagnosis.",
-      validation: "Used in AsPEN PSSA NSAID/PPI safety work (Andersen M, Pratt N et al. PDS 2013, founding methods).",
+      validation: "",
+      provenance: "No specific validation record is attached to this definition here.",
     },
   ],
 };
@@ -808,6 +851,25 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           else if (state[name] !== undefined) el.value = state[name];
         }
       };
+      // A picked citation travels only while the phenotype it validates is still
+      // named somewhere in the form. `pickedCitations` has its own localStorage
+      // key and was cleared only by "Clear all", so picking MI and then picking
+      // stroke left an MI validation study in the reference list of a
+      // stroke-only protocol — and a reload brought it back. The reference list
+      // was also assembled by two copies of the same expression, one in the
+      // Markdown builder and one in the Word builder, which is how the pairs of
+      // lookups in this codebase have drifted before; there is one now.
+      const liveCitations = (s) => {
+        const named = [s.picoO, s.picoI, s.exposureName, s.outcomeDef].map((x) => String(x || "").toLowerCase());
+        return Object.entries(pickedCitations)
+          .filter(([nm, cite]) => cite && cite.trim() && named.some((v) => v && v.includes(String(nm).toLowerCase())))
+          .map(([, cite]) => cite.trim());
+      };
+      const refsOf = (s) => {
+        const set = new Set(String(s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean));
+        for (const c of liveCitations(s)) set.add(c);
+        return Array.from(set);
+      };
       const mergeList = (picks, customText) => {
         const lines = (customText || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         return [...(picks || []), ...lines];
@@ -895,8 +957,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           "active-comparator":  "Active-comparator within-person SCCS; case-time on the index drug compared with case-time on a comparator drug (no reliance on a 'no-drug' baseline). Best when patients of the same indication are continuously on some therapy.",
         })[s.sccsVariant] || "Standard SCCS (Farrington 1995); within-person comparison of exposed vs unexposed time.";
 
-        const refsUser = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const refs = (() => { const set = new Set(refsUser); for (const c of Object.values(pickedCitations)) if (c && c.trim()) set.add(c.trim()); return Array.from(set); })();
+        const refs = refsOf(s);
         const milestones  = (s.timeline || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const subgroups   = mergeList(s.subgroupsPick, s.subgroupsCustom);
         const tvCovs      = (s.tvCovariates || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -1531,8 +1592,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           })),
         });
 
-        const refsUser = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const refs = (() => { const set = new Set(refsUser); for (const c of Object.values(pickedCitations)) if (c && c.trim()) set.add(c.trim()); return Array.from(set); })();
+        const refs = refsOf(s);
         const milestones  = (s.timeline || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const subgroups   = mergeList(s.subgroupsPick, s.subgroupsCustom);
         const tvCovs      = (s.tvCovariates || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -1682,13 +1742,20 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         const f = filter.trim().toLowerCase();
         const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f)) : items;
         if (filtered.length === 0) { modalList.innerHTML = '<p class="px-3 py-6 text-sm text-slate-500 italic text-center">No phenotype matches.</p>'; return; }
-        // validation citation hidden in modal; accumulates silently and
-        // lands in the Word/MD References section at export time.
+        // The validation citation used to be hidden here and appended silently
+        // to the reference list at export. Under a modal captioned "Validated
+        // phenotype library" that is the wrong way round: the one thing a user
+        // picking a validated definition needs to see is what the validation
+        // actually is, and — more often than not — that there isn't one.
         modalList.innerHTML = filtered.map((it, idx) => `
           <button type="button" data-phenotype-idx="${idx}" class="block w-full text-left px-4 py-3 rounded-lg border border-transparent hover:border-brand-300 hover:bg-brand-50/40 transition">
             <p class="font-semibold text-slate-900 text-sm">${esc(it.name)}</p>
             ${it.codes ? `<p class="mt-1 text-xs text-slate-700 font-mono leading-relaxed">${esc(it.codes)}</p>` : ""}
             ${it.definition ? `<p class="mt-1 text-xs text-slate-600 leading-relaxed">${esc(it.definition)}</p>` : ""}
+            ${it.validation
+              ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation</span> · ${esc(it.validation)} <span class="text-slate-500">(added to your reference list)</span></p>`
+              : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study attached</span> · nothing is added to your reference list; supply one before relying on this definition.</p>`}
+            ${it.provenance ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed">${esc(it.provenance)}</p>` : ""}
           </button>
         `).join("");
         modalList.querySelectorAll("[data-phenotype-idx]").forEach((btn) => {
