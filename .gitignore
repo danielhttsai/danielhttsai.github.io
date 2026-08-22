@@ -1,5 +1,8 @@
 # build output
 dist/
+# throwaway builds: the ship loop tells agents to use `--outDir dist-$$`
+# rather than the shared dist/, and those directories are disposable.
+dist-*/
 # generated types
 .astro/
 # dependencies
