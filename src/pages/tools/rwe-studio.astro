@@ -1696,7 +1696,14 @@ const DESIGNS = [
           L.push("# --- seasonality ---");
           L.push("seasok<-FALSE");
           L.push("if(SEASON!='none'){ if(!('seas' %in% names(a))){ kd2<-pdate(a$key); if(all(!is.na(kd2))) a$seas<-if(CYC==4) as.character((as.integer(format(kd2,'%m'))-1)%/%3+1) else as.character(as.integer(format(kd2,'%m'))) else a$seas<-as.character(((a$t-1)%%CYC)+1) }");
-          L.push("  seasok<-TRUE; if(SEASON=='dummies' && length(unique(a$seas))>max(2,nrow(a)-6)){ cat('Too few periods per season to fit calendar dummies — seasonality dropped.\\n'); seasok<-FALSE } }");
+          L.push("  seasok<-TRUE; if(SEASON=='dummies' && length(unique(a$seas))>max(2,nrow(a)-6)){ cat('RESULT_NOTE|Too few periods per season to fit calendar dummies — seasonality was dropped.\\n'); seasok<-FALSE }");
+          // A cycle no shorter than the series is not a cycle over that series: the
+          // harmonic pair is a constant and a near-zero column, which R fits as a
+          // coefficient of the order 1e12 on floating-point noise rather than
+          // refusing. Caught in the browser too, but the browser cannot know how
+          // many periods survive aggregation, and this is where that is known.
+          L.push("  nper0<-if(HASG) min(as.numeric(table(a$g))) else nrow(a)");
+          L.push("  if(seasok && SEASON=='harmonic' && CYC>=nper0){ cat(sprintf('RESULT_NOTE|A cycle of %g period(s) cannot be estimated from a series of %d period(s): over less than one full cycle the sine and cosine terms are not a season, they are a constant and a straight line, and fitting them silently changes the level and slope estimates. Seasonality was dropped. Shorten the cycle or lengthen the series.\\n',CYC,nper0)); seasok<-FALSE } }");
           L.push("");
           L.push("rhs<-if(HASG) 'g + t + level + tsince + g:t + g:level + g:tsince' else 't + level + tsince'");
           L.push("if(seasok && SEASON=='dummies') rhs<-paste(rhs,'+ factor(seas)')");
@@ -2120,8 +2127,11 @@ const DESIGNS = [
       const needCov = spec.covariates && COVS.length === 0;
       const noUsable = spec.covariates && COVS.length > 0 && DATA.rows.length > 0 && covPlan(MASTER || DATA.rows).info.length === 0;
       const needCut = getDesign() === "its" && !$("its_cut").value.trim();
+      // Only blocks when the cycle length is actually in play; otherwise a stray
+      // character in a box the analysis never reads would stop the run.
+      const badCyc = getDesign() === "its" && $("its_season").value !== "none" && !itsCycle().ok ? itsCycle() : null;
       const bt = missing.length ? [] : binTrouble();
-      const ok = missing.length === 0 && !needCov && !needCut && !noUsable && !bt.length;
+      const ok = missing.length === 0 && !needCov && !needCut && !badCyc && !noUsable && !bt.length;
       const m = $("mapmsg");
       if (bt.length) {
         m.innerHTML = bt.map((b) => "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but holds " +
@@ -2131,6 +2141,11 @@ const DESIGNS = [
       }
       else if (missing.length) { m.textContent = "Map the required roles (*): " + missing.join(", "); m.className = "mt-3 text-xs text-amber-700"; }
       else if (needCut) { m.textContent = "Give the interruption point — the first period affected by the intervention."; m.className = "mt-3 text-xs text-amber-700"; }
+      else if (badCyc) {
+        m.innerHTML = "Seasonality is switched on, but the cycle length “<strong>" + esc(badCyc.raw) + "</strong>” " + esc(badCyc.why) +
+          ". It is not assumed: a cycle the tool guessed wrong is fitted as a seasonal term that is really nothing at all, and the estimates move without anything saying why. Give a whole number of periods (12 for monthly data, 4 for quarterly), or set Seasonality to None.";
+        m.className = "mt-3 text-xs text-rose-700";
+      }
       else if (needCov) { m.textContent = "Tick at least one baseline covariate for the propensity score."; m.className = "mt-3 text-xs text-amber-700"; }
       else if (noUsable) { m.textContent = "None of the ticked covariates can be used — see the note under the list."; m.className = "mt-3 text-xs text-rose-700"; }
       else { m.textContent = "Mapping complete ✓ — build the master file below."; m.className = "mt-3 text-xs text-emerald-700"; }
@@ -2327,8 +2342,25 @@ const DESIGNS = [
       if ($("est_pp").checked) estimands.push("PP");
       return { methods: methods, estimands: estimands.length ? estimands : ["ITT"], ratio: parseInt($("m_ratio").value) || 2, nstrata: parseInt($("m_nstrata").value) || 10, trim: $("m_trim").value, wts: $("m_wts").value, trunc: $("m_trunc").value };
     }
+    // A number input accepts "1e3": it is a valid HTML floating-point number, above
+    // the min and on the step, so nothing on screen marks it invalid — and
+    // parseInt("1e3") is 1. With a cycle of 1 the harmonic terms become sin(2*pi*t)
+    // and cos(2*pi*t), which for whole t are floating-point noise and a constant:
+    // R drops the constant and fits the noise, giving a seasonal coefficient of
+    // 4e12, a near-singular design that makes the HAC sandwich throw, and an
+    // effect estimate that moves. Nothing said the cycle was 1. So read it the way
+    // the day counts in the protocol builders are read: a number, or a refusal.
+    function itsCycle() {
+      const raw = $("its_cycle").value.trim();
+      if (raw === "") return { ok: false, raw: raw, n: 12, why: "was left blank" };
+      const n = Number(raw);
+      if (!isFinite(n)) return { ok: false, raw: raw, n: 12, why: "could not be read as a number of periods" };
+      if (n !== Math.round(n)) return { ok: false, raw: raw, n: 12, why: "is not a whole number of periods" };
+      if (n < 2) return { ok: false, raw: raw, n: 12, why: "must be at least 2 — a cycle of " + n + " is not a cycle" };
+      return { ok: true, raw: raw, n: n };
+    }
     function itsOpts() {
-      return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: parseInt($("its_cycle").value) || 12, ac: $("its_ac").value, order: $("its_order").value, denomcomb: $("its_denomcomb").value };
+      return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: itsCycle().n, ac: $("its_ac").value, order: $("its_order").value, denomcomb: $("its_denomcomb").value };
     }
     function buildScript() {
       const spec = SPEC[getDesign()]; const { covNames, covInfo, covDropped } = analysisCSV();
