@@ -2117,3 +2117,108 @@ Ranked. The first two are the highest-value things left in this file.
   grace) while the strip is a fixed length. The new contradiction check
   deliberately stays silent there, treating the strip as a schematic — which is
   defensible but means the one default combination is never questioned.
+
+
+#### Round two: the reviewer was pointed at this run's own commits
+
+The prompt's two-reviewer method earned its keep in the same way the fifth run
+recorded, and it is worth stating as a rule: **after you ship, send a reviewer
+back at your own diff, not at the code you replaced.** The methodologist's
+sharpest finding in its second round was a bug this run had introduced, and it
+was worse than several it had inherited.
+
+- ~~**A `stop` that could never be cleared, and became false.**~~ `staleSelects`
+  was reset only inside `writeForm`, which runs at restore. So after the user did
+  exactly what the new check told them to — pick a real design variant — §8 went
+  on saying "SCCS variant was saved as nested-case-control … it has been left at
+  Standard SCCS" while §5 of the same document said "Active-comparator
+  within-person SCCS". It survived "Clear all" and travelled into the Word
+  protocol and STROBE item 19. **A blocker nobody can dismiss is precisely what
+  teaches people to ignore the panel** — the thing these checks exist to avoid.
+  Cleared per-control on `change`/`input`, and emptied by `doReset`.
+- ~~**Zero blocked only one side of the ratio.**~~ Zero-length *exposure* was a
+  stop; every Reference segment at zero got "ℹ a legitimate way to say no such
+  window". But that strip has no unexposed person-time — no denominator — which
+  is the condition the structural "No reference (baseline) period" stop already
+  existed for, reached numerically. Both sides block now; the info is kept for
+  pre/post/washout/custom, where zero genuinely does mean "no such window".
+- ~~**A strip with no exposure segment said nothing at all.**~~ Day 0 *is* the
+  first exposure segment's start, so a Reference-only strip drew an "Exposure
+  start (day 0)" anchor and wrote "Time zero (day 0): each case's own first
+  exposure" into the Word window list — describing an exposure that does not
+  exist. Now a stop, and the list says "the start of the strip" when there is no
+  anchor.
+- ~~**A zero-day look-back drew a bar.**~~ The parser this run replaced carried
+  the invariant in its own comment — "a '0 d' look-back can't be drawn as a
+  visible bar" — and dropping the clamp dropped the guarantee. **When you replace
+  a coercion, read what the coercion was guaranteeing.**
+- ~~**The Word window list omitted the calendar baseline block**~~, so a
+  calendar-anchored protocol carried a picture starting at day −730 beside a
+  written list starting at day 0 — and that list is the only part a text-reading
+  checker sees.
+- ~~**The legend advertised colours that were not drawn**~~ (pre/post were
+  unconditional). The same inconsistency this run had just fixed for washout,
+  still live for the other four.
+- ~~**The refusal note asked for the impossible.**~~ When a length cannot be read
+  there is deliberately no diagram on screen, but `DesignDiagram`'s stock note
+  says "please paste a screenshot of the on-screen diagram here". The page writes
+  its own note now. **Trap for reuse: that stock wording is fine for a rendering
+  failure and wrong for a principled refusal.**
+- ~~**The citation-pruning rule was wrong in both directions.**~~ Searching four
+  fields for the phenotype name as a substring meant rewording the outcome
+  ("Myocardial infarction (MI)" → "Acute myocardial infarction") **deleted** the
+  validation reference silently, while naming MI as an inclusion criterion
+  ("Hip fracture in patients with prior myocardial infarction") **revived** an MI
+  outcome-validation study into a hip-fracture protocol — the same bug from the
+  other side. Citations are keyed by the **field** the name was written into now,
+  so a second pick evicts the first deterministically; and because neither
+  dropping nor keeping is safe in silence, a lapsed entry is withheld **and**
+  reported.
+- ~~**Two wording errors, one substantive.**~~ The first-event note said to allow
+  all events "and see whether the interval widens" — backwards: under clustering
+  it is the all-events interval that is too narrow and the first-event analysis
+  that is conservative. And "washout time is *normally* removed from the
+  likelihood" overstated a literature in which both treatments appear.
+- ~~**`lcFirst` lower-cased acronyms**~~ — "SCCS conditional Poisson" became
+  "sCCS" in the abstract. Found by re-reading the run's own diff, not by a
+  reviewer.
+- **The estimand sentence** the reviewer insisted on was taken: `pcOf.limitations`
+  now states the IRR is a within-person relative incidence from cases only, not
+  an absolute risk, and **not interchangeable with a cohort hazard ratio**.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The methodologist filed two retractions, and both are instructive.** It
+  nearly reported "the Word diagram fix does not work" as its top finding — its
+  harness stubbed `URL.createObjectURL` to capture the docx Blob, and `svgToPng`
+  calls the *same* API to hand the serialised SVG to an `<img>`, so the stub fed
+  it a dead URL and every export reported the figure missing. **If you stub
+  `createObjectURL` on this site, delegate for non-docx callers.** It also
+  withdrew its round-one "drag behaviour clean" as never actually executed.
+- **It was right that `page.mouse` cannot reach the drag handles, and wrong about
+  why** — it concluded `elementFromPoint` returns nothing because the diagram is
+  ~5,400 px down the page; the orchestrator had already established the same
+  symptom on the *pre-change* build, which is what proved it was the harness and
+  not a regression. Dispatching real `PointerEvent`s works and was used to verify
+  that a drag writes to the correct row.
+- **On the ≥80% power claim in `ProtocolCommon` the reviewer pressed and the
+  orchestrator held.** Its argument is good — the sentence is not merely generic
+  but *wrong in kind* for SCCS, and `pcOf` already passes `skip: ["ethics"]`, so
+  `skip: ["ethics", "studySize"]` is a one-line local mitigation. It was left
+  anyway, because removing the section from one builder of nine makes the set
+  inconsistent and the replacement paragraph is a real piece of design. **This is
+  the strongest single argument for doing the ProtocolCommon tail deliberately,
+  across all nine, and it is the best-evidenced item left in this brief.**
+- **On the Farrington event-dependent-*exposure* item the reviewer's stronger
+  claim was declined**: it argued that leaving the item is defensible but leaving
+  it *ticked by default* is not, since every untouched export then pre-specifies a
+  named method whose only nearby citation is the observation-period paper. That
+  is persuasive, but the brief records that **Daniel asked for this item to be
+  left**, and a default he chose is not an agent's to flip. Recorded for him.
+- **The reviewer withdrew its covariate-look-back finding** once the prose fix
+  landed, and said so explicitly rather than leaving it on the list.
+- **Its "0-30 is silent by luck, not by reason"** is right and worth keeping in
+  mind: that check agrees only because the authored default exposure segment
+  happens to be 30 days. Agreement is still agreement, so the silence is correct
+  — but the reasoning is coincidental and a future default change would need it
+  re-checked.
