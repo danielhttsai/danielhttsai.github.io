@@ -612,12 +612,17 @@ const fwList = Object.values(FRAMEWORKS);
       const KIND_COLOR = { washout: "#6366f1", covariate: "#f59e0b", exposure: "#14b8a6", followup: "#10b981", grace: "#8b5cf6", outcome: "#ef4444" };
       const KIND_LABEL = { washout: "Washout / eligibility", covariate: "Covariate look-back", exposure: "Exposure", followup: "Follow-up", grace: "Grace period", outcome: "Outcome window" };
 
+      // Abbreviate only where the conversion is exact. Rounding put "−3mo" (90
+      // days) on the diagram for a 100-day covariate look-back and "+1.1y" for
+      // 400 days of follow-up, while the exported report printed -100 and 400 —
+      // so the picture and the file described different windows, and the picture
+      // is the part people read. A window of 400 days is now labelled 400d.
       function fmtDay(d) {
         if (!Number.isFinite(d)) return "?";
         if (d === 0) return "0";
         const a = Math.abs(d), s = d < 0 ? "−" : "+";
-        if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; }
-        if (a >= 60) { return s + Math.round(a / 30) + "mo"; }
+        if (a % 365 === 0) return s + a / 365 + "y";
+        if (a >= 60 && a % 30 === 0) return s + a / 30 + "mo";
         return s + a + "d";
       }
 
