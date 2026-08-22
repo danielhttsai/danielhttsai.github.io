@@ -62,54 +62,83 @@ const PHENOTYPES = {
     { name: "Anticoagulants; DOACs",    codes: "ATC B01AE07, B01AF01, B01AF02, B01AF03" },
     { name: "Anticoagulants; warfarin", codes: "ATC B01AA03" },
   ],
+  // Two different fields, because they were one and it was the wrong shape.
+  // `validation` is a study that measured this definition's accuracy — a PPV or
+  // a sensitivity — and is the ONLY thing that reaches the exported reference
+  // list. `provenance` is a "this definition has been used here" note: it is
+  // shown to the user at the moment of picking and is never a numbered
+  // reference, because a study that used an outcome has not validated it.
+  //
+  // Everything used to be `validation`, hidden from the modal, and appended
+  // verbatim to the reference list. Two of the strings were wrong about the
+  // record they named. Both were removed rather than replaced: taking out a
+  // claim shown false is safe; inventing its replacement is how a fabricated
+  // reference got into this repo once already.
+  //  - Self-harm cited "Man KKC et al Lancet Psychiatry 2024 (PMID 39241791)".
+  //    PMID 39241791 is Luo H, Chai Y, Li S, et al, a psychotropic-prescribing
+  //    trends paper; it defines no self-harm outcome and Man is not its first
+  //    author. Established twice, independently, by earlier passes over the
+  //    SCCS and descriptive-analysis builders, which carried the same string.
+  //  - GI bleeding cited "AsPEN PSSA NSAID/PPI safety work (Andersen M,
+  //    Pratt N et al. PDS 2013)". That record is the AsPEN network DESCRIPTION
+  //    paper, PDS 2013;22(7):700-704 — not PSSA work, not NSAIDs or PPIs, and
+  //    not a validation of anything.
+  // Four more said nothing checkable ("Shao SC et al CGRD AKI work"; "Lai EC et
+  // al, BMJ Open 2021/2023"). A string with no title, year or identifier cannot
+  // be looked up by the person relying on it, so it does not travel as a
+  // reference either. Those entries now say plainly, in the modal, that no
+  // validation study is attached.
   outcomes: [
     {
       name: "Myocardial infarction (MI)",
       codes: "ICD-10 I21.*, I22.* (primary discharge diagnosis)",
-      definition: "First hospitalisation with a primary discharge diagnosis of acute MI within the case-ascertainment window.",
+      definition: "First hospitalisation with a primary discharge diagnosis of acute MI within the case-ascertainment window. Note that I22 is a SUBSEQUENT myocardial infarction and is by definition not a first event; drop it if the case must be incident.",
       validation: "Cheng CL et al. Validation of acute MI cases in the NHIRD. J Epidemiol 2014;24(6):500-7.",
+      validationNote: "Validated ICD-9-CM coding; the code set above is ICD-10. Taiwan's NHIRD moved to ICD-10-CM in 2016.",
     },
     {
       name: "Ischemic stroke",
       codes: "ICD-10 I63.*, I64.* (primary discharge diagnosis)",
-      definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke.",
+      definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke. I64 is stroke NOT specified as haemorrhage or infarction; its share varies widely by country and imaging availability, so including it can dominate a cross-country comparison.",
       validation: "Cheng CL et al. Pharmacoepidemiol Drug Saf 2011;20(3):236-42. Hsieh CY et al. J Formos Med Assoc 2015;114(3):254-9.",
+      validationNote: "Both validated ICD-9-CM coding; the code set above is ICD-10.",
     },
     {
       name: "Hip fracture",
       codes: "ICD-10 S72.0, S72.1, S72.2 (primary discharge diagnosis), paired with surgical-fixation procedure code.",
       definition: "First hospitalisation with primary discharge hip-fracture diagnosis during the case-ascertainment window.",
-      validation: "AsPEN hip-fracture multi-country work; Lai EC et al, BMJ Open 2021/2023.",
+      validation: "",
     },
     {
       name: "Falls",
       codes: "ICD-10 W00-W19 (external cause), with paired injury codes for higher specificity.",
       definition: "First ED / hospital encounter with a fall code.",
-      validation: "Used in the AsPEN antipsychotic-cholinesterase falls/fractures SCCS (Wang GH et al, BMJ 2021;PMID 34503972).",
+      validation: "",
+      provenance: "A comparable definition was used in a Taiwan NHIRD self-controlled case series of antipsychotics and cholinesterase inhibitors (Wang GH et al. BMJ 2021; PMID 34503972). That study used the definition; it did not measure its accuracy.",
     },
     {
       name: "Acute kidney injury (AKI)",
       codes: "ICD-10 N17.* (primary discharge diagnosis), with creatinine criteria where lab linkage exists.",
       definition: "First hospitalisation with primary discharge AKI diagnosis.",
-      validation: "Shao SC et al CGRD AKI work.",
+      validation: "",
     },
     {
       name: "Intracranial haemorrhage",
       codes: "ICD-10 I60.*, I61.*, I62.* (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge ICH diagnosis.",
-      validation: "NHIRD-validated; CGRD-confirmed in Shao SC et al DOAC studies.",
+      validation: "",
     },
     {
       name: "GI bleeding",
       codes: "ICD-10 K25.0/.2/.4/.6, K26.0/.2/.4/.6, K27.*, K28.*, K29.0, K92.0/.1/.2 (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge GI bleed diagnosis.",
-      validation: "Used in AsPEN PSSA NSAID/PPI safety work (Andersen M, Pratt N et al. PDS 2013).",
+      validation: "",
     },
     {
       name: "Suicide / self-harm",
       codes: "ICD-10 X60-X84, Y87.0; T-codes for intentional poisoning.",
       definition: "First ED / hospital / mortality record with suicide or intentional self-harm code.",
-      validation: "Man KKC et al Lancet Psychiatry 2024 (PMID 39241791).",
+      validation: "",
     },
   ],
 };
@@ -140,9 +169,9 @@ const ASSUMPTIONS = [
     cite: "Maclure 1991",
   },
   {
-    t: "The outcome has to be abrupt in onset, and uncommon",
+    t: "The outcome has to be abrupt in onset",
     plain: "A single identifiable moment — an MI, a fall, a bleed — not the slow onset of a chronic condition.",
-    precise: "Maclure derived the design for a brief exposure producing a transient change in the risk of a rare, acute-onset disease, and it is in that setting that the case-only conditional odds ratio estimates the incidence rate ratio for the hypothesised effect period. Gradual onset makes the index date arbitrary, which mis-places every window relative to the true event time.",
+    precise: "Maclure derived the design for a brief exposure producing a transient change in the risk of a rare, acute-onset disease. Rarity is not, however, what licenses the odds ratio to be read as a rate ratio: the referent windows sample the case's own person-time, and under that sampling the exposure odds ratio estimates the incidence rate ratio directly. What abruptness buys is a usable index date — gradual onset makes it arbitrary, which mis-places every window relative to the true event time, and an event whose onset precedes its record by an unknown lag pushes the true aetiological moment out of the hazard window altogether.",
     check: "State how the index date is defined and how well it approximates onset (admission date is a proxy, not onset).",
     cite: "Maclure 1991",
   },
@@ -150,7 +179,7 @@ const ASSUMPTIONS = [
     t: "Exposure prevalence must not trend over time within a person",
     plain: "If people were simply becoming more (or less) likely to be on the drug as time went on, the design finds an effect that is not there.",
     precise: "The hazard window is always more recent than the control windows, so any monotone within-person trend in exposure probability — a drug being adopted, a dose being escalated as prognosis worsens, a treatment being stopped as a patient becomes frail — is confounded with the effect of interest. This is exposure-time-trend bias, and it does not shrink with sample size.",
-    check: "Choose a variant that removes it: time-stratified referent selection (Janes 2005), case-time-control using a matched non-case series (Suissa 1995), or case-case-time-control using future cases (Wang 2011; Huang/Yang/Tsai BMJ 2023). Report the uncorrected and corrected estimates side by side.",
+    check: "Choose a variant that addresses it, and be clear which trend it addresses. Time-stratified referent selection (Janes 2005) removes bias from calendar-time trends in exposure prevalence. A case-time-control (Suissa 1995) or case-case-time-control (Wang 2011; Huang/Yang/Tsai BMJ 2023) subtracts the portion of the trend shared with a comparison series. None of them removes a trend specific to the individual — a dose escalated as that person deteriorates — so if that is the mechanism you fear, say so and argue it separately. Report the uncorrected and corrected estimates side by side.",
     cite: "Suissa 1995; Janes 2005; Wang 2011",
   },
   {
@@ -158,7 +187,7 @@ const ASSUMPTIONS = [
     plain: "Hazard and control windows have to be separate stretches of time in which the person was alive, enrolled, and could have been dispensed the drug.",
     precise: "Overlapping windows double-count person-time and break the conditioning; control windows falling before database enrolment, before the drug was marketed, or before the person entered the age band produce a structural zero that is read as 'unexposed'. Immeasurable time (in-hospital days with no outpatient dispensing record) has the same effect.",
     check: "Require continuous enrolment covering the earliest control window; report how in-hospital time was handled. The builder checks window overlap for you below.",
-    cite: "Maclure 1991; Mittleman 1995",
+    cite: "Maclure 1991; Janes 2005",
   },
 ];
 
@@ -433,7 +462,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Effect estimate</span>
-              <input type="text" name="effectMeasure" value="Odds ratio (OR); interpreted as incidence rate ratio under the rare-disease assumption" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              <input type="text" name="effectMeasure" value="Odds ratio (OR) from the conditional logistic model; it estimates the incidence rate ratio for the hazard period, because the referent windows sample the case's own person-time (incidence-density sampling) — not because the outcome is rare" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Meta-analysis</span>
@@ -594,6 +623,14 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const setMsg = (msg, isError = false) => { if (!actionMsg) return; actionMsg.textContent = msg; actionMsg.classList.toggle("text-rose-700", isError); actionMsg.classList.toggle("text-brand-700", !isError); };
       let pickedCitations = {};
       try { pickedCitations = JSON.parse(localStorage.getItem(STORAGE_CITATIONS_KEY) || "{}") || {}; } catch {}
+      // Entries saved before citations were keyed by field are keyed by the
+      // phenotype's name, and nothing would ever evict them — so a browser that
+      // has visited this page before would carry them into every future
+      // protocol. Anything not keyed by a field this page fills is dropped.
+      {
+        const validKeys = new Set([...document.querySelectorAll("[data-open-library]")].map((b) => b.dataset.targetName || b.dataset.targetDef || b.dataset.targetCodes).filter(Boolean));
+        for (const k of Object.keys(pickedCitations)) if (!validKeys.has(k)) delete pickedCitations[k];
+      }
       const savePickedCitations = () => { try { localStorage.setItem(STORAGE_CITATIONS_KEY, JSON.stringify(pickedCitations)); } catch {} };
       // Declared up here, not next to the library modal: renderChecks() runs on
       // first paint, and a const used above its declaration is a dead-zone throw.
@@ -610,13 +647,24 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // Permissive regex map: typed text → data features needed.
       // Case-crossover almost always uses Rx (or some pharmacy/exposure source)
       // + Dx (case ascertainment); those two are seeded as universal.
+      // Each group was written `\b( … )\b`, which makes the TRAILING boundary
+      // mandatory for every alternative — so the stems matched only when the
+      // word ended there. "carcinoma", "malignancy", "tumours", "pregnancy",
+      // "gestational age", "echocardiogram", "angiography", "radiology",
+      // "genomics" and "deaths" all matched nothing at all. `labs` was the one
+      // group written without the trailing \b and the one group that worked.
+      // Third copy of this defect in this codebase; the replacements below are
+      // mirrored from the vetted set in descriptive-analysis.astro rather than
+      // re-derived, including its deliberate narrowing of bare "angio" (which
+      // matched nothing with the boundary and matches "angiotensin", an entire
+      // drug class, without it) to "angiograph".
       const FEATURE_TRIGGERS = {
-        labs:      /\b(hba1c|egfr|creatinine|bmi|blood\s*pressure|systolic|diastolic|ldl|hdl|cholesterol|glucose|albumin|hemoglobin|haemoglobin|inr|tsh|lipid|biochemical|biochemist|labora?tor[yi]|lab[s]?\b)/i,
-        mortality: /\b(mortality|all-?cause death|cv death|cardiovascular death|cause of death|died|fatal|death|survival)\b/i,
-        cancer:    /\b(cancer|carcinom|malignan|neoplasm|tumou?r|sarcoma|leuk[ae]mia|lymphoma|registr[yi].*cancer|cancer.*registr[yi])\b/i,
-        pregnancy: /\b(pregnan|birth|neonatal|gestation|trimester|maternal|fetal|foetal|infant)\b/i,
-        imaging:   /\b(imaging|mri|ct\s*scan|x-?ray|ultrasound|echocardio|angio|radiolog)\b/i,
-        genomics:  /\b(genomic|snp|gwas|biobank|genotype|exome|gene(?:tic)?\b)\b/i,
+        labs:      /\bhba1c|\begfr|\bcreatinine|\bbmi\b|\bblood\s*pressure|\bsystolic|\bdiastolic|\bldl\b|\bhdl\b|\bcholesterol|\bglucose|\balbumin|\bh[ae]?emoglobin|\binr\b|\btsh\b|\blipid|\bbiochemi|\blabora?tor[yi]|\blabs?\b/i,
+        mortality: /\bmortality|\ball-?cause\s+death|\bcv\s+death|\bcardiovascular\s+death|\bcause[\s-]of[\s-]death|\bdied\b|\bfatal|\bdeath|\bsurvival/i,
+        cancer:    /\bcancer|\bcarcinom|\bmalignan|\bneoplas|\btumou?r|\bsarcoma|\bleuk[ae]?[ae]mia|\blymphom|\bmyeloma|\boncolog/i,
+        pregnancy: /\bpregnan|\bbirth|\bneonat|\bgestation|\btrimester|\bmaternal|\bfo?etal|\binfant|\bmother/i,
+        imaging:   /\bimaging|\bmri\b|\bct\s*scan|\bx-?ray|\bultrasound|\bechocardio|\bangiograph|\bradiolog/i,
+        genomics:  /\bgenomic|\bsnp\b|\bgwas\b|\bbiobank|\bgenotyp|\bexome|\bgene\b|\bgenetic/i,
       };
       const FEATURE_TEXT_FIELDS = [
         "outcomeDef","outcomeCodes","indexDateDef",
@@ -677,14 +725,32 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         for (const [k, v] of data.entries()) { if (multi.has(k)) out[k].push(String(v)); else out[k] = String(v); }
         return out;
       };
+      // A value a saved draft or a ?seed= link carried for a <select> that no
+      // longer offers it. Captured HERE and nowhere else: assigning an unmatched
+      // value leaves selectedIndex = -1, a select with no selection contributes
+      // NO entry to FormData, and readForm therefore omits the key entirely — so
+      // the dead value is not recoverable after the fact.
+      let staleSelects = [];
       const writeForm = (state) => {
         const multi = new Set(["sites", "sensitivityPick", "subgroupsPick"]);
+        staleSelects = [];
         for (const el of form.querySelectorAll("input, textarea, select")) {
           const name = el.name; if (!name) continue;
           if (el.type === "checkbox" && multi.has(name)) el.checked = (state[name] || []).includes(el.value);
           // A radio's .value IS the option it stands for; assigning to it would
           // rewrite the option and collapse the group. Tick the match instead.
           else if (el.type === "radio") { if (state[name] !== undefined) el.checked = String(state[name]) === el.value; }
+          else if (el.tagName === "SELECT" && state[name] !== undefined) {
+            // Every export used to reach its `|| "…"` fallback from here and
+            // name a definite choice. A draft carrying a renamed ccoVariant
+            // exported "Standard (Maclure 1991)"; a blanked nControls exported
+            // one referent window where the page's own default is three — so a
+            // stale draft did not restore the default, it quietly specified a
+            // different design. The empty box on screen said none of it.
+            const want = String(state[name]);
+            if ([...el.options].some((o) => o.value === want)) el.value = want;
+            else staleSelects.push({ name, want, kept: el.value, label: (el.selectedOptions[0] || {}).text || el.value });
+          }
           else if (state[name] !== undefined) el.value = state[name];
         }
       };
@@ -728,7 +794,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             return null;
           }
           if (!r.ok) {
-            stops.push({ field, msg: label + ' reads "' + r.raw + '", which is not a whole number of days. Nothing is assumed in its place.' });
+            stops.push({ field, msg: label + ' reads "' + r.raw + '", which is not a whole number of days.' });
             return null;
           }
           if (r.days < o.min) {
@@ -745,8 +811,13 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         // field an empty box may answer for. It still needs a readable hazard
         // window to copy, which is why the fallback is L and not a constant.
         const C = num(s.controlLen, "controlLen", "Control window length", { min: 1, blankMeans: L, why: "A control window of zero days contains no person-time." });
-        const n = Math.min(6, Math.max(1, parseInt(s.nControls) || 1));
-        const ok = L !== null && g !== null && off !== null && C !== null;
+        // Read like the rest, not with `parseInt(x) || 1`. It is the one number
+        // here that comes from a <select>, and a select whose value a stale
+        // draft blanked contributes nothing to FormData — so the old reading
+        // turned a three-referent design into a one-referent design in silence.
+        // The old ceiling of 6 was dead: the control offers at most 4.
+        const n = num(s.nControls, "nControls", "Number of control windows", { min: 1, why: "A within-person contrast needs at least one referent window." });
+        const ok = L !== null && g !== null && off !== null && C !== null && n !== null;
         if (!ok) return { ok: false, stops, L, g, C, off, n, haz: null, ctrls: [], wins: [], issues: [] };
         const haz = { label: "Hazard window", kind: "hazard", first: -(g + L - 1), last: -g, len: L };
         const ctrls = [];
@@ -783,6 +854,16 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // every protocol on this site pools site estimates, and this site's other
       // builders produce hazard ratios and self-controlled incidence rate
       // ratios that are not the same quantity.
+      // The checks, as the two exported documents and STROBE item 19 print
+      // them. Says what it actually means when it is empty: this builder runs a
+      // fixed set of pattern checks, and "nothing outstanding" is a statement
+      // about those, not an attestation that the protocol is sound.
+      const CHK_ICON = { stop: "⛔", warn: "⚠", info: "ℹ" };
+      const checksMd = (G, s) => {
+        const notes = checksOf(G, s);
+        if (!notes.length) return "_The builder's automatic checks on the window scheme, the design variant and the sensitivity list found nothing to raise against this draft. They are pattern checks over the fields on the form; they cannot tell you the design is right for your question._";
+        return "**Checks the builder raises against this draft**\n\n" + notes.map((n) => "- " + CHK_ICON[n.lvl] + " **" + n.t + ".** " + n.d).join("\n");
+      };
       const ESTIMAND_LIMIT = "The estimate is a within-person contrast computed in cases only: the odds of exposure during the hazard window against the odds of exposure during the same person's referent window(s). It carries no information about absolute risk — no risk difference, number needed to harm or excess incidence can be derived from it without an external denominator — and it is not interchangeable with a cohort hazard ratio, because the comparison is between periods within a case rather than between people. Pooling it with estimates from other designs requires that equivalence to be argued in the protocol, not assumed.";
 
       // One description of the window scheme, built once and consumed by the
@@ -809,7 +890,26 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const mergeList = (picks, customText) => { const lines = (customText || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean); return [...(picks || []), ...lines]; };
       const bullets = (arr) => arr.length === 0 ? "_(none specified)_" : arr.map((l) => "- " + l).join("\n");
       const numbered = (arr) => arr.length === 0 ? "_(none)_" : arr.map((l, i) => (i + 1) + ". " + l).join("\n");
-      const orFb = (s, fb) => (s && s.trim()) ? s : fb;
+      // orFb trims before deciding, so " " is blank. The Word export used to
+      // test `s.x || fb`, which a single space passes: three spaces left in the
+      // title field produced a Markdown protocol headed "(Untitled multi-national
+      // case-crossover study)" and a .docx opening on an empty bold heading, with
+      // blank Population and Primary-model cells. The two exported documents
+      // disagreed about whether the study had a title.
+      const orFb = (s, fb) => (s && String(s).trim()) ? s : fb;
+      // …and the fallback prose itself lived twice, once per export, already
+      // drifted: "Conditional logistic regression with the case as the
+      // conditioning stratum." against "…with case as conditioning stratum",
+      // and "interpreted as incidence rate ratio" against "interpreted as IRR".
+      // One copy, so the two documents cannot describe different analyses.
+      const FB = {
+        indexDate: "Admission date of first hospitalisation meeting the case definition.",
+        exposureRule: "Any dispensing within the window counts as exposed.",
+        primaryModel: "Conditional logistic regression with the case as the conditioning stratum.",
+        effectMeasure: "Odds ratio (OR) from the conditional logistic model.",
+        ethics: "Each participating site obtains local IRB / ethics approval before data extraction.",
+        dissemination: "Primary manuscript to a peer-reviewed pharmacoepidemiology journal.",
+      };
       // A "|" typed into a code set ("ATC M01A* | excluding M01AX") emitted a
       // three-cell row against a two-column header. GFM drops the cells past the
       // header width, so the Markdown silently lost half the code set while the
@@ -826,7 +926,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         outcome: orFb(s.picoO, "(outcome)"),
         data: (s.sites && s.sites.length ? s.sites.length + " AsPEN data source(s)" : "multi-national AsPEN data sources"),
         analysis: "conditional logistic regression contrasting exposure in the hazard window vs matched control windows within each case, pooled across sites",
-        groupBy: "hazard vs control window",
+        groupBy: "site",
         skip: ["ethics"],
         amendments: s.amendments,
         version: s.version,
@@ -880,11 +980,11 @@ ${sitesLine(s.sites, s.sitesOther)}
 
 **Code set.** ${orFb(s.outcomeCodes, "_(codes)_")}
 
-**Index date.** ${orFb(s.indexDateDef, "Admission date of first hospitalisation meeting the case definition.")}
+**Index date.** ${orFb(s.indexDateDef, FB.indexDate)}
 
 ## 4. Exposure definition
 
-${mdTable([["Name", orFb(s.exposureName, "_(exposure)_")], ["Code set", orFb(s.exposureCodes, "_(codes)_")], ["Ascertainment rule", orFb(s.exposureRule, "Any dispensing within the window counts as exposed.")]])}
+${mdTable([["Name", orFb(s.exposureName, "_(exposure)_")], ["Code set", orFb(s.exposureCodes, "_(codes)_")], ["Ascertainment rule", orFb(s.exposureRule, FB.exposureRule)]])}
 
 ## 5. Hazard (case) window
 
@@ -902,14 +1002,14 @@ ${variant}
 
 ${ASSUMPTIONS.map((a, i) => (i + 1) + ". **" + a.t + ".** " + a.plain + "\n\n   *Why it matters.* " + a.precise + "\n\n   *What we do about it.* " + a.check + " [" + a.cite + "]").join("\n\n")}
 
-${G.issues.length ? "**Outstanding issues with the window scheme in this draft**\n\n" + G.issues.map((i) => "- " + i.t).join("\n") : (G.ok ? "_The window scheme in this draft has no overlapping or mismatched windows._" : "_The window scheme in this draft could not be read; see section 5._")}
+${checksMd(G, s)}
 
 **What the estimate is.** ${ESTIMAND_LIMIT}
 
 ## 9. Statistical analysis
 
-- **Primary model:** ${orFb(s.primaryModel, "Conditional logistic regression with the case as the conditioning stratum.")}
-- **Effect estimate:** ${orFb(s.effectMeasure, "Odds ratio (OR); interpreted as IRR under the rare-disease assumption.")}
+- **Primary model:** ${orFb(s.primaryModel, FB.primaryModel)}
+- **Effect estimate:** ${orFb(s.effectMeasure, FB.effectMeasure)}
 - **Meta-analysis across sites:** ${meta}
 
 **Subgroup analyses**
@@ -930,9 +1030,9 @@ ${numbered(milestones)}
 
 ## 11. Ethics, data sharing, dissemination
 
-**Ethics.** ${orFb(s.ethics, "Each participating site obtains local IRB / ethics approval before data extraction.")}
+**Ethics.** ${orFb(s.ethics, FB.ethics)}
 
-**Dissemination.** ${orFb(s.dissemination, "Primary manuscript to a peer-reviewed pharmacoepidemiology journal.")}
+**Dissemination.** ${orFb(s.dissemination, FB.dissemination)}
 
 ${window.PC.tailMd(pcOf(s))}
 
@@ -992,11 +1092,18 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         renderChecks(G, s);
       };
 
-      // Assumption checks that depend on what the user actually entered. These
-      // never block; they say what is wrong and what number to change.
-      const renderChecks = (G, s) => {
-        const box = document.querySelector("[data-checks]"); if (!box) return;
+      // Assumption checks that depend on what the user actually entered,
+      // computed ONCE and painted into the panel, both exported protocols and
+      // the STROBE checklist. Two of them used to exist only in the panel — and
+      // the sharper of those two says, in effect, "do not use this variant for
+      // dispensed medicines", so a protocol exported with bidirectional
+      // referents selected carried section 7 naming them with no trace of the
+      // objection. A check nobody outside the browser can see is not a check.
+      const checksOf = (G, s) => {
         const notes = [];
+        // Named here because the value is gone by the time an export runs: an
+        // unmatched select contributes no FormData entry at all.
+        for (const st of staleSelects) notes.push({ lvl: "stop", t: "A saved value was not one of the choices offered", d: 'This draft was restored with ' + st.name + ' set to "' + st.want + '", which this form no longer offers. It has been left at "' + st.label + '" and that is what the exported protocol says. Choose the option you want before circulating it.' });
         if (s.ccoVariant === "standard" || !s.ccoVariant) notes.push({ lvl: "warn", t: "No correction for exposure-time trend", d: "The standard (Maclure) variant compares a recent hazard window with older control windows, so any within-person drift in the probability of being on the drug is read as an effect. If the exposure is one whose use changes with worsening prognosis, pick a variant under section 8 — time-stratified, or case-case-time-control — or state in the protocol why a trend is implausible here." });
         if (s.ccoVariant === "symmetric") notes.push({ lvl: "warn", t: "Bidirectional sampling assumes the event does not change later exposure", d: "Control windows drawn from after the event require exposure in that period to be unaffected by having had the event. For dispensed medicines that is usually false — an MI changes what is prescribed the next day. Bidirectional referents are standard for environmental exposures, not for drugs." });
         // The window calculator lays out one scheme: evenly spaced referent
@@ -1009,10 +1116,24 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         }
         for (const st of G.stops) notes.push({ lvl: "stop", t: "Window scheme not specified", d: st.msg + " Nothing has been assumed in its place: the diagram is not drawn and the protocol says the scheme is unspecified rather than printing one." });
         for (const i of G.issues) notes.push({ lvl: i.lvl, t: "Window scheme", d: i.t });
-        if (notes.length === 0) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+        // A sensitivity analysis that IS the primary analysis is not a check on
+        // anything. Both of these ship ticked, so an untouched page exports them.
+        const sensPicks = s.sensitivityPick || [];
+        const picked = (frag) => sensPicks.some((x) => x.indexOf(frag) === 0);
+        if (G.ok && G.n > 1 && picked("Multiple control windows")) notes.push({ lvl: "warn", t: "A sensitivity analysis restates the primary analysis", d: "Section 7 of the form already specifies " + G.n + " control windows, so “Multiple control windows” is the primary analysis, not a check on it. Either reduce the primary analysis to one referent window and vary it here, or untick it." });
+        if (s.ccoVariant === "time-stratified" && picked("Time-stratified case-crossover")) notes.push({ lvl: "warn", t: "A sensitivity analysis restates the primary analysis", d: "Time-stratified referent selection is the variant chosen in section 8 of the form, so it cannot also be a sensitivity analysis against it." });
+        else if (picked("Time-stratified case-crossover")) notes.push({ lvl: "warn", t: "A promised sensitivity analysis has no window scheme", d: "The protocol promises a time-stratified sensitivity analysis, but section 6 defines only the fixed-offset windows and this builder has no field for a calendar stratum, so the promised analysis is named and left operationally undefined. State the stratum definition and the within-stratum matching rule, or untick it." });
+        if (s.ccoVariant !== "symmetric" && picked("Symmetric bidirectional sampling")) notes.push({ lvl: "warn", t: "Bidirectional referents assume the event does not change later exposure", d: "This is ticked as a sensitivity analysis. Referent windows drawn from after the event require exposure in that period to be unaffected by having had the event; for dispensed medicines that is usually false, and for a fatal outcome there is no post-event time at all. Bidirectional referents are standard for environmental exposures, not for drugs." });
+        if (notes.length === 0) return notes;
         // A blocker printed below a heads-up is a blocker people scroll past.
         const rank = { stop: 0, warn: 1, info: 2 };
         notes.sort((a, b) => rank[a.lvl] - rank[b.lvl]);
+        return notes;
+      };
+      const renderChecks = (G, s) => {
+        const box = document.querySelector("[data-checks]"); if (!box) return;
+        const notes = checksOf(G, s);
+        if (notes.length === 0) { box.classList.add("hidden"); box.innerHTML = ""; return; }
         const style = { stop: ["bg-rose-50 border-rose-300", "text-rose-900", "⛔"], warn: ["bg-amber-50 border-amber-300", "text-amber-900", "⚠"], info: ["bg-slate-50 border-slate-300", "text-slate-700", "ℹ"] };
         box.innerHTML = '<p class="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500">Checks against what you entered</p><div class="mt-2 space-y-2">' +
           notes.map((n) => { const st = style[n.lvl]; return '<div class="rounded-lg border ' + st[0] + ' p-3 text-xs ' + st[1] + '"><p class="font-bold">' + st[2] + " " + esc(n.t) + '</p><p class="mt-1 leading-relaxed">' + esc(n.d) + "</p></div>"; }).join("") + "</div>";
@@ -1038,13 +1159,23 @@ _Drafted with the AsPEN case-crossover builder (${today})._
       // saved draft (or a ?seed= link) actually carried.
       if (window.PC && PC.mountAmendments) PC.mountAmendments(form);
       render();
+      // Cleared per control, not globally: a blocker that survives the user
+      // doing exactly what it asked is the thing that teaches people to ignore
+      // the panel. Touch the select the message names and the message goes.
+      const clearStale = (e) => {
+        const el = e.target; if (!el || !el.name) return;
+        const before = staleSelects.length;
+        staleSelects = staleSelects.filter((x) => x.name !== el.name);
+        if (staleSelects.length !== before) render();
+      };
       form.addEventListener("input", render);
-      form.addEventListener("change", render);
+      form.addEventListener("change", (e) => { clearStale(e); render(); });
       form.addEventListener("click", (e) => {
         const tl = e.target?.closest?.("[data-timeline-preset]");
         if (tl) { const ta = form.querySelector('[name="timeline"]'); if (ta) { ta.value = TIMELINE_PRESETS[tl.dataset.timelinePreset] || ta.value; render(); } }
       });
 
+      let lastFigNote = "";
       const buildFilename = (ext) => {
         const state = readForm();
         const slug = (state.shortId || "aspen-protocol-cco").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "aspen-protocol-cco";
@@ -1064,7 +1195,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
       });
       const doReset = () => {
         if (!confirm("Reset every field to its default and forget the saved draft?")) return;
-        localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_CITATIONS_KEY); pickedCitations = {};
+        localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_CITATIONS_KEY); pickedCitations = {}; staleSelects = [];
         // "Start over" means exactly the page a first-time visitor sees, not an
         // empty one. Emptying stripped defaults the protocol goes on asserting
         // anyway (the exposure rule, the primary model, the reference list) — a
@@ -1094,7 +1225,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a"); a.href = url; a.download = buildFilename("docx");
           document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-          setMsg("Downloaded " + a.download);
+          setMsg("Downloaded " + a.download + lastFigNote, !!lastFigNote);
         } catch (e) { console.error(e); setMsg("Couldn't build the Word file: " + String(e), true); }
       });
 
@@ -1109,7 +1240,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
           const a = document.createElement("a");
           const today = new Date().toISOString().slice(0, 10);
           a.href = url;
-          a.download = (s.shortId || "case-crossover").replace(/[^a-z0-9]+/gi, "-").toLowerCase() + "-STROBE-checklist-" + today + ".docx";
+          a.download = orFb(s.shortId, "case-crossover").replace(/[^a-z0-9]+/gi, "-").toLowerCase() + "-STROBE-checklist-" + today + ".docx";
           document.body.appendChild(a); a.click(); a.remove();
           URL.revokeObjectURL(url);
           setMsg("Downloaded " + a.download);
@@ -1132,18 +1263,18 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         const metaTxt = ({ re: "random-effects (DerSimonian-Laird)", "re-reml": "random-effects (REML)", fe: "fixed-effects (inverse-variance)" })[s.metaMethod] || "random-effects";
         return {
           "1a": "Multi-national case-crossover study" + (isCctc ? " (case-case-time-control variant)." : "."),
-          "3": "Among cases of " + (s.picoO || "(outcome)") + ", is " + (s.picoI || s.exposureName || "(exposure)") + " more likely during the pre-event hazard window than during matched referent windows in the same person?",
+          "3": "Among cases of " + orFb(s.picoO, "(outcome)") + ", is " + orFb(s.picoI, orFb(s.exposureName, "(exposure)")) + " more likely during the pre-event hazard window than during matched referent windows in the same person?",
           "4": "Case-crossover (" + variant + "). Each case serves as their own control; exposure in a pre-event hazard window is compared with matched referent window(s) in the same individual, removing all time-invariant between-person confounding." + (isCctc ? " A future-case control series corrects for exposure-time trend: OR_CCTC = OR_case / OR_control." : ""),
           "5": "AsPEN sites: " + sitesPlain + ". " + (GG.ok
             ? ("Windows, as inclusive days relative to the event (day 0): hazard " + spanTxt(GG.haz) + "; " + GG.ctrls.map((c, i) => "control " + (i + 1) + " " + spanTxt(c)).join("; ") + ". Cases require continuous data coverage from day " + dTxt(GG.ctrls[GG.ctrls.length - 1].first) + " onwards." + (variantCaveat(s) ? " " + variantCaveat(s) : ""))
             : ("THE WINDOW SCHEME IS NOT SPECIFIED IN THIS DRAFT. " + GG.stops.map((x) => x.msg).join(" "))),
-          "6": "Cases experiencing " + (s.picoO || "the outcome") + " during the study period. Case definition: " + (s.outcomeDef || "(case definition)") + " (" + (s.outcomeCodes || "codes TBD") + ").",
-          "7": "Exposure: " + (s.exposureName || s.picoI || "(exposure)") + " (" + (s.exposureCodes || "codes TBD") + "). Outcome (case): " + (s.picoO || "(outcome)") + ". Hazard-vs-referent window scheme per the protocol.",
+          "6": "Cases experiencing " + orFb(s.picoO, "the outcome") + " during the study period. Case definition: " + orFb(s.outcomeDef, "(case definition)") + " (" + orFb(s.outcomeCodes, "codes TBD") + ").",
+          "7": "Exposure: " + orFb(s.exposureName, orFb(s.picoI, "(exposure)")) + " (" + orFb(s.exposureCodes, "codes TBD") + "). Outcome (case): " + orFb(s.picoO, "(outcome)") + ". Hazard-vs-referent window scheme per the protocol.",
           "8": "Routinely-collected health data from the contributing databases (" + sitesPlain + "). Exposure and outcome ascertained from dispensing / diagnosis records by the protocol code sets.",
           "9": "Self-matched design removes fixed confounders. Exposure-time-trend bias addressed by the referent-window scheme" + (isCctc ? " and the case-case-time-control correction" : "") + "; further sensitivity analyses:\n" + bul(sens),
           "12": "Conditional logistic regression for the odds ratio, matching each case's hazard window to their referent window(s)" + (isCctc ? "; the control (future-case) crossover OR is divided out (CCTC)" : "") + ". Site-specific ORs pooled by " + metaTxt + " meta-analysis (report I², τ²). Subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
           "17": "Pre-specified subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
-          "19": "The case-crossover design controls time-invariant confounding but is susceptible to exposure-time-trend bias if exposure prevalence changes over time (mitigated by referent selection / the CCTC variant); it assumes transient exposure and abrupt, uncommon outcome onset, and that hazard and referent windows are non-overlapping eligible person-time; outcome misclassification is possible. " + ESTIMAND_LIMIT + (GG.issues.length ? " Outstanding window-scheme issues in the current draft: " + GG.issues.map((i) => i.t).join(" ") : "") + (GG.ok ? "" : " " + GG.stops.map((x) => x.msg).join(" ")),
+          "19": "The case-crossover design controls time-invariant confounding but is susceptible to exposure-time-trend bias if exposure prevalence changes over time (mitigated by referent selection / the CCTC variant); it assumes transient exposure and abrupt, uncommon outcome onset, and that hazard and referent windows are non-overlapping eligible person-time; outcome misclassification is possible. " + ESTIMAND_LIMIT + (() => { const n = checksOf(GG, s); return n.length ? " Checks the builder raises against the current draft: " + n.map((x) => x.t + " — " + x.d).join(" ") : ""; })(),
           "21": "Results generalise to the source populations of the contributing AsPEN databases: " + sitesPlain + ".",
         };
       };
@@ -1173,8 +1304,13 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         }
         const table = new D.Table({ width: { size: 9026, type: D.WidthType.DXA }, columnWidths: [700, 4163, 4163], rows });
         const children = [
-          new D.Paragraph({ children: [text("STROBE checklist; " + (s.title || "(Untitled multi-national case-crossover study)"), { bold: true, size: 32 })], spacing: { after: 120 } }),
-          p([new D.TextRun({ text: "This document maps the protocol fields to the STROBE statement (von Elm E, et al. PLoS Med 2007;4:e296). Methods items are pre-filled from your protocol; Results / Discussion items are placeholders to complete at the time of reporting. Full checklist with elaboration: strobe-statement.org.", font: FONT, size: 20, italics: true, color: "555555" })]),
+          new D.Paragraph({ children: [text("STROBE checklist; " + orFb(s.title, "(Untitled multi-national case-crossover study)"), { bold: true, size: 32 })], spacing: { after: 120 } }),
+          // Computed, not asserted. The old sentence claimed "Methods items are
+          // pre-filled; Results / Discussion items are placeholders" and was
+          // false in both directions: items 17, 19 and 21 are Results and
+          // Discussion items and ARE pre-filled, while Methods item 10 (study
+          // size) is not. Same defect found and fixed in descriptive-analysis.
+          p([new D.TextRun({ text: "This document maps the protocol fields to the STROBE statement (von Elm E, et al. PLoS Med 2007;4:e296). " + (() => { const keys = Object.keys(where); const all = STROBE_ITEMS.flatMap((sec) => sec.items.map(([n]) => n)); return keys.length + " of the " + all.length + " checklist items are pre-filled from your protocol (" + all.filter((n) => keys.includes(n)).join(", ") + "); the rest are placeholders to complete at the time of reporting."; })() + " Full checklist with elaboration: strobe-statement.org.", font: FONT, size: 20, italics: true, color: "555555" })]),
           p([new D.TextRun({ text: "Generated " + today + " from the AsPEN case-crossover protocol builder.", font: FONT, size: 18, italics: true, color: "777777" })]),
           table,
         ];
@@ -1222,36 +1358,63 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         let __phdcLogo = null; try { const __r = await fetch("/images/networks/phdc.png"); if (__r.ok) __phdcLogo = new Uint8Array(await __r.arrayBuffer()); } catch (e) {}
         const children = [];
         if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
-        children.push(new D.Paragraph({ children: [text(s.title || "(Untitled multi-national case-crossover study)", { bold: true, size: 32 })], spacing: { before: 0, after: 120 } }));
+        children.push(new D.Paragraph({ children: [text(orFb(s.title, "(Untitled multi-national case-crossover study)"), { bold: true, size: 32 })], spacing: { before: 0, after: 120 } }));
         children.push(labelTable([
-          ["Study ID", s.shortId || ""],
-          ["Lead investigator(s)", s.leadInvestigator || ""],
-          ["Version", s.version || ("v0.1 draft · " + today)],
+          ["Study ID", orFb(s.shortId, "")],
+          ["Lead investigator(s)", orFb(s.leadInvestigator, "")],
+          ["Version", orFb(s.version, "v0.1 draft · " + today)],
           ["Design", "Multi-national case-crossover study"],
         ]));
 
         window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
         children.push(h1("1. Research question"));
-        children.push(labelTable([["Population", s.picoP || ""], ["Exposure", s.picoI || ""], ["Outcome (case)", s.picoO || ""]]));
+        children.push(labelTable([["Population", orFb(s.picoP, "")], ["Exposure", orFb(s.picoI, "")], ["Outcome (case)", orFb(s.picoO, "")]]));
 
         children.push(h1("2. Sites"));
         children.push(para(sitesText));
 
         children.push(h1("3. Case definition"));
-        children.push(p([text("Operational definition. ", { bold: true }), text(s.outcomeDef || "-")]));
-        children.push(p([text("Code set. ", { bold: true }), text(s.outcomeCodes || "-")]));
-        children.push(p([text("Index date. ", { bold: true }), text(s.indexDateDef || "Admission date of first hospitalisation meeting the case definition.")]));
+        children.push(p([text("Operational definition. ", { bold: true }), text(orFb(s.outcomeDef, "-"))]));
+        children.push(p([text("Code set. ", { bold: true }), text(orFb(s.outcomeCodes, "-"))]));
+        children.push(p([text("Index date. ", { bold: true }), text(orFb(s.indexDateDef, FB.indexDate))]));
 
         children.push(h1("4. Exposure definition"));
         children.push(labelTable([
-          ["Name", s.exposureName || ""],
-          ["Code set", s.exposureCodes || ""],
-          ["Ascertainment rule", s.exposureRule || "Any dispensing within the window counts as exposed."],
+          ["Name", orFb(s.exposureName, "")],
+          ["Code set", orFb(s.exposureCodes, "")],
+          ["Ascertainment rule", orFb(s.exposureRule, FB.exposureRule)],
         ]));
 
         children.push(h1("5. Hazard (case) window"));
         if (G.ok) children.push(labelTable(hazardRows(G)));
         else children.push(p([text("This draft does not specify a window scheme. ", { bold: true }), text(G.stops.map((x) => x.msg).join(" ") + " Nothing has been assumed in its place — the hazard and referent windows are the estimand of a case-crossover study, so a length the builder could not read is left unstated rather than replaced by a plausible one.")]));
+
+        lastFigNote = "";
+        // HARPER item 7.2 — the study design diagram. The page drew one on
+        // screen and the Word protocol shipped without it. It belongs here,
+        // between the two window sections it illustrates. Two things it needs
+        // from this page:
+        //  * The written window list. That text, not the picture, is all a
+        //    reviewer or an extractor reading the .docx as text can see. The
+        //    shared helper builds it with its own day formatter, which rounds
+        //    −60 to "−2mo" — so a 7-day referent window came out as
+        //    "day −66d to −2mo". The exact inclusive spans this page already
+        //    computes are substituted instead.
+        //  * Nothing at all when the window scheme could not be read. There is
+        //    no geometry to draw, and the helper's stock failure note asks the
+        //    user to "paste a screenshot of the on-screen diagram" — right for a
+        //    rendering failure, wrong for a principled refusal, and there is no
+        //    on-screen diagram to paste.
+        if (G.ok) {
+          const FIG_CAPTION = "Figure 1. Case-crossover window scheme — the hazard window and the referent window(s) as inclusive day indices relative to the event (day 0).";
+          const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: FIG_CAPTION });
+          if (fig) fig.lines = ["Hazard window: " + spanTxt(G.haz) + (G.g > 0 ? " (the event day and the " + G.g + " day(s) before it are excluded)" : " (the event day is included)")].concat(G.ctrls.map((c, i) => "Control window " + (i + 1) + ": " + spanTxt(c))).concat(variantCaveat(s) ? ["Referent scheme for the variant in section 7: " + variantCaveat(s)] : []);
+          const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: FIG_CAPTION });
+          figParas.forEach((c) => children.push(c));
+          if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + ((fig && fig.reason) || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
+        } else {
+          children.push(p([new D.TextRun({ text: "[No study design diagram is included: the window scheme is not determined by what the form says, so there is no geometry to draw. HARPER item 7.2 requires a design diagram — specify the window lengths named in section 5 and re-export.]", font: FONT, size: 18, italics: true, color: "B45309" })]));
+        }
 
         children.push(h1("6. Control (referent) window(s)"));
         if (G.ok) {
@@ -1271,21 +1434,20 @@ _Drafted with the AsPEN case-crossover builder (${today})._
           children.push(p([text("Why it matters. ", { italics: true }), text(a.precise)]));
           children.push(p([text("What we do about it. ", { italics: true }), text(a.check + " [" + a.cite + "]")]));
         });
-        if (G.issues.length) {
-          children.push(h2("Outstanding issues with the window scheme in this draft"));
-          G.issues.forEach((i) => children.push(bullet(i.t)));
-        } else if (G.ok) {
-          children.push(para("The window scheme in this draft has no overlapping or mismatched windows."));
+        const chkNotes = checksOf(G, s);
+        if (chkNotes.length) {
+          children.push(h2("Checks the builder raises against this draft"));
+          chkNotes.forEach((n) => children.push(bullet(CHK_ICON[n.lvl] + " " + n.t + ". " + n.d)));
         } else {
-          children.push(para("The window scheme in this draft could not be read; see section 5."));
+          children.push(para("The builder's automatic checks on the window scheme, the design variant and the sensitivity list found nothing to raise against this draft. They are pattern checks over the fields on the form; they cannot tell you the design is right for your question."));
         }
         children.push(h2("What the estimate is"));
         children.push(para(ESTIMAND_LIMIT));
 
         children.push(h1("9. Statistical analysis"));
         children.push(labelTable([
-          ["Primary model", s.primaryModel || "Conditional logistic regression with case as conditioning stratum"],
-          ["Effect estimate", s.effectMeasure || "Odds ratio (OR); interpreted as IRR under rare-disease assumption"],
+          ["Primary model", orFb(s.primaryModel, FB.primaryModel)],
+          ["Effect estimate", orFb(s.effectMeasure, FB.effectMeasure)],
           ["Meta-analysis", meta],
         ]));
         children.push(h2("Subgroup analyses"));
@@ -1299,8 +1461,8 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         milestones.length ? milestones.forEach((l) => children.push(numItem(l))) : children.push(para("(none)"));
 
         children.push(h1("11. Ethics, data sharing, dissemination"));
-        children.push(p([text("Ethics. ", { bold: true }), text(s.ethics || "Each participating site obtains local IRB / ethics approval before data extraction.")]));
-        children.push(p([text("Dissemination. ", { bold: true }), text(s.dissemination || "Primary manuscript to a peer-reviewed pharmacoepidemiology journal.")]));
+        children.push(p([text("Ethics. ", { bold: true }), text(orFb(s.ethics, FB.ethics))]));
+        children.push(p([text("Dissemination. ", { bold: true }), text(orFb(s.dissemination, FB.dissemination))]));
 
         window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
         children.push(h1("12. Key references"));
@@ -1310,7 +1472,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
 
         const doc = new D.Document({
           creator: "AsPEN protocol builder",
-          title: s.title || "AsPEN case-crossover protocol",
+          title: orFb(s.title, "AsPEN case-crossover protocol"),
           styles: { default: { document: { run: { font: FONT, size: 22 } } }, paragraphStyles: [
             { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { size: 28, bold: true, font: FONT }, paragraph: { spacing: { before: 200, after: 80 }, outlineLevel: 0 } },
             { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true, run: { size: 24, bold: true, font: FONT }, paragraph: { spacing: { before: 160, after: 60 }, outlineLevel: 1 } },
@@ -1334,13 +1496,20 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         const f = filter.trim().toLowerCase();
         const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f)) : items;
         if (filtered.length === 0) { modalList.innerHTML = '<p class="px-3 py-6 text-sm text-slate-500 italic text-center">No phenotype matches.</p>'; return; }
-        // validation citation hidden in modal; accumulates silently and
-        // lands in the Word/MD References section at export time.
+        // The validation citation used to be hidden here and appended silently
+        // to the exported reference list. Whether a definition has been
+        // validated, in which coding system, is the single most important thing
+        // about it — so it is shown at the moment of picking, and an entry with
+        // no validation study says so rather than saying nothing.
         modalList.innerHTML = filtered.map((it, idx) => `
           <button type="button" data-phenotype-idx="${idx}" class="block w-full text-left px-4 py-3 rounded-lg border border-transparent hover:border-brand-300 hover:bg-brand-50/40 transition">
             <p class="font-semibold text-slate-900 text-sm">${esc(it.name)}</p>
             ${it.codes ? `<p class="mt-1 text-xs text-slate-700 font-mono leading-relaxed">${esc(it.codes)}</p>` : ""}
             ${it.definition ? `<p class="mt-1 text-xs text-slate-600 leading-relaxed">${esc(it.definition)}</p>` : ""}
+            ${"validation" in it ? (it.validation
+              ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation study</span> · ${esc(it.validation)}${it.validationNote ? " " + esc(it.validationNote) : ""} <span class="text-slate-500">Added to the protocol's reference list.</span></p>`
+              : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring the accuracy of this definition. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`) : ""}
+            ${it.provenance ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Used in</span> · ${esc(it.provenance)}</p>` : ""}
           </button>
         `).join("");
         modalList.querySelectorAll("[data-phenotype-idx]").forEach((btn) => {
@@ -1350,7 +1519,19 @@ _Drafted with the AsPEN case-crossover builder (${today})._
             const fill = (key, val) => { const fieldName = currentTargets[key]; if (!fieldName || val === undefined) return; const el = form.querySelector(`[name="${fieldName}"]`); if (el) el.value = val; };
             fill("name", it.name); fill("codes", it.codes); fill("def", it.definition);
             if (currentTargets.alsoFill) { const el = form.querySelector(`[name="${currentTargets.alsoFill}"]`); if (el && it.name) el.value = it.name; }
-            if (it.validation) { pickedCitations[it.name] = it.validation; savePickedCitations(); }
+            // Keyed by the FIELD the pick wrote into, not by the phenotype's
+            // name. Keyed by name, nothing ever evicted anything: pick MI,
+            // change your mind and pick hip fracture, and the exported protocol
+            // — Markdown and Word alike — cited an MI validation study as a
+            // numbered reference in a hip-fracture study, for an outcome
+            // appearing nowhere else in the document. It survived a reload and
+            // was cleared only by "Clear all". Browsing five outcomes while
+            // deciding exported five validation citations. A second pick into
+            // the same field now replaces the first, deterministically.
+            const citeKey = currentTargets.name || currentTargets.def || currentTargets.codes || "picked";
+            if (it.validation) pickedCitations[citeKey] = it.validation;
+            else delete pickedCitations[citeKey];
+            savePickedCitations();
             closeLibrary();
             render();
           });
