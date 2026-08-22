@@ -2680,14 +2680,29 @@ _Drafted with the AsPEN protocol builder (${today})._
       // look-back and exported it as "Comorbidities 0 d" — a plausible number
       // meaning "no baseline window at all", with nothing on screen to say the
       // text was never read. Distinguish unreadable from a deliberate 0.
+      // The readability test used to be /^\s*\d/, which looks at the FIRST
+      // character only, so anything starting with a digit was accepted whole
+      // and handed to parseInt. "1,000" and "1e3" both became 1 and "3.5"
+      // became 3, all with bad = false, so no check fired — and because a
+      // usable row switches the diagram to per-covariate mode, the shared
+      // 365-day look-back was suppressed as well. Someone asking for a
+      // 1000-day baseline window got a protocol asserting a one-day one, and
+      // nothing on screen said otherwise. Require the whole field to be a
+      // whole number of days, optionally with the word "days" after it.
+      const DAYS_RE = /^\d+\s*(?:d|day|days)?$/i;
       const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
         const p = l.split("|");
         const raw = (p[1] === undefined ? "" : String(p[1])).trim();
-        const n = parseInt(raw, 10);
-        const bad = raw === "" || !isFinite(n) || n < 0 || !/^\s*\d/.test(raw);
+        const bad = !DAYS_RE.test(raw);
+        const n = bad ? 0 : parseInt(raw, 10);
         return { name: (p[0] || "").trim(), days: bad ? 0 : n, bad: bad, raw: raw };
       }).filter((r) => r.name);
-      const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
+      // Keep what the user typed on a row we could not read. This used to write
+      // back the parsed `days`, which is 0 for an unreadable row, so clicking a
+      // covariate chip or dragging a handle silently rewrote
+      // "Comorbidities | one year" as "Comorbidities | 0" and the autosave
+      // persisted it — the warning then complained about a line reading "| 0".
+      const rowsJoin = (rows) => rows.map((r) => r.name + " | " + (r.bad ? r.raw : r.days)).join("\n");
       // A line in the per-covariate box with no readable "| days" is prose, not
       // a window. It used to be pushed into the diagram anyway with startDay 0
       // and endDay 0 — drawn as a zero-width covariate look-back and exported as
@@ -2840,7 +2855,23 @@ _Drafted with the AsPEN protocol builder (${today})._
         const addRow = e.target?.closest?.("[data-add-row]");
         if (addRow) {
           const el = form.elements[addRow.dataset.target], name = addRow.dataset.name;
-          if (el) { const rows = parseRows(el.value); if (!rows.some((r) => r.name === name)) { rows.push({ name: name, days: parseInt(form.elements.lookback && form.elements.lookback.value) || 365 }); el.value = rowsJoin(rows); render(); } }
+          if (el) {
+            const rows = parseRows(el.value);
+            if (!rows.some((r) => r.name === name)) {
+              // Seed the new row from the shared look-back, but read it the same
+              // way every other day count is read. `parseInt(v) || 365` turned a
+              // deliberate 0 into 365 and "1e3" into 1; an unreadable value is
+              // now carried through as typed so the row is flagged rather than
+              // silently given a number nobody chose.
+              const shared = String((form.elements.lookback && form.elements.lookback.value) || "").trim();
+              const ok = DAYS_RE.test(shared);
+              rows.push(ok
+                ? { name: name, days: parseInt(shared, 10), bad: false, raw: shared }
+                : { name: name, days: 0, bad: true, raw: shared || "(no shared look-back set)" });
+              el.value = rowsJoin(rows);
+              render();
+            }
+          }
           return;
         }
         const chip = e.target?.closest?.("[data-set-input]");
