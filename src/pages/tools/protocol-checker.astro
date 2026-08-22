@@ -609,6 +609,34 @@ const fwList = Object.values(FRAMEWORKS);
         return n && /assum|not stated|unstated|default|guess|inferred|approx/i.test(n) ? n : "";
       };
 
+      // A criteria list the AI returned as prose, or as objects, is not an empty
+      // criteria list. The panel and both exporters rendered anything that was
+      // not a non-empty array as "— none stated —", so a protocol whose
+      // eligibility the AI had extracted in full came back to its author as
+      // having none — and array entries that were objects printed as
+      // "[object Object]" into the Word file. Read what is there, say what could
+      // not be read, and never split prose into criteria we were not given.
+      const NAMED_KEYS = ["name", "criterion", "criteria", "label", "text", "description", "item", "value"];
+      function readList(v, what) {
+        if (Array.isArray(v)) {
+          const items = [], bad = [];
+          for (const x of v) {
+            if (typeof x === "string" || typeof x === "number" || typeof x === "boolean") {
+              const s = String(x).trim();
+              if (s) items.push(s);
+            } else if (x && typeof x === "object") {
+              const s = NAMED_KEYS.map((k) => x[k]).find((y) => typeof y === "string" && y.trim());
+              if (s) items.push(s.trim()); else bad.push(x);
+            }
+          }
+          return { items, note: bad.length ? bad.length + " entr" + (bad.length === 1 ? "y" : "ies") + " in the " + what + " could not be read as text and " + (bad.length === 1 ? "is" : "are") + " not shown" : "" };
+        }
+        if (typeof v === "string" && v.trim()) {
+          return { items: [v.trim()], note: "the AI returned the " + what + " as one block of prose rather than as separate entries; it is shown as written and has NOT been split, so the count of entries here is not the number of " + what };
+        }
+        return { items: [], note: "" };
+      }
+
       // A window whose days are not finite numbers produces NaN geometry, which
       // SVG renders as nothing at all — a diagram that silently loses a row is
       // worse than one that says a row was unusable.
@@ -697,21 +725,33 @@ const fwList = Object.values(FRAMEWORKS);
           '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + (KIND_COLOR[k] || "#64748b") + '"></span>' + escapeHtml(KIND_LABEL[k] || k) + '</span>').join("") +
           (assumed.length ? '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm border border-dashed border-slate-500"></span>dashed = duration assumed by the AI, not stated</span>' : "");
 
-        // Explicit inclusion / exclusion / covariates, colour-keyed to the diagram
-        const col = (title, dot, items, emptyTxt) => {
-          const list = Array.isArray(items) && items.length
-            ? '<ul class="mt-2 space-y-1">' + items.map((x) => '<li class="text-xs text-slate-700 leading-snug flex gap-1.5"><span class="text-slate-300">•</span><span>' + escapeHtml(x) + '</span></li>').join("") + '</ul>'
-            : '<p class="mt-2 text-xs text-slate-400 italic">' + emptyTxt + '</p>';
-          return '<div><p class="text-[11px] uppercase tracking-wider font-bold flex items-center gap-1.5" style="color:' + dot + '"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:' + dot + '"></span>' + title + '</p>' + list + '</div>';
+        // Explicit inclusion / exclusion / covariates, colour-keyed to the diagram.
+        // Read once here; the screen, the Markdown and the Word file all consume
+        // this same result, so they cannot describe three different lists.
+        const lists = {
+          inclusion: readList(d.inclusion, "inclusion criteria"),
+          exclusion: readList(d.exclusion, "exclusion criteria"),
+          covariates: readList(d.covariates, "covariates"),
+        };
+        const col = (title, dot, key) => {
+          const L = lists[key];
+          const list = L.items.length
+            ? '<ul class="mt-2 space-y-1">' + L.items.map((x) => '<li class="text-xs text-slate-700 leading-snug flex gap-1.5"><span class="text-slate-300">•</span><span>' + escapeHtml(x) + '</span></li>').join("") + '</ul>'
+            : '<p class="mt-2 text-xs text-slate-400 italic">— none stated —</p>';
+          return '<div><p class="text-[11px] uppercase tracking-wider font-bold flex items-center gap-1.5" style="color:' + dot + '"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:' + dot + '"></span>' + title + '</p>' + list +
+            (L.note ? '<p class="mt-1.5 text-[11px] text-amber-800 leading-snug">⚠ ' + escapeHtml(L.note) + '</p>' : "") + '</div>';
         };
         criteriaEl.innerHTML =
-          col("Inclusion", "#6366f1", d.inclusion, "— none stated —") +
-          col("Exclusion", "#ef4444", d.exclusion, "— none stated —") +
-          col("Covariates", "#f59e0b", d.covariates, "— none stated —");
+          col("Inclusion", "#6366f1", "inclusion") +
+          col("Exclusion", "#ef4444", "exclusion") +
+          col("Covariates", "#f59e0b", "covariates");
+        for (const k of ["inclusion", "exclusion", "covariates"]) {
+          if (lists[k].note && caveats) caveats.push("The " + k + " list: " + lists[k].note + ".");
+        }
 
         schemeEl.classList.remove("hidden");
-        // Handed back so the exports describe the SAME timeline the screen drew.
-        return { kept, dropped };
+        // Handed back so the exports describe the SAME scheme the screen drew.
+        return { kept, dropped, lists };
       }
 
       const DELIV_META = {
@@ -994,10 +1034,15 @@ const fwList = Object.values(FRAMEWORKS);
             for (const x of scheme.dropped) md += "- " + x.name + ": NOT USABLE — " + (x.why || "no start/end day") + "; this window was not drawn and is not part of the scheme\n";
             md += "\n";
           }
-          const critList = (title, arr) => { md += "**" + title + ":** " + (Array.isArray(arr) && arr.length ? "\n" + arr.map((x) => "  - " + x).join("\n") : "none stated") + "\n\n"; };
-          critList("Inclusion", d.inclusion);
-          critList("Exclusion", d.exclusion);
-          critList("Covariates", d.covariates);
+          const critList = (title, key) => {
+            const L = scheme.lists[key];
+            md += "**" + title + ":** " + (L.items.length ? "\n" + L.items.map((x) => "  - " + x).join("\n") : "none stated") + "\n";
+            if (L.note) md += "  - _⚠ " + L.note + "._\n";
+            md += "\n";
+          };
+          critList("Inclusion", "inclusion");
+          critList("Exclusion", "exclusion");
+          critList("Covariates", "covariates");
         }
         if (Array.isArray(delivRows) && delivRows.length) {
           md += "## Planned outputs & figures (shell tables, Love plot, …)\n\n";
@@ -1103,14 +1148,16 @@ const fwList = Object.values(FRAMEWORKS);
                 ]));
               }
             }
-            const critBlock = (title, arr) => {
+            const critBlock = (title, key) => {
+              const L = scheme.lists[key];
               children.push(h2(title));
-              if (Array.isArray(arr) && arr.length) for (const x of arr) children.push(para([text("•  " + x)]));
+              if (L.items.length) for (const x of L.items) children.push(para([text("•  " + x)]));
               else children.push(para([text("none stated", { italics: true, color: "999999" })]));
+              if (L.note) children.push(para([text("⚠ " + L.note + ".", { size: 17, color: "8A5A00", italics: true })]));
             };
-            critBlock("Inclusion criteria", d.inclusion);
-            critBlock("Exclusion criteria", d.exclusion);
-            critBlock("Covariates", d.covariates);
+            critBlock("Inclusion criteria", "inclusion");
+            critBlock("Exclusion criteria", "exclusion");
+            critBlock("Covariates", "covariates");
           }
 
           if (Array.isArray(delivRows) && delivRows.length) {
