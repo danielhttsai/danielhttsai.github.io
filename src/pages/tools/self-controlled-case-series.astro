@@ -1394,6 +1394,20 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // a red mark on a page nobody has touched yet teaches people to ignore
         // the panel.
         const expSegs = periods.filter((p) => p.kind === "exposure");
+        // Zero is a readable length, and deliberately so — the sensitivity list
+        // itself offers "Alternative pre-risk window (0, 30, 60 d)", so a 0-day
+        // pre, post or washout segment is a real choice meaning "none". A 0-day
+        // exposure risk window is not: it leaves no exposed person-time, so the
+        // incidence rate ratio the whole protocol is built to report has no
+        // numerator. The old parser clamped every length up to 1 and so could
+        // never say any of this.
+        const zeroSegs = periods.filter((p) => p.ok && p.days === 0);
+        if (zeroSegs.length) {
+          const noExposedTime = expSegs.length > 0 && expSegs.every((p) => p.ok && p.days === 0);
+          out.push(noExposedTime
+            ? { lvl: "stop", t: "The exposure risk window is zero days long", d: "Every exposure risk period on the strip has a length of 0, so no person-time is classified as exposed and there is nothing for the reference time to be a rate ratio against. The incidence rate ratio this protocol reports would have no numerator. Give the exposure risk period a length, or say plainly which period is meant to carry the exposed time." }
+            : { lvl: "info", t: "A period is zero days long", d: zeroSegs.map((p) => "“" + p.name + "”").join(", ") + " " + (zeroSegs.length > 1 ? "have" : "has") + " a length of 0, so " + (zeroSegs.length > 1 ? "they contribute" : "it contributes") + " no person-time and " + (zeroSegs.length > 1 ? "have" : "has") + " no effect on the estimate. That is a legitimate way to say “no such window” — the sensitivity list offers a 0-day pre-risk window — but the exported protocol still names the period, so delete the line if you meant to remove it." });
+        }
         const RW_DAYS = { "0-30": 30, "0-90": 90, "0-180": 180 };
         const rwWant = RW_DAYS[s.riskWindowDef];
         if (rwWant && expSegs.length && expSegs.every((p) => p.ok)) {
