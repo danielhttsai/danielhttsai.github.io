@@ -1570,7 +1570,25 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         comparator: orFb(s.picoC, "(active comparator)"),
         outcome: orFb(s.picoO, "(primary outcome)"),
         data: (s.sites && s.sites.length ? s.sites.length + " AsPEN data source(s)" : "multi-national AsPEN data sources"),
-        analysis: "propensity-score confounding control with an intention-to-treat / on-treatment Cox analysis, pooled across sites by meta-analysis",
+        // The abstract is the first thing a reviewer reads, and it stated a
+        // fixed analysis whatever the form said. Choose overlap weights, a
+        // landmark analysis and a risk difference and the abstract asserted
+        // PS control, a Cox model and both analysis types, contradicting
+        // sections 6 and 8 of its own document. Note the parentheses: + binds
+        // tighter than ||, so an unparenthesised `"a " + map[k] || "b"` never
+        // reaches its fallback.
+        analysis: (PS_METHOD_DESCRIPTIONS[s.psMethod] || "propensity-score confounding control")
+          + " with " + (({
+              ITT: "an intention-to-treat (as-assigned) analysis",
+              OT: "an on-treatment (per-protocol) analysis",
+              both: "both intention-to-treat and on-treatment analyses",
+              landmark: "a landmark analysis",
+            })[s.primaryAnalysisType] || "the primary analysis named in Section 6")
+          + ", reporting " + (({
+              HR: "a hazard ratio", RR: "a risk ratio",
+              RD: "a risk difference", IRR: "an incidence rate ratio",
+            })[s.effectMeasure] || "the effect measure named in Section 8")
+          + ", pooled across sites by meta-analysis",
         groupBy: "treatment group",
         skip: ["studySize", "ethics"],
         limitations: "The active comparator must share the indication and have no a-priori association with the outcome; residual confounding by unmeasured indication severity and informative censoring under the on-treatment analysis remain possible.",
@@ -1791,7 +1809,13 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         const hasBoot = bootLo !== null && bootHi !== null;
         const ratio = s.effectMeasure !== "RD";
         const measure = ({ HR: "HR", RR: "RR", RD: "RD", IRR: "IRR" })[s.effectMeasure] || "HR";
-        const nonCollapsible = s.effectMeasure !== "RD";   // HR / RR-from-logistic / IRR: Wan bias source 1
+        // Wan bias source 1. Of the four measures this builder offers, only the
+        // hazard ratio is non-collapsible; the risk ratio and the incidence rate
+        // ratio are collapsible, as is the risk difference. This read
+        // `!== "RD"`, so a user reporting an RR or an IRR was told their measure
+        // was non-collapsible by a paragraph whose own first sentence correctly
+        // names the odds and hazard ratio as the non-collapsible pair.
+        const nonCollapsible = s.effectMeasure === "HR";
         const scaleLabel = s.pscScale === "logit" ? "logit(PS)" : "PS (probability scale)";
         // Surrogacy verdict. S (Lunt 2012, Table 2 footnote g) is the primary
         // instrument and the p-value is demoted to a secondary one, because the
@@ -1857,7 +1881,7 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
             "This protocol reports a " + m.measure + ". Wan identifies non-collapsibility of the odds and hazard ratio as an independent source of PSC bias: conditioning on a propensity score is not the same as conditioning on the covariates, and for a non-collapsible measure that changes the coefficient being estimated. So the calibrated " + m.measure + " is conditional on the gold-standard propensity score, not on baseline covariates — a subtly different estimand from the one the protocol otherwise describes. The gap shrinks as the outcome becomes rarer. In our simulation with proportional coefficients the calibrated log odds ratio still sat 0.13 below the truth, against a naive bias of +0.84. State the estimand you are reporting."]);
         } else {
           out.push(["4. Your effect measure is collapsible, which removes one of the two bias sources",
-            "A risk difference is collapsible, so Wan's non-collapsibility bias does not apply. Residual confounding — the calibrated score not being a valid propensity score — still does, and is still governed by the proportionality condition above."]);
+            ({ RD: "A risk difference", RR: "A risk ratio", IRR: "An incidence rate ratio" })[m.measure] + " is collapsible — it is the odds ratio and the hazard ratio that are not — so Wan's non-collapsibility bias does not apply. Residual confounding — the calibrated score not being a valid propensity score — still does, and is still governed by the proportionality condition above."]);
         }
         out.push(["5. What to report",
           "Report the naive claims-only estimate as the primary result and the calibrated estimate as a pre-specified sensitivity analysis, never the calibrated one alone. Report the surrogacy test with it. Report the calibration coefficients α₀, α₁, α₂ with standard errors and R² so the correction is reproducible and reusable. Give the calibrated estimate a bootstrap interval, not a closed-form one. If surrogacy is doubtful or untestable, Lunt et al. (Am J Epidemiol 2012;175(12):1294-1302, doi:10.1093/aje/kwr463) give a bias formula that lets you present PSC as a sensitivity analysis over a plausible range for the unmeasured confounder's outcome association rather than as a point correction."]);
@@ -1991,7 +2015,10 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
               "boot <- replicate(B, {",
               "  ids <- sample(main$id, nrow(main), replace = TRUE)",
               "  m <- main[match(ids, main$id), ]",
-              "  v <- val[val$id %in% ids, ]",
+              "  ## match(), not %in%: %in% is a membership mask, so a patient drawn",
+              "  ## three times contributed one validation row and the replicate was",
+              "  ## a ~63% distinct subsample, not a resample of the patients in m.",
+              "  v <- val[na.omit(match(ids, val$id)), ]",
             ].join("\n")
             : [
               "## EXTERNAL validation sample: the two datasets are independent, so",
@@ -2837,7 +2864,29 @@ _Drafted with the AsPEN protocol builder (${today})._
         if (pa === "ITT" || pa === "both") checks.push({ level: "info", msg: "ITT (as-assigned): the treatment strategy is fixed at the index date — later switching or add-on therapy is ignored (no deviation censoring)." });
         if (pa === "OT" || pa === "both") checks.push({ level: "info", msg: "On-treatment (per-protocol): follow-up is censored at deviation (discontinuation/switch), so this informative censoring should be adjusted with IPCW." });
         if (pa === "landmark") checks.push({ level: "warn", msg: "Landmark analysis is conditional on patients who survive event-free to the landmark time — it estimates a conditional effect and drops early events; state the landmark time and interpret accordingly." });
-        checks.push({ level: "ok", msg: "Eligibility, treatment assignment, and follow-up start are aligned at the index date (time zero) — this is what avoids immortal-time bias." });
+        // An "ITT" analysis that censors at deviation is a per-protocol analysis
+        // under the wrong name, and it is one click from the defaults: the first
+        // two censoring rules ship ticked. The panel already tells the user ITT
+        // ignores switching while the document beside it instructs the site to
+        // censor on exactly that.
+        if (pa === "ITT") {
+          const deviation = mergeList(s.censoringPick, s.censoringCustom)
+            .filter((l) => /discontinu|switch|add-on|non-adheren|deviat/i.test(l));
+          if (deviation.length) checks.push({ level: "warn", msg: "The primary analysis is ITT (as-assigned), but the censoring rules include " + deviation.map((l) => "“" + l + "”").join(", ") + ". An ITT analysis does not censor at deviation — censoring there makes it a per-protocol analysis under an ITT label, and puts back the selection bias the as-assigned contrast is chosen to avoid. Untick those rules, or set the primary analysis to on-treatment or both. The grace period the protocol prints applies to the on-treatment analysis only." });
+        }
+        // This was pushed on every render, so nothing could falsify it. It sat
+        // directly under the panel's own "Washout is 0 — prevalent (non-new)
+        // users may be included" and certified that follow-up began at
+        // treatment initiation, on a form nobody had touched; and it stayed
+        // green under a landmark analysis, which creates immortal time by
+        // construction. A check that cannot come out false is not a check.
+        if (pa === "landmark") {
+          checks.push({ level: "warn", msg: "Follow-up does not start at time zero under a landmark analysis: patients who die or have the event before the landmark are excluded, so the interval between the index date and the landmark is immortal time by construction. Say how you handle it." });
+        } else if (!washR.ok || wash <= 0) {
+          checks.push({ level: "warn", msg: "Time zero cannot be certified while the washout is 0 or unreadable — a cohort that may contain prevalent users is one whose follow-up does not start at treatment initiation. Set a washout and this check can pass." });
+        } else {
+          checks.push({ level: "ok", msg: "Eligibility, treatment assignment, and follow-up start are aligned at the index date (time zero) — this is what avoids immortal-time bias. A post-index eligibility criterion (for example “≥2 dispensings within 90 days”) would reintroduce it; this check reads the windows, not your custom criteria." });
+        }
         if (s.pscEnable === "yes") {
           const m = pscModel(s);
           if (m.clinical.length === 0) checks.push({ level: "warn", msg: "PS calibration is switched on but no covariate is marked clinical-only — the gold-standard and error-prone scores would be identical and the correction would be a no-op. Mark the variables the claims database cannot see." });
