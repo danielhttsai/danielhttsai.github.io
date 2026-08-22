@@ -138,10 +138,15 @@ const fwList = Object.values(FRAMEWORKS);
                 <p id="summary" class="mt-1 text-sm text-slate-600 leading-relaxed"></p>
               </div>
               <div class="shrink-0 flex items-center gap-2">
-                <button id="downloadword" class="rounded-xl bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800">⬇ Word (.docx)</button>
+                <button id="downloadword" class="rounded-xl bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 disabled:cursor-wait">⬇ Word (.docx)</button>
                 <button id="download" class="rounded-xl border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50">⬇ Markdown</button>
               </div>
             </div>
+            <!-- A download that fails has to say so HERE. Its only report used to
+                 go to #status, which lives in the input card ~1,300px above: the
+                 observable behaviour of a blocked CDN was a button that did
+                 nothing, for ever. -->
+            <p id="dlerr" class="hidden mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 leading-relaxed"></p>
             <div id="bar" class="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100"></div>
             <div id="tally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
             <!-- The AI's own prose summary, kept apart from the tally above it.
@@ -282,9 +287,15 @@ const fwList = Object.values(FRAMEWORKS);
       // page looks frozen with nothing to explain it.
       const scriptPromises = new Map();
       const SCRIPT_TIMEOUT = 20000;
-      function loadScript(src) {
+      function loadScript(src, alt) {
         if (scriptPromises.has(src)) return scriptPromises.get(src);
         const name = src.split("/").pop();
+        // Name the host that actually failed. This message hardcoded
+        // cdnjs.cloudflare.com because three of its four callers use it — but the
+        // fourth, the Word export, loads from unpkg.com, so a user behind a proxy
+        // that blocks unpkg was told to have the wrong domain unblocked.
+        let host = "the CDN it is hosted on";
+        try { host = new URL(src, location.href).host; } catch (e) {}
         const p = new Promise((res, rej) => {
           const s = document.createElement("script");
           const fail = (why) => {
@@ -292,8 +303,8 @@ const fwList = Object.values(FRAMEWORKS);
             // rather than replaying this failure for the rest of the session.
             scriptPromises.delete(src);
             try { s.remove(); } catch (e) {}
-            rej(new Error("A component needed to read this file (" + name + ") " + why +
-              ". It is fetched from cdnjs.cloudflare.com — check your connection or any blocker, then try again, or paste the text instead."));
+            rej(new Error("A component needed for this step (" + name + ") " + why +
+              ". It is fetched from " + host + " — check your connection or any blocker, then try again." + (alt || "")));
           };
           const timer = setTimeout(() => fail("took more than " + (SCRIPT_TIMEOUT / 1000) + " seconds to download"), SCRIPT_TIMEOUT);
           s.src = src;
@@ -333,7 +344,7 @@ const fwList = Object.values(FRAMEWORKS);
       // forever is far worse than losing the table borders. Cell text IS read.
       async function extractDocx(file, step) {
         step("Loading the Word reader…");
-        await loadScript(MAMMOTH);
+        await loadScript(MAMMOTH, " Or paste the text instead.");
         step("Extracting the text…");
         const buf = await file.arrayBuffer();
         let r;
@@ -355,7 +366,7 @@ const fwList = Object.values(FRAMEWORKS);
 
       async function extractXlsx(file, step) {
         step("Loading the spreadsheet reader…");
-        await loadScript(SHEETJS);
+        await loadScript(SHEETJS, " Or paste the text instead.");
         step("Reading the cells…");
         const wb = window.XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
         const notes = [];
@@ -373,7 +384,7 @@ const fwList = Object.values(FRAMEWORKS);
 
       async function extractPdf(file, step) {
         step("Loading the PDF reader…");
-        await loadScript(PDFJS);
+        await loadScript(PDFJS, " Or paste the text instead.");
         step("Opening the PDF…");
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
         let pdf;
@@ -401,9 +412,33 @@ const fwList = Object.values(FRAMEWORKS);
         return { text: out, notes, detail: pdf.numPages + " page(s)" };
       }
 
+      // A .txt is the only upload with no parser behind it, so it is the only one
+      // that cannot fail. A renamed .docx, a gzip, or a UTF-16 export decodes to
+      // thousands of replacement characters, clears the 200-character floor
+      // easily (every bad byte becomes a character that counts), and is sent to
+      // the model as though it were a protocol — which then scores it. Decode by
+      // the byte-order mark where there is one (UTF-16 is what Notepad's
+      // "Unicode" option and several Windows statistical packages write), and
+      // refuse what still comes back as bytes rather than text.
+      const NOTTEXT_RE = /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
       async function extractPlain(file, step) {
         step("Reading the text…");
-        return { text: await file.text(), notes: [] };
+        const buf = new Uint8Array(await file.arrayBuffer());
+        let enc = "utf-8";
+        if (buf.length > 1 && buf[0] === 0xFF && buf[1] === 0xFE) enc = "utf-16le";
+        else if (buf.length > 1 && buf[0] === 0xFE && buf[1] === 0xFF) enc = "utf-16be";
+        let text;
+        try { text = new TextDecoder(enc).decode(buf); }
+        catch (e) { text = new TextDecoder("utf-8").decode(buf); enc = "utf-8"; }
+        const notes = enc === "utf-8" ? [] : ["This file was saved as " + enc.toUpperCase() + " rather than UTF-8, and was decoded accordingly."];
+        const bad = (text.match(NOTTEXT_RE) || []).length;
+        const pct = Math.round((bad / (text.length || 1)) * 100);
+        if (bad / (text.length || 1) > 0.02) {
+          throw new Error("“" + file.name + "” does not read as plain text — about " + pct + "% of it is bytes that are not characters, so nothing here can be assessed. " +
+            "A file renamed to .txt keeps its original format inside: if this is really a Word document, a PDF or a spreadsheet, upload it under its own extension. " +
+            "If it is text, re-save it as UTF-8 (in Word or Notepad: “Save as → Plain Text (UTF-8)”), or paste the text instead.");
+        }
+        return { text, notes };
       }
 
       const UNSUPPORTED = {
@@ -1101,6 +1136,15 @@ const fwList = Object.values(FRAMEWORKS);
 
       async function downloadWord() {
         if (!lastReport) return;
+        // Everything about this button's progress and failure belongs next to the
+        // button. The library it needs is fetched from a CDN some institutional
+        // proxies block, and that failure used to be reported only in #status,
+        // far off the top of the screen, up to 20 seconds later.
+        const wordBtn = $("downloadword"), dlErr = $("dlerr");
+        dlErr.classList.add("hidden");
+        wordBtn.disabled = true;
+        const label = wordBtn.textContent;
+        wordBtn.textContent = "Building…";
         setStatus("Building Word document…");
         try {
           await loadScript(DOCX);
@@ -1218,7 +1262,14 @@ const fwList = Object.values(FRAMEWORKS);
           setTimeout(() => URL.revokeObjectURL(url), 1000);
           setStatus("");
         } catch (e) {
-          setStatus("Couldn't build the Word file: " + (e && e.message ? e.message : e), true);
+          const msg = "The Word file could not be built. " + (e && e.message ? e.message : String(e)) +
+            " The Markdown report next to this button is produced entirely in your browser and does not need it.";
+          dlErr.textContent = msg;
+          dlErr.classList.remove("hidden");
+          setStatus("");
+        } finally {
+          wordBtn.disabled = false;
+          wordBtn.textContent = label;
         }
       }
 
