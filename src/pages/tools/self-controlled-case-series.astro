@@ -886,15 +886,37 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // was also assembled by two copies of the same expression, one in the
       // Markdown builder and one in the Word builder, which is how the pairs of
       // lookups in this codebase have drifted before; there is one now.
-      const liveCitations = (s) => {
-        const named = [s.picoO, s.picoI, s.exposureName, s.outcomeDef].map((x) => String(x || "").toLowerCase());
-        return Object.entries(pickedCitations)
-          .filter(([nm, cite]) => cite && cite.trim() && named.some((v) => v && v.includes(String(nm).toLowerCase())))
-          .map(([, cite]) => cite.trim());
+      //
+      // The first version of this searched four fields for the phenotype's name
+      // as a substring, and got it wrong in both directions. Rewording the
+      // outcome from "Myocardial infarction (MI)" to "Acute myocardial
+      // infarction" — the most ordinary edit there is — deleted the validation
+      // reference with no notice; and naming MI as an *inclusion criterion*
+      // ("Hip fracture in patients with prior myocardial infarction") revived an
+      // MI outcome-validation study into a hip-fracture protocol, which is the
+      // same bug from the other side.
+      //
+      // A citation is stored against the FIELD it was written into, so picking a
+      // new outcome evicts the previous one deterministically instead of by
+      // substring luck. And because neither dropping nor keeping is safe to do
+      // in silence, an entry whose field no longer names its phenotype is
+      // withheld AND reported, rather than either one quietly.
+      const citeEntries = () => Object.entries(pickedCitations)
+        .map(([field, v]) => (v && typeof v === "object" && v.cite) ? { field, name: String(v.name || ""), cite: String(v.cite) } : { field, legacy: true })
+        .filter(Boolean);
+      const citeState = (s) => {
+        const live = [], lapsed = [];
+        for (const e of citeEntries()) {
+          if (e.legacy) { lapsed.push({ name: "(a phenotype picked before this page stored which field it filled)", field: e.field }); continue; }
+          const val = String(s[e.field] || "");
+          if (val && val.toLowerCase().includes(e.name.toLowerCase())) live.push(e.cite.trim());
+          else lapsed.push({ name: e.name, field: e.field });
+        }
+        return { live, lapsed };
       };
       const refsOf = (s) => {
         const set = new Set(String(s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean));
-        for (const c of liveCitations(s)) set.add(c);
+        for (const c of citeState(s).live) set.add(c);
         return Array.from(set);
       };
       const mergeList = (picks, customText) => {
@@ -975,7 +997,12 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         skip: ["ethics"],
         amendments: s.amendments,
         version: s.version,
-        limitations: "SCCS removes time-invariant between-person confounding but assumes events do not affect subsequent exposure and do not censor observation; time-varying confounders (age, season) must be modelled.",
+        // The document never said what the IRR is, in a protocol whose whole
+        // output is an IRR and whose cross-site section pools it with estimates
+        // from other designs. A reader who takes a within-person relative
+        // incidence for a cohort hazard ratio has misread the design, and this
+        // is the sentence that is supposed to stop them.
+        limitations: "The estimate is an incidence rate ratio: a within-person relative incidence, estimated from cases only. It is not an absolute risk, no risk difference is estimable from it without an external denominator, and it is not interchangeable with a hazard ratio from a cohort design. SCCS removes time-invariant between-person confounding but assumes events do not affect subsequent exposure and do not censor observation; time-varying confounders (age, season) must be modelled.",
         plannedOutputs: ["Case-selection flow diagram.", "Distribution of exposed vs unexposed person-time and events.", "Incidence-rate ratio by risk window, with a forest plot across sites."],
       });
       const sitesLine = (ids, otherText) => {
@@ -1416,6 +1443,12 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           out.push({ lvl: "stop", t: "Your saved draft asked for a choice this form no longer offers", d:
             staleSelects.map((x) => "“" + x.label + "” was saved as “" + x.value + "”, which is not one of its options; it has been left at “" + x.kept + "”").join(". ") +
             ". Check that setting before you export: a value the form cannot show is a value the protocol cannot honour, and it is not recoverable from the saved draft once the page has loaded." });
+        }
+        const lapsed = citeState(s).lapsed;
+        if (lapsed.length) {
+          out.push({ lvl: "info", t: "A validation citation is no longer attached", d:
+            lapsed.map((x) => "the study attached when you picked " + x.name + " is not in the reference list, because “" + x.field + "” no longer names it").join("; ") +
+            ". Nothing has been added or removed from your reference list on a guess: re-pick the phenotype from the library, or paste the citation into Key references yourself." });
         }
         const dos = readDays(s.daysOfSupply), grc = readDays(s.grace);
         if (!dos.ok || !grc.ok) {
@@ -1989,7 +2022,15 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
             fill("codes", it.codes);
             fill("def", it.definition);
             if (currentTargets.alsoFill) { const el = form.querySelector(`[name="${currentTargets.alsoFill}"]`); if (el && it.name) el.value = it.name; }
-            if (it.validation) { pickedCitations[it.name] = it.validation; savePickedCitations(); }
+            // Keyed by the field the phenotype's name was written into, not by
+            // the phenotype's name — so picking a second outcome replaces the
+            // first one's citation instead of accumulating beside it.
+            const citeField = currentTargets.alsoFill || currentTargets.name;
+            if (citeField) {
+              if (it.validation) pickedCitations[citeField] = { name: it.name, cite: it.validation };
+              else delete pickedCitations[citeField];
+              savePickedCitations();
+            }
             closeLibrary();
             render();
           });
