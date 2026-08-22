@@ -901,6 +901,15 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         const lines = (customText || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         return [...(picks || []), ...lines];
       };
+      // A "|" anywhere in a Markdown table cell ends the cell. Typing
+      // "ATC N05A* | excluding N05AN01" in the code set emitted a three-cell row
+      // against a two-column header, and GFM drops the cells past the header
+      // width — so the Markdown silently lost "excluding N05AN01" while the
+      // .docx kept it, and the two exported documents specified different code
+      // sets for the same study. Period names can contain a "|" too, now that
+      // the parser splits on the last one. Same defect and same fix as
+      // descriptive-analysis.astro.
+      const tc = (v) => String(v ?? "").replace(/\|/g, "\\|");
       const bullets = (arr) => arr.length === 0 ? "_(none specified)_" : arr.map((l) => "- " + l).join("\n");
       const numbered = (arr) => arr.length === 0 ? "_(none)_" : arr.map((l, i) => (i + 1) + ". " + l).join("\n");
       const orFb = (s, fb) => (s && s.trim()) ? s : fb;
@@ -1017,9 +1026,9 @@ ${window.PC.abstractMd(pcOf(s))}
 
 | | |
 |---|---|
-| **Population** | ${orFb(s.picoP, "_(population)_")} |
-| **Exposure**   | ${orFb(s.picoI, "_(exposure)_")} |
-| **Outcome**    | ${orFb(s.picoO, "_(outcome)_")} |
+| **Population** | ${tc(orFb(s.picoP, "_(population)_"))} |
+| **Exposure**   | ${tc(orFb(s.picoI, "_(exposure)_"))} |
+| **Outcome**    | ${tc(orFb(s.picoO, "_(outcome)_"))} |
 
 ## 2. Sites
 
@@ -1037,11 +1046,11 @@ ${sitesLine(s.sites, s.sitesOther)}
 
 | | Value |
 |---|---|
-| **Name** | ${orFb(s.exposureName, "_(exposure name)_")} |
-| **Code set** | ${orFb(s.exposureCodes, "_(codes)_")} |
-| **Days of supply (default)** | ${rowDays(readDays(s.daysOfSupply))} |
-| **Grace period** | ${rowDays(readDays(s.grace))} |
-| **Exposure period rule** | ${orFb(s.exposurePeriodDef, "Continuous exposure inferred from sequential dispensings; gap > grace period ends the episode.")} |
+| **Name** | ${tc(orFb(s.exposureName, "_(exposure name)_"))} |
+| **Code set** | ${tc(orFb(s.exposureCodes, "_(codes)_"))} |
+| **Days of supply (default)** | ${tc(rowDays(readDays(s.daysOfSupply)))} |
+| **Grace period** | ${tc(rowDays(readDays(s.grace)))} |
+| **Exposure period rule** | ${tc(orFb(s.exposurePeriodDef, "Continuous exposure inferred from sequential dispensings; gap > grace period ends the episode."))} |
 
 ## 5. Design variant
 
@@ -1051,11 +1060,11 @@ ${sccsVariantText}
 
 | | |
 |---|---|
-| **Timeline anchor** | ${s.sccsAnchor === "calendar" ? "Calendar-anchored — common start " + orFb(s.cohortStart, "(date)") + "; baseline " + (s.baselineYears || "1") + " calendar year(s) before start" : "Exposure-anchored — day 0 = first exposure"} |
-| **Risk / reference periods** | ${parsePeriods(s.periods).map((p) => p.name + " " + rowDays(p)).join(" → ") || "(define the period strip)"} |
-| **Risk window definition** | ${riskWin} |
-| **Baseline (control) period** | ${orFb(s.baselinePeriod, "All observation time NOT in pre-risk, risk, or post-risk windows.")} |
-| **Covariate / eligibility look-back** | ${covLookbackText(s)} |
+| **Timeline anchor** | ${tc(s.sccsAnchor === "calendar" ? "Calendar-anchored — common start " + orFb(s.cohortStart, "(date)") + "; baseline " + (s.baselineYears || "1") + " calendar year(s) before start" : "Exposure-anchored — day 0 = first exposure")} |
+| **Risk / reference periods** | ${tc(parsePeriods(s.periods).map((p) => p.name + " " + rowDays(p)).join(" → ")) || "(define the period strip)"} |
+| **Risk window definition** | ${tc(riskWin)} |
+| **Baseline (control) period** | ${tc(orFb(s.baselinePeriod, "All observation time NOT in pre-risk, risk, or post-risk windows."))} |
+| **Covariate / eligibility look-back** | ${tc(covLookbackText(s))} |
 
 ## 7. Observation period
 
@@ -1225,7 +1234,20 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         const segs = periods.map((p) => { const g = { name: p.name, kind: p.kind, s: cum, e: cum + p.days }; cum += p.days; return g; });
         const expIdx = segs.findIndex((x) => x.kind === "exposure");
         const day0 = anchor === "calendar" ? segs[0].s : (expIdx >= 0 ? segs[expIdx].s : 0);
-        const lines = ["Time zero (day 0): " + (anchor === "calendar" ? "cohort entry" + (s.cohortStart ? " (" + s.cohortStart + ")" : "") : "each case's own first exposure")];
+        // Day 0 is the first exposure segment's start — so with no exposure
+        // segment there is no such anchor, and saying "each case's own first
+        // exposure" describes an exposure the strip does not contain. The
+        // checks panel blocks that case; this list must not assert it either.
+        const lines = ["Time zero (day 0): " + (anchor === "calendar"
+          ? "cohort entry" + (s.cohortStart ? " (" + s.cohortStart + ")" : "")
+          : (expIdx >= 0 ? "each case's own first exposure" : "the start of the strip — no exposure risk period is defined"))];
+        // The calendar baseline block is drawn in the figure and named in
+        // section 6, but was built from `periods` alone and so was missing from
+        // the written list — which then described an axis starting at day 0 for
+        // a picture that starts two years earlier. This list is what a checker
+        // reading the .docx as text sees, so the omission was the whole design.
+        const baseDaysL = Math.round(Math.max(0, parseFloat(s.baselineYears) || 0) * 365);
+        if (anchor === "calendar" && baseDaysL > 0) lines.push("Baseline (calendar): day -" + baseDaysL + " to day 0");
         segs.forEach((g) => lines.push(g.name + ": day " + (g.s - day0) + " to day " + (g.e - day0)));
         for (const r of parseRows(s.covWindows)) lines.push("Covariate / eligibility look-back, " + r.name + ": " + (r.ok ? "day -" + r.days + " to day 0" : rowDays(r)));
         return lines;
@@ -1274,7 +1296,10 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // the checks panel names it. `drawn` keeps each row's ORIGINAL index:
         // the drag handles carry it in `data-idx` and write straight back into
         // that line of the textarea, so re-indexing here would drag the wrong row.
-        const covDrawn = covRows.map((r, i) => ({ r, i })).filter((x) => x.r.ok);
+        // `.days > 0` restores an invariant the parser this replaced stated in
+        // its own comment — that "a '0 d' look-back can't be drawn as a visible
+        // bar". Without it a zero-day row drew a 3px stub sitting on day 0.
+        const covDrawn = covRows.map((r, i) => ({ r, i })).filter((x) => x.r.ok && x.r.days > 0);
         const covMax = covDrawn.reduce((m, x) => Math.max(m, x.r.days), 0);
         const stripMin = segs.length ? segs[0].start : 0, stripMax = segs.length ? segs[segs.length - 1].end : 1;
         let lo = Math.min(stripMin, -covMax, anchor === "calendar" ? -baseDays : 0), hi = Math.max(stripMax, 1);
@@ -1325,8 +1350,12 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // base ones — a legend entry for a colour that is not drawn is as
         // confusing as a drawn colour with no entry, which is what "Washout"
         // used to be.
-        const legendKinds = ["reference", "exposure", "pre", "post"].concat(["washout", "custom"].filter((k) => segs.some((x) => x.kind === k)));
-        document.getElementById("dlegend").innerHTML = legendKinds.map((k) => '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + PKIND[k].c + '"></span>' + PKIND[k].l + '</span>').join("") +'<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Covariate look-back</span>' +
+        // Every kind filtered by presence, not just the two added last. Four
+        // keys were unconditional, so a strip of Reference + Exposure still
+        // advertised "Pre-exposure risk" and "Post-exposure risk" for colours
+        // that appear nowhere in the figure — on the figure HARPER requires.
+        const legendKinds = ["reference", "exposure", "pre", "post", "washout", "custom"].filter((k) => segs.some((x) => x.kind === k));
+        document.getElementById("dlegend").innerHTML = legendKinds.map((k) => '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + PKIND[k].c + '"></span>' + PKIND[k].l + '</span>').join("") + (covDrawn.length ? '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Covariate look-back</span>' : "") +
           (badRows(covRows).length ? '<span class="text-rose-700 font-semibold">Not drawn: ' + badRows(covRows).map((r) => esc(r.name)).join(", ") + ' (no readable length)</span>' : "");
 
         const svgXof = (cx) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = cx; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
@@ -1428,12 +1457,45 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // incidence rate ratio the whole protocol is built to report has no
         // numerator. The old parser clamped every length up to 1 and so could
         // never say any of this.
+        // A ratio needs both of its sides, and zero reaches them symmetrically.
+        // The first version made a zero-length exposure window a blocker and a
+        // zero-length reference period an "ℹ legitimate way to say no such
+        // window" — but a strip whose every Reference segment is 0 has no
+        // unexposed person-time at all, which is the same condition the "No
+        // reference (baseline) period" stop below exists for, reached
+        // numerically instead of structurally. Both sides are blockers now, and
+        // the info is reserved for pre, post, washout and custom segments, where
+        // zero really does just mean "no such window".
+        const refSegs = periods.filter((p) => p.kind === "reference");
         const zeroSegs = periods.filter((p) => p.ok && p.days === 0);
-        if (zeroSegs.length) {
-          const noExposedTime = expSegs.length > 0 && expSegs.every((p) => p.ok && p.days === 0);
-          out.push(noExposedTime
-            ? { lvl: "stop", t: "The exposure risk window is zero days long", d: "Every exposure risk period on the strip has a length of 0, so no person-time is classified as exposed and there is nothing for the reference time to be a rate ratio against. The incidence rate ratio this protocol reports would have no numerator. Give the exposure risk period a length, or say plainly which period is meant to carry the exposed time." }
-            : { lvl: "info", t: "A period is zero days long", d: zeroSegs.map((p) => "“" + p.name + "”").join(", ") + " " + (zeroSegs.length > 1 ? "have" : "has") + " a length of 0, so " + (zeroSegs.length > 1 ? "they contribute" : "it contributes") + " no person-time and " + (zeroSegs.length > 1 ? "have" : "has") + " no effect on the estimate. That is a legitimate way to say “no such window” — the sensitivity list offers a 0-day pre-risk window — but the exported protocol still names the period, so delete the line if you meant to remove it." });
+        const noExposedTime = expSegs.length > 0 && expSegs.every((p) => p.ok && p.days === 0);
+        const noReferenceTime = refSegs.length > 0 && refSegs.every((p) => p.ok && p.days === 0);
+        if (noExposedTime) {
+          out.push({ lvl: "stop", t: "The exposure risk window is zero days long", d: "Every exposure risk period on the strip has a length of 0, so no person-time is classified as exposed and there is nothing for the reference time to be a rate ratio against. The incidence rate ratio this protocol reports would have no numerator. Give the exposure risk period a length, or say plainly which period is meant to carry the exposed time." });
+        }
+        if (noReferenceTime) {
+          out.push({ lvl: "stop", t: "The reference period is zero days long", d: "Every reference (baseline) period on the strip has a length of 0, so the strip contains no unexposed person-time and the incidence rate ratio has no denominator. For a reference period, zero days is not a way of saying “no such window” — it is a design with no baseline. Give it a length, or switch to the active-comparator variant, where the comparator drug's time supplies the baseline." });
+        }
+        const otherZeros = zeroSegs.filter((p) => p.kind !== "exposure" && p.kind !== "reference");
+        if (otherZeros.length) {
+          out.push({ lvl: "info", t: "A period is zero days long", d: otherZeros.map((p) => "“" + p.name + "”").join(", ") + " " + (otherZeros.length > 1 ? "have" : "has") + " a length of 0, so " + (otherZeros.length > 1 ? "they contribute" : "it contributes") + " no person-time and " + (otherZeros.length > 1 ? "have" : "has") + " no effect on the estimate. For a pre-exposure, post-exposure or washout window that is a legitimate way to say “no such window” — the sensitivity list offers a 0-day pre-risk window — but the exported protocol still names the period, so delete the line if you meant to remove it." });
+        }
+        // A zero-day look-back has the same problem and used to be impossible:
+        // the parser this replaced clamped look-backs up to 1 day precisely so
+        // that "a '0 d' look-back can't be drawn as a visible bar", and dropping
+        // the clamp dropped that guarantee with it. Zero-day rows are no longer
+        // drawn, and are named here instead.
+        const zeroCov = parseRows(s.covWindows).filter((r) => r.ok && r.days === 0);
+        if (zeroCov.length) {
+          out.push({ lvl: "info", t: "A look-back window is zero days long", d: zeroCov.map((r) => "“" + r.name + "”").join(", ") + " " + (zeroCov.length > 1 ? "have" : "has") + " a look-back of 0 days, so nothing is measured in " + (zeroCov.length > 1 ? "them" : "it") + ". " + (zeroCov.length > 1 ? "They are" : "It is") + " not drawn on the figure, but the exported protocol still names " + (zeroCov.length > 1 ? "them" : "it") + " — give a length or delete the line." });
+        }
+        // The mirror of the "No reference (baseline) period" stop below. Without
+        // it, a strip of nothing but Reference segments exported "Time zero (day
+        // 0): each case's own first exposure" into the Word figure's window list
+        // and drew an "Exposure start (day 0)" anchor, both describing an
+        // exposure the strip does not contain.
+        if (periods.length && !expSegs.length) {
+          out.push({ lvl: "stop", t: "No exposure risk period", d: "The strip has no exposure risk period, so no person-time is classified as exposed and there is nothing to compare the reference time against — and because day 0 is defined as the start of the first exposure segment, the figure and its written window list have no anchor to describe. Add an Exposure risk period from the chips under the strip." });
         }
         // Choosing the active-comparator variant used to export a protocol that
         // contradicts itself one table later. Section 5 says "case-time on the
@@ -1448,7 +1510,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           out.push({ lvl: "stop", t: "An active-comparator SCCS with no comparator", d: "The design variant is active-comparator, whose whole point is that the baseline is time on a comparator drug rather than untreated time — but the baseline (control) period is still defined as all observation time outside the risk windows, which is the untreated baseline this variant exists to avoid, and no comparator drug is named anywhere in the protocol. The exported document therefore states both things, two sections apart. Name the comparator drug and its code set in the baseline (control) period definition." });
         }
         if (periods.some((p) => p.kind === "washout")) {
-          out.push({ lvl: "warn", t: "Say what happens to the washout time", d: "The strip contains a washout / carry-over period. That is not the same thing as a post-exposure risk window: a post-risk window is a parameter the conditional Poisson model estimates, whereas washout time is normally removed from the likelihood altogether so that carry-over does not contaminate the reference rate. This tool cannot tell which you mean, and the difference changes both the reference rate and the degrees of freedom, so state it in the baseline (control) period definition." });
+          out.push({ lvl: "warn", t: "Say what happens to the washout time", d: "The strip contains a washout / carry-over period. That is not the same thing as a post-exposure risk window: a post-risk window is a parameter the conditional Poisson model estimates, whereas washout time is often removed from the likelihood altogether so that carry-over does not contaminate the reference rate. Both treatments appear in the SCCS literature, this tool cannot tell which you mean, and they give different reference rates, so state which one applies in the baseline (control) period definition." });
         }
         if (periods.length && !periods.some((p) => p.kind === "reference")) {
           out.push({ lvl: "stop", t: "No reference (baseline) period", d: "The strip has no unexposed reference time, so there is nothing for the risk window to be a rate ratio against. Add a Reference period, or switch to the active-comparator variant in the design-variant section, where the comparator drug's time supplies the baseline." });
@@ -1467,7 +1529,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // pre-specifies a sensitivity analysis identical to its own primary
         // analysis — and both statements are exported, three sections apart.
         if (s.eventHandling === "first" && (s.sensitivityPick || []).some((x) => /Restrict to first event only/i.test(x))) {
-          out.push({ lvl: "warn", t: "A sensitivity analysis that repeats the primary analysis", d: "The case definition is set to first event only per person, and \"Restrict to first event only (vs all events)\" is also ticked as a sensitivity analysis — so the protocol pre-specifies, as a check on its primary analysis, the primary analysis. If the point is to test the independence assumption, the informative direction is the other one: allow all events per person and see whether the interval widens." });
+          out.push({ lvl: "warn", t: "A sensitivity analysis that repeats the primary analysis", d: "The case definition is set to first event only per person, and \"Restrict to first event only (vs all events)\" is also ticked as a sensitivity analysis — so the protocol pre-specifies, as a check on its primary analysis, the primary analysis. If the point is to test the independence assumption, the informative direction is the other one: run it with all events per person and compare. Note which way round that reads — under clustering it is the all-events interval that is too narrow, and the first-event analysis that is conservative." });
         }
         if (s.seasonAdj === "none") {
           out.push({ lvl: "info", t: "Season not adjusted", d: "Assumption 4. Seasonality is a within-person time-varying confounder that the self-controlled design does not remove. If the outcome or the prescribing has any seasonal pattern, adjust for calendar month; if you leave it out, state why in the protocol." });
@@ -1503,8 +1565,18 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       // saved draft (or a ?seed= link) actually carried.
       if (window.PC && PC.mountAmendments) PC.mountAmendments(form);
       render();
-      form.addEventListener("input", render);
-      form.addEventListener("change", render);
+      // Once the user has set the control the warning is about, the warning is
+      // not merely stale — it is false, and it is a blocker. Left uncleared it
+      // said "SCCS variant … has been left at Standard SCCS" in section 8 of a
+      // protocol whose section 5 read "Active-comparator within-person SCCS",
+      // and it travelled into the Word file and STROBE item 19 that way. A stop
+      // nobody can dismiss is exactly what teaches people to ignore the panel.
+      const clearStale = (e) => {
+        const n = e && e.target && e.target.name;
+        if (n && staleSelects.some((x) => x.name === n)) staleSelects = staleSelects.filter((x) => x.name !== n);
+      };
+      form.addEventListener("input", (e) => { clearStale(e); render(); });
+      form.addEventListener("change", (e) => { clearStale(e); render(); });
 
       form.addEventListener("click", (e) => {
         const addRow = e.target?.closest?.("[data-add-row]");
@@ -1553,6 +1625,8 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_CITATIONS_KEY);
         pickedCitations = {};
+        // The draft that was stale is gone, so the warning about it must go too.
+        staleSelects = [];
         // "Start over" means exactly the page a first-time visitor sees, not an
         // empty one. Emptying instead of resetting used to leave the timeline
         // anchor with no radio ticked, and stripped defaults the protocol goes
@@ -1785,12 +1859,29 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // note in the document when the picture cannot be made, never a silently
         // absent figure.
         const FIG_CAPTION = "Figure 1. SCCS design diagram — the case's observation time as one continuous strip of consecutive periods, with covariate look-back windows, on a day axis relative to day 0.";
+        // When the strip cannot be read there is deliberately no SVG on the
+        // page, and the shared helper's stock note — "please paste a screenshot
+        // of the on-screen diagram here" — then asks for something that does not
+        // exist and describes a principled refusal as a missing element. Say
+        // what actually happened instead, and keep the written window list,
+        // which is the only description of the design the document can carry.
+        const stripBad = badRows(parsePeriods(s.periods));
         lastFigNote = "";
-        const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: FIG_CAPTION });
-        fig.lines = stripLines(s);
-        const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: FIG_CAPTION });
-        figParas.forEach((c) => children.push(c));
-        if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
+        if (stripBad.length) {
+          children.push(new D.Paragraph({ spacing: { before: 160, after: 40 }, children: [new D.TextRun({
+            text: "[No study design diagram is included, because the period strip does not specify one: " +
+              stripBad.map((r) => "“" + r.name + "” " + (r.empty ? "has no length" : "gives its length as “" + r.raw + "”, which is not a whole number of days")).join("; ") +
+              ". HARPER item 7.2 requires a design diagram; give every period a length in whole days and export again. No figure has been drawn rather than one asserting a window this protocol does not define.]",
+            font: FONT, size: 18, italics: true, color: "B45309" })] }));
+          stripLines(s).forEach((l) => children.push(bullet(l)));
+          lastFigNote = " Exported WITHOUT the design diagram: a window length could not be read, and the document says which.";
+        } else {
+          const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: FIG_CAPTION });
+          fig.lines = stripLines(s);
+          const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: FIG_CAPTION });
+          figParas.forEach((c) => children.push(c));
+          if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
+        }
 
         children.push(h1("7. Observation period"));
         children.push(labelTable([
