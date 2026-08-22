@@ -41,10 +41,55 @@ const { target = "data" } = Astro.props;
     const picker = document.querySelector("[data-sites-picker]");
     if (!picker) return;
     const target = picker.getAttribute("data-target");
-    picker.addEventListener("change", () => {
-      const sel = [...picker.querySelectorAll("[data-site]:checked")].map((c) => c.value);
-      const el = document.querySelector('[name="' + target + '"]');
-      if (el && sel.length) { el.value = sel.join("; "); el.dispatchEvent(new Event("input", { bubbles: true })); }
+    const boxes = [...picker.querySelectorAll("[data-site]")];
+    const field = () => document.querySelector('[name="' + target + '"]');
+    const split = (v) => String(v == null ? "" : v).split(";").map((x) => x.trim()).filter(Boolean);
+
+    /* The picker used to rewrite the WHOLE field from whichever boxes were
+       ticked, and to skip the write entirely when none were. Three failures
+       followed, all of them silent, and all of them ending in an exported
+       protocol that named the wrong data sources:
+
+         - Untick every site and the field kept the second-to-last write. Zero
+           boxes ticked on screen, "Taiwan (TWB)" still in the protocol, the
+           abstract, the Word file and TARGET items 1b and 5.
+         - The boxes carry no name, so they are outside readForm / localStorage
+           / ?seed=. After a reload the field held three sites and nothing was
+           ticked — the picker and the field disagreeing from the first paint.
+         - Which made the next click destructive: with three sites restored and
+           nothing ticked, ticking a fourth REPLACED all three. One click that
+           the user makes to add a source silently deleted the others.
+
+       So each box now owns exactly its own token and nothing else. Ticking adds
+       that token, unticking removes it, and text the user typed themselves is
+       never touched — the picker cannot act on the other boxes' state, so a
+       stale tick can no longer resurrect a source that was cleared. */
+    picker.addEventListener("change", (e) => {
+      const b = e.target && e.target.closest ? e.target.closest("[data-site]") : null;
+      if (!b) return;
+      const el = field(); if (!el) return;
+      const toks = split(el.value).filter((t) => t !== b.value);
+      if (b.checked) toks.push(b.value);
+      const next = toks.join("; ");
+      if (next === el.value) return;
+      el.value = next;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
     });
+
+    // Boxes follow the field, so a restored draft, a ?seed= link or a "Clear
+    // all" leaves the two in step. Runs on load (after the builder's own
+    // restore, which happens while the document is still parsing) and on any
+    // later edit of the field.
+    const sync = () => {
+      const el = field(); if (!el) return;
+      const have = new Set(split(el.value));
+      boxes.forEach((b) => { b.checked = have.has(b.value); });
+    };
+    window.addEventListener("load", sync);
+    document.addEventListener("input", (e) => { if (e.target === field()) sync(); });
+    document.addEventListener("click", (e) => {
+      if (e.target && e.target.closest && e.target.closest("[data-action='reset']")) setTimeout(sync, 0);
+    });
+    sync();
   })();
 </script>
