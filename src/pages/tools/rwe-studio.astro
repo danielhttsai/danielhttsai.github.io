@@ -1234,6 +1234,20 @@ const DESIGNS = [
     // that must be numeric has to hold numbers. as.numeric() on text yields NA,
     // and every design here would then carry on and print a number computed from
     // a variable that silently left the model. Refuse instead, and say what to fix.
+    // Every machine-readable line R writes back is pipe-delimited and split on "|"
+    // in the browser, so a pipe inside a column name or a factor level shifts every
+    // later cell one place: `Sex (M|F)` puts "F), n (%)" in the comparator column
+    // and leaves the balance column showing the BEFORE-weighting SMD — the one
+    // number that column exists to report. A newline is worse: the row breaks in
+    // two and the covariate loses all its values. Neither can be escaped at the
+    // split, so both are removed on the way in. Same species as the amendments-log
+    // row a pipe used to shift, fixed in ProtocolCommon.
+    const PIPE_SAFE = (s) => String(s == null ? "" : s).replace(/[|\r\n]+/g, " ");
+    // For the handful of strings whose pipe IS the stream prefix ("RESULT_NOTE|…").
+    // Those interpolate the user's text themselves, through PIPE_SAFE.
+    const qraw = (s) => "'" + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+    // R-side twin, for strings that come from the data rather than from the form.
+    const R_SQ = "sq<-function(s) gsub('[|\\r\\n]+',' ',s)\n";
     const R_CHK01 = "chk01<-function(v,nm){ x<-suppressWarnings(as.numeric(v)); u<-unique(x[!is.na(x)]); if(length(u)==0 || !all(u %in% c(0,1))) stop(sprintf('The column mapped to %s is not coded 0/1 (values seen: %s). Say which value means yes under \"Coded flags\" in the structure panel, or map a different column.', nm, paste(head(unique(as.character(v)),6),collapse=', '))); x }\n";
     const R_CHKNUM = "chknum<-function(v,nm){ x<-suppressWarnings(as.numeric(v)); if(all(is.na(x))) stop(sprintf('The column mapped to %s holds no numeric values (values seen: %s).', nm, paste(head(unique(as.character(v)),6),collapse=', '))); x }\n";
     const SPEC = {
@@ -1251,14 +1265,14 @@ const DESIGNS = [
         rscript: (covInfo, opts) => {
           opts = opts || {};
           covInfo = covInfo || [];
-          const q = (s) => "'" + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+          const q = (s) => "'" + PIPE_SAFE(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
           const M = opts.methods || [], E = (opts.estimands && opts.estimands.length) ? opts.estimands : ["ITT"], ratio = opts.ratio || 2, ns = opts.nstrata || 10;
           const dropped = opts.dropped || [];
           let r = "d<-read.csv('/data.csv', stringsAsFactors=FALSE); library(survival)\n";
           // A covariate has to enter the model as what it is. as.numeric() on a text
           // column yields all-NA, which drops it from the propensity model silently —
           // the only symptom being crude and adjusted estimates that agree exactly.
-          r += R_CHK01 + R_CHKNUM;
+          r += R_CHK01 + R_CHKNUM + R_SQ;
           r += "d$TREAT<-chk01(d$TREAT,'Treatment'); d$EVENT<-chk01(d$EVENT,'Outcome event'); d$TIME<-chknum(d$TIME,'Follow-up time')\n";
           r += "covs<-c(" + covInfo.map((c) => q(c.col)).join(",") + "); covsrc<-c(" + covInfo.map((c) => q(c.label)).join(",") + "); covkind<-c(" + covInfo.map((c) => q(c.kind)).join(",") + ")\n";
           r += "if(length(covs)==0) stop('None of the ticked covariates can be used in a propensity model — see the note under the covariate list.')\n";
@@ -1340,9 +1354,9 @@ const DESIGNS = [
           if (M.indexOf("overlap") >= 0) r += "cat('PSW|Overlap weighting (ATO)|',fmw(zOVL),'|',if(wgate(zOVL)) 1 else 0,'|0\\n',sep='')\n";
           r += "cat(sprintf('N = %d; exposure = %d; comparator = %d; events = %d\\n\\n', n, sum(tr), sum(!tr), sum(d$EVENT==1,na.rm=TRUE)))\n";
           r += "cat('RESULT_NOTE|Propensity model: ',sum(covkind=='numeric'),' continuous, ',sum(covkind=='binary'),' binary 0/1, ',sum(covkind=='factor'),' categorical entered as dummy-coded factors',if(any(covkind=='factor')) paste0(' (',paste(covsrc[covkind=='factor'],collapse=', '),')') else '','.\\n',sep='')\n";
-          if (dropped.length) r += "cat(" + q("RESULT_NOTE|" + dropped.length + " ticked covariate(s) were left out of the model: " + dropped.map((x) => x.src + " — " + x.why).join("; ") + ".") + ",'\\n',sep='')\n";
+          if (dropped.length) r += "cat(" + qraw("RESULT_NOTE|" + dropped.length + " ticked covariate(s) were left out of the model: " + dropped.map((x) => PIPE_SAFE(x.src) + " — " + x.why).join("; ") + ".") + ",'\\n',sep='')\n";
           const folded = covInfo.filter((c) => c.collapsed);
-          if (folded.length) r += "cat(" + q("RESULT_NOTE|Rare categories were folded into 'other' before modelling: " + folded.map((c) => c.src + " (" + c.rare.length + " of " + c.levels + " levels, each with fewer than " + COV_MIN_PER_LEVEL + " rows)").join("; ") + ".") + ",'\\n',sep='')\n";
+          if (folded.length) r += "cat(" + qraw("RESULT_NOTE|Rare categories were folded into 'other' before modelling: " + folded.map((c) => PIPE_SAFE(c.src) + " (" + c.rare.length + " of " + c.levels + " levels, each with fewer than " + COV_MIN_PER_LEVEL + " rows)").join("; ") + ".") + ",'\\n',sep='')\n";
           r += "wsmd<-function(x,g,w){ ok<-!is.na(x); a<-g&ok; b<-(!g)&ok; if(sum(a)<1||sum(b)<1) return(NA_real_); m1<-weighted.mean(x[a],w[a]); m0<-weighted.mean(x[b],w[b]); v1<-sum(w[a]*(x[a]-m1)^2)/sum(w[a]); v0<-sum(w[b]*(x[b]-m0)^2)/sum(w[b]); (m1-m0)/sqrt((v1+v0)/2) }\n";
           // Yang & Dalton (2012) multinomial standardised difference: a categorical
           // variable needs the Mahalanobis form, not the continuous one.
@@ -1372,7 +1386,7 @@ const DESIGNS = [
                "  if(covkind[i]=='factor'){ f<-d[[cc]]; lv<-levels(f)\n" +
                "    s1<-smdcat(f,tr,rep(1,n)); s2<-if(is.null(wBAL)) NA_real_ else smdcat(f,tr,wBAL); smd1[i]<-s1; smd2[i]<-s2\n" +
                "    cat(sprintf('TABLE1|%s, n (%%)|||%s|%s\\n', lab, f3(s1), f3(s2)))\n" +
-               "    for(l in lv){ a<-sum(f[!tr]==l); b<-sum(f[tr]==l); cat(sprintf('TABLE1|  %s|%d (%.1f%%)|%d (%.1f%%)||\\n', l, a, 100*a/sum(!tr), b, 100*b/sum(tr))) }\n" +
+               "    for(l in lv){ a<-sum(f[!tr]==l); b<-sum(f[tr]==l); cat(sprintf('TABLE1|  %s|%d (%.1f%%)|%d (%.1f%%)||\\n', sq(l), a, 100*a/sum(!tr), b, 100*b/sum(tr))) }\n" +
                "  } else { x<-d[[cc]]\n" +
                "    s1<-wsmd(x,tr,rep(1,n)); s2<-if(is.null(wBAL)) NA_real_ else wsmd(x,tr,wBAL); smd1[i]<-s1; smd2[i]<-s2\n" +
                "    if(covkind[i]=='binary'){ a<-sum(x[!tr]==1,na.rm=TRUE); b<-sum(x[tr]==1,na.rm=TRUE); cat(sprintf('TABLE1|%s, n (%%)|%d (%.1f%%)|%d (%.1f%%)|%s|%s\\n', lab, a, 100*a/sum(!tr), b, 100*b/sum(tr), f3(s1), f3(s2)))\n" +
@@ -1564,11 +1578,12 @@ const DESIGNS = [
         // for the negative binomial only if it happens to be available.
         rscript: (cov, o) => {
           o = o || {};
-          const q = (s) => "'" + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+          const q = (s) => "'" + PIPE_SAFE(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
           const L = [];
           L.push("d<-read.csv('/data.csv', stringsAsFactors=FALSE)");
           L.push(R_CHK01.trim());
           L.push(R_CHKNUM.trim());
+          L.push(R_SQ.trim());
           L.push("CUT<-" + q(o.cut) + "; UNIT<-" + q(o.unit || "month") + "; COMBF<-" + q(o.comb || "sum") + "; MODEL<-" + q(o.model || "auto") + "; SEASON<-" + q(o.season || "none") + "; CYC<-" + (o.cycle || 12) + "; AC<-" + q(o.ac || "auto") + "; ORDER<-" + q(o.order || "auto") + "; DCOMB<-" + q(o.denomcomb || "auto"));
           L.push("");
           L.push("# --- parse the time column (ISO dates, slashes, datetimes, YYYY-MM) ---");
@@ -1636,6 +1651,11 @@ const DESIGNS = [
           L.push("if(ORDER=='file'){ ord<-seq_along(ukey); ordmode<-'the order the periods first appear in the file (you confirmed it is chronological)' } else if(ORDER=='alpha'){ ord<-order(ukey); ordmode<-'alphabetical order of the labels (you confirmed that is chronological)' } else if(all(!is.na(kd))){ ord<-order(kd); ordmode<-'dates parsed from the period labels' } else if(all(!is.na(kn))){ ord<-order(kn); ordmode<-'the numeric value of each label' } else { stub<-gsub('[0-9]+','#',ukey); num<-suppressWarnings(as.numeric(gsub('[^0-9]','',ukey))); if(length(unique(stub))==1 && !any(is.na(num)) && !any(duplicated(num))){ ord<-order(num); ordmode<-'the number inside each label' } }");
           L.push("if(ordmode==''){ stop(paste0('Cannot work out the chronological order of the period labels: they do not parse as dates, they are not numbers, and they do not share a single numbered pattern. Sorting them as text would give ', paste(head(sort(ukey),5),collapse=' -> '), ' ... which is very unlikely to be chronological, and analysing periods in the wrong order can reverse the direction of the estimate. Set \"Period order\" to \"the order they appear in the file\" if the file is already sorted, or map a numeric period index instead.')) }");
           L.push("ukey<-ukey[ord]; a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey)");
+          // Period labels are data, and they end up inside pipe-delimited estimate
+          // labels, ITSMETA and every FITTED row. A month written "2019|03" would
+          // shift the fitted series one column and break the chart. Cleaned only
+          // after a$t has been matched, so the ordering is unaffected.
+          L.push("ukey<-sq(ukey); a$key<-sq(a$key)");
           L.push("");
           L.push("# --- place the interruption: exact period label, then date, then index ---");
           L.push("cut<-trimws(CUT); t0<-NA");
