@@ -628,7 +628,11 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // has visited this page before would carry them into every future
       // protocol. Anything not keyed by a field this page fills is dropped.
       {
-        const validKeys = new Set([...document.querySelectorAll("[data-open-library]")].map((b) => b.dataset.targetName || b.dataset.targetDef || b.dataset.targetCodes).filter(Boolean));
+        // Must match the write-side `citeKey` expression exactly, or a
+        // legitimate citation is pruned on the next load. Kept adjacent for
+        // that reason; this file has been bitten three times by two copies of
+        // one lookup drifting apart.
+        const validKeys = new Set([...document.querySelectorAll("[data-open-library]")].map((b) => b.dataset.targetName || b.dataset.alsoFill || b.dataset.targetDef).filter(Boolean));
         for (const k of Object.keys(pickedCitations)) if (!validKeys.has(k)) delete pickedCitations[k];
       }
       const savePickedCitations = () => { try { localStorage.setItem(STORAGE_CITATIONS_KEY, JSON.stringify(pickedCitations)); } catch {} };
@@ -726,13 +730,27 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         return out;
       };
       // A value a saved draft or a ?seed= link carried for a <select> that no
-      // longer offers it. Captured HERE and nowhere else: assigning an unmatched
+      // longer offers it. Captured at restore, because assigning an unmatched
       // value leaves selectedIndex = -1, a select with no selection contributes
-      // NO entry to FormData, and readForm therefore omits the key entirely — so
-      // the dead value is not recoverable after the fact.
+      // NO entry to FormData, and readForm therefore omits the key entirely.
+      //
+      // It has to be PERSISTED as well as captured, and that was this fix's own
+      // worst bug for a while. `render()` runs immediately after restore and
+      // saves `readForm()` — the SUBSTITUTED state — back over the draft. So the
+      // blocker appeared once, the substituted value was written into the draft,
+      // and on the next load `writeForm` found it perfectly valid: reload, and
+      // the red mark is gone and the export asserts a choice nobody made. That
+      // is the brief's own listed bug restored one keystroke later by the commit
+      // that named it. Carried in the saved draft under a reserved key now, so
+      // the question survives until the user answers it. `readForm` never sees
+      // the key, so it cannot reach an export as a field.
+      const STALE_KEY = "__staleSelects";
       let staleSelects = [];
       const writeForm = (state) => {
         const multi = new Set(["sites", "sensitivityPick", "subgroupsPick"]);
+        // Anything still unanswered from a previous visit. Its select now holds
+        // the substituted value, so this pass cannot rediscover it.
+        const carried = Array.isArray(state[STALE_KEY]) ? state[STALE_KEY] : [];
         staleSelects = [];
         for (const el of form.querySelectorAll("input, textarea, select")) {
           const name = el.name; if (!name) continue;
@@ -749,9 +767,14 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             // different design. The empty box on screen said none of it.
             const want = String(state[name]);
             if ([...el.options].some((o) => o.value === want)) el.value = want;
-            else staleSelects.push({ name, want, kept: el.value, label: (el.selectedOptions[0] || {}).text || el.value });
+            else staleSelects.push({ name, want, label: (el.selectedOptions[0] || {}).text || el.value });
           }
           else if (state[name] !== undefined) el.value = state[name];
+        }
+        for (const c of carried) {
+          if (!c || !c.name || staleSelects.some((x) => x.name === c.name)) continue;
+          const el = form.elements[c.name];
+          if (el && el.tagName === "SELECT") staleSelects.push({ name: c.name, want: c.want, label: (el.selectedOptions[0] || {}).text || el.value });
         }
       };
 
@@ -794,7 +817,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             return null;
           }
           if (!r.ok) {
-            stops.push({ field, msg: label + ' reads "' + r.raw + '", which is not a whole number of days.' });
+            stops.push({ field, msg: label + ' reads "' + r.raw + '", which is not a whole number of days.' + (/^-\s*\d/.test(r.raw) ? " A window length or offset is a count of days and cannot be negative; every window on this page is placed before the event by the diagram, not by the sign of the number you type." : "") });
             return null;
           }
           if (r.days < o.min) {
@@ -827,7 +850,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         // sentence silently promoted a heads-up to a blocker, or demoted one.
         const issues = [];
         if (off <= g + L - 1) issues.push({ lvl: "stop", t: "Control window 1 overlaps the hazard window. The hazard window reaches back to " + dTxt(haz.first) + " but control window 1's most recent day is " + dTxt(-off) + ". Overlapping windows double-count person-time and the conditional logistic model is not valid. Set the offset to at least " + (g + L) + " days." });
-        else if (off === g + L) issues.push({ lvl: "warn", t: "Control window 1 begins the day the hazard window ends (offset " + off + " days, hazard window " + spanTxt(haz) + "). The windows do not overlap, but an exposure whose effect persists past the hazard window — or a dispensing whose days of supply run into it — makes the referent window exposed as well, which biases the odds ratio towards the null. State the washout between the windows, or move the referent further back." });
+        else if (off === g + L) issues.push({ lvl: "warn", t: "Control window 1 ends the day before the hazard window begins: the hazard window is " + spanTxt(haz) + " and control window 1 reaches up to day " + dTxt(-off) + ", with no gap between them. The windows do not overlap, but an exposure whose effect persists into the hazard window — or a dispensing whose days of supply run across the boundary — makes the referent window exposed as well, which biases the odds ratio towards the null. Put a washout between them, or move the referent further back." });
         if (n > 1 && off < C) issues.push({ lvl: "stop", t: "The control windows overlap each other: " + C + "-day windows spaced only " + off + " days apart. Space them at least " + C + " days apart, or shorten the control window." });
         if (C !== L) issues.push({ lvl: "info", t: "Control windows (" + C + " d) are a different length from the hazard window (" + L + " d). This is allowed, but the windows are then no longer matched on duration; state explicitly in the analysis plan how unequal person-time is handled." });
         return { ok: true, stops, L, g, C, off, n, haz, ctrls, wins: [haz].concat(ctrls), issues };
@@ -844,8 +867,8 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // where the answer goes.
       const VARIANT_CAVEAT = {
         standard: "",
-        "time-stratified": "The days listed above are the fixed-offset scheme of the standard design, not the time-stratified scheme named in section 7. Time-stratified referent selection partitions the study period into calendar strata and draws referent windows from the same stratum as the event — matched within the stratum, and falling both before and after it — so referents are not at a fixed offset from the event and this builder cannot lay them out on an event-anchored axis. State the stratum definition and the within-stratum matching rule here before circulating this protocol.",
-        symmetric: "The days listed above are the pre-event half of the scheme only. Symmetric bidirectional sampling draws referent windows both before and after the event, and this form has no field for the post-event windows, so the builder does not place them and has not drawn them. State the post-event referent windows explicitly here before circulating this protocol.",
+        "time-stratified": "The days listed above are the fixed-offset scheme of the standard design, not the time-stratified scheme this protocol names as its variant. Time-stratified referent selection partitions the study period into calendar strata and draws referent windows from the same stratum as the event — matched within the stratum, and falling both before and after it — so referents are not at a fixed offset from the event and this builder cannot lay them out on an event-anchored axis. State the stratum definition and the within-stratum matching rule here before circulating this protocol.",
+        symmetric: "The days listed above are the pre-event half of the scheme only. Symmetric bidirectional sampling draws referent windows both before and after the event, and this builder has no field for the post-event windows, so it does not place them and has not drawn them. State the post-event referent windows explicitly here before circulating this protocol.",
         cctc: "The same referent scheme is applied twice — once to the current cases and once to the future-case control series — and the two odds ratios are divided (OR_CCTC = OR_case / OR_control). The days listed above describe the referent windows for both series.",
       };
       const variantCaveat = (s) => VARIANT_CAVEAT[s.ccoVariant] || "";
@@ -858,6 +881,23 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // them. Says what it actually means when it is empty: this builder runs a
       // fixed set of pattern checks, and "nothing outstanding" is a statement
       // about those, not an attestation that the protocol is sound.
+      // Which picked citations still belong to this draft. A citation travels
+      // only while the field it was written into still names the phenotype it
+      // validates; one that has lapsed is withheld from the reference list AND
+      // named in the checks, because silently dropping a reference the user
+      // believes they took from a validated library is its own failure.
+      const liveCitations = (s) => {
+        const live = [], lapsed = [];
+        for (const [field, v] of Object.entries(pickedCitations)) {
+          if (!v) continue;
+          const rec = typeof v === "string" ? { wrote: null, cite: v } : v;
+          if (!rec.cite || !rec.cite.trim()) continue;
+          const now = String(s[field] == null ? "" : s[field]).trim();
+          if (rec.wrote && now !== String(rec.wrote).trim()) lapsed.push({ field, wrote: rec.wrote, cite: rec.cite.trim(), now });
+          else live.push(rec.cite.trim());
+        }
+        return { live, lapsed };
+      };
       const CHK_ICON = { stop: "⛔", warn: "⚠", info: "ℹ" };
       const checksMd = (G, s) => {
         const notes = checksOf(G, s);
@@ -951,7 +991,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         const arch = ({ federated: "Federated; each AsPEN site executes a common analytic package locally and shares aggregate ORs.", cdm: "Common Data Model; each site transforms data into agreed CDM, runs shared package.", centralised: "Centralised; site-level individual data pooled under DUA." })[s.arch] || "Federated";
 
         const refsUser = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const refs = (() => { const set = new Set(refsUser); for (const c of Object.values(pickedCitations)) if (c && c.trim()) set.add(c.trim()); return Array.from(set); })();
+        const refs = (() => { const set = new Set(refsUser); for (const c of liveCitations(s).live) set.add(c); return Array.from(set); })();
         const milestones  = (s.timeline  || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const subgroups   = mergeList(s.subgroupsPick, s.subgroupsCustom);
         const sensitivity = mergeList(s.sensitivityPick, s.sensitivityCustom);
@@ -992,8 +1032,8 @@ ${hazardRows(G) ? mdTable(hazardRows(G)) : geomRefusal(G)}
 
 ## 6. Control (referent) window(s)
 
-${G.ok ? mdTable(controlRows(G, s)) + "\n" + coverageLine(G) : "_See section 5._"}
-${variantCaveat(s) ? "\n**Referent scheme for the variant chosen in section 7.** " + variantCaveat(s) + "\n" : ""}
+${G.ok ? mdTable(controlRows(G, s)) + "\n\n" + coverageLine(G) : "_See section 5._"}
+${variantCaveat(s) ? "\n**Referent scheme for the variant chosen above.** " + variantCaveat(s) + "\n" : ""}
 ## 7. Design variant
 
 ${variant}
@@ -1088,7 +1128,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
           '<p class="font-semibold text-slate-800">Windows, as inclusive days relative to the event</p><p class="mt-1 leading-relaxed">' +
           chip("#ef4444", "Hazard: " + spanTxt(G.haz)) +
           G.ctrls.map((c) => chip("#94a3b8", "Control " + c.label.replace(/\D+/g, "") + ": " + spanTxt(c))).join("") + "</p>" +
-          (variantCaveat(s) ? '<p class="mt-2 text-slate-600 leading-relaxed"><span class="font-semibold">Referent scheme for the variant chosen in section 8 of the form.</span> ' + esc(variantCaveat(s)) + "</p>" : "");
+          (variantCaveat(s) ? '<p class="mt-2 text-slate-600 leading-relaxed"><span class="font-semibold">Referent scheme for the case-crossover variant you chose.</span> ' + esc(variantCaveat(s)) + "</p>" : "");
         renderChecks(G, s);
       };
 
@@ -1104,8 +1144,8 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         // Named here because the value is gone by the time an export runs: an
         // unmatched select contributes no FormData entry at all.
         const SELECT_LABEL = { ccoVariant: "the case-crossover variant", nControls: "the number of control windows", metaMethod: "the meta-analysis method", arch: "the architecture" };
-        for (const st of staleSelects) notes.push({ lvl: "stop", t: "A saved value was not one of the choices offered", d: 'This draft was restored with ' + (SELECT_LABEL[st.name] || st.name) + ' saved as "' + st.want + '", which this form no longer offers. It has been left at "' + st.label + '", and that is what the exported protocol says. Choose the option you want before circulating it.' });
-        if (s.ccoVariant === "standard" || !s.ccoVariant) notes.push({ lvl: "warn", t: "No correction for exposure-time trend", d: "The standard (Maclure) variant compares a recent hazard window with older control windows, so any within-person drift in the probability of being on the drug is read as an effect. If the exposure is one whose use changes with worsening prognosis, pick a variant under section 8 — time-stratified, or case-case-time-control — or state in the protocol why a trend is implausible here." });
+        for (const st of staleSelects) notes.push({ lvl: "stop", dismiss: st.name, t: "A saved value was not one of the choices offered", d: 'This draft was restored with ' + (SELECT_LABEL[st.name] || st.name) + ' saved as "' + st.want + '", which this form no longer offers. It has been left at "' + st.label + '", and that is what the exported protocol says. Choose the option you want, or confirm the one it was left at.' });
+        if (s.ccoVariant === "standard" || !s.ccoVariant) notes.push({ lvl: "warn", t: "No correction for exposure-time trend", d: "The standard (Maclure) variant compares a recent hazard window with older control windows, so any within-person drift in the probability of being on the drug is read as an effect. If the exposure is one whose use changes with worsening prognosis, choose a different case-crossover variant — time-stratified, or case-case-time-control — or state in the protocol why a trend is implausible here." });
         if (s.ccoVariant === "symmetric") notes.push({ lvl: "warn", t: "Bidirectional sampling assumes the event does not change later exposure", d: "Control windows drawn from after the event require exposure in that period to be unaffected by having had the event. For dispensed medicines that is usually false — an MI changes what is prescribed the next day. Bidirectional referents are standard for environmental exposures, not for drugs." });
         // The window calculator lays out one scheme: evenly spaced referent
         // windows, all of them before the event. For two of the four variants
@@ -1115,6 +1155,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         if (s.ccoVariant === "time-stratified" || s.ccoVariant === "symmetric") {
           notes.push({ lvl: "warn", t: "The window calculator does not describe this variant's referent scheme", d: variantCaveat(s) + " The protocol says so where the days are listed; it does not present the fixed-offset windows as if they were the scheme you chose." });
         }
+        for (const lc of liveCitations(s).lapsed) notes.push({ lvl: "warn", t: "A validation citation no longer matches its field", d: 'A validation study was added to the reference list when "' + lc.wrote + '" was picked from the phenotype library, but that field now reads "' + (lc.now || "(blank)") + '". The citation has been withheld from the exported reference list rather than left to describe an outcome the protocol no longer names. Pick the phenotype again from the library, or cite your own source.' });
         for (const st of G.stops) notes.push({ lvl: "stop", t: "Window scheme not specified", d: st.msg + " Nothing has been assumed in its place: the diagram is not drawn and the protocol says the scheme is unspecified rather than printing one." });
         for (const i of G.issues) notes.push({ lvl: i.lvl, t: "Window scheme", d: i.t });
         // A sensitivity analysis that IS the primary analysis is not a check on
@@ -1127,9 +1168,9 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         // analysis. It ships ticked, so raising it as a warning would put an
         // amber mark on an untouched page — and marks on an untouched page are
         // what teach people to stop reading the panel.
-        if (G.ok && G.n > 1 && picked("Multiple control windows")) notes.push({ lvl: "info", t: "Say how many referent windows the sensitivity analysis uses", d: "Section 7 of the form already specifies " + G.n + " control windows, so “Multiple control windows” does not by itself describe anything different from the primary analysis. Name the number it varies to." });
-        if (s.ccoVariant === "time-stratified" && picked("Time-stratified case-crossover")) notes.push({ lvl: "warn", t: "A sensitivity analysis restates the primary analysis", d: "Time-stratified referent selection is the variant chosen in section 8 of the form, so it cannot also be a sensitivity analysis against it." });
-        else if (picked("Time-stratified case-crossover")) notes.push({ lvl: "warn", t: "A promised sensitivity analysis has no window scheme", d: "The protocol promises a time-stratified sensitivity analysis, but section 6 defines only the fixed-offset windows and this builder has no field for a calendar stratum, so the promised analysis is named and left operationally undefined. State the stratum definition and the within-stratum matching rule, or untick it." });
+        if (G.ok && G.n > 1 && picked("Multiple control windows")) notes.push({ lvl: "info", t: "Say how many referent windows the sensitivity analysis uses", d: "The primary analysis already uses " + G.n + " control windows, so “Multiple control windows” does not by itself describe anything different from it. Name the number it varies to." });
+        if (s.ccoVariant === "time-stratified" && picked("Time-stratified case-crossover")) notes.push({ lvl: "warn", t: "A sensitivity analysis restates the primary analysis", d: "Time-stratified referent selection is already this protocol's design variant, so it cannot also be a sensitivity analysis against itself." });
+        else if (picked("Time-stratified case-crossover")) notes.push({ lvl: "warn", t: "A promised sensitivity analysis has no window scheme", d: "The protocol promises a time-stratified sensitivity analysis, but the only window scheme it defines is the fixed-offset one, and this builder has no field for a calendar stratum — so the promised analysis is named and left operationally undefined. State the stratum definition and the within-stratum matching rule, or untick it." });
         if (s.ccoVariant !== "symmetric" && picked("Symmetric bidirectional sampling")) notes.push({ lvl: "warn", t: "Bidirectional referents assume the event does not change later exposure", d: "This is ticked as a sensitivity analysis. Referent windows drawn from after the event require exposure in that period to be unaffected by having had the event; for dispensed medicines that is usually false, and for a fatal outcome there is no post-event time at all. Bidirectional referents are standard for environmental exposures, not for drugs." });
         if (notes.length === 0) return notes;
         // A blocker printed below a heads-up is a blocker people scroll past.
@@ -1143,14 +1184,22 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         if (notes.length === 0) { box.classList.add("hidden"); box.innerHTML = ""; return; }
         const style = { stop: ["bg-rose-50 border-rose-300", "text-rose-900", "⛔"], warn: ["bg-amber-50 border-amber-300", "text-amber-900", "⚠"], info: ["bg-slate-50 border-slate-300", "text-slate-700", "ℹ"] };
         box.innerHTML = '<p class="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500">Checks against what you entered</p><div class="mt-2 space-y-2">' +
-          notes.map((n) => { const st = style[n.lvl]; return '<div class="rounded-lg border ' + st[0] + ' p-3 text-xs ' + st[1] + '"><p class="font-bold">' + st[2] + " " + esc(n.t) + '</p><p class="mt-1 leading-relaxed">' + esc(n.d) + "</p></div>"; }).join("") + "</div>";
+          notes.map((n) => { const st = style[n.lvl]; return '<div class="rounded-lg border ' + st[0] + ' p-3 text-xs ' + st[1] + '"><p class="font-bold">' + st[2] + " " + esc(n.t) + '</p><p class="mt-1 leading-relaxed">' + esc(n.d) + "</p>" +
+            (n.dismiss ? '<button type="button" data-dismiss-stale="' + esc(n.dismiss) + '" class="mt-2 text-[11px] font-semibold underline underline-offset-2 hover:no-underline">Keep what it was left at</button>' : "") + "</div>"; }).join("") + "</div>";
+        box.querySelectorAll("[data-dismiss-stale]").forEach((btn) => btn.addEventListener("click", () => {
+          staleSelects = staleSelects.filter((x) => x.name !== btn.dataset.dismissStale);
+          render();
+        }));
         box.classList.remove("hidden");
       };
 
       const render = () => {
         const state = readForm();
         preview.textContent = buildMarkdown(state);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn("draft not saved", e); }
+        // The unanswered questions ride along with the draft; without this the
+        // saved draft is the substituted state and the blocker dies on reload.
+        const saved = staleSelects.length ? Object.assign({}, state, { [STALE_KEY]: staleSelects }) : state;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); } catch (e) { console.warn("draft not saved", e); }
         renderFeasibility(state);
         // Never a bare catch here: a throw in the diagram used to blank it silently.
         try { renderScheme(state); } catch (e) { console.error("renderScheme failed", e); }
@@ -1281,7 +1330,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
           "9": "Self-matched design removes fixed confounders. Exposure-time-trend bias addressed by the referent-window scheme" + (isCctc ? " and the case-case-time-control correction" : "") + "; further sensitivity analyses:\n" + bul(sens),
           "12": "Conditional logistic regression for the odds ratio, matching each case's hazard window to their referent window(s)" + (isCctc ? "; the control (future-case) crossover OR is divided out (CCTC)" : "") + ". Site-specific ORs pooled by " + metaTxt + " meta-analysis (report I², τ²). Subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
           "17": "Pre-specified subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
-          "19": "The case-crossover design controls time-invariant confounding but is susceptible to exposure-time-trend bias if exposure prevalence changes over time (mitigated by referent selection / the CCTC variant); it assumes transient exposure and abrupt, uncommon outcome onset, and that hazard and referent windows are non-overlapping eligible person-time; outcome misclassification is possible. " + ESTIMAND_LIMIT + (() => { const n = checksOf(GG, s); return n.length ? " Checks the builder raises against the current draft: " + n.map((x) => x.t + " — " + x.d).join(" ") : ""; })(),
+          "19": "The case-crossover design controls time-invariant confounding but is susceptible to exposure-time-trend bias if exposure prevalence changes over time (mitigated by referent selection / the CCTC variant); it assumes transient exposure and abrupt outcome onset, and that hazard and referent windows are non-overlapping eligible person-time; outcome misclassification is possible. " + ESTIMAND_LIMIT + (() => { const n = checksOf(GG, s); return n.length ? " Checks the builder raises against the current draft, stated in full in the protocol's design-assumptions section: " + n.map((x) => CHK_ICON[x.lvl] + " " + x.t).join("; ") + "." : ""; })(),
           "21": "Results generalise to the source populations of the contributing AsPEN databases: " + sitesPlain + ".",
         };
       };
@@ -1350,7 +1399,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         });
 
         const refsUser = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const refs = (() => { const set = new Set(refsUser); for (const c of Object.values(pickedCitations)) if (c && c.trim()) set.add(c.trim()); return Array.from(set); })();
+        const refs = (() => { const set = new Set(refsUser); for (const c of liveCitations(s).live) set.add(c); return Array.from(set); })();
         const milestones  = (s.timeline  || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const subgroups   = mergeList(s.subgroupsPick, s.subgroupsCustom);
         const sensitivity = mergeList(s.sensitivityPick, s.sensitivityCustom);
@@ -1415,7 +1464,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         if (G.ok) {
           const FIG_CAPTION = "Figure 1. Case-crossover window scheme — the hazard window and the referent window(s) as inclusive day indices relative to the event (day 0).";
           const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: FIG_CAPTION });
-          if (fig) fig.lines = ["Hazard window: " + spanTxt(G.haz) + (G.g > 0 ? " (the event day and the " + G.g + " day(s) before it are excluded)" : " (the event day is included)")].concat(G.ctrls.map((c, i) => "Control window " + (i + 1) + ": " + spanTxt(c))).concat(variantCaveat(s) ? ["Referent scheme for the variant in section 7: " + variantCaveat(s)] : []);
+          if (fig) fig.lines = ["Hazard window: " + spanTxt(G.haz) + (G.g > 0 ? " (the event day and the " + G.g + " day(s) before it are excluded)" : " (the event day is included)")].concat(G.ctrls.map((c, i) => "Control window " + (i + 1) + ": " + spanTxt(c))).concat(variantCaveat(s) ? ["Referent scheme for the variant chosen in this protocol: " + variantCaveat(s)] : []);
           const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: FIG_CAPTION });
           figParas.forEach((c) => children.push(c));
           if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + ((fig && fig.reason) || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
@@ -1430,7 +1479,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         } else {
           children.push(para("See section 5."));
         }
-        if (variantCaveat(s)) children.push(p([text("Referent scheme for the variant in section 7. ", { bold: true }), text(variantCaveat(s))]));
+        if (variantCaveat(s)) children.push(p([text("Referent scheme for the variant chosen in this protocol. ", { bold: true }), text(variantCaveat(s))]));
 
         children.push(h1("7. Design variant"));
         children.push(para(variant));
@@ -1535,8 +1584,24 @@ _Drafted with the AsPEN case-crossover builder (${today})._
             // was cleared only by "Clear all". Browsing five outcomes while
             // deciding exported five validation citations. A second pick into
             // the same field now replaces the first, deterministically.
-            const citeKey = currentTargets.name || currentTargets.def || currentTargets.codes || "picked";
-            if (it.validation) pickedCitations[citeKey] = it.validation;
+            // Keyed by the field that carries the phenotype's NAME, and the
+            // name written there is stored beside the citation. Keying by the
+            // definition textarea was not enough: pick MI, then hand-edit the
+            // definition, the code set and the outcome name to hip fracture,
+            // and the MI validation study stayed in the reference list for an
+            // outcome appearing nowhere else in the document — the exact
+            // sentence this fix was written to prevent, reached by editing
+            // instead of by a second pick. Picking from the library and then
+            // tuning the wording is the normal workflow.
+            //
+            // The comparison is equality against what the pick wrote, not a
+            // substring search: the SCCS builder was caught by substring
+            // matching in both directions at once — rewording an outcome
+            // deleted its reference silently, and naming a phenotype in an
+            // inclusion criterion revived an unrelated validation study.
+            const citeKey = currentTargets.name || currentTargets.alsoFill || currentTargets.def || "picked";
+            const citeVal = currentTargets.name ? it.name : (currentTargets.alsoFill ? it.name : it.definition);
+            if (it.validation) pickedCitations[citeKey] = { wrote: citeVal, cite: it.validation };
             else delete pickedCitations[citeKey];
             savePickedCitations();
             closeLibrary();
