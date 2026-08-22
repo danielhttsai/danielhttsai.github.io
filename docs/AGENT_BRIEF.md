@@ -373,3 +373,174 @@ Still open, examined and deliberately left:
   leads, not findings** — Crossref and PubMed are blocked from a cloud run, and
   this repo has already had a fabricated author introduced by exactly this route.
   Do not rewrite any of them without an authoritative record.
+
+### Found 2026-08-22 by a fourth run — RWE Studio, not ACNU
+
+Four consecutive runs had worked `active-comparator-new-user.astro`. This one
+rotated to `rwe-studio.astro` and found five defects of the house bug class in
+the estimation path. **Two environment discoveries here change what a run can
+verify — read them before anything else.**
+
+#### Environment: you can run the real R, and drive the real upload path
+
+- **`sudo apt-get install -y --no-install-recommends r-base-core r-cran-survival`
+  works.** Roughly 90 seconds, and it gives you R 4.3.3 with `survival`. The
+  WebR CDN (`webr.r-wasm.org`) is still 403, so the browser cannot run the
+  analysis — but you do not need it to. Drive the page in Chromium, call
+  `buildScript()` and `analysisCSV()` from `page.evaluate`, write the CSV out,
+  `sed` the `/data.csv` path, and run it with `Rscript`. **Every R claim in this
+  run was executed, not read.** Do this. Reading generated R is how three of the
+  bugs below survived previous reviews.
+- **`cdnjs.cloudflare.com` is blocked, which is where SheetJS comes from**, so
+  file upload silently does nothing in a headless run and `DATA.columns` stays
+  empty — it is not your test that is broken. Fix it the way the brief already
+  describes for `docx`: `npm pack xlsx@0.18.5`, then
+  `page.route('**cdnjs.cloudflare.com/**xlsx**', r => r.fulfill({ path: '…/package/dist/xlsx.full.min.js' }))`.
+  Without this you can only test the four demo datasets, which is how a bug in
+  the coercion of *uploaded* files stayed hidden.
+- **The ship loop in this file is wrong for this environment.** The session
+  starts on a **detached HEAD**, and the local `main` branch is stale (12 behind
+  when this run started), so `git push origin main` pushes that stale branch and
+  is rejected as non-fast-forward. Use **`git push origin HEAD:main`**.
+- Feeding a canned R output back through the page — `page.evaluate(o => {
+  window.RWEngine = { run: async () => o } }, realROutput)` — renders the whole
+  results/diagnostics/export layer without WebR. Generate the canned output with
+  real `Rscript` so it is faithful.
+
+#### Fixed this run
+
+- ~~**Any number that was not zero counted as a "yes".**~~ `toBin`'s last line was
+  `n > 0 ? 1 : 0`. An outcome coded 1 = yes, 2 = no, 9 = unknown — ordinary in
+  registry and hospital extracts — became an outcome that happened to *every*
+  patient. The "Coded flags — which value means yes" vocabulary is built only
+  from two-level columns, so a three-level column never appears in the structure
+  panel; `chk01` in R, which exists to refuse exactly this, then saw a variable
+  whose only value was 1 and passed it. 400 events in 400 patients, three
+  confident hazard ratios, one of them 1.27 (1.00-1.61). Now refuses, and the
+  mapping step names the unreadable values and blocks step 4.
+- ~~**A missing number became a hard zero.**~~ The blank guard in `buildMaster`
+  tested the original value while the number came from a value already replaced
+  by `""`; `Number("")` is 0 and `String(null)` is `"null"`, which is not `""`.
+  35 patients in the cohort demo entered the propensity model aged 0, and
+  because nothing was missing any more, `complete.cases` had nothing to drop and
+  "Drop rows missing a required mapped variable" silently did nothing.
+- ~~**Weight diagnostics described IPTW whatever was fitted.**~~ (The brief's own
+  open item, plus a false reassurance.) `wdiag` was applied only to the IPTW
+  weights, so unticking IPTW and ticking SMR produced an SMR hazard ratio, a
+  Table 1 column headed "SMD after IPTW", a badge reading "IPTW withheld" and
+  the sentence "the other estimators are unaffected and are still shown" — while
+  the SMR weights on that same data had ESS 2.5% and a top-1% share of 36%,
+  against 7.0% and 26% for the IPTW weights just refused. Each scheme is now
+  judged on its own weights. **SMR is gated like IPTW; overlap is not** — overlap
+  weights are bounded in [0,1], so a small ESS there means the equipoise
+  population is small, not that a few patients carry the answer. Do not "fix"
+  that asymmetry; it is deliberate.
+- ~~**Fine stratification and matching hid who they dropped.**~~ Fine
+  stratification silently discarded every patient in a single-arm stratum (20%
+  of the no-overlap demo at 10 strata, 42% at 50). Matching reported "(343
+  matched)" — rows, not exposed — while only 117 of 235 exposed were matched,
+  and greedy no-replacement matching drops the highest-propensity exposed
+  first. Both now report survivors, and matching names its estimand and warns
+  when the ratio is arithmetically impossible (2:1 needs 470 comparators, 330
+  exist).
+- ~~**A pipe in a column name shifted the balance column.**~~ `Sex (M|F)` split
+  the `TABLE1|` row into six fields against a five-column header, so the cell
+  under "SMD after IPTW" showed the *before*-weighting SMD and the after value
+  landed in an unheaded column the exports drop. Sanitised on the way in, both
+  from the form (`q()`) and from the data (`sq()` in R).
+
+#### Open, examined this run, deliberately left
+
+Ranked by damage. The first is the sharpest thing left in this file.
+
+- **The ITS default standard errors look badly anti-conservative.** `auto`
+  applies a Newey-West sandwich to every series with ≥12 rows (`its_ac`, the
+  `useh<-(AC=='newey') || (AC=='auto' && nrow(a)>=12)` line). It is HC0-type: no
+  finite-sample correction, no prewhitening, z critical values. A reviewer's
+  simulation put the rejection rate of a nominal 5% test at **20.9% at 24
+  periods and 35.4% at 12**, and worse than the model-based SE it replaces at
+  every length below roughly 60 periods *including* the autocorrelated cases it
+  exists to fix. **This is a strong claim and it was NOT reproduced in R by this
+  run — it comes from a Python re-implementation of the file's own sandwich.**
+  Reproduce it in R before changing anything; if it holds, raise the threshold
+  far above 12 and print the HAC interval as a sensitivity rather than the
+  headline. Independently and definitely true: the `<option>` text still says
+  "only if Durbin-Watson flags serial correlation", which the code has
+  deliberately not done since the comment above it was written, and the
+  `RESULT_NOTE` says "model-based standard errors were requested" in the auto
+  path where nothing was requested. Fix the wording regardless.
+- **The ITS time index is a rank over observed periods** (`a$t<-match(a$key,ukey)`).
+  A month absent from the input is closed up rather than left as a gap, so every
+  "per period" coefficient is per observed row. A reviewer's simulation of a
+  36-month series with months 7-12 missing moved the end-of-follow-up contrast
+  from 1.366 to 1.632. Not reproduced in R here. The fix has a precedent in the
+  same function: when the labels parse as dates, check consecutive periods are
+  one unit apart and **refuse**, exactly as the period-ordering guard does.
+- **"Fine stratification" is a stratified Cox model, not the published method**,
+  which reweights strata precisely so sparse ones need not be dropped. On the
+  cohort demo the two differ (0.640 as coded vs 0.671 ATT-weighted at 10
+  strata). Either implement the weights or rename the row. The file cites
+  nothing there — **do not add a citation from memory**; the attribution to
+  Desai et al. Epidemiology 2017 is a reviewer's recollection, unverified.
+- **The PS-calibration page asserts, without checking, that the correction it
+  withheld would have hurt.** The "Applying the correction anyway would give HR
+  … — further from the gold standard than doing nothing" branch is
+  unconditional, and all three numbers are on that same line. A reviewer
+  produced a counterexample at S = 73% where the correction moved *toward* the
+  gold standard, and one at S = 90% (green, released) where it more than doubled
+  the error. Two lines: compare `|bcal-bG|` with `|bT-bG|` and say which
+  happened. Worth doing; the arithmetic is already there.
+- **The per-protocol row is naive censoring at discontinuation**, with no IPCW
+  offered or mentioned, and a blank DISC silently read as "never discontinued"
+  (376 of 565 on the cohort demo). No note reports either. Also `est_itt` is a
+  no-op — the ITT rows are emitted unconditionally — and ticking PP without
+  mapping DISC skips it in silence while the handoff JSON still records
+  `estimand: "ITT+PP"`.
+- **`MASTER` is frozen once built.** Nothing in step 4, the structure panel, or
+  the covariate ticks invalidates it, and `runanalysis` rebuilds only when it is
+  null. Un-tick a covariate after building and the analysis still runs on the
+  cohort that covariate's missingness defined. Flip "which value means yes" and
+  the covariates flip while the exposure and outcome do not. One line each, the
+  design radio already shows the pattern.
+- **`LAST` is likewise stale**: change the methods or the interruption point and
+  export without re-running, and the Word file carries the previous run's
+  estimates and script under today's date.
+- **`its_cycle` is read with `parseInt`, so `1e3` becomes a cycle of 1** — the
+  brief's own `parseInt("1e3")` family, still live. Harmonic terms collapse to
+  constants and the only trace is a generic collinearity note.
+- **European decimals**: `Number(String(v).replace(/,/g,""))` turns `3,5` into
+  35, in `buildMaster` and in the profiler, so the profile cannot expose it. The
+  fix needs a per-column locale decision — say which was assumed rather than
+  guessing silently.
+- **`dupRowCount` joins cells with no separator while the de-duplication that
+  follows joins with `"|"`**, so the panel's duplicate count and the cleaning
+  step disagree in both directions.
+- **The exports omit every diagnostic that gates the numbers they print** — the
+  whole positivity/weight panel and the PS-calibration verdict are on screen
+  only. The refusals travel (they are `RESULT_NOTE`/estimate rows), but the ESS,
+  concentration and balance verdicts do not.
+- **The "Validation sample is internal / external" control changes nothing** in
+  the generated R; it only travels into the handoff JSON, while sitting among
+  controls that do affect the analysis.
+- **SCCS and case-crossover state no assumptions in their output.** The
+  estimators are correct — both were re-derived and reproduce their demos' known
+  truths (IRR 2.99 against a true 3.0; OR 2.55 against a true 2.5) — but nothing
+  warns that SCCS assumes the event does not alter later exposure or end
+  observation, or that a case-crossover is biased by an exposure-prevalence
+  trend. The case-crossover also never checks that each stratum has exactly one
+  hazard window.
+- **`MASS` is requested for the negative binomial but `WebrEngine` installs only
+  `survival`**, so in the browser the overdispersed branch is always
+  quasi-Poisson. `famlab` reports the truth, so nothing false is printed, but
+  the UI text promises negative binomial first.
+
+#### A method note for whoever runs this next
+
+The two-reviewer method paid for itself here, but not in the way the prompt
+suggests. Both reviewers were right about arithmetic and wrong about causes at
+least once — one insisted the cohort demo's advertised numbers were a stale
+caption, when the real cause was the missing-becomes-zero bug producing them.
+The disagreement was only resolvable because R was installed and the claim could
+be executed. **Treat a reviewer's simulation as a lead, not a finding**, and
+promote it only when you have reproduced it in the tool's own stack. Two of the
+open items above are recorded precisely because that could not be done in time.
