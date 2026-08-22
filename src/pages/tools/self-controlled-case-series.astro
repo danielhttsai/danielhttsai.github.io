@@ -927,7 +927,11 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         "extended-unexposed": "exposed against unexposed person-time within each case, augmented with never-exposed reference cases",
         "active-comparator":  "person-time on the index drug against person-time on the comparator drug within each case",
       };
-      const lcFirst = (t) => t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+      // Lower-cases the first letter so the clause reads as prose mid-sentence —
+      // but not when the field opens with an acronym, or "SCCS conditional
+      // Poisson" and "IRR with 95% CI" come out as "sCCS" and "iRR". Two
+      // capitals in a row is the test: "Conditional" is prose, "SCCS" is not.
+      const lcFirst = (t) => (t && !/^[A-Z]{2}/.test(t)) ? t.charAt(0).toLowerCase() + t.slice(1) : t;
       const analysisSentence = (s) => {
         const contrast = SCCS_CONTRAST[s.sccsVariant];
         if (!contrast) return "";
