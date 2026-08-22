@@ -762,18 +762,39 @@ const fwList = Object.values(FRAMEWORKS);
       };
       const DELIV_ALIASES = { present: "present", yes: "present", planned: "present", "pre-specified": "present", prespecified: "present", partial: "partial", partially: "partial", implied: "partial", absent: "absent", missing: "absent", no: "absent", none: "absent" };
 
+      // Names come back re-typeset: "Kaplan–Meier" with an en dash where the
+      // worker asked for "Kaplan-Meier", stray spacing, different case. Matching
+      // on raw lowercase equality made one such character both erase a verdict
+      // the model HAD given ("The AI returned no verdict for this planned
+      // output") and, in the same run, announce the same row again at the bottom
+      // as something the AI had "volunteered … not on the list it was asked
+      // about". reconcile() thirty lines up already normalises ids and already
+      // handles duplicates; this is the same job and now uses the same rules.
+      const normName = (s) => String(s == null ? "" : s).toLowerCase()
+        .replace(/[‐-―−]/g, "-")   // ‐‑‒–—― and − → -
+        .replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+        .replace(/\s*([/\-])\s*/g, "$1")           // "Love plot / balance" == "Love plot/balance"
+        .replace(/[.\s]+$/, "").replace(/\s+/g, " ").trim();
+
       function renderDeliverables(list, caveats) {
         // Reconcile against the list the worker actually asked about, so an entry
         // the model dropped or renamed shows as "not assessed" rather than
         // vanishing from a panel that looks complete.
+        const canonBy = new Map(DELIVERABLE_NAMES.map((n) => [normName(n), n]));
         const byName = new Map();
-        const extras = [];
+        const extras = [], dupes = [];
         for (const d of (Array.isArray(list) ? list : [])) {
-          const key = String((d && d.name) || "").trim().toLowerCase();
-          const canon = DELIVERABLE_NAMES.find((n) => n.toLowerCase() === key);
-          if (canon && !byName.has(canon)) byName.set(canon, d);
-          else if (d && d.name) extras.push(d);
+          if (!d || !d.name) continue;
+          const canon = canonBy.get(normName(d.name));
+          if (canon) {
+            // First verdict wins, the rest are named — never rendered twice with
+            // opposite statuses, which is what "Forest plot: Absent / Present"
+            // four rows apart looked like.
+            if (byName.has(canon)) dupes.push(canon); else byName.set(canon, d);
+          } else extras.push(d);
         }
+        if (dupes.length && caveats) caveats.push("The AI returned more than one verdict for planned output(s) " +
+          [...new Set(dupes)].join(", ") + "; only the first was used.");
         const rows = DELIVERABLE_NAMES.map((name) => {
           const d = byName.get(name);
           const st = d ? DELIV_ALIASES[String(d.status || "").trim().toLowerCase()] : null;
