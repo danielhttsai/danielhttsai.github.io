@@ -682,6 +682,13 @@ const fwList = Object.values(FRAMEWORKS);
       // worse than one that says a row was unusable.
       function cleanTimeline(tl) {
         const kept = [], dropped = [];
+        // A timeline returned as a sentence is not an absent timeline. Without
+        // this the panel says "No analysis windows could be placed on a day axis
+        // from this text" — a claim about the protocol — when the AI did answer
+        // and the answer was simply not in the shape asked for.
+        if (!Array.isArray(tl) && tl != null && String(tl).trim()) {
+          return { kept, dropped: [{ name: "the whole timeline", why: "the AI returned it as " + (typeof tl === "string" ? "prose" : "a " + typeof tl) + " rather than as windows with start and end days: " + showRaw(typeof tl === "string" ? tl : JSON.stringify(tl)) }] };
+        }
         for (const w of (Array.isArray(tl) ? tl : [])) {
           const a = readDay(w && w.startDay), b = readDay(w && w.endDay);
           if (a !== null && b !== null) { kept.push({ ...w, startDay: a, endDay: b }); continue; }
