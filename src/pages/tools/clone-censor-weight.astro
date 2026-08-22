@@ -542,6 +542,12 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (!rows.some((r) => r.name === name)) { rows.push({ name: name, days: 365 }); el.value = rowsJoin(rows); render(); }
     }));
 
+    // Caption for the exported figure, and the note buildDocx leaves behind when
+    // the picture could not be made, so the click handler can tell the user
+    // rather than shipping a protocol that is quietly missing its diagram.
+    const FIG_CAPTION = "Figure 1. Study design diagram — time zero (day 0, where every eligible patient is cloned into both strategy arms), the grace period, the ascertainment windows that precede time zero, and follow-up.";
+    let lastFigNote = "";
+
     const actionMsg = document.querySelector("[data-action-msg]");
     const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
 
@@ -682,6 +688,21 @@ ${REFS.map((r) => "- " + r).join("\n")}
         ["Covariates", rowsText(s.covlist)],
       ]));
 
+      // HARPER item 7.2 — the study design diagram. This page drew one on
+      // screen and shipped a Word protocol without it, which is the one item a
+      // CCW protocol can least afford to omit: cloning, the grace period and
+      // the two arms' different deviation schedules are far easier to see than
+      // to read. designDiagramDocx emits the picture, a numbered caption and
+      // the written window list together, and it is that text — not the image —
+      // that an extractor or a reviewer reading the .docx as text can see. It
+      // never throws; on failure it returns a visible amber note, so the
+      // protocol still exports and the page can say which of the two you got.
+      lastFigNote = "";
+      const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: FIG_CAPTION });
+      const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: FIG_CAPTION });
+      figParas.forEach((c) => children.push(c));
+      if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
+
       children.push(h1("4. Cloning"));
       children.push(para("At time zero each eligible patient is cloned once into every strategy arm. Because assignment is made by construction rather than by anything about the patient, baseline covariate distributions are identical across arms and the assigned strategy is unconfounded at time zero."));
       children.push(para("Until a patient acts, their data are compatible with both strategies, so their person-time and any event inside the grace period contribute to BOTH arms; this is what removes immortal-time bias (Maringe 2020). It also means the arms are not independent samples and the number of records exceeds the number of patients — see Sections 8 and 9."));
@@ -738,7 +759,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
     document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
       if (!window.docx) { setMsg("The Word engine (docx) did not load — check the network, then reload the page.", true); return; }
       setMsg("Building the Word document…");
-      try { dl(await buildDocx(readForm()), fname("docx")); setMsg("Word document downloaded."); }
+      try { dl(await buildDocx(readForm()), fname("docx")); setMsg("Word document downloaded." + lastFigNote, !!lastFigNote); }
       catch (e) { console.error(e); setMsg("Word export failed: " + (e && e.message ? e.message : e), true); }
     });
   </script>
