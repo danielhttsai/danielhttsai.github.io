@@ -1045,3 +1045,187 @@ Ranked by damage. The first three need a source this sandbox cannot reach; do
   constructed data. That is the strongest evidence available here that a finding
   is real, and it is cheap to get: give two reviewers the same file and let them
   build their own fixtures.
+
+### Found 2026-08-22 by a seventh run — the case-control path, which no run had opened
+
+Six runs had worked ACNU (×3), RWE Studio (×2) and the Protocol Checker. This one
+rotated to **`src/pages/tools/case-control.astro`** (632 lines, never opened) and
+the `CC` card in `protocol-generator.astro`. Two reviewers ran concurrently on the
+same file from different angles and **converged independently on four defects**,
+which is the strongest evidence available here that they are real.
+
+#### Environment notes that held, and one that did not
+
+- Everything in the fourth/sixth runs' sections is still true: `npm i
+  --no-package-lock --no-audit --fund=false`; `npm pack docx@8.5.0` +
+  `page.route('**unpkg.com/**', …)` for a **real** `.docx`; Crossref/PubMed/doi.org
+  blocked, `WebSearch` only; the live site unreachable.
+- **The session did NOT start on a detached HEAD this time** — it was on a normal
+  branch and `git push` behaved. Check `git status` rather than assuming either way.
+- The whole builder script block is `is:inline`, so `page.evaluate(() =>
+  buildMarkdown(readForm()))` and `await buildDocx(readForm())` work directly.
+  That is the entire harness needed for a protocol builder — no WebR, no worker.
+- **A number typed into `input[type=number]` that the browser rejects comes back
+  as `""`, not as the text.** Pasting `90 days` empties the field while the box
+  still looks filled. So `DAYS_RE`'s tolerance of "365 days" is for pasted/seeded
+  values, not for typing — but the blank it produces is the case that matters.
+
+#### Fixed this run
+
+All executed in Chromium against a local `astro build`, before and after, and the
+export claims asserted by unzipping a generated `.docx` and reading
+`word/document.xml` — not inferred from `buildDocx`.
+
+- ~~**`parseInt("1e3") === 1`, still live in this builder.**~~ The brief recorded
+  this family as closed in ACNU; it was untouched here. `1e3` in the exposure
+  look-back gave **three** answers in one document: §6 prose "the **1e3**-day
+  window", the design table "1e3 days", and the figure's written window list
+  "day −1d to 0" — with the SVG drawing a one-day exposure window nested inside a
+  365-day covariate window. Worse, **the check that exists to catch exactly that
+  nesting was silenced by it** (`365 < parseInt("1e3")` is `365 < 1`), and the
+  reverse input (`covlookback=1e3`) fired a **false alarm quoting a number the
+  user never typed**: "The covariate look-back (1 d) is shorter than the exposure
+  look-back (90 d)". One `readDays`/`readCount` now feeds prose, figure, checks
+  and Word; the figure omits a window it cannot place.
+- ~~**Blank boxes exported as defaults, then laundered into localStorage.**~~
+  `V("lookback") || "90"`, `|| "365"`, `|| "4"` in `readForm`. Deleting the
+  contents exported "the **90-day** window" and "**4** control(s) per case" with
+  the boxes visibly empty and **no check firing** — because the default was
+  substituted before `computeChecks` ever saw the blank. The state was then
+  written to `localStorage` as 90/365/4, so a reload silently made the default
+  real. The file's own comment at `doReset` names this bug; only that half had
+  been fixed.
+- ~~**Case-cohort + the three default-ticked matching factors.**~~ Change one
+  dropdown and nothing else and the `.docx` was headed "Matched case-control
+  study", matched on age, sex and index date, with a case-cohort weighted
+  estimator in the analysis section — `grep incoherent word/document.xml` → 0.
+  The refusal existed, in the checks panel, which does not travel. There is now a
+  `conflicts()` list feeding the panel, the Markdown and the `.docx` from one
+  computation, beside the existing "this draft is incomplete" banner.
+- ~~**Case-cohort named a Prentice estimator and called its output a risk
+  ratio.**~~ Reviewer A's headline finding, and the one thing in the file worth a
+  reject-and-resubmit. Prentice pseudo-likelihood is a weighted Cox partial
+  likelihood → **hazard ratio**; the case-base cross-product against the subcohort
+  → **risk ratio**, but only over a **fixed cohort with complete follow-up**.
+  Both confirmed from search snippets (a Lifetime Data Analysis paper for the
+  first, several sources for the second, "without requiring any rare-disease
+  assumption ... from a fixed cohort"). Not verified against the primary records —
+  Prentice 1986 Biometrika 73:1-11 was never read. The stated *reason* for the
+  robust variance was borrowed from the Cox setting too ("subcohort members
+  contribute to several risk sets"); in the cross-product there are no risk sets
+  and the overlap of cases and subcohort is why. Both estimands are now named,
+  with their conditions, on all four surfaces including the header explainer they
+  originate from.
+- ~~**The analysis was chosen from the matching ticks alone.**~~ Untick the three
+  defaults under risk-set sampling — one gesture — and §8 prescribed
+  "unconditional logistic regression" while the panel above showed a green tick
+  promising the incidence-rate ratio. Incidence-density sampling time-matches by
+  construction; conditioning on those risk sets is what buys the rate-ratio
+  reading. `analysisText` now routes on the scheme, not only on `isMatched()`.
+- ~~**"Do not enter the matching factors as covariates", stated
+  unconditionally.**~~ True for individual matching, **exactly backwards for
+  frequency matching**, where the correct fit is unconditional *including* them.
+  The form cannot tell the two apart, so both branches are stated and the user is
+  asked which they did. **This was a correction to this run's own fix**, which had
+  shipped four hours earlier as a flat error message accusing the user — the third
+  run in a row where the sharpest methodological finding was against the run's own
+  work. Keep doing this.
+- ~~**Overmatching was never mentioned**~~ while "Region / site" and
+  "Primary-care practice" sit in the matching list — both proxies for prescribing
+  behaviour, i.e. for the exposure. A warning names them now.
+- ~~**A stale draft or `?seed=` silently became risk-set sampling.**~~ The restore
+  loop does `els.value = val` with no membership check; an unknown value leaves
+  `selectedIndex = -1`, the select shows nothing, and `V()` returns `""` — which
+  `|| "riskset"` turned into a **specific, definite, wrong** scheme with a green
+  tick endorsing it. (The brief's ACNU version of this falls through to *generic*
+  prose; this one was worse.) Now named as unset everywhere, with a red error.
+  The three parallel sampling maps plus the panel's if/else chain are one
+  `SAMPLING` table, and the page checks it against its own `<select>` at load.
+- ~~**The phenotype-library buttons discarded the code set.**~~ All three declared
+  only `data-target-name`, so picking "Myocardial infarction (MI)" from a modal
+  captioned *Validated phenotype library*, which had just displayed the ICD codes
+  and the operational definition, wrote the bare name and left the case-definition
+  field empty. Every other builder wires `data-target-def`/`data-target-codes`.
+  This is the ACNU indication-button bug (third run) in a second file — **check
+  the remaining builders' buttons against `PhenotypeLibrary.astro`'s documented
+  attributes; it is a two-minute grep.**
+- ~~**The Word file had no research question at all**~~ — the PICO sentence lived
+  only in the Markdown — **and its section numbers ran one behind** the Markdown
+  throughout, so "as stated in section 5" meant different sections depending on
+  which export the reader had.
+- ~~**Zero controls per case and a zero-day covariate window**~~ (under a section
+  listing covariates) stayed on screen; they travel now.
+- ~~**The Knol "90%" sentence.**~~ The number itself is supported by search
+  snippets ("90% of the studies reported only an odds ratio despite the fact that
+  the majority used designs that estimate risk ratios or incidence rate ratios"),
+  so it is **not** fabricated — but as written it welded that marginal to an
+  *unconditional* entitlement, and Knol's own denominators cap that conjunction at
+  ~81% (105 + 17 of 150) and show it was conditional for the majority: 57 of 125
+  needed a stable source population, 16 of 17 needed the rare-disease assumption,
+  only 48 needed nothing. On the page whose thesis is *state your assumptions*.
+  Rewritten to report what Knol reports. **Evidence is search-snippet only.**
+
+#### Checked and clean (do not re-derive)
+
+- **Citations: nothing fabricated in the case-control path.** All five references
+  (Vandenbroucke & Pearce 2012 IJE 41(5):1480-9; Wacholder I 1992 AJE
+  135(9):1019-28; Knol 2008 AJE 168(9):1073-81; Labrecque 2021 AJE 190(2):318-21;
+  Essebag 2003 Am Heart J 146(4):581-90) matched search records on author list,
+  journal, year, volume, issue and pages, as did the CC card's `cite`/`doi`. Two
+  DOIs (`aje.a116396`, `aje/kwaa167`) never appeared in any snippet. **One
+  possible defect, deliberately left**: a reviewer's snippet says Wacholder II and
+  III carry a different author order (Wacholder, Silverman, McLaughlin, Mandel)
+  from paper I, and the reference lists all three under I's order. Snippet-only
+  evidence, and this repo has already had an author list broken by a
+  well-intentioned fix — do not touch it without a record.
+- Every `name="…"` diffed against every `s.<x>` in `readForm`: all controls read,
+  no `s.subgroups`-style typo. No `+`/`||` precedence bug. 390px viewport clean
+  (390/390). "Clear all" restores the authored defaults and unticks correctly.
+
+#### Open, examined this run, deliberately left
+
+- **The outcome library still loses the ICD codes.** `PhenotypeLibrary`'s
+  `fillFrom` sets `targetDef` to `item.definition || item.codes`, so where an
+  entry has both — every outcome — the codes are dropped once a definition exists,
+  and case-control has no separate codes field to point at. Fixing it means
+  changing the shared component's fallback, which would alter `outcomeDef` in four
+  other builders. Worth doing deliberately, in one pass, not as a side effect.
+- **`max="20"` on "Controls per case" binds nothing.** `500` prints as "500 per
+  case". No `:invalid` styling exists anywhere in the repo, and there is no submit.
+  Nothing false is printed — the user sees what they typed — so it is the species
+  without the damage.
+- **Three matching factors ship ticked**, so a blank form is a "matched
+  case-control study" in the abstract, the subtitle, §1, §3, §5's heading and the
+  Word design table before any design decision is made. `SENSITIVITY` ships four
+  ticked including "Matched vs unmatched analysis". **Defaults policy — Daniel's
+  call**, same class as the ACNU note above.
+- **No study size, power or sparse-data check.** Six matching factors at 4:1 can
+  leave most matched sets uninformative (no exposure variation contributes nothing
+  to the conditional likelihood) and nothing says so.
+- **No risk period is ever elicited**, yet under cumulative sampling the tool
+  promises the odds ratio approximates "the risk ratio" — which is undefined
+  without one. §8 also opens "The estimand is the effect of E on O", which names
+  no population, contrast or time horizon.
+- **"overstates it"** (three places) is directionally ambiguous: for a protective
+  exposure the OR is *smaller* than the RR. "Further from the null" is exact.
+- **`pcOf.analysis` under cumulative sampling produces a comma splice** in the
+  exported abstract: "…estimates the odds ratio of the full cohort; it
+  approximates the risk ratio only if the outcome is rare, and overstates it
+  otherwise, with 95% confidence intervals."
+- **`PC.mountAmendments(form)` is not called here either** — confirmed by DOM
+  query — while both exports still assert "no amendments have been made". Same
+  item as the third run's; seven builders, unchanged.
+
+#### What the two reviewers disagreed about, and who was right
+
+- The applied reviewer ranked the phenotype-library data loss first and never
+  looked at the estimand; the methodologist ranked the Prentice/risk-ratio muddle
+  first and never noticed the library button. **Neither list contained the
+  other's top finding.** That is the strongest argument yet for running the two
+  briefs genuinely differently rather than as two passes of the same review.
+- Both independently reproduced the `1e3` family, the blank-default refill, the
+  case-cohort/matching incoherence and the missing covariate-vs-matching check,
+  from separately constructed fixtures. Four-for-four convergence.
+- The methodologist's frequency-matching point **overturned this run's own
+  earlier fix**, which had shipped as a flat error. The fix was softened to name
+  the fork. Had the two reviewers only agreed, that error would still be live.
