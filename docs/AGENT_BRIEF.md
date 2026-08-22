@@ -2179,6 +2179,15 @@ was worse than several it had inherited.
   it is the all-events interval that is too narrow and the first-event analysis
   that is conservative. And "washout time is *normally* removed from the
   likelihood" overstated a literature in which both treatments appear.
+- ~~**A `|` in a table cell split the Markdown row.**~~ Typing
+  "ATC N05A* | excluding N05AN01" in the code set emitted a three-cell row
+  against a two-column header; GFM drops the cells past the header width, so the
+  Markdown silently lost "excluding N05AN01" while the `.docx` kept it — **the
+  two exported documents specified different code sets for the same study.**
+  Period names can contain a "|" too now that the parser splits on the last one.
+  Escaped by `tc()` in every Markdown table cell. (Same defect as
+  descriptive-analysis. Note for the record: this landed inside the commit
+  "fixes for this run's own defects", whose message does not mention it.)
 - ~~**`lcFirst` lower-cased acronyms**~~ — "SCCS conditional Poisson" became
   "sCCS" in the abstract. Found by re-reading the run's own diff, not by a
   reviewer.
