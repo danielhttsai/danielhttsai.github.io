@@ -1406,6 +1406,17 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // a red mark on a page nobody has touched yet teaches people to ignore
         // the panel.
         const expSegs = periods.filter((p) => p.kind === "exposure");
+        const RW_DAYS = { "0-30": 30, "0-90": 90, "0-180": 180 };
+        const rwWant = RW_DAYS[s.riskWindowDef];
+        if (rwWant && expSegs.length && expSegs.every((p) => p.ok)) {
+          const have = expSegs.reduce((a, p) => a + p.days, 0);
+          if (have !== rwWant) {
+            out.push({ lvl: "stop", t: "The period strip and the risk-window definition disagree", d: "The risk-window definition says the risk window is days 0-" + rwWant + " after exposure start, which is " + rwWant + " days, but the strip gives the exposure risk period as " + have + " day(s)" + (expSegs.length > 1 ? " across " + expSegs.length + " exposure segments" : "") + ". The protocol exports both of these in the same table, so as it stands it specifies two different risk windows and therefore two different incidence rate ratios. Change whichever one is wrong; the tool will not pick for you." });
+          }
+        }
+        if (s.riskWindowDef === "early-late" && expSegs.length === 1) {
+          out.push({ lvl: "warn", t: "An early/late split needs more than one exposure segment", d: "The risk-window definition asks for the risk window to be split into early (0-14 d) and late (15+ d), but the strip has a single exposure risk period, so the exported protocol describes a split the design does not contain. Divide the exposure segment into two lines, e.g. Exposure risk (early) | 14 and Exposure risk (late) | 16." });
+        }
         // Zero is a readable length, and deliberately so — the sensitivity list
         // itself offers "Alternative pre-risk window (0, 30, 60 d)", so a 0-day
         // pre, post or washout segment is a real choice meaning "none". A 0-day
@@ -1419,17 +1430,6 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           out.push(noExposedTime
             ? { lvl: "stop", t: "The exposure risk window is zero days long", d: "Every exposure risk period on the strip has a length of 0, so no person-time is classified as exposed and there is nothing for the reference time to be a rate ratio against. The incidence rate ratio this protocol reports would have no numerator. Give the exposure risk period a length, or say plainly which period is meant to carry the exposed time." }
             : { lvl: "info", t: "A period is zero days long", d: zeroSegs.map((p) => "“" + p.name + "”").join(", ") + " " + (zeroSegs.length > 1 ? "have" : "has") + " a length of 0, so " + (zeroSegs.length > 1 ? "they contribute" : "it contributes") + " no person-time and " + (zeroSegs.length > 1 ? "have" : "has") + " no effect on the estimate. That is a legitimate way to say “no such window” — the sensitivity list offers a 0-day pre-risk window — but the exported protocol still names the period, so delete the line if you meant to remove it." });
-        }
-        const RW_DAYS = { "0-30": 30, "0-90": 90, "0-180": 180 };
-        const rwWant = RW_DAYS[s.riskWindowDef];
-        if (rwWant && expSegs.length && expSegs.every((p) => p.ok)) {
-          const have = expSegs.reduce((a, p) => a + p.days, 0);
-          if (have !== rwWant) {
-            out.push({ lvl: "stop", t: "The period strip and the risk-window definition disagree", d: "The risk-window definition says the risk window is days 0-" + rwWant + " after exposure start, which is " + rwWant + " days, but the strip gives the exposure risk period as " + have + " day(s)" + (expSegs.length > 1 ? " across " + expSegs.length + " exposure segments" : "") + ". The protocol exports both of these in the same table, so as it stands it specifies two different risk windows and therefore two different incidence rate ratios. Change whichever one is wrong; the tool will not pick for you." });
-          }
-        }
-        if (s.riskWindowDef === "early-late" && expSegs.length === 1) {
-          out.push({ lvl: "warn", t: "An early/late split needs more than one exposure segment", d: "The risk-window definition asks for the risk window to be split into early (0-14 d) and late (15+ d), but the strip has a single exposure risk period, so the exported protocol describes a split the design does not contain. Divide the exposure segment into two lines, e.g. Exposure risk (early) | 14 and Exposure risk (late) | 16." });
         }
         // Choosing the active-comparator variant used to export a protocol that
         // contradicts itself one table later. Section 5 says "case-time on the
