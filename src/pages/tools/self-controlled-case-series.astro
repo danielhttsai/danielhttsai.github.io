@@ -1419,6 +1419,18 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         if (s.riskWindowDef === "early-late" && expSegs.length === 1) {
           out.push({ lvl: "warn", t: "An early/late split needs more than one exposure segment", d: "The risk-window definition asks for the risk window to be split into early (0-14 d) and late (15+ d), but the strip has a single exposure risk period, so the exported protocol describes a split the design does not contain. Divide the exposure segment into two lines, e.g. Exposure risk (early) | 14 and Exposure risk (late) | 16." });
         }
+        // Choosing the active-comparator variant used to export a protocol that
+        // contradicts itself one table later. Section 5 says "case-time on the
+        // index drug compared with case-time on a comparator drug (no reliance
+        // on a 'no-drug' baseline)"; section 6's baseline field still carries
+        // its authored default, "All observation time NOT in pre-risk, risk, or
+        // post-risk windows" — which is precisely a no-drug baseline. And the
+        // comparator drug itself is named nowhere in the document, because the
+        // form has no field for it. The tool cannot supply the drug, so it says
+        // where to put it rather than inventing one.
+        if (s.sccsVariant === "active-comparator" && !/comparator|reference drug/i.test(String(s.baselinePeriod || ""))) {
+          out.push({ lvl: "stop", t: "An active-comparator SCCS with no comparator", d: "The design variant is active-comparator, whose whole point is that the baseline is time on a comparator drug rather than untreated time — but the baseline (control) period is still defined as all observation time outside the risk windows, which is the untreated baseline this variant exists to avoid, and no comparator drug is named anywhere in the protocol. The exported document therefore states both things, two sections apart. Name the comparator drug and its code set in the baseline (control) period definition." });
+        }
         if (periods.some((p) => p.kind === "washout")) {
           out.push({ lvl: "warn", t: "Say what happens to the washout time", d: "The strip contains a washout / carry-over period. That is not the same thing as a post-exposure risk window: a post-risk window is a parameter the conditional Poisson model estimates, whereas washout time is normally removed from the likelihood altogether so that carry-over does not contaminate the reference rate. This tool cannot tell which you mean, and the difference changes both the reference rate and the degrees of freedom, so state it in the baseline (control) period definition." });
         }
