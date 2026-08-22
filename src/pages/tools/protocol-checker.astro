@@ -531,12 +531,22 @@ const fwList = Object.values(FRAMEWORKS);
       // outside the vocabulary must NOT be silently coerced into a verdict.
       const STATUS_ALIASES = {
         met: "met", yes: "met", present: "met", complete: "met", satisfied: "met", addressed: "met",
-        partial: "partial", partially: "partial", "partially met": "partial", incomplete: "partial", unclear: "partial",
+        partial: "partial", partially: "partial", "partially met": "partial", incomplete: "partial",
         missing: "missing", absent: "missing", no: "missing", "not met": "missing", "not addressed": "missing", "not reported": "missing",
         na: "na", "n/a": "na", "not applicable": "na", notapplicable: "na", inapplicable: "na",
       };
+      // "Unclear" is not a verdict on the protocol — it is the model saying it
+      // could not tell. It used to be aliased to "partial", which on this page
+      // means something specific and accusatory: "the topic is raised but a key
+      // element (usually an operational definition, code list, or window) is
+      // missing". That is a finding the model never made, and it is the exact
+      // conflation STATUS_META.unassessed was written to prevent. These go to
+      // "Not assessed", keeping whatever the model did say as the evidence.
+      const UNDECIDED = new Set(["unclear", "uncertain", "unsure", "unknown", "cannot tell", "can't tell",
+        "cannot determine", "indeterminate", "not assessed", "not assessable", "insufficient information", "ambiguous"]);
       function normStatus(s) {
         const k = String(s == null ? "" : s).trim().toLowerCase();
+        if (UNDECIDED.has(k)) return "unassessed";
         return STATUS_ALIASES[k] || null;
       }
       // Ids come back from the model as "7.3.1", "7.3.1.", "Item 7.3.1", "7A"…
@@ -742,7 +752,7 @@ const fwList = Object.values(FRAMEWORKS);
       // not match is reported, never dropped and never guessed at.
       function reconcile(fw, rawItems) {
         const byId = new Map();
-        const unmatched = [], badStatus = [], duplicates = [];
+        const unmatched = [], badStatus = [], duplicates = [], undecided = [];
         const known = new Map();
         for (const sec of fw.checklist) for (const it of sec.items) known.set(normId(it.id), it.id);
         for (const v of (Array.isArray(rawItems) ? rawItems : [])) {
@@ -751,6 +761,12 @@ const fwList = Object.values(FRAMEWORKS);
           if (byId.has(id)) { duplicates.push(id); continue; }
           const st = normStatus(v.status);
           if (!st) { badStatus.push(id + " → “" + String(v.status) + "”"); byId.set(id, { status: "unassessed", evidence: "The AI returned an unrecognised verdict (“" + String(v.status) + "”), so nothing is claimed about this item.", suggestion: "" }); continue; }
+          if (st === "unassessed") {
+            undecided.push(id);
+            byId.set(id, { status: "unassessed", suggestion: "",
+              evidence: v.evidence ? "The AI could not tell (“" + String(v.status) + "”): " + v.evidence : "The AI reported that it could not tell whether this item is addressed (“" + String(v.status) + "”)." });
+            continue;
+          }
           byId.set(id, { status: st, evidence: v.evidence, suggestion: v.suggestion });
         }
         const omitted = [];
@@ -760,7 +776,7 @@ const fwList = Object.values(FRAMEWORKS);
             byId.set(it.id, { status: "unassessed", evidence: "The AI returned no verdict for this item. That is a gap in this check, not a finding about your protocol — read the item and judge it yourself.", suggestion: "" });
           }
         }
-        return { byId, unmatched, badStatus, duplicates, omitted };
+        return { byId, unmatched, badStatus, duplicates, omitted, undecided };
       }
 
       function showRunError(msg) {
@@ -781,7 +797,7 @@ const fwList = Object.values(FRAMEWORKS);
           return;
         }
         const fw = fwOf(data.framework || requestedFramework);
-        const { byId, unmatched, badStatus, duplicates, omitted } = reconcile(fw, data.items);
+        const { byId, unmatched, badStatus, duplicates, omitted, undecided } = reconcile(fw, data.items);
         const counts = { met: 0, partial: 0, missing: 0, na: 0, unassessed: 0 };
 
         itemsEl.innerHTML = "";
@@ -831,6 +847,7 @@ const fwList = Object.values(FRAMEWORKS);
         }
         if (omitted.length) caveats.push("The AI returned no verdict for " + omitted.length + " item(s) (" + omitted.join(", ") + "). They are marked “Not assessed” and excluded from the score — judge them yourself.");
         if (badStatus.length) caveats.push("The AI returned an unrecognised verdict for " + badStatus.length + " item(s) (" + badStatus.join("; ") + "). They are marked “Not assessed”.");
+        if (undecided.length) caveats.push("The AI answered that it could not tell for " + undecided.length + " item(s) (" + undecided.join(", ") + "). That is a statement about this check, not a finding about your protocol, so those items are marked “Not assessed” and excluded from the score — read the item and judge it yourself.");
         if (unmatched.length) caveats.push("The AI returned " + unmatched.length + " verdict(s) for item id(s) that are not in the " + fw.name + " checklist (" + unmatched.slice(0, 8).join(", ") + (unmatched.length > 8 ? ", …" : "") + "). They were ignored.");
         if (duplicates.length) caveats.push("The AI returned more than one verdict for item(s) " + [...new Set(duplicates)].join(", ") + "; only the first was used.");
         for (const n of loadedNotes) caveats.push(n);
