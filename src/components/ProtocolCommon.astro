@@ -115,9 +115,37 @@
        "amendments", pipe-delimited in that same order — the idiom the builders
        already use for their period strips and look-back windows, so their
        existing readForm / localStorage / ?seed= paths carry it with no change.
-       A reason containing a pipe survives: only the first four are split. */
+       A pipe typed into any cell survives, because it is escaped on the way
+       into the field and unescaped on the way out. Only the trailing Reason
+       column used to be protected, so a pipe in one of the first four — "7 | 8"
+       in Section of protocol, meaning sections 7 and 8, is the obvious one —
+       shifted every later cell one column left. The exported HARPER amendment
+       table then read "Section: 7", "Amendment: 8", and the description of what
+       changed appeared under Reason: a complete, plausible, wrong row. */
     const AM_FIELD = "amendments";
     const AM_COLS = ["Version date", "Version number", "Section of protocol", "Amendment or update", "Reason"];
+
+    // Escape backslash first, so unescaping is unambiguous.
+    var amEsc = function (c) { return String(c == null ? "" : c).replace(/\\/g, "\\\\").replace(/\|/g, "\\|"); };
+    var amUnesc = function (c) { return String(c).replace(/\\([\\|])/g, "$1"); };
+    // Split on pipes that are not escaped. Drafts written before this change
+    // contain bare pipes and still split on them, which is the behaviour they
+    // already had; anything typed from now on round-trips intact.
+    function amSplit(line) {
+      var out = [], cur = "", i = 0;
+      while (i < line.length) {
+        var ch = line.charAt(i);
+        if (ch === "\\" && i + 1 < line.length) { cur += ch + line.charAt(i + 1); i += 2; continue; }
+        if (ch === "|") { out.push(cur); cur = ""; i += 1; continue; }
+        cur += ch; i += 1;
+      }
+      out.push(cur);
+      // Five columns; anything beyond the fifth belongs to Reason.
+      var cells = [];
+      for (var j = 0; j < 4; j++) cells.push(amUnesc(out[j] === undefined ? "" : out[j]).trim());
+      cells.push(amUnesc(out.slice(4).join("|")).trim());
+      return cells;
+    }
 
     // Read a builder field straight off the page. Used only as a fallback when
     // a builder has not yet been updated to pass the value through pcOf(), so
@@ -140,9 +168,7 @@
       var raw = (s && s.amendments != null) ? s.amendments : fromForm(AM_FIELD);
       return String(raw || "").split(/\r?\n/).map(function (line) {
         if (!line.trim()) return null;
-        var p = line.split("|");
-        var cells = [ (p[0] || "").trim(), (p[1] || "").trim(), (p[2] || "").trim(),
-                      (p[3] || "").trim(), p.slice(4).join("|").trim() ];
+        var cells = amSplit(line);
         return cells.some(function (c) { return c; }) ? cells : null;
       }).filter(Boolean);
     }
@@ -250,16 +276,13 @@
       var INPUT = "border border-slate-300 rounded px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
 
       var readRows = function () {
-        return String(field.value || "").split(/\r?\n/).filter(function (l) { return l.trim(); }).map(function (l) {
-          var p = l.split("|");
-          return [(p[0] || "").trim(), (p[1] || "").trim(), (p[2] || "").trim(), (p[3] || "").trim(), p.slice(4).join("|").trim()];
-        });
+        return String(field.value || "").split(/\r?\n/).filter(function (l) { return l.trim(); }).map(amSplit);
       };
       var writeRows = function (rows) {
         // Drop rows the user left entirely blank, so an accidental "+ Add"
         // never becomes an empty amendment in the exported protocol.
         var text = rows.filter(function (r) { return r.some(function (c) { return c.trim(); }); })
-          .map(function (r) { return r.map(function (c) { return c.replace(/\r?\n/g, " ").trim(); }).join(" | "); }).join("\n");
+          .map(function (r) { return r.map(function (c) { return amEsc(String(c).replace(/\r?\n/g, " ").trim()); }).join(" | "); }).join("\n");
         field.value = text;
         lastWritten = text;
         form.dispatchEvent(new Event("input", { bubbles: true }));
