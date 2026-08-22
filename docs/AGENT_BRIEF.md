@@ -2254,3 +2254,316 @@ Practical note for the next run: give a subagent a deadline in its opening brief
 ("report at N minutes with whatever you have executed, even if incomplete"),
 rather than trying to extract a report from it later. A reviewer that returns
 nothing costs the whole run its second perspective.
+
+### Found 2026-08-22 by an eleventh run — case-crossover, the last big never-opened builder
+
+Ten runs had worked ACNU (×3), RWE Studio (×2), the Protocol Checker,
+case-control, clone-censor-weight, descriptive-analysis and SCCS. This one
+rotated to **`src/pages/tools/case-crossover.astro`** (1272 lines, never
+opened). Two reviewers ran concurrently with genuinely different briefs, both
+with a 45-minute deadline in their opening prompt — **and both reported**, which
+is the first time in three runs. The deadline instruction the tenth run
+recommended works; keep using it.
+
+The focus chosen was **the window scheme**, because in a case-crossover the
+hazard and referent windows *are* the estimand: the odds ratio is the contrast
+between exposure in one and exposure in the others. A window length is not a
+presentational detail here any more than it is in SCCS.
+
+#### Environment: nothing newly blocked
+
+- `npm i --no-package-lock --no-audit --fund=false`, `npm pack docx@8.5.0` +
+  `page.route('**unpkg.com/**', …)`, Crossref/PubMed/doi.org blocked with
+  `WebSearch` only, the live site unreachable — all still true. **Nothing here
+  was checked against `danielhttsai.github.io`.**
+- The session was on a **detached HEAD** again. `git push origin HEAD:main`.
+- Ports: orchestrator 8123/8124, reviewers 8121/8122/8131. Assign them up front.
+- A reusable harness is in this run's scratch: `harness.mjs` (static server,
+  CJS-safe Playwright import, the `docx` CDN route, and a `URL.createObjectURL`
+  stub that **delegates for `image/*`** so `svgToPng` still works — the tenth
+  run's trap, avoided by construction), plus `t1`…`t4` driving the page.
+
+#### Fixed this run
+
+All executed in Chromium against a local build, before and after. Every export
+claim was asserted by unzipping a generated `.docx` and reading
+`word/document.xml`, never inferred.
+
+- ~~**Every window length was clamped, and `1e3` meant one day.**~~ The house
+  `parseInt` family, in the four numbers that define the estimand. `ccoGeom`
+  read all of them with `Math.max(1, parseInt(x) || 1)`. **This one is reachable
+  by typing, not only by a stale draft**: `input[type=number]` accepts `1e3` as
+  a valid floating-point literal, so Chromium keeps `1e3` in the box, reports
+  `validity.valid === true` and `valueAsNumber === 1000`, while `parseInt` stops
+  at the "e" and returns 1. A thousand-day hazard window exported as
+  "day −1 (1 d)" with the field still showing 1e3 beside it. `7.5` → 7; `0` and
+  blank → 1; a blank offset → L+g, placing the first referent window against the
+  hazard window with no gap and no mention; an offset of `1e3` → 1, putting all
+  three referent windows on top of the hazard window — the same person-time on
+  both sides of the contrast. Tri-state now (`DAYS_RE`/`readDays`, the ACNU
+  idiom): a number, deliberately blank, or unreadable. Nothing is drawn, and
+  sections 5 and 6 of both documents say the scheme is unspecified.
+- ~~**The variant menu and the window geometry were independent.**~~ Reviewer
+  A's top finding and the orchestrator's #1, found independently. `ccoGeom`
+  never read `ccoVariant`, so the fixed-offset scheme was printed in §6, the
+  diagram and STROBE item 5 whatever was chosen in §7. Selecting "Symmetric
+  bidirectional; controls before AND after event" exported that sentence
+  directly above a table listing three referent windows at days −66, −126 and
+  −186, every one before the event; selecting time-stratified exported a
+  fixed-offset table, which is exactly what time-stratified referent selection
+  is not (it partitions the study period into calendar strata and draws
+  referents from the case's own stratum, before and after, not at a fixed
+  offset — which is the whole mechanism that makes it trend-robust). **The
+  builder has no field for what those two variants need, so it says what is
+  missing and where the answer goes rather than inventing geometry.** Note
+  Reviewer A's sharpest supporting detail: the page's own CCTC exemplar
+  (Huang 2023) used *randomly selected* 30-day referent periods from days −61 to
+  −180, so even the cited exemplar contradicts the geometry exported under its
+  name.
+- ~~**"Interpreted as incidence rate ratio under the rare-disease
+  assumption."**~~ The exported default for the effect measure, and wrong in a
+  way a methods referee catches on sight. A case-crossover samples referent
+  person-time from the case's own past — incidence-density sampling — under
+  which the exposure odds ratio estimates the rate ratio **directly, with no
+  rarity assumption**. Rarity is what cumulative-incidence sampling needs.
+  Assumption 2's title carried the same error ("abrupt in onset, **and
+  uncommon**") while this page's own library offers *falls*, which is not rare —
+  so a student was told to refuse a design that is fine.
+- ~~**Nothing said what the OR is not.**~~ Now stated in the abstract's
+  limitations, §8 and STROBE item 19: a within-person contrast computed in cases
+  only, carrying no information about absolute risk, **not interchangeable with
+  a cohort hazard ratio** — while §8 of every protocol on this site pools site
+  estimates and the sibling builders emit hazard ratios and SCCS rate ratios.
+  The SCCS builder already carried its equivalent sentence; this is the second.
+- ~~**A stale draft blanked four `<select>`s and both exports answered for
+  them.**~~ The brief's standing item, live here, executed end to end by
+  Reviewer B with `.docx` evidence. **`nControls` makes this worse than the
+  usual version**: a blanked select exported ONE referent window where the
+  page's default is three, so a stale draft did not restore the default, it
+  quietly specified a different design. Captured at restore (the value is
+  unrecoverable afterwards), named in the panel and both exports, cleared **per
+  control** on change and by `doReset` — the tenth run's lesson about a blocker
+  that outlives its own fix.
+- ~~**Two checks existed only on screen.**~~ The sharper says, in effect, "do
+  not use bidirectional referents for dispensed medicines"; a protocol exported
+  with that variant carried §7 naming it with no trace of the objection.
+  `checksOf()` is computed once now and painted into the panel, both exports and
+  STROBE item 19 (the CCW `blockers()` pattern).
+- ~~**The phenotype library's `validation` strings were hidden and
+  auto-appended to the reference list.**~~ The code comment admitted it. Two of
+  the eight were wrong about the record they named — the self-harm entry's
+  PMID 39241791 (Luo H et al, a prescribing-trends paper; **fifth independent
+  agreement across runs on this one PMID**) and the GI-bleeding entry's
+  Andersen/Pratt PDS 2013 (the AsPEN network *description* paper). Both removed,
+  neither replaced. Four more said nothing lookup-able. `validation` (a study
+  that measured the definition's accuracy — the only thing reaching the
+  reference list) is split from `provenance` (a "used in" note, shown, never
+  numbered), both are shown **in the modal at the moment of picking**, an entry
+  with no validation says so, and the two survivors say they validated ICD-9-CM
+  while the code sets shown are ICD-10.
+- ~~**`pickedCitations` was never pruned**~~ (standing item, third builder).
+  Keyed by the field the pick writes into now, so a second pick evicts the
+  first; entries saved under the old name-keyed scheme are dropped on load
+  rather than carried into every future protocol.
+- ~~**A space passed the Word export's fallback test.**~~ The Markdown trimmed
+  (`orFb`) and the `.docx` tested `s.x || fb`. Three spaces in the title
+  produced a Markdown protocol headed "(Untitled…)" and a `.docx` opening on an
+  empty bold heading: two documents disagreeing about whether the study had a
+  title. The fallback *prose* had also drifted between the two exports and is
+  one copy (`FB`) now.
+- ~~**The Word protocol shipped without the design diagram**~~ (HARPER 7.2, and
+  a standing brief item). Added, verified by unzipping — `word/media` carries
+  two images with the figure, one without. **The exact inclusive spans are
+  substituted for `fig.lines`**, because the shared helper's `fmtDay` rounds −60
+  to "−2mo" and a 7-day referent window came out as "day −66d to −2mo".
+- ~~**A check's level was decided by matching its own prose**~~
+  (`/allowed, but/.test(i) ? "info" : "stop"`) — the species the brief names.
+  Each issue carries its level now, and the panel sorts blockers above warnings.
+- ~~**Markdown table cells were unescaped**~~ — `ATC M01A* | excluding M01AX`
+  emitted a three-cell row against a two-column header and GFM drops the
+  overflow, so the two exported documents specified different exposures. `tc()`
+  + one `mdTable()`; §1, §4, §5 and §6 verified as 2-cell rows in the browser.
+- ~~**The feasibility regexes were the third copy of the `\b( … )\b` defect.**~~
+  "carcinoma", "malignancy", "tumours", "pregnancy", "gestational age",
+  "echocardiogram", "angiography", "radiology", "genomics" and "deaths" all
+  matched nothing; `labs` was again the one group written without the trailing
+  `\b` and the one that worked. Mirrored from descriptive-analysis's vetted set
+  rather than re-derived, including the `angio` → `angiograph` narrowing.
+- ~~**Assumption 4 cited the wrong paper**~~ — Mittleman 1995 is about how many
+  referent windows to use (relative efficiency), attached to a claim about
+  window overlap and referent eligibility. Janes 2005, already in the reference
+  list, is the paper that argues it. ~~**Assumption 3's remedy was
+  overstated**~~: time stratification removes calendar-time trends, not a trend
+  specific to the individual, which is the case its own plain line describes.
+- ~~**Table 1 had identical columns by construction**~~ — `groupBy: "hazard vs
+  control window"` in a design where the same person contributes both. By site
+  now, exactly as SCCS was fixed.
+- ~~**The STROBE covering sentence was false in both directions**~~ — "Methods
+  items are pre-filled; Results / Discussion items are placeholders" while items
+  17, 19 and 21 were pre-filled and Methods item 10 was not. Counted now.
+
+#### Checked and clean (do not re-derive)
+
+- **The four `ASSUMPTIONS` are otherwise sound.** Assumption 1 (transient
+  exposure, and only exposure-discordant cases contributing to the conditional
+  likelihood) and assumption 4 (non-overlapping windows, eligible person-time,
+  structural zeros from enrolment / marketing date / age band, immeasurable
+  in-hospital time) are correct as written and were read against the design's
+  requirements by the methodologist.
+- **The window arithmetic is right.** Hazard = −(g+L−1) … −g and control k =
+  −(k·off+C−1) … −(k·off) match the stated inclusive-day convention; the
+  hazard-overlap test (`off ≤ g+L−1`) and the control-overlap test (`off < C`)
+  were both re-derived and are correct.
+- **`strobeWhere()`'s keys are clean.** All twelve match real item numbers in
+  `src/data/strobe.ts`; the unmapped items fall through to a placeholder, which
+  is right for a protocol. No key drift.
+- **The three `<select>` lookup maps** (variant, meta, arch) match their option
+  lists exactly, in all three of `buildMarkdown`, `buildDocx` and `strobeWhere`.
+  The copy-paste drift this codebase keeps getting caught by is **not** present.
+- **Both library buttons' `data-target-*` resolve to real fields.** The ACNU
+  name-only-button bug is not here. `exposures` entries carry only `{name,
+  codes}` — no definition, no validation — so the missing `data-target-def` on
+  that button drops nothing.
+- **"Clear all" was already right**: `defaultValue` / `defaultChecked` /
+  `defaultSelected`, citations cleared, the timeline preset reapplied, and it
+  survives a reload.
+- **This is one of the two builders that DO mount `PC.mountAmendments`.**
+- **390 / 768 / 1024 / 1440 px**: no horizontal overflow at any of them.
+- **Citations confirmed from search records, unchanged**: Mittleman/Maclure/
+  Robins AJE 1995;142(1):91-8 (PMID 7785679); Janes/Sheppard/Lumley Epidemiology
+  2005;16(6):717-26; Suissa Epidemiology 1995;6(3):248-53 (PMID 7619931); Wang
+  S, Linkletter, Maclure, Dore, Mor, Buka, Wellenius Epidemiology
+  2011;22(4):568-74 (full author list matched); Huang WC…Lai ECC BMJ 2023
+  e076045 (**volume "382" appeared in no snippet — unconfirmed**); Hsieh CY
+  Clin Epidemiol 2019;11:349-358; Shao SC PDS 2019;28(5):593-600; Cheng CL
+  J Epidemiol 2014;24(6) (PMID 25174915, pages unconfirmed); Cheng CL PDS
+  2011;20(3):236-42 (PMID 21351304); Hsieh CY JFMA 2015;114(3):254-9 (PMID
+  24140108); Wang GH BMJ 2021 (PMID 34503972). **Search-snippet evidence, not a
+  Crossref check.** Maclure 1991 was not separately searched. **No citation
+  text was rewritten** — the orchestrator drafted fuller author lists and titles
+  for three of them from memory and reverted every one, because only the
+  journal / year / volume / issue / PMID had been confirmed. Do not upgrade a
+  citation on a recollection; that is how this repo got a fabricated reference.
+
+#### Open, examined this run, deliberately left
+
+Ranked. The first is the highest-value thing left in this file.
+
+- **Carry-over and persistent use are invisible, and they are the practical
+  killer.** The default exposure rule is "Any dispensing within the window
+  counts as exposed" with 7-day windows spaced 60 days apart, while 28/30/90-day
+  supplies dominate Asian claims data. A person on a 90-day supply is exposed in
+  every window or none — non-discordant, contributing nothing to the conditional
+  likelihood — so with a dispensing-date rule and a short window you are not
+  measuring *being on the drug*, you are measuring *refill timing*, and the
+  estimate rests on the irregular-refill minority. Nothing on the page
+  distinguishes dispensing-date from days-supply exposure and no assumption
+  mentions carry-over. Assumption 1 gets close but frames it as "consider
+  another design" rather than "state which of the two you mean". Reviewer A
+  offered PMID 32548875 as a possible reference; **it was not read and is a
+  lead, not a citation to add.**
+- **The CCTC variant is named and never operationalised.** §7 and STROBE item 4
+  assert `OR_CCTC = OR_case / OR_control`, and nothing anywhere defines the
+  future-case control series: how future cases are identified, how their
+  pseudo-index date is assigned, or the lag between a case's event and a
+  control's. The variant caveat added this run says the same referent scheme
+  applies to both series, which is true and not sufficient. A field for it is a
+  feature, so it is Daniel's call; a check that fires when `cctc` is chosen and
+  no control-series definition exists is not, and is the cheap half.
+- **Reverse causation / protopathic bias is not an assumption.** Prodromal
+  symptoms cause the dispensing; the 1-day default gap is a token nod, and only
+  the CCTC option's helper text mentions it.
+- **Fatal outcomes have no post-event time.** MI, ICH and self-harm are all in
+  the library. Pick self-harm and the symmetric variant, or tick symmetric
+  sampling as a sensitivity analysis, and the protocol asks for post-event
+  exposure in decedents. The new bidirectional warnings fire, but neither knows
+  the outcome may be fatal.
+- **Recurrent events.** Every phenotype definition says "First hospitalisation…"
+  and the design conditions on one event, but nothing states that only first
+  events are analysed, and a recurrence inside a referent window makes that
+  window ineligible person-time.
+- **`ProtocolCommon`'s tail is wrong in kind for a case-only design**, again:
+  "the study targets ≥ 80% power to detect the smallest clinically important
+  effect at a two-sided α = 0.05" when case-crossover power depends on the
+  number of exposure-discordant cases and the referent-window exposure
+  prevalence; and its shared limitation "residual and unmeasured confounding
+  cannot be excluded" undersells a self-matched design, where all time-invariant
+  between-person confounding is removed **by construction** and only
+  time-varying confounding remains. **This is now the third builder to record
+  the same objection** (SCCS argued it hardest and the orchestrator held). It
+  remains the best-evidenced item in this brief and it should be done
+  deliberately across all nine, not locally in one.
+- **`ProtocolCommon`'s amendments sentence.** "This is the original version of
+  the protocol; no amendments have been made" — a positive claim about the
+  study's history that the tool cannot check. Cross-cutting; unchanged since the
+  third run.
+- **Three ticked defaults still assert a study nobody specified**, in the ACNU /
+  descriptive-analysis / CCW pattern: five sensitivity analyses and four
+  subgroups ship ticked, "Country / site" is listed as a subgroup though site is
+  the unit of the primary analysis and its meta-analysis, and "First-ever vs
+  repeated exposure" appears as a ticked subgroup *and* a ticked sensitivity
+  analysis in the same document. This run added checks that say what is wrong
+  rather than changing what ships. **Defaults policy — Daniel's call.**
+- **`SENSITIVITY[8]`, "Stratify by season to control for time-trends in
+  exposure", is incoherent for this design**: each case's windows fall wherever
+  they fall in the calendar and referents 60/120/180 days back already straddle
+  seasons. What is meant is time-stratified referent selection, which is item 4.
+  Unticked, so nothing exports it by default.
+- **`SENSITIVITY[7]` is weaker than what §6 already requires** — "Exclude events
+  within 30 days of cohort entry" against §6's hard requirement of continuous
+  coverage back to the earliest referent window (day −186 on the defaults).
+- **`shortDbName()`'s trailing-parenthetical bug** is present here too (this
+  file has its own copy). Standing cross-cutting item; the id migration and the
+  label have to be done together.
+- **The site checkbox labels overflow their own border** — at 1024 px "Medical
+  Data Vision (MDV) Database" measures 321/206, and the text crosses into the
+  neighbouring column. Cosmetic, page-level layout is clean at every viewport.
+- **Clicking a timeline preset overwrites custom milestones** with no
+  confirmation and no undo. The button says what it does; low severity.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The methodologist's first act was to attack this run's own uncommitted
+  diff, and it was right to.** It read the tree mid-edit, found `ccoGeom`
+  returning `issues` as objects while four consumers still did `"- " + i` and
+  `.join(" ")` (three `[object Object]`s, one silently-wrong check level), and
+  `spanTxt(G.haz)` unguarded on the new `haz: null` path. All four were closed
+  before it reported, but the finding was correct at the moment it was made and
+  the *class* is the one this brief keeps recording: **when you replace a
+  coercion, the invariants the coercion was silently guaranteeing are gone.**
+  Note its supporting detail — `renderScheme` is wrapped in a try/catch, so a
+  throw there blanks the diagram with no error on screen. **Tell your reviewers
+  the tree is moving and they will do this; it is worth the noise.**
+- **The two reviewers converged on the bidirectional variant from opposite
+  ends.** The methodologist noticed the page warns about a post-event window it
+  never draws or exports; the applied analyst noticed the warning never leaves
+  the screen. Neither had the other's half, and together they are one defect.
+- **The applied analyst's whitespace finding was invisible to the
+  methodologist** and vice versa: three of the run's fixes came from one list
+  only. That is now five runs in a row where running the two briefs *genuinely
+  differently* is what found the sharpest thing.
+- **Reviewer A's "Multiple control windows is the primary analysis" was
+  downgraded, not taken.** With three referent windows in the primary, ticking
+  "multiple control windows (e.g., 4 control periods)" may legitimately mean
+  "also try four" — it is ambiguous, not false. It ships ticked, so raising it
+  as a warning would put a third amber mark on an untouched page. It is an ℹ
+  asking for the number, and the two amber marks a fresh page shows were
+  re-counted after the change.
+- **Reviewer B's report that `nControls` was left on `parseInt` was correct**
+  and was the one field the orchestrator's first pass missed — worth recording
+  because it is the field whose reader looked *least* dangerous (a `<select>`
+  can only hold 1–4) and was in fact the most, since a blanked select holds
+  nothing at all.
+
+#### A method note
+
+Both reviewers were given a **hard deadline in their opening brief** ("report at
+45 minutes with whatever you have executed"), which the tenth run recommended
+after a reviewer ran the whole session and returned nothing. Both reported, in
+time, with executed evidence. Do this every time.
+
+The other thing that paid: telling each reviewer **explicitly** that the working
+tree was moving under it and to re-read the file and mark each finding LIVE /
+ALREADY FIXED before reporting. Both did, accurately, and one of them spent its
+opening section on the orchestrator's own half-finished diff — which is the
+single most valuable thing either of them produced.

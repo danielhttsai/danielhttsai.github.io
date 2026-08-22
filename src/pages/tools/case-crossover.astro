@@ -1120,7 +1120,13 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         // anything. Both of these ship ticked, so an untouched page exports them.
         const sensPicks = s.sensitivityPick || [];
         const picked = (frag) => sensPicks.some((x) => x.indexOf(frag) === 0);
-        if (G.ok && G.n > 1 && picked("Multiple control windows")) notes.push({ lvl: "warn", t: "A sensitivity analysis restates the primary analysis", d: "Section 7 of the form already specifies " + G.n + " control windows, so “Multiple control windows” is the primary analysis, not a check on it. Either reduce the primary analysis to one referent window and vary it here, or untick it." });
+        // Deliberately ℹ, not ⚠. This one is ambiguous rather than wrong: with
+        // three referent windows in the primary analysis, "multiple control
+        // windows" may well mean "also try four", which is a real sensitivity
+        // analysis. It ships ticked, so raising it as a warning would put an
+        // amber mark on an untouched page — and marks on an untouched page are
+        // what teach people to stop reading the panel.
+        if (G.ok && G.n > 1 && picked("Multiple control windows")) notes.push({ lvl: "info", t: "Say how many referent windows the sensitivity analysis uses", d: "Section 7 of the form already specifies " + G.n + " control windows, so “Multiple control windows” does not by itself describe anything different from the primary analysis. Name the number it varies to." });
         if (s.ccoVariant === "time-stratified" && picked("Time-stratified case-crossover")) notes.push({ lvl: "warn", t: "A sensitivity analysis restates the primary analysis", d: "Time-stratified referent selection is the variant chosen in section 8 of the form, so it cannot also be a sensitivity analysis against it." });
         else if (picked("Time-stratified case-crossover")) notes.push({ lvl: "warn", t: "A promised sensitivity analysis has no window scheme", d: "The protocol promises a time-stratified sensitivity analysis, but section 6 defines only the fixed-offset windows and this builder has no field for a calendar stratum, so the promised analysis is named and left operationally undefined. State the stratum definition and the within-stratum matching rule, or untick it." });
         if (s.ccoVariant !== "symmetric" && picked("Symmetric bidirectional sampling")) notes.push({ lvl: "warn", t: "Bidirectional referents assume the event does not change later exposure", d: "This is ticked as a sensitivity analysis. Referent windows drawn from after the event require exposure in that period to be unaffected by having had the event; for dispensed medicines that is usually false, and for a fatal outcome there is no post-event time at all. Bidirectional referents are standard for environmental exposures, not for drugs." });
