@@ -934,18 +934,22 @@ const DESIGNS = [
       "<li>smoking (×" + Math.exp(DEMO.smokeLHR).toFixed(1) + ") and a step change from 2019-01 (×" + Math.exp(DEMO.stepLHR).toFixed(1) + ") also raise the hazard.</li>" +
       "<li><code>sex</code> and <code>clinic_site</code> affect nothing — they are there to be messy.</li>" +
       "<li>The <strong>true treatment effect is HR " + DEMO.trueHR.toFixed(2) + "</strong> — the new drug helps.</li></ul>" +
-      "<p class='mt-1'>Because the sicker patients were the ones given it, a <strong>crude</strong> comparison makes it look " +
-      "<em>harmful</em>. Tick <em>Quick pick</em> for the covariates and you should see roughly:</p>" +
+      "<p class='mt-1'>Because the sicker patients were the ones given it, a <strong>crude</strong> comparison hides the benefit " +
+      "entirely — it comes out at no effect. Tick <em>Quick pick</em> for the covariates and you should see roughly:</p>" +
       "<table class='mt-1 w-full max-w-md text-[11px]'><tbody>" +
-      "<tr><td class='py-0.5 pr-3 text-slate-600'>Crude HR</td><td class='font-semibold'>≈ 1.14 (0.91–1.43)</td></tr>" +
-      "<tr><td class='py-0.5 pr-3 text-slate-600'>IPTW (ATE)</td><td class='font-semibold'>≈ 0.74 (0.57–0.96)</td></tr>" +
-      "<tr><td class='py-0.5 pr-3 text-slate-600'>2:1 PS matching</td><td class='font-semibold'>≈ 0.71 (0.51–0.99)</td></tr>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>Crude HR</td><td class='font-semibold'>≈ 1.04 (0.82–1.32)</td></tr>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>IPTW (ATE)</td><td class='font-semibold'>≈ 0.70 (0.53–0.92)</td></tr>" +
+      "<tr><td class='py-0.5 pr-3 text-slate-600'>2:1 PS matching</td><td class='font-semibold'>≈ 0.77 (0.56–1.07)</td></tr>" +
       "</tbody></table>" +
+      "<p class='mt-1 text-slate-500'>Quick pick ticks <code>age</code>, which is missing for 35 of the 600 by construction, so the " +
+      "run analyses <strong>565</strong> — a complete-case analysis, reported in step 4. Crude and adjusted are both computed on " +
+      "those 565, because a crude estimate from a different population is not a comparison.</p>" +
       "<p class='mt-1'><strong>If crude and adjusted come out the same, the tool is broken</strong> — a covariate that silently drops " +
       "out of the model produces exactly that, and it reads like a reassuring null. That is what this demo is for.</p>" +
       "<p class='mt-1 text-slate-500'>The adjusted figures will not land on 0.70 exactly and should not: 600 patients carry sampling " +
-      "error, and a marginal hazard ratio is not the same quantity as the conditional one. Fitting the correctly-specified model to " +
-      "this particular draw gives HR 0.686 (0.533–0.883), so both estimates above are where they should be.</p>" +
+      "error, and a marginal hazard ratio is not the same quantity as the conditional one. Fitting the correctly-specified model " +
+      "(severity, smoking and the calendar step — the three things actually in the hazard) to these 565 gives HR 0.648 " +
+      "(0.498–0.841), so both estimates above are where they should be.</p>" +
       "<p class='mt-1'>The same file also runs as an <strong>interrupted time series</strong>: map <code>index_date</code> and " +
       "<code>outcome</code>, aggregate by month, interruption <strong>2019-01</strong>. Expect a level change of " +
       "<strong>≈ 1.35 (0.98–1.85)</strong>. Note that is <em>not</em> the ×" + Math.exp(DEMO.stepLHR).toFixed(1) + " that was put into the hazard, and " +
@@ -1299,7 +1303,14 @@ const DESIGNS = [
           r += "if(trimmode=='pct'){ lo1<-as.numeric(quantile(ps,0.01)); hi1<-as.numeric(quantile(ps,0.99)); keep<-ps>=lo1 & ps<=hi1; trimlab<-'trimmed to the 1st-99th percentile of the propensity score' }\n";
           r += "ntrim<-sum(!keep)\n";
           r += "if(ntrim>0){ cat('RESULT_NOTE|Cohort ',trimlab,': ',ntrim,' of ',n,' row(s) removed before every estimate below, so all rows are comparable. This changes the population the effect refers to.\\n',sep='')\n";
-          r += "  d<-d[keep,,drop=FALSE]; ps<-ps[keep]; tr<-tr[keep]; n<-nrow(d); d$lp<-qlogis(ps); psT<-ps[tr]; psC<-ps[!tr] }\n";
+          r += "  d<-d[keep,,drop=FALSE]; ps<-ps[keep]; tr<-tr[keep]; n<-nrow(d); d$lp<-qlogis(ps); psT<-ps[tr]; psC<-ps[!tr]\n";
+          // outT/outC were counted on the cohort BEFORE the restriction, and nT/nC
+          // are reported after it. Printed together they said "245 of 555 patients
+          // lie outside the range" about the 245 that had just been removed — and
+          // then advised the restriction the user had already applied. Recount on
+          // the cohort that is actually being analysed.
+          r += "  csLo<-max(min(psT),min(psC)); csHi<-min(max(psT),max(psC))\n";
+          r += "  outT<-sum(psT<csLo | psT>csHi); outC<-sum(psC<csLo | psC>csHi) }\n";
           // ── Weights ───────────────────────────────────────────────────────
           // Stabilised by default: the numerator is the marginal probability of the
           // treatment actually received rather than 1. Same estimand, far tamer
@@ -1419,7 +1430,16 @@ const DESIGNS = [
           // for matching.
           if (M.indexOf("finestrat") >= 0) r += "  { br<-unique(quantile(ps,probs=seq(0,1,length.out=" + (ns + 1) + "))); if(length(br)>=3){ q<-cut(ps,breaks=br,include.lowest=TRUE,labels=FALSE); keep<-ave(as.integer(tr),q,FUN=function(z)length(unique(z)))==2; ok<-which(keep); dd<-data.frame(t=t[ok],e=e[ok],TREAT=d$TREAT[ok],st=q[ok]); fit<-tryCatch(coxph(Surv(t,e)~TREAT+strata(st),data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|Fine stratification (" + ns + " strata, %d of %d patients) - %s HR|%.2f (95%% CI %.2f-%.2f)\\n',length(ok),n,est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))\n" +
             "    if(length(ok)<n) cat(sprintf('RESULT_NOTE|Fine stratification discarded %d of %d patient(s) (%.1f%%) who fell in a propensity stratum holding only one arm - there is nobody to compare them with inside their own stratum. The stratified estimate refers to the remaining %d, not to the cohort you uploaded.\\n', n-length(ok), n, 100*(n-length(ok))/n, length(ok)))} } }\n";
-          if (M.indexOf("matching") >= 0) r += "  { mi<-matchidx(); if(length(mi)>2){ dd<-data.frame(t=t[mi],e=e[mi],TREAT=d$TREAT[mi]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|" + ratio + ":1 PS matching (%d matched) - %s HR|%.2f (95%% CI %.2f-%.2f)\\n',length(mi),est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))} } }\n";
+          // "(%d matched)" counted ROWS in the matched cohort, which cannot show
+          // that half the exposed found no comparator and were dropped. Greedy
+          // matching without replacement takes the easiest-to-match exposed first,
+          // so the ones it discards are systematically the highest-propensity,
+          // sickest exposed — and the estimate is an ATT among whoever is left, a
+          // population nobody chose. Report exposed retained, and say when the
+          // requested ratio was arithmetically impossible before matching began.
+          if (M.indexOf("matching") >= 0) r += "  { mi<-matchidx(); nex<-sum(tr); nmex<-sum(d$TREAT[mi]==1); if(length(mi)>2){ dd<-data.frame(t=t[mi],e=e[mi],TREAT=d$TREAT[mi]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|" + ratio + ":1 PS matching (%d of %d exposed matched) - %s HR, ATT among the matched exposed|%.2f (95%% CI %.2f-%.2f)\\n',nmex,nex,est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))\n" +
+            "    if(nmex<nex) cat(sprintf('RESULT_NOTE|Matching kept %d of %d exposed patient(s): %d found no comparator within the caliper and were dropped. Greedy matching without replacement takes the easiest-to-match exposed first, so the ones left out are systematically those with the highest propensity scores - the estimate is an average treatment effect among the exposed who could be matched, not among the exposed you uploaded.\\n', nmex, nex, nex-nmex))\n" +
+            "    if(" + ratio + "*nex > sum(!tr)) cat(sprintf('RESULT_NOTE|A " + ratio + ":1 ratio needs %d comparators for %d exposed and only %d exist, so at least %d exposed could never be matched whatever the caliper allowed. Lower the ratio.\\n', " + ratio + "*nex, nex, sum(!tr), nex-sum(!tr)%/%" + ratio + "))} } }\n";
           r += "}\n";
           // ── Propensity-score calibration (Stürmer 2005; surrogacy per Lunt 2012) ──
           // Everything the ACNU protocol page currently asks to be typed in by hand.
@@ -2109,7 +2129,22 @@ const DESIGNS = [
         BIN_ROLES.forEach((rk) => { if (roleCol[rk]) { const b = toBin(r[roleCol[rk]]); if (b != null) r[roleCol[rk]] = b; } });
       });
       const numCols = NUM_ROLES.map((k) => roleCol[k]).filter(Boolean).concat(spec.covariates ? COVS : []);
-      rows.forEach((r) => numCols.forEach((c) => { const n = Number(String(r[c] == null ? "" : r[c]).replace(/,/g, "")); if (!isNaN(n) && String(r[c]).trim() !== "") r[c] = n; }));
+      // The blank guard here used to test the ORIGINAL value while the number was
+      // computed from a value already replaced by "". Number("") is 0, and
+      // String(null) is "null", which is not "" — so the guard waved it through and
+      // every missing cell in a numeric role became a hard zero. On the cohort demo
+      // that gave 35 patients an age of exactly 0; a missing follow-up time would
+      // become 0 days and a missing denominator 0. Nothing downstream could see it:
+      // complete.cases in R has nothing left to drop, so the "Drop rows missing a
+      // required mapped variable" box silently did nothing and the run reported the
+      // full cohort. A blank must stay blank and be dropped, or be refused by name.
+      rows.forEach((r) => numCols.forEach((c) => {
+        if (r[c] == null) return;
+        const s = String(r[c]).trim();
+        if (s === "") return;
+        const n = Number(s.replace(/,/g, ""));
+        if (!isNaN(n)) r[c] = n;
+      }));
       const before = rows.length;
       if ($("c_dedupe").checked) { const seen = new Set(); rows = rows.filter((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) return false; seen.add(k); return true; }); }
       // Duplicate patients/cases — ACNU (one-row-per-person cohort) only.
@@ -2432,7 +2467,10 @@ const DESIGNS = [
         (okOverlap
           ? "every patient has a counterpart in the other arm across the whole propensity range. Positivity is satisfied here."
           : "<strong>" + outN + " of " + (nT + nC) + " patients (" + outPct.toFixed(1) + "%) — " + outT + " exposed and " + outC + " comparator — lie outside the propensity range the other arm occupies.</strong> For them there is nobody to compare with, so the model is extrapolating rather than contrasting. " +
-            "<span class='block mt-1'>Stabilising or truncating the weights will <em>not</em> repair this: they make the arithmetic behave, and a tidy weight profile below is not evidence that this is resolved. The honest routes are to restrict to common support, or to narrow the eligibility criteria so the question is one the data can answer.</span>") + "</div>";
+            "<span class='block mt-1'>Stabilising or truncating the weights will <em>not</em> repair this: they make the arithmetic behave, and a tidy weight profile below is not evidence that this is resolved. " +
+            (ntrim
+              ? "This is what is left <em>after</em> the restriction you applied — the boundary of the retained region, recounted on the patients actually analysed. Narrowing the eligibility criteria is the remaining route."
+              : "The honest routes are to restrict to common support, or to narrow the eligibility criteria so the question is one the data can answer.") + "</span>") + "</div>";
       if (ntrim) h += '<p class="mt-1 text-[11px] text-amber-700">' + ntrim + " row(s) were removed before estimating (" + esc(dg.trim) + "). The estimates refer to the remaining patients.</p>";
       h += g ? '<div class="mt-2">' + g + "</div>" : "";
       // ── Section 2: weights ──
