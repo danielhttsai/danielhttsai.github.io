@@ -497,7 +497,7 @@ Reference | 90</textarea>
                   <button type="button" data-add-row data-target="covWindows" data-name={t} class="text-[10px] rounded-full border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-brand-400 hover:text-brand-700">+ {t}</button>
                 ))}
               </div>
-              <span class="text-[11px] text-slate-500">Measure baseline covariates / eligibility <em id="covAnchorHint">before exposure start</em> (day 0) — each is a draggable window, exactly like the cohort builder (<code>Name | days</code>). This is the <strong>measurement</strong> layer; the risk-vs-reference windows above are SCCS's within-person estimand, <strong>not</strong> a cohort follow-up.</span>
+              <span class="text-[11px] text-slate-500">Measure baseline covariates / eligibility <em id="covAnchorHint">before exposure start</em> (day 0) — each is a draggable window, exactly like the cohort builder (<code>Name | days</code>). This is the <strong>measurement</strong> layer; the risk-vs-reference windows above are SCCS's within-person estimand, <strong>not</strong> a cohort follow-up.<br /><strong class="text-slate-600">These windows do not adjust anything.</strong> A covariate measured once before day 0 is constant within a person, and the conditional Poisson likelihood conditions on the person — so it drops out of the model entirely. Use these to decide who is eligible, to describe the cases, and to define subgroups; anything that must be <em>adjusted</em> for has to vary within the observation period, and belongs under time-varying confounders below.</span>
             </label>
           </div>
         </details>
@@ -1051,7 +1051,7 @@ ${sccsVariantText}
 | **Risk / reference periods** | ${parsePeriods(s.periods).map((p) => p.name + " " + rowDays(p)).join(" → ") || "(define the period strip)"} |
 | **Risk window definition** | ${riskWin} |
 | **Baseline (control) period** | ${orFb(s.baselinePeriod, "All observation time NOT in pre-risk, risk, or post-risk windows.")} |
-| **Covariate / eligibility look-back** | ${parseRows(s.covWindows).map((r) => r.name + " " + rowDays(r)).join("; ") || "none (self-controlled design)"} |
+| **Covariate / eligibility look-back** | ${covLookbackText(s)} |
 
 ## 7. Observation period
 
@@ -1187,6 +1187,18 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         : r.empty ? "(no length given)"
         : "(not specified — “" + r.raw + "” could not be read as a number of days)";
       const badRows = (rows) => rows.filter((r) => !r.ok);
+      // The look-back row, said honestly. These windows are measurement, not
+      // adjustment: a covariate constant within a person is conditioned out of
+      // the self-controlled likelihood, so listing "Comorbidity (CCI) | 365"
+      // does not control for comorbidity and a reader of the protocol should
+      // not think it does. The chips offer four such covariates, so the export
+      // has to carry the caveat, not just the form.
+      const covLookbackText = (s) => {
+        const rows = parseRows(s.covWindows);
+        if (!rows.length) return "none (self-controlled design)";
+        return rows.map((r) => r.name + " " + rowDays(r)).join("; ") +
+          ". These define eligibility, describe the cases and may define subgroups; they do not adjust the estimate, because a covariate that is constant within a person is conditioned out of the self-controlled likelihood.";
+      };
 
       // The plain-text description of the figure, for the Word export.
       //
@@ -1761,7 +1773,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           ["Risk / reference periods", parsePeriods(s.periods).map((p) => p.name + " " + rowDays(p)).join(" → ") || "(define the period strip)"],
           ["Risk window definition", riskWin],
           ["Baseline (control) period", s.baselinePeriod || "All observation time NOT in pre-risk, risk, or post-risk windows"],
-          ["Covariate / eligibility look-back", parseRows(s.covWindows).map((r) => r.name + " " + rowDays(r)).join("; ") || "none (self-controlled design)"],
+          ["Covariate / eligibility look-back", covLookbackText(s)],
         ]));
 
         // HARPER item 7.2. Placed with section 6 because in an SCCS the figure
