@@ -84,8 +84,19 @@
       ["Reporting. ", "This protocol follows the HARPER template" + (s.tte ? "; target-trial-emulation elements follow the TARGET statement" : "") + "."],
     ]);
 
+    // `abstractLines` above already branches on s.descriptive; these three did
+    // not, so a descriptive protocol exported "Primary-results table — the
+    // effect estimate", "Residual and unmeasured confounding cannot be
+    // excluded" and a power calculation "to detect the smallest clinically
+    // important effect" — three statements about an effect that the very next
+    // sentence says is not being estimated. Only the descriptive-analysis
+    // builder sets s.descriptive, so these branches reach exactly that one page.
     const defaultOutputs = (s) => {
-      const base = [
+      const base = s.descriptive ? [
+        "Population-selection flow diagram (source population → analytic cohort, with exclusions and counts).",
+        "Table 1 — characteristics of the study population by " + nz(s.groupBy, "stratum") + ".",
+        "Primary-results table — each reported rate or proportion with its 95% confidence interval, by site and by stratum.",
+      ] : [
         "Participant-flow diagram (source population → analytic cohort, with exclusions and counts).",
         "Table 1 — baseline characteristics by " + nz(s.groupBy, "exposure group") + ".",
         "Primary-results table — the effect estimate with its 95% confidence interval.",
@@ -94,7 +105,9 @@
     };
 
     const limitationsText = (s) =>
-      "Residual and unmeasured confounding cannot be excluded; the outcome and exposure may be misclassified in secondary data; and generalisability is bounded by the source population." +
+      (s.descriptive
+        ? "No causal contrast is estimated and none should be read into these numbers; the outcome and exposure may be misclassified in secondary data, and generalisability is bounded by the source populations of the contributing data sources."
+        : "Residual and unmeasured confounding cannot be excluded; the outcome and exposure may be misclassified in secondary data; and generalisability is bounded by the source population.") +
       (s.limitations ? " " + s.limitations : "");
 
     const ethicsText = (s) => nz(s.ethics,
@@ -202,7 +215,9 @@
     function tailSections(s) {
       const skip = s.skip || [];
       return [
-        ["studySize", "Study size and feasibility", [nz(s.studySize, "Power is assessed per data source from observed exposure and outcome frequencies in a pilot extraction; the study targets ≥ 80% power to detect the smallest clinically important effect at a two-sided α = 0.05. Feasibility (available person-time and event counts) is confirmed before the analysis is executed.")]],
+        ["studySize", "Study size and feasibility", [nz(s.studySize, s.descriptive
+          ? "There is no effect size to detect, so the study is sized for PRECISION rather than power: for every reported rate or proportion the expected number of events and the person-time available are established per data source and per stratum in a pilot extraction, and the expected width of the 95% confidence interval is reported alongside them. Cells that will fall below the small-cell suppression rule are identified before the analysis is executed."
+          : "Power is assessed per data source from observed exposure and outcome frequencies in a pilot extraction; the study targets ≥ 80% power to detect the smallest clinically important effect at a two-sided α = 0.05. Feasibility (available person-time and event counts) is confirmed before the analysis is executed.")]],
         ["provenance", "Data sources and provenance", [nz(s.dataMeta, "For each source, we record its original purpose, type (claims / EHR / registry), geographic setting, calendar coverage, any record linkage, and the analytic software used.")]],
         ["dataMgmt", "Data management and quality control", ["Source data are extracted and transformed into the analytic dataset with all derived-variable definitions retained and version-controlled. Analytic code is peer-reviewed; variable distributions, cross-variable logic checks, and expected code frequencies are inspected; and missing data are quantified and handled as pre-specified."]],
         ["outputs", "Planned analytical outputs (shell tables and figures)", defaultOutputs(s), "bullets"],
