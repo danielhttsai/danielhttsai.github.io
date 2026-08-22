@@ -923,7 +923,15 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         outcome: orFb(s.picoO, "(outcome)"),
         data: (s.sites && s.sites.length ? s.sites.length + " AsPEN data source(s)" : "multi-national AsPEN data sources"),
         analysis: analysisSentence(s),
-        groupBy: "risk vs baseline period",
+        // Not "risk vs baseline period". ProtocolCommon turns this into
+        // "Table 1 — baseline characteristics by <groupBy>", and in a
+        // self-controlled design every case contributes person-time to both the
+        // risk and the baseline period, so a table of fixed baseline
+        // characteristics split that way has identical columns by construction —
+        // that is the whole point of the design. By site is the split that
+        // actually differs in a multi-national case series; the distribution of
+        // person-time and events across the windows is a planned output below.
+        groupBy: "site",
         skip: ["ethics"],
         amendments: s.amendments,
         version: s.version,
@@ -1152,6 +1160,36 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         : r.empty ? "(no length given)"
         : "(not specified — “" + r.raw + "” could not be read as a number of days)";
       const badRows = (rows) => rows.filter((r) => !r.ok);
+
+      // The plain-text description of the figure, for the Word export.
+      //
+      // HARPER item 7.2 requires a study design diagram, and this builder drew
+      // one on screen and shipped a .docx without it. The shared helper can
+      // rasterise any SVG, but its window list comes from a WeakMap that only
+      // `renderDesignDiagram` fills, and this page draws its own bespoke SVG —
+      // so `fig.lines` comes back empty here and the list has to be built from
+      // the same parse the strip is drawn from. The text is not decoration: a
+      // reviewer or an automated checker reading the .docx as text cannot see
+      // an embedded picture at all, so the list is the only machine-readable
+      // description of the design the document carries.
+      const stripLines = (s) => {
+        const anchor = s.sccsAnchor === "calendar" ? "calendar" : "exposure";
+        const periods = parsePeriods(s.periods);
+        const bad = badRows(periods);
+        if (bad.length) return ["The period strip is not fully specified, so no day axis can be given: " + bad.map((p) => "“" + p.name + "” " + (p.empty ? "has no length" : "has the unreadable length “" + p.raw + "”")).join("; ") + "."];
+        if (!periods.length) return ["No risk / reference periods have been defined."];
+        let cum = 0;
+        const segs = periods.map((p) => { const g = { name: p.name, kind: p.kind, s: cum, e: cum + p.days }; cum += p.days; return g; });
+        const expIdx = segs.findIndex((x) => x.kind === "exposure");
+        const day0 = anchor === "calendar" ? segs[0].s : (expIdx >= 0 ? segs[expIdx].s : 0);
+        const lines = ["Time zero (day 0): " + (anchor === "calendar" ? "cohort entry" + (s.cohortStart ? " (" + s.cohortStart + ")" : "") : "each case's own first exposure")];
+        segs.forEach((g) => lines.push(g.name + ": day " + (g.s - day0) + " to day " + (g.e - day0)));
+        for (const r of parseRows(s.covWindows)) lines.push("Covariate / eligibility look-back, " + r.name + ": " + (r.ok ? "day -" + r.days + " to day 0" : rowDays(r)));
+        return lines;
+      };
+      // Set by buildDocx so the download handler can tell the user which of the
+      // two documents they got — one with the figure, or one saying why not.
+      let lastFigNote = "";
       const PKIND = { reference: { c: "#94a3b8", l: "Reference (baseline)" }, exposure: { c: "#14b8a6", l: "Exposure risk" }, pre: { c: "#f59e0b", l: "Pre-exposure risk" }, post: { c: "#fb923c", l: "Post-exposure risk" }, washout: { c: "#78716c", l: "Washout / carry-over" }, custom: { c: "#8b5cf6", l: "Custom period" } };
       const fmtD = (d) => { const a = Math.abs(d), s = d < 0 ? "−" : "+"; if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return s + Math.round(a / 30) + "mo"; return s + a + "d"; };
 
@@ -1466,7 +1504,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           a.href = url; a.download = buildFilename("docx");
           document.body.appendChild(a); a.click(); a.remove();
           URL.revokeObjectURL(url);
-          setMsg("Downloaded " + a.download);
+          setMsg("Downloaded " + a.download + lastFigNote, !!lastFigNote);
         } catch (e) { console.error(e); setMsg("Couldn't build the Word file: " + String(e), true); }
       });
 
@@ -1660,6 +1698,18 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           ["Baseline (control) period", s.baselinePeriod || "All observation time NOT in pre-risk, risk, or post-risk windows"],
           ["Covariate / eligibility look-back", parseRows(s.covWindows).map((r) => r.name + " " + rowDays(r)).join("; ") || "none (self-controlled design)"],
         ]));
+
+        // HARPER item 7.2. Placed with section 6 because in an SCCS the figure
+        // IS the risk-window specification; `designDiagramDocx` emits a visible
+        // note in the document when the picture cannot be made, never a silently
+        // absent figure.
+        const FIG_CAPTION = "Figure 1. SCCS design diagram — the case's observation time as one continuous strip of consecutive periods, with covariate look-back windows, on a day axis relative to day 0.";
+        lastFigNote = "";
+        const fig = await window.designDiagramFigure(document.getElementById("diagram"), { caption: FIG_CAPTION });
+        fig.lines = stripLines(s);
+        const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: FIG_CAPTION });
+        figParas.forEach((c) => children.push(c));
+        if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
 
         children.push(h1("7. Observation period"));
         children.push(labelTable([
