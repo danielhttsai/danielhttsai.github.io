@@ -160,27 +160,24 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
 Both reviewers agreed these are real. They are listed with what each is, so the
 next run does not have to re-derive them. Ranked roughly by damage.
 
-- **The `1e3` family is still live for `washout`, `lookback` and `grace`** in the
-  ACNU builder. The prose paths print the raw field string; the diagram and the
-  checks use `parseInt`. `<input type="number">` accepts `1e3` (a valid
-  floating-point literal), so the protocol says "1e3 days" beside a one-day bar.
-  `1,000` and U+2212 `−30` are sanitised by the browser to `""`, so the export's
-  `|| "365"` asserts 365 days while the checks panel says washout is 0. ASCII
-  `-30` survives and prints "-30 days". This needs one tri-state reader —
-  unreadable / deliberately blank / a number — used by prose, diagram and checks
-  alike, touching ~7 template sites across three exports. It was too wide to do
-  well in the time left. The equivalent fix for the per-covariate look-back box
-  is committed and is the pattern to copy.
-- **"Clear all" refills defaults at export.** `doReset` blanks the fields, then
-  the exports apply `|| "365"` / `|| "30"`, so a cleared form still produces a
-  protocol asserting a 365-day washout and a 30-day grace period. Worse,
-  `el.selectedIndex = 0` is not the page's authored default: `maxFollowupChoice`
-  is authored `selected={i === 3}` (5 years) and reset lands on index 0 (1 year),
-  silently changing maximum follow-up.
-- **`pcOf` hardcodes the analysis sentence.** `analysis: "propensity-score
-  confounding control with an intention-to-treat / on-treatment Cox analysis…"`
-  is a constant, so the structured abstract asserts PS control, a Cox model and
-  both analysis types even when the user chose IV, a risk difference and ITT.
+- ~~**The `1e3` family for `washout`, `lookback` and `grace`.**~~ **Done
+  2026-08-22 (second run).** `readDays` reuses the same `DAYS_RE` the covariate
+  rows use and returns unreadable / deliberately blank / a number; prose, figure,
+  checks, Word and the TARGET checklist all consume it, so they cannot disagree.
+  An unreadable value prints "(not specified — “1e3” could not be read as a
+  number of days)" and the figure omits the window rather than drawing a wrong
+  one; the checks panel names the field. `doReset` now restores each select's
+  authored default instead of `selectedIndex = 0`, so Clear no longer moves
+  maximum follow-up from five years to one. Verified in Chromium for 1e3, blank,
+  a pasted "30 days", 365, 730 and a deliberate 0.
+- ~~**"Clear all" refills defaults at export.**~~ **Done 2026-08-22 (second
+  run)**, together with the item above: the exports refuse instead of applying
+  `|| "365"` / `|| "30"`, and `doReset` restores each select's authored default.
+- ~~**`pcOf` hardcodes the analysis sentence.**~~ **Done 2026-08-22 (second
+  run).** The abstract now reads `psMethod`, `primaryAnalysisType` and
+  `effectMeasure`, and falls back to naming the section rather than to a
+  plausible constant. Verified in a generated `.docx`: it reads "Overlap weights
+  with a landmark analysis, reporting a hazard ratio".
 - **No target estimand is ever named.** Matching targets the ATT, stabilised IPTW
   the ATE, overlap weights the ATO, IV a LATE — and site estimates are then
   meta-analysed together. The two reviewers disagreed here and the sceptic won:
@@ -234,6 +231,64 @@ next run does not have to re-derive them. Ranked roughly by damage.
   A separate reviewer claim that Stürmer 2005 is free at PMC1444885 was
   **rejected**: it was asserted from memory while the verifier was unreachable,
   and the file's existing text already honestly says it could not check.
+
+### Added by the second 2026-08-22 run (two reviewers again, run concurrently)
+
+Two runs of this task fired at once and converged independently on the same
+defects, which is good evidence they were real. Closed on top of the first run's
+work: the three top-level day counts, the reset default, `pcOf`'s hardcoded
+abstract, and four more below. **If you see a rebase conflict across all nine
+builders, check `git log origin/main` before resolving — you may be duplicating
+a sibling run.** Resetting and re-applying only the non-duplicate fixes was
+cleaner than fighting the other run's refactor.
+
+- ~~**Non-collapsibility was flagged as `effectMeasure !== "RD"`.**~~ Fixed: only
+  the hazard ratio is non-collapsible among the four measures offered. A user
+  reporting an RR or an IRR was told the opposite of the truth by a paragraph
+  that opens by naming the odds and hazard ratio correctly.
+- ~~**The immortal-time check was pushed unconditionally.**~~ Fixed. It sat
+  under the panel's own "Washout is 0" warning and certified time-zero alignment
+  anyway, and stayed green under a landmark analysis. It still cannot read a
+  post-index eligibility criterion, and now says so.
+- ~~**ITT with deviation censoring.**~~ A check now fires: the first two
+  censoring rules ship ticked, so choosing ITT exported a protocol declaring an
+  as-assigned analysis and instructing sites to censor at discontinuation and
+  switch. Not silently rewritten — the user is told, and decides.
+- ~~**`val$id %in% ids` in the calibration bootstrap.**~~ Fixed to `match()`.
+  %in% is a membership mask, so a patient drawn three times contributed one
+  validation row: a ~63% distinct subsample, not the resample the comment above
+  it promises.
+
+Still open, examined and deliberately left this run:
+
+- **`shortDbName()` treats any trailing parenthetical as an acronym**, so
+  `Medicare (20% sample)` is exported as a data source called `20% sample` and
+  the word "Medicare" appears nowhere in the protocol, the Word file, or TARGET
+  item 5 — the data-source provenance item. The only affected row in
+  `databases.json`. **Not fixed because site ids derive from the same function**
+  (`US-20sample`), so correcting the label silently unticks that site in every
+  saved draft with no message. Do the id migration and the label together.
+- **The defaults are type-2-diabetes-specific and all 41 covariates ship
+  `checked={true}`.** A warfarin-vs-DOAC protocol exports an exclusion for type 1
+  diabetes and adjusts for GLP-1 RA dispensing. The same ticks feed the
+  feasibility engine, so a fresh page with one site selected shows an amber panel
+  claiming lab, mortality and cancer-registry linkage are "implied by your study
+  text" before any study text exists — one root cause, two wrong outputs in
+  opposite directions. `Charlson Comorbidity Index` is also ticked alongside
+  eight of its own components. **This is a defaults policy question for Daniel,
+  not a bug.**
+- **The estimand question was left as the first run decided it** — auto-stamping
+  a `psMethod → estimand` map is undetermined for six of thirteen entries. Note
+  though that ATT for the three matching options is not undetermined, and pooling
+  an ATT with an ATE across sites is exactly what section 8 does. Worth asking
+  Daniel whether the five determined cases should name their estimand in prose,
+  as overlap and IPTW already do.
+- **Amendments row.** The comma is fixed, but the row is still `sm:`, and it
+  lives in the left pane, which is half the page now. Measured at a 1024px
+  viewport: the three text columns come out 37/52/52px. `min-w-0` on the inputs
+  plus an `xl:` breakpoint fixes it; left alone here because it is cosmetic and
+  the other run had just touched that file.
+
 - No fabricated reference was found in the ACNU builder this run. Roughly twenty
   citations were confirmed from search records; the phenotype-library entries
   that cite by narrative ("Shao SC et al, Clinical Epidemiology series";
