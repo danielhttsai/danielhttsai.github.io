@@ -1830,7 +1830,16 @@ const DESIGNS = [
           L.push("  if(expo) cat(sprintf('RESULT_ESTIMATE|%s|%.3f (95%% CI %.3f-%.3f)\\n',lab,exp(b),exp(lo),exp(hi)))");
           L.push("  else cat(sprintf('RESULT_ESTIMATE|%s|%s (95%% CI %s to %s)\\n',lab,fmt(b),fmt(lo),fmt(hi))) }");
           L.push("sc<-if(expo) ' (rate ratio)' else ' (absolute change)'");
-          L.push("rep1(paste0('Pre-intervention slope, per period',sc),'t')");
+          // Under the controlled parameterisation `t` is the slope at g=0, which is
+          // the CONTROL series, not the intervention series. It was labelled
+          // "Pre-intervention slope" in both cases, so a controlled run told the
+          // reader the baseline trend was flat while the intervention series was
+          // rising 5% a month.
+          L.push("rep1(paste0(if(HASG) 'Pre-intervention slope, control series, per period' else 'Pre-intervention slope, per period',sc),'t')");
+          // g:t IS the parallel-pre-trends test the whole controlled estimand rests
+          // on. It was fitted and never shown.
+          L.push("if(HASG){ rep1(paste0('Difference in pre-intervention slope, intervention vs control',sc),'g:t')");
+          L.push("  if('g:t' %in% nmv && !is.na(cf[['g:t']])){ zpt<-abs(as.numeric(cf[['g:t']])/as.numeric(se[['g:t']])); if(is.finite(zpt) && zpt>crit) cat(sprintf('RESULT_NOTE|The two series were NOT on parallel trends before the intervention: the difference in pre-intervention slope is %.3f per period, %.1f standard errors from zero. A controlled interrupted time series estimates the intervention effect by assuming the control series shows what the intervention series would have done, and that assumption is contradicted here. The difference-in-differences rows below inherit the divergence and should not be read as an effect.\\n', if(expo) exp(as.numeric(cf[['g:t']])) else as.numeric(cf[['g:t']]), zpt)) } }");
           L.push("if(HASG){ rep1(paste0('Level change, control series',sc),'level'); rep1(paste0('Slope change per period, control series',sc),'tsince')");
           L.push("  rep1(paste0('Difference in level change, intervention vs control',sc),'g:level'); rep1(paste0('Difference in slope change per period, intervention vs control',sc),'g:tsince')");
           L.push("} else { rep1(paste0('Level change, immediate step',sc),'level'); rep1(paste0('Slope change, per period',sc),'tsince') }");
@@ -1848,8 +1857,14 @@ const DESIGNS = [
           L.push("vct<-if(semode=='model') vm0 else if(semode=='hac') vh0 else max(vm0,vh0)");
           L.push("sct<-if(is.finite(vct) && vct>0) sqrt(vct) else NA_real_");
           L.push("endlab<-ukey[tn]");
-          L.push("if(!is.na(sct)){ if(expo) cat(sprintf('RESULT_ESTIMATE|Observed vs counterfactual at %s (end of follow-up)|%.3f (95%% CI %.3f-%.3f)\\n',endlab,exp(ct),exp(ct-crit*sct),exp(ct+crit*sct)))");
-          L.push("  else cat(sprintf('RESULT_ESTIMATE|Observed minus counterfactual at %s (end of follow-up)|%s (95%% CI %s to %s)\\n',endlab,fmt(ct),fmt(ct-crit*sct),fmt(ct+crit*sct))) }");
+          // "Observed" was wrong: ct is built from the model's own coefficients, so
+          // this is the FITTED value against the counterfactual, not the observed
+          // one. On the cohort demo the last period's observed count is 16 and its
+          // fitted value 18.73, so the row labelled "observed vs counterfactual"
+          // was 0.655 where observed/counterfactual is 0.559.
+          L.push("if(!is.na(sct)){ if(expo) cat(sprintf('RESULT_ESTIMATE|Fitted vs counterfactual at %s (end of follow-up)|%.3f (95%% CI %.3f-%.3f)\\n',endlab,exp(ct),exp(ct-crit*sct),exp(ct+crit*sct)))");
+          L.push("  else cat(sprintf('RESULT_ESTIMATE|Fitted minus counterfactual at %s (end of follow-up)|%s (95%% CI %s to %s)\\n',endlab,fmt(ct),fmt(ct-crit*sct),fmt(ct+crit*sct))) }");
+          L.push("if(!is.na(sct)) cat(sprintf('RESULT_NOTE|The end-of-follow-up row compares the model%s fitted value at %s with the counterfactual the model projects from the pre-intervention trend. It is not the observed value at that period divided by the counterfactual - a single period%s observation carries its own noise, which is why the model value is used.\\n', \"'s\", endlab, \"'s\"))");
           L.push("");
           L.push("# --- fitted and counterfactual series ---");
           L.push("X<-model.matrix(fit); Xc<-X");
@@ -1897,12 +1912,21 @@ const DESIGNS = [
           // correlation, where ignoring it makes the intervals too wide.
           L.push("if(!is.na(dw) && dw<1.5 && semode=='model' && AC=='none') cat(sprintf('RESULT_NOTE|Durbin-Watson %.2f: the residuals are positively correlated from one period to the next, and you asked for model-based standard errors, which assume they are not. These intervals are too narrow.\\n', dw))");
           L.push("if(!is.na(dw) && dw>2.5 && semode=='model' && AC=='none') cat(sprintf('RESULT_NOTE|Durbin-Watson %.2f: the residuals alternate in sign from one period to the next (negative serial correlation). Model-based standard errors are conservative in that case, so these intervals are if anything too wide - but alternation this strong usually means the period length or the aggregation rule does not match how the data were collected, which is worth checking before reading the estimates.\\n', dw))");
-          // Neither standard error is trustworthy on a short positively-correlated
-          // series, and no choice available here fixes that. Say so rather than
-          // letting the interval speak for itself. The claim is restricted to
-          // positive autocorrelation because that is the case simulated above;
-          // negative autocorrelation runs the other way and is handled just above.
-          L.push("if(nser<48 && !is.na(r1) && r1>=0.2) cat(sprintf('RESULT_NOTE|Read this interval as indicative, not as a 95%% interval. With %d period(s) per series and a lag-1 residual autocorrelation of %+.2f, no standard error on offer here delivers its nominal coverage: a sandwich estimated from %d score contributions is itself noisy, and the model-based one assumes an independence the residuals do not have. Both reject a true null more often than 5%% at this length, so an interval that only just excludes the null is not evidence of an effect. A longer series is the only real remedy.\\n', nser, r1, nser))");
+          // This note is gated on LENGTH ALONE, deliberately. An earlier version of
+          // it also required a residual autocorrelation above 0.2, which is the
+          // very statistic the comment above says is too weak to gate on — and
+          // simulating that gate showed it firing in 30% of runs at 24 periods and
+          // 55% at 36 under the same true rho, while the worst-coverage cell tested
+          // (60 periods, rho 0.7, both estimators rejecting a true null a fifth to a
+          // quarter of the time) could never fire it at all. Whether the residuals
+          // are correlated is exactly what a series this short cannot establish, so
+          // the warning has to be about the length. r1 is reported inside it as
+          // information, not used as the trigger.
+          L.push("if(nser<60) cat(sprintf('RESULT_NOTE|Read this interval as indicative rather than as a 95%% interval. With %d period(s) per series there is not enough data to establish whether the residuals are correlated from one period to the next, and if they are, no standard error on offer here delivers its nominal coverage: in simulation both the model-based and the Newey-West interval reject a true null well over 5%% of the time once the residuals are correlated, at every length up to at least 60 periods. The lag-1 residual autocorrelation here is %s, which is itself too imprecise at this length to settle the question. Treat an interval that only just excludes the null as inconclusive; a longer series is the only real remedy.\\n', nser, if(is.na(r1)) 'not computable' else sprintf('%+.2f',r1)))");
+          // Explicitly choosing the sandwich is a request, so it is honoured rather
+          // than overridden — but on a short series it is the anti-conservative
+          // choice, and the option text cannot say so per-series.
+          L.push("if(semode=='hac' && nser<60) cat(sprintf('RESULT_NOTE|You asked for Newey-West standard errors and they were used. On a series of %d period(s) that is the narrower of the two options and the anti-conservative one: simulated on this model with independent residuals, the sandwich rejects a true null roughly two to four times as often as it should at this length, while the model-based standard error is close to nominal. \"Auto\" reports the wider of the two.\\n', nser))");
           // Say where the HAC correction stops, next to the numbers it produced.
           L.push("if(HASG && semode!='model') cat('RESULT_NOTE|With a control series the HAC correction is applied within each series: lag products that cross the two series are excluded, so serial correlation is handled but any contemporaneous correlation between the intervention and control series at the same time point is assumed to be zero. If the two series move together period by period, these standard errors are too narrow.\\n')");
           L.push("");
