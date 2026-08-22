@@ -144,13 +144,26 @@ const fwList = Object.values(FRAMEWORKS);
             </div>
             <div id="bar" class="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100"></div>
             <div id="tally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
-            <p class="mt-3 text-xs text-slate-500 leading-relaxed">
+            <!-- The AI's own prose summary, kept apart from the tally above it.
+                 It is unchecked free text and routinely states a total of its
+                 own, which is not the total this page computed. -->
+            <p id="aisummary" class="hidden mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 leading-relaxed"></p>
+            <!-- These three paragraphs are the frame around the number. They are
+                 read out of the DOM by both exporters (`frameText()`), so the
+                 report cannot carry the score without carrying them. -->
+            <p id="howtoread" class="mt-3 text-xs text-slate-500 leading-relaxed">
               <strong class="text-slate-600">How to read this.</strong> <em>Met</em> = the protocol says it, substantively.
               <em>Partial</em> = the topic is raised but a key element (usually an operational definition, code list, or window) is missing.
               <em>Missing</em> = no trace in the text. <em>N/A</em> = the item cannot apply to this kind of document.
-              <em>Not assessed</em> = the AI returned no usable verdict, so nothing is claimed either way — those items are excluded from the score.
+              <em>Not assessed</em> = the AI returned no usable verdict, so nothing is claimed either way.
+              Both N/A and Not assessed are excluded from the score, so the denominator is smaller than the checklist.
             </p>
-            <p class="mt-2 text-xs text-slate-500 leading-relaxed">
+            <p id="notascore" class="mt-2 text-xs text-slate-500 leading-relaxed">
+              <strong class="text-slate-600">Neither HARPER nor TARGET defines a conformance score.</strong> This ratio is this tool's own summary of the
+              item-level verdicts below; the guidelines are checklists, not scales, and a percentage is not what either was written to produce.
+              The verdicts are the output — the number is a way of sorting them.
+            </p>
+            <p id="onesample" class="mt-2 text-xs text-slate-500 leading-relaxed">
               <strong class="text-slate-600">This score is one sample, not a measurement.</strong> The same protocol, submitted four times unchanged,
               scored 19, 20, 21 and 22 of 23 in our own testing — the model is not deterministic. Treat a one- or two-item difference as noise,
               read the per-item evidence rather than the total, and re-run if a verdict surprises you.
@@ -225,7 +238,14 @@ const fwList = Object.values(FRAMEWORKS);
       const $ = (id) => document.getElementById(id);
       const drop = $("drop"), fileEl = $("file"), fileChip = $("filechip"), fileNameEl = $("filename"), fileMetaEl = $("filemeta"), fileNotesEl = $("filenotes"), removeFile = $("removefile"), fileErr = $("fileerr");
       const textEl = $("text"), checkBtn = $("check"), clearBtn = $("clear"), statusEl = $("status"), inputNoteEl = $("inputnote"), fwNoteEl = $("fwnote");
-      const resultsEl = $("results"), confHead = $("confhead"), summaryEl = $("summary"), tallyEl = $("tally"), barEl = $("bar"), itemsEl = $("items"), caveatsEl = $("caveats"), citeEl = $("cite");
+      const resultsEl = $("results"), confHead = $("confhead"), summaryEl = $("summary"), aiSummaryEl = $("aisummary"), tallyEl = $("tally"), barEl = $("bar"), itemsEl = $("items"), caveatsEl = $("caveats"), citeEl = $("cite");
+      // The three paragraphs that frame what the score is and is not. Read out of
+      // the page itself so an export can never carry a different wording than the
+      // one on screen — or, as it did, carry none of it.
+      const frameText = () => ["howtoread", "notascore", "onesample"].map((id) => {
+        const el = $(id);
+        return el ? el.textContent.replace(/\s+/g, " ").trim() : "";
+      }).filter(Boolean);
       const runErrEl = $("runerror"), runErrMsg = $("runerrormsg");
       const schemeEl = $("scheme"), designGrid = $("designgrid"), timelineEl = $("timeline"), timelineNote = $("timelinenote"), legendEl = $("legend"), criteriaEl = $("criteria");
       const delivEl = $("deliverables"), delivTallyEl = $("delivtally"), delivListEl = $("delivlist");
@@ -832,10 +852,25 @@ const fwList = Object.values(FRAMEWORKS);
         const total = SCORED.reduce((a, k) => a + counts[k], 0) + counts.unassessed;
         const assessable = counts.met + counts.partial + counts.missing;
         confHead.textContent = fw.name + " conformance";
-        summaryEl.textContent = (data.summary ? data.summary + " " : "") +
-          counts.met + " of " + assessable + " assessable items met" +
-          (counts.na ? " (" + counts.na + " not applicable)" : "") +
-          (counts.unassessed ? "; " + counts.unassessed + " item(s) could not be assessed and are excluded from that count" : "") + ".";
+        // The denominator is not the checklist — N/A and Not assessed are taken
+        // out of it — so it moves with what the model chose to answer. A run
+        // where the model marked everything "na" reads "12 of 12 met" for a
+        // protocol another run scored 12 of 23. Name the checklist's own size
+        // whenever the denominator is smaller than it, so the shrinkage is on
+        // screen next to the ratio it produced.
+        const dropParts = [];
+        if (counts.na) dropParts.push(counts.na + (counts.na === 1 ? " was" : " were") + " judged not applicable");
+        if (counts.unassessed) dropParts.push(counts.unassessed + (counts.unassessed === 1 ? " was" : " were") + " not assessed");
+        summaryEl.textContent = counts.met + " of " + assessable + " assessable items met." +
+          (dropParts.length ? " Of this checklist's " + total + " " + fw.name + " items, " + dropParts.join(" and ") +
+            " — excluded from that count, so it is out of " + assessable + " and not out of " + total + "." : "");
+        // The model's own words, quoted and attributed, never merged into the
+        // sentence above: it is free text, nothing validates it, and it commonly
+        // states a total of its own that contradicts the computed one.
+        aiSummaryEl.innerHTML = data.summary
+          ? '<span class="font-semibold text-slate-500">The AI\'s own summary, quoted unchecked — any count or claim in it is the model\'s, not this tool\'s:</span> “' + escapeHtml(data.summary) + "”"
+          : "";
+        aiSummaryEl.classList.toggle("hidden", !data.summary);
         barEl.innerHTML = ["met", "partial", "missing", "na", "unassessed"].map((k) =>
           counts[k] ? '<div class="' + STATUS_META[k].bar + '" style="width:' + (counts[k] / (total || 1) * 100).toFixed(2) + '%"></div>' : "").join("");
         tallyEl.innerHTML = ["met", "partial", "missing", "na", "unassessed"].map((k) => counts[k] ? chip(k, counts[k]) : "").join("");
@@ -921,11 +956,18 @@ const fwList = Object.values(FRAMEWORKS);
         const { data, counts, fw, byId, caveats, delivRows, scheme } = lastReport;
         const date = new Date().toISOString().slice(0, 10);
         let md = "![Population Health Data Center](" + LOGO_ABS + ")\n\n# " + fw.name + " conformance report\n\n_Population Health Data Center · generated " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
-        if (data.summary) md += data.summary + "\n\n";
         md += "**Tally:** " + counts.met + " met · " + counts.partial + " partial · " + counts.missing + " missing" +
           (counts.na ? " · " + counts.na + " N/A" : "") +
           (counts.unassessed ? " · " + counts.unassessed + " NOT ASSESSED" : "") +
           " (" + counts.met + " of " + (counts.met + counts.partial + counts.missing) + " assessable items met)\n\n";
+        md += summaryEl.textContent + "\n\n";
+        // The frame the reader saw around the number travels with the number.
+        for (const f of frameText()) md += "> " + f + "\n>\n";
+        md += "\n";
+        // Attributed, and below the tool's own count — not passed off as the
+        // report's opening statement, which is where an unchecked model total
+        // used to sit.
+        if (data.summary) md += "**The AI's own summary**, quoted unchecked — any count or claim in it is the model's, not this tool's:\n\n> " + data.summary + "\n\n";
         if (caveats && caveats.length) {
           md += "## What this check could not do\n\n";
           for (const c of caveats) md += "- " + c + "\n";
@@ -1012,7 +1054,6 @@ const fwList = Object.values(FRAMEWORKS);
           children.push(para([text(fw.name + " conformance report", { bold: true, size: 32 })], { spacing: { after: 40 } }));
           children.push(para([text("Population Health Data Center · generated " + date + " · AI-assisted self-check (Google Gemini) — not a substitute for peer review.", { italics: true, color: "777777", size: 16 })], { spacing: { after: 160 } }));
 
-          if (data.summary) children.push(para([text(data.summary)]));
           children.push(para([
             text("Tally: ", { bold: true }),
             text(counts.met + " met", { color: STCOL.met, bold: true }), text(" · "),
@@ -1022,6 +1063,13 @@ const fwList = Object.values(FRAMEWORKS);
             ...(counts.unassessed ? [text(" · " + counts.unassessed + " NOT ASSESSED", { color: STCOL.unassessed, bold: true })] : []),
             text("  —  " + counts.met + " of " + (counts.met + counts.partial + counts.missing) + " assessable items met."),
           ], { spacing: { after: 80 } }));
+          children.push(para([text(summaryEl.textContent)], { spacing: { after: 80 } }));
+          // The frame the reader saw around the number travels with the number.
+          for (const f of frameText()) children.push(para([text(f, { size: 17, color: "555555", italics: true })]));
+          if (data.summary) {
+            children.push(para([text("The AI's own summary, quoted unchecked — any count or claim in it is the model's, not this tool's:", { bold: true, size: 18 })], { spacing: { before: 140 } }));
+            children.push(para([text("“" + data.summary + "”", { italics: true })], { spacing: { after: 80 } }));
+          }
 
           if (caveats && caveats.length) {
             children.push(h1("What this check could not do"));
