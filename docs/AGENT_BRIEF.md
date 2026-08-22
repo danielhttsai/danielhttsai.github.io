@@ -544,3 +544,253 @@ The disagreement was only resolvable because R was installed and the claim could
 be executed. **Treat a reviewer's simulation as a lead, not a finding**, and
 promote it only when you have reproduced it in the tool's own stack. Two of the
 open items above are recorded precisely because that could not be done in time.
+
+### Found 2026-08-22 by a fifth run — the ITS inference path in RWE Studio
+
+This run took the previous run's sharpest open item ("the ITS default standard
+errors look badly anti-conservative … reproduce it in R before changing
+anything") and did exactly that. It reproduces. Everything below was executed,
+not read: R 4.3.3 for the statistics, Chromium against a local `astro build` for
+the browser behaviour.
+
+#### The harness worth reusing
+
+`its_harness.mjs` in this run's scratch: Playwright loads the built page, clicks
+the cohort demo, checks the `its` design radio, sets `select[data-role="TIDX"]`
+and `="YCOUNT"`, sets the option inputs, then `page.evaluate` calls
+`buildMaster()`, `analysisCSV()` and `buildScript()` and writes `analysis.R` and
+`data.csv` out. `sed` the `/data.csv` path and run it with `Rscript`. It
+reproduces the demo caption's advertised number to three decimals, which is how
+you know the harness is faithful before you trust anything else it says.
+Everything in the ITS block is reachable this way without WebR.
+
+Also reusable: the top-level `let`s in this file (`MAP`, `DATA`, `MASTER`, `LAST`)
+and its function declarations are genuine globals, because the whole script block
+is `is:inline` — a classic script, not a module. `page.evaluate(() => MAP)` works.
+
+#### Fixed this run
+
+- ~~**The `auto` standard errors were narrower than the ones they corrected.**~~
+  Re-implementing this file's own `hacv`/`brd`/`ef`/`Lg` and simulating the null
+  (2000–2500 replicates, two seeds) put the rejection rate of a nominal 5% test
+  at **0.38 at 12 periods, 0.21 at 24, 0.18 at 36, 0.13 at 60 and 0.09 at 100** —
+  the previous run's alleged 20.9% at 24 and 35.4% at 12, confirmed. The second
+  half of that allegation holds too: the sandwich is worse than the model-based
+  SE at every length below about 60 *including* under AR(1) errors. On the cohort
+  demo at the default setting the shipped interval for the pre-intervention slope
+  was **2.9× narrower on the log scale** than the model-based interval for the
+  same coefficient. Cause: HC0 (no finite-sample scaling) plus z critical values.
+  `auto` now takes **the wider of the two SEs, coefficient by coefficient**. That
+  rule was simulated against both alternatives and is at least as good as
+  whichever happens to be better in every cell tested — nominal 0.05 at rho=0 at
+  every length, and below both at rho=0.3/0.5/0.7. **Do not "simplify" it back to
+  picking one estimator by a threshold: no threshold wins, because which of the
+  two is better depends on rho, which the data does not tell you.** The meat is
+  now scaled by n/(n−k), and the bandwidth and length are per series (`nser`)
+  rather than `nrow(a)` — a controlled ITS of two six-period series counted as
+  twelve and got the correction anyway.
+- ~~**A blanket 1.96 for every interval.**~~ R itself uses t for `lm` and
+  quasi-Poisson and z for Poisson and negative binomial, so two of the four
+  families this file fits were getting intervals that were too narrow before any
+  sandwich was involved. Now `qt(0.975, df.residual)` wherever R would use it,
+  and always for the sandwich; `critlab` states which, in the results.
+- ~~**The `auto` option label described behaviour the code deliberately did not
+  have.**~~ It promised "HAC SE only if Durbin–Watson flags serial correlation";
+  DW had not been consulted since the comment above that line was written.
+- ~~**"Model-based standard errors were requested" when nothing was
+  requested.**~~ `!useh` was reachable four ways and only one was a request. The
+  worst was `Vh` coming back NULL from `hacv`, which silently switched inference
+  and printed that note — so a user who explicitly chose "always use Newey–West"
+  got the opposite and was told they had asked for it. That failure now has its
+  own note. The same sentence also asserted "too narrow" under a two-sided
+  condition, and in practice fired more often for DW > 2.5, which is *negative*
+  serial correlation, where the intervals are too wide. Split by direction.
+- ~~**`parseInt("1e3") === 1` for the seasonality cycle length.**~~ Still live,
+  as the brief suspected. `<input type="number" min="2" step="1">` accepts `1e3`
+  as valid, so nothing on screen objects. With CYC=1 the harmonic pair is
+  `sin(2πt)` and `cos(2πt)`: R drops the constant and **fits the floating-point
+  noise**, giving a seasonal coefficient of 3.95e12 (SE 1.26e13), a near-singular
+  design that makes the sandwich throw, and an end-of-follow-up contrast moving
+  from 1.465 (0.996–2.155) to 1.466 (0.581–3.700). Read as a number now, refused
+  visibly in `validateMap` when blank / non-integer / < 2 — and R separately
+  refuses a cycle at least as long as the series, which the browser cannot judge
+  because it does not know how many periods survive aggregation.
+- ~~**An interruption date inside a period selected the NEXT period.**~~ `kd[ord]`
+  holds period *starts* and the cut date was compared to it raw, so 15 January
+  selected February and January — the month the intervention happened in — was
+  analysed as a control month. Found independently by this run's harness and by
+  one of its reviewers, who measured a level change moving from 0.903
+  (0.742–1.099) to 0.778 (0.615–0.983): a null turned significant. The date is
+  floored to the period unit now, and a note says when the date given was not a
+  period start, because a partly-exposed first period is the investigator's call.
+
+#### The refusal channel for ITS
+
+`RESULT_NOTE|` lines are the only warnings that travel: the parser at
+`runanalysis` collects them into `notes`, which reach the on-screen panel, the
+Markdown report and the `.docx` under "How the model was fitted". A bare `cat()`
+lands in `#routput`, a black `<pre>` below the chart that reads as a debug
+console and is dumped into a code block in the exports. **Five real warnings are
+still bare `cat()`** — "the time column does not parse as dates", "dropped N
+row(s) with a missing time or outcome value", "aggregated N row(s)", "too few
+periods per season", "dropped N period(s) with a missing or non-positive
+denominator". One of those ("too few periods per season") was converted this
+run and the new cycle-length refusal was written as a note; the rest were left. This is
+a cheap, high-value sweep for a future run: "half your data was discarded" is
+currently formatted as debug output.
+
+#### Open in the ITS path, examined this run, deliberately left
+
+Ranked by how likely a real user is to hit it. All were executed by the applied
+reviewer against real R unless marked otherwise.
+
+- **`Q1 2018`-style labels are ordered by concatenating their digits.** The
+  period-order fallback at the `stub`/`num` line strips everything after the
+  first space in `pdate`, so `Q1 2017` never parses as a date and falls to the
+  digit-concatenation branch: `Q1 2017`→12017, `Q1 2018`→12018, `Q1 2019`→12019,
+  `Q2 2017`→22017. The guard (one stub, no NAs, no duplicates) passes. Twelve
+  quarters with a true −25% drop came out ordered Q1 2017, Q1 2018, Q1 2019, Q2
+  2017 … and reported an end-of-follow-up contrast of **0.322 (0.019–5.455)** — a
+  claimed 68% reduction — while the note stated confidently "Periods were ordered
+  by the number inside each label". This is the exact failure the form panel
+  promises it has closed ("Periods analysed in the wrong order can **reverse** the
+  estimated effect, so this is never guessed"). The guard needs to check the
+  concatenation is monotone when there is more than one digit group, or refuse.
+  **This is the sharpest thing left in the file.**
+- **A control series with no denominator is silently deleted and the result is
+  then labelled "control series".** Intervention hospital plus comparator, both
+  mapped, but you only know your own catchment population — so the control rows'
+  `DENOM` is blank, the bad-denominator drop removes all of them, and the run
+  continues. Every headline row is labelled "control series" when they are the
+  intervention series, the difference-in-differences rows vanish without comment,
+  `controlled=yes` is exported, and the note affirmatively describes a controlled
+  analysis that did not happen. `Control-series periods | 0 | 0` in Table 1 is the
+  only honest line. Same failure from a constant `SERIES` column, which `chk01`
+  and `binTrouble` both accept: there the counterfactual line equals the fitted
+  line, so the chart draws no effect underneath a table reporting one.
+- **One differing cell in the denominator column flips the auto-combine rule for
+  the whole series.** `dconst` is a single global `all()`. Changing one cell by
+  +1 in one of 36 periods moved the mean denominator from 10,575 to **264,985**
+  (row count leaking into the offset) and the level change from 1.047 to 0.950.
+  The note does change to say "sum", but a swing that large deserves a refusal.
+- **A decimal comma is silently multiplied by ten.** `Number(s.replace(/,/g,""))`
+  in `buildMaster` turns `3,5` into 35 and `0,75` into 75. It also **defeats the R
+  guard**: `chknum` would refuse `"3,5"` by name, but JavaScript has already made
+  it a valid number, so R never sees anything wrong. Any German/French/Spanish
+  Excel export of a rate produces a confident tenfold-wrong answer. (The brief's
+  fourth run recorded this; it is still live, and the "R will catch it" assumption
+  is wrong.)
+- **"Cycle length" is ignored by calendar dummies except for the single value 4.**
+  With date-parsed labels the seasonality column is month-of-year unless CYC is
+  exactly 4, so 6, 12 and 52 all produce the same twelve monthly dummies. Weekly
+  data with cycle 52 gets months. The harmonic option *does* honour the value, so
+  one control means two different things depending on its neighbour.
+- **Mapping the "Season / cycle position" role does nothing** unless the separate
+  Seasonality dropdown is also changed from its default of None. Estimates are
+  identical to the last digit with and without the column mapped, and nothing says
+  it was ignored.
+- **The default period unit is Month, so an already-weekly series is silently
+  re-aggregated.** 104 weekly rows became 24 monthly ones; the 4-vs-5-week
+  boundaries injected a sawtooth the tool read as overdispersion (2.01) and
+  "corrected" by switching to quasi-Poisson. The warning is a bare `cat()`.
+- **Table 1's "Total outcome" reports a sum of rates in rate mode**, because
+  `a$Y` has been overwritten with `Y/N` by then: "Total outcome: 0.125" for 1,330
+  events, copied verbatim into the Word report. The same branch suppresses the
+  denominator row, so a rate-mode Table 1 shows no evidence a denominator existed.
+- **The printed coefficient table shows model-based SEs and p-values even when
+  the intervals above used the sandwich.** `print(summary(fit)$coefficients)`
+  knows nothing about the chosen variance. Two different standard errors for the
+  same coefficient on the same screen, one of them carrying a p-value.
+- **The Durbin–Watson disclaimer is hard-coded to the GLM case** and prints on OLS
+  fits too, where DW is exactly the statistic it was designed for — telling the
+  user to disregard the one diagnostic that is fully valid in that branch.
+- **Two `ordmode` strings claim a confirmation the user never gave** — "(you
+  confirmed it is chronological)" — and are exported verbatim into the Word
+  report, where they read as an attestation the analyst signed. Selecting a
+  dropdown option is not a confirmation.
+- **Changing an ITS control leaves the previous run's results and chart on
+  screen** with no staleness marker; only a *design* change clears them. The
+  exports are safe (`LAST` is a snapshot), but the screen invites reading the new
+  setting with the old numbers. ARGUED, not executed.
+- **The HAC degeneracy guard is set at `dg < 1e-6*dm`** — six orders of
+  magnitude, so a factor-4 variance collapse sails through it.
+- **The ITS demo cannot make a single ITS diagnostic fire.** The cohort demo is
+  24 perfectly-formed ISO monthly periods, 25 rows each, no denominator, no
+  control series, no seasonality, dates that parse first time, and ≥ 12 rows — so
+  the denominator combine rule, the control-series path, the period-order
+  fallback, the cycle length and the SE choice are all unreachable. It is the
+  only file offered as an ITS demo. Given this file's own stated principle that
+  a diagnostic nobody sees fire is a diagnostic nobody trusts, ITS is the design
+  with no demo built to exercise its refusals. **A second ITS demo is a feature,
+  so it is Daniel's call — but it is the highest-leverage one on this list.**
+
+#### Fixed later the same run, after the two reviewers argued
+
+The prompt's two-reviewer method earned its keep here in a way worth
+recording: **the methodologist's sharpest finding was against this run's own
+fix, not against the code it inherited.** The applied reviewer's list and the
+methodologist's overlapped on the period-order and control-series defects
+(found independently, from different constructed data, which is good evidence
+they are real), but only the methodologist thought to *simulate the new
+warning's trigger* rather than read it.
+
+- ~~**The new short-series warning was gated on the statistic the file says is
+  too weak to gate on.**~~ The first version required `nser<48 && r1>=0.2`.
+  Simulated at a fixed true rho of 0.7 that gate fired in **30% of runs at 24
+  periods and 55% at 36** — and at 60 periods, where both estimators reject a
+  true null a fifth to a quarter of the time and coverage is worst anywhere in
+  the simulation, the length cutoff blocked it entirely. Now gated on length
+  alone (`nser<60`), with `r1` reported inside as information. **The general
+  lesson: a warning whose trigger is a noisy estimate is itself a coin flip.
+  Simulate the gate, not just the estimator.**
+- ~~**`AC='newey'` chosen explicitly had no caveat.**~~ Still 8.8–20.8% rejection
+  under the null with independent residuals. It is honoured, not overridden —
+  the user asked — but the results now say it is the narrower and
+  anti-conservative option at that length.
+- ~~**`CYC=2` still put a 1.5e13 coefficient in the model.**~~ The morning's
+  cycle fix guarded the *number* (below 2, or at least as long as the series)
+  and missed the case between: `sin(2*pi*t/2)` is `sin(pi*t)`, zero at every
+  whole t but ~1e-16 in floating point, so R fits it. Guarding the number was
+  the wrong shape of fix; each harmonic term's column is now checked for
+  variation and dropped by name if it has none. **When you guard an input,
+  check whether the thing you actually care about is a property of the column.**
+- ~~**`Q1 2015`-style labels ordered quarter-before-year.**~~ Both reviewers.
+  A monotonically rising 24-quarter series with no intervention reported a
+  significant 42% drop (0.582, 0.343–0.987) under a note claiming the periods
+  had been ordered "by the number inside each label". Unpadded ISO weeks the
+  same: a 3.1%/week rise reported a *declining* pre-intervention slope and an
+  end-of-follow-up contrast of 2.519 (1.337–4.746). A label with more than one
+  run of digits is refused now. Both escape hatches were checked afterwards:
+  `Week 1`…`Week 24` still orders by its single number, and the quarters order
+  correctly under "the order they appear in the file" — each then correctly
+  reporting no effect.
+- ~~**Controlled ITS reported the control's slope as "Pre-intervention
+  slope".**~~ Under `g + t + …` the `t` coefficient is the slope at `g=0`. A
+  controlled run reported a flat baseline (1.003) while the intervention series
+  rose 5% a month. Renamed, and `g:t` — the parallel-pre-trends test the whole
+  DiD estimand rests on, fitted all along and never shown — is now reported,
+  with a note when the series are demonstrably not parallel.
+- ~~**"Observed vs counterfactual" was fitted vs counterfactual.**~~ On the
+  cohort demo the final period's observed count is 16 against a fitted 18.73:
+  the row said 0.655 where observed/counterfactual is 0.559. Renamed, with a
+  note on why the model value is the right one to use.
+
+#### What the reviewers disagreed about, and who was right
+
+- The applied reviewer called the HAC arithmetic correct and the narrow
+  intervals "genuine underdispersion plus HC0's known small-sample bias, not a
+  coding error". The methodologist agreed the algebra is right — bread, scores,
+  Bartlett weights and the dispersion cancellation all check out — and both
+  were correct: the fix is a finite-sample correction and a different default,
+  not a repair to the estimator. **Nobody should "fix" `hacv`'s algebra.**
+- The applied reviewer flagged the 12-row cliff as the headline SE problem
+  (11 periods → 0.610–1.152, 12 periods → 0.798–0.858, from one extra month on
+  an option the user never touched). The methodologist showed the cliff is a
+  symptom: the sandwich is anti-conservative at *every* length in range, so
+  removing the cliff by lowering the threshold would have been the wrong fix.
+  The methodologist won; the threshold is gone entirely.
+- Both reviewers independently proposed that `hacdeg` (the zero-variance
+  guard) is effectively dead code — 0 firings in 32,500 simulated fits plus
+  every real case. Left alone: harmless, and it is a guard against a real if
+  rare pathology. Its threshold (`dg < 1e-6*dm`) is six orders of magnitude,
+  so a factor-4 variance collapse passes it. Worth tightening some day.
