@@ -1511,3 +1511,327 @@ is not "verified against Crossref".** No fabricated reference was found and
 **no citation was changed**. Two housekeeping notes: the Cashin 2025 reference
 is rendered two different ways across the protocol and the TARGET export, and
 Gran 2010 and Gaber 2024 are in the reference list but never cited in the text.
+
+### Found 2026-08-22 by a ninth run — descriptive-analysis, the biggest never-opened builder
+
+Eight runs had worked ACNU (×3), RWE Studio (×2), the Protocol Checker,
+case-control and clone-censor-weight. This one rotated to
+**`src/pages/tools/descriptive-analysis.astro`** (1691 lines, never opened) plus
+`ProtocolCommon.astro`. Two reviewers ran concurrently with genuinely different
+briefs. **Neither reviewer's top finding appeared on the other's list, and
+neither contained the orchestrator's** — three lists, three different headline
+defects, all real. That is now four runs in a row where running the two briefs
+genuinely differently was what found the sharpest thing.
+
+#### Environment: nothing new blocked, one harness note
+
+- `npm i --no-package-lock --no-audit --fund=false` (26 s), `npm pack docx@8.5.0`
+  + `page.route('**unpkg.com/**', …)`, Crossref/PubMed/doi.org blocked and
+  `WebSearch` only, the live site unreachable — all still true. Nothing here was
+  checked against `danielhttsai.github.io`.
+- **The session was on a detached HEAD again.** `git push origin HEAD:main`.
+- **Playwright's global install has no named exports.** `const { chromium } =
+  await import('/opt/node22/lib/node_modules/playwright/index.js')` gives
+  `undefined`; it is a CJS default export, so use
+  `const pw = await import(…); const chromium = pw.chromium || pw.default.chromium`.
+  This costs ten minutes if you copy the previous runs' snippet verbatim.
+- **Build your reviewers a `dist-` they own and never rebuild it.** One reviewer
+  correctly reported that the file grew 1691 → 1854 lines underneath it and
+  re-checked every finding against the working tree, marking each LIVE / already
+  being fixed. That is the right behaviour, and it only happened because it was
+  told the tree was moving. Tell them.
+
+#### Fixed this run
+
+All executed in Chromium against a local build, before and after, and every
+export claim asserted by unzipping a generated `.docx` and reading
+`word/document.xml`.
+
+- ~~**The refusals never left the screen.**~~ Four `level:"error"` checks lived
+  only in the panel. `blockers()` now paints the panel, the Markdown, the Word
+  protocol and the STROBE checklist from one computation (CCW's `blockers()` /
+  case-control's `conflicts()` pattern). Verified: a protocol with
+  age-standardisation ticked and no age stratum now carries "This draft specifies
+  a metric it cannot compute" in the real `.docx`, and the STROBE checklist's
+  item 1a is prefixed with it.
+- ~~**The feasibility panel was the only place the tool compared a metric's data
+  needs against the sites, and it existed only on screen.**~~ Reviewer A's
+  finding, and the sharpest of the three "does not travel" cases: a protocol
+  could name three databases with no mortality linkage under "Numerator:
+  all-cause deaths in cohort (mortality-linked records)" while STROBE item 9
+  claimed the gap had been reported. `featureGaps()` now feeds the amber panel,
+  the checks panel, both exports and item 9; a metric whose linkage **no**
+  selected site carries is a blocker, not a heads-up.
+- ~~**Every stem in `FEATURE_TRIGGERS` was dead.**~~ Each alternation was wrapped
+  `\b( … )\b`, making the trailing boundary mandatory, so `carcinom`,
+  `malignan`, `pregnan`, `gestation`, `radiolog`, `echocardio`, `genomic`,
+  `tumou?r` and `death` matched only when the word ended there. Executed:
+  "carcinoma", "pregnancy", "pregnant women", "gestational age", "radiology",
+  "echocardiogram", "genomics", "tumours", "deaths" and **"leukaemia"** (the
+  `leuk[ae]mia` bracket covers "leukemia" and "leukamia", i.e. neither common
+  spelling of the British one) all matched nothing. `labs` was the one group
+  written without the trailing `\b` and the one group that worked. **Note the
+  deliberate narrowing:** bare `angio` matched nothing with the boundary and
+  matches "angiotensin" without it, so the imaging cue is now `angiograph`.
+- ~~**The structured abstract was a constant.**~~ It asserted "age-standardised
+  rates … and pooled across sites" in every export, three sections above
+  "Cross-site comparison: Descriptive only … no pooled estimate" — on the default
+  form, with no user action. The ACNU `pcOf` bug in a second file. Read from the
+  form now, and an unset option is named rather than replaced by a plausible one.
+- ~~**Six fields exported a plausible value the user never entered.**~~ An
+  untouched Section 9 exported "Time-series of 2010–2023" — a specific fourteen-
+  year series — while the panel simultaneously said the trend range was not
+  given; likewise `ageStdBands`, `suppression`, `ethics`, `dissemination`.
+- ~~**Four pairs of copy-pasted `<select>` lookups with drifting wording.**~~ One
+  `SELECT_TXT` now, plus `auditSelectMaps()` which asserts at load that each
+  map's keys are exactly the option values in the markup and `console.error`s if
+  not. The `strobeWhere` copy carried a fourth key (`fe`) the form has never
+  offered.
+- ~~**A stale draft or `?seed=` blanked a select and the export invented a
+  choice.**~~ `writeForm` assigned `el.value` with no membership check;
+  `selectedIndex = -1` shows an empty box and `FormData` omits the control
+  entirely, so the dead value is **not recoverable from the state object** — it
+  has to be captured at the moment of restore. The authored default is kept now
+  and each dropped value is named in the panel. Worst case reproduced:
+  `contribution: "pooled"` exported "Site-level aggregate (counts + person-time)
+  only", the opposite of what the draft asked for, in the sentence an IRB reads.
+- ~~**"Clear all" deleted the page.**~~ `selectedIndex = 0` moved the maximum
+  joinpoints from 3 to 2 (the only one of nine selects whose authored default is
+  not index 0 — worth auditing that way in every builder), and blanking `value=`
+  / textarea content destroyed nine curated references, the ethics and
+  dissemination paragraphs, the index-date rule, the standardisation age bands
+  and the suppression rule **permanently**, because `render()` saves the empty
+  state a tick later. `el.defaultValue` fixes all seven.
+- ~~**A `|` in a code set silently deleted half of it.**~~ `ICD-10 F00.* |
+  G30.*` emitted a three-cell row against a two-column header; GFM drops cells
+  past the header width, so `G30.*` vanished from the Markdown — while the
+  `.docx` kept it. **The two exported documents specified different code sets for
+  the same study.** Escaped in every Markdown table cell.
+- ~~**`pickedCitations` was never pruned**~~ (the brief's own standing item, live
+  here in a second copy of the library modal). A citation now travels only while
+  the phenotype it validates is still the value of one of the four name fields.
+- ~~**Markdown and Word numbered their sections differently.**~~ With no metric
+  ticked the Markdown emitted a fallback section and advanced `n`; `buildDocx`
+  did neither, so Statistical analysis was "8." in one and "7." in the other and
+  every later section too. The comment above the `n++` reasons about this and
+  gets it backwards. Verified by extracting Heading-1 runs from both real files.
+- ~~**Indirect standardisation.**~~ Two errors in one table cell. It printed
+  "observed / expected events × 1000" under a unit of "per 1000 (standardised)"
+  — an SMR/SIR is a dimensionless ratio. And it named WHO 2000 / ESP 2013 / Segi
+  1960 as what it standardises *to*: those are age-**structure** weight vectors
+  and carry no rates, so the expected count cannot be computed from the object
+  the protocol names. Refused now, with the internal-pooled option identified as
+  the one choice on that menu that does yield age-specific rates.
+- ~~**The joinpoint control conflated the search with the selection rule.**~~ It
+  offered "Grid search (NCI Joinpoint Regression Program default)" against
+  "Permutation test (more conservative)" as alternatives. A grid search *locates*
+  candidate joinpoints; a separate rule decides *how many*; Kim 2000, cited on
+  the same line, uses both together. Grid search has never been that program's
+  model-selection default — permutation test through v4.9, weighted BIC from
+  v5.0 (**confirmed twice, independently, from NCI's own documentation**). The
+  option values were deliberately **not** remapped, because a saved draft
+  carrying `grid` would then silently mean something else; the labels and the
+  exported prose were corrected instead, and the protocol now asks for the
+  software and version.
+- ~~**The points-per-segment number was wrong.**~~ Adjacent segments share their
+  joinpoint observation, so the average is `(npts + jp)/(jp + 1)`, not
+  `npts/(jp + 1)`: 10 points with 3 joinpoints is 3.3, printed as "2".
+- ~~**Trend-in-trend stage 2 was described as a 2×2 of exposure by outcome**~~ —
+  the one thing the design does not require. It is fitted to stratum-period
+  marginals (N, n exposed, n outcomes), which is why it can run on aggregate data
+  under a federated agreement. **Search-snippet evidence; the primary record was
+  not read.** Everything else in that stub is correct and was checked: "cumulative
+  probability of exposure" is the right expansion of CPE and quintiles is right.
+  **Do not let anyone "correct" those from memory.**
+- ~~**`ageStandardised` and `joinpoint` ticked alone.**~~ Both say they operate on
+  "the relevant metric above" / "the primary metric (above)". With no occurrence
+  or utilisation metric ticked there is no metric above; refused now.
+- ~~**The terminal age band.**~~ Default bands stop at 85+; WHO 2000 runs to 100+
+  and ESP 2013 to 95+, so the reference weights above 85 must be summed and the
+  protocol never said so. Two sites collapsing them differently produce
+  "WHO-2000-standardised" rates that are not comparable — the exact failure this
+  page exists to prevent.
+- ~~**The DDD source-population check tested the wrong second field**~~
+  (`suppression`, a copy-paste) and any `populationDef` containing the word
+  "population" silenced it.
+- ~~**The STROBE header sentence was false in both directions.**~~ It asserted
+  "Methods items are pre-filled; Results / Discussion items are placeholders"
+  while a Methods item (10, study size) was deferred and four Results/Discussion
+  items were pre-filled. Computed from the key set now — "16 of the 23 checklist
+  items are pre-filled (1a, 3, 4, …)" — and items 10 and 22 are filled, both of
+  which the exported protocol devotes a section to. Item 5 now gives the dates
+  STROBE asks for, and item 7 names the **exposure**, which it never did although
+  the whole Utilisation half of the builder rests on it.
+- ~~**Two references resolved to different papers.**~~ PMID 36821644 was "Tan EC …
+  *Multi-country comparison of polypharmacy*. Pharmacoepidemiol Drug Saf 2023" —
+  wrong first author, wrong journal, invented title; it is **Lee H, Baek YH, Kim
+  JH, Liao TC, Lau WCY, Man KKC, et al. Age Ageing 2023;52(2):afad014**. PMID
+  30540837 was "Ooba N et al PDS 2018"; it is **Kubota K et al, PLoS One
+  2018;13(12):e0208796**. Both **confirmed twice, independently** (reviewer and
+  orchestrator, separate searches, PubMed record + publisher page). Crossref,
+  PubMed and doi.org are blocked, so this is **search-record evidence, not a
+  Crossref check.** The co-author list was taken only from a snippet that showed
+  it; where it did not, "et al." Also fixed: the file named Lai as first author
+  of the Clin Epidemiol 2019 NHIRD paper in one entry and Hsieh in another, both
+  exporting into the same reference list — an internal contradiction needing no
+  external record.
+- ~~**Two false sentences.**~~ External-cause deaths were called "an important
+  **denominator** for excess-mortality calculations" (they are a numerator, on
+  this page of all pages), and the normal-approximation warning said intervals
+  "cross zero or **exceed 1**", merging a property of proportions with rates that
+  are unbounded above.
+- ~~**Two phenotype code sets contradicted their own definitions.**~~ "First
+  hospitalisation … acute MI" shipped `I21.*, I22.*` — I22 is *subsequent* MI, by
+  definition not a first event. "Ischemic stroke" shipped `I63.*, I64.*` — I64 is
+  stroke *not specified* as haemorrhage or infarction, and its share varies
+  enormously by country and imaging availability, so it can dominate a
+  cross-country comparison. **The code sets were not changed** — the ICD
+  semantics are stated in the definition and the choice left to the user.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The methodologist's #7 was a false alarm against work in flight.** It grepped
+  at 21:09, saw `blockerMd` defined and never called, and reported that the
+  four-surface comment above it asserted a guarantee the code did not provide.
+  It was right at 21:09 and wrong by 21:11. That is a race artefact rather than a
+  disagreement, but it is a real cost of running reviewers against a moving tree
+  — and note that the *right* response to a comment claiming more than the code
+  does is exactly what it did.
+- **Neither reviewer's top finding appeared on the other's list, and neither
+  contained the orchestrator's.** The applied reviewer led with the dead trigger
+  regexes; the methodologist led with indirect standardisation naming an
+  uncomputable reference; the orchestrator led with the refusals not travelling.
+  All three were real and independently reproduced.
+- **Three convergences, from separately constructed fixtures**: the dead stems,
+  the section-numbering mismatch, and the stale-select fallback. The brief's
+  claim that convergence is the strongest available evidence held again.
+- The methodologist proposed prefixing the abstract with "crude" when
+  standardisation is unticked. **Declined**: "Age-standardised rates" is itself
+  one of the thirteen metrics, so its label already appears in the list when it
+  is ticked, and prefixing produced "age-standardised Incidence rate,
+  Age-standardised rates". Caught only by reading the rendered output of the
+  run's own fix.
+
+#### Open, examined this run, deliberately left
+
+Ranked. The first is the highest-value thing left in this file.
+
+- **No ICD-9 → ICD-10 check, in a tool whose entire phenotype library is ICD-10
+  and whose headline example is a 2010-2023 trend.** Taiwan's NHIRD coded in
+  ICD-9-CM until 2016 and US claims until Oct 2015, so `ICD-10 I21.*, I22.*` over
+  2010-2023 returns **zero Taiwanese cases before 2016** — and the two validation
+  papers the tool itself attaches to those phenotypes (Cheng 2014, Hsieh 2015,
+  both confirmed) validated **ICD-9-CM** codes. A coding changeover is also the
+  textbook source of a spurious joinpoint, and the tool will fit one and report
+  an APC for it. Giving each phenotype an `icd9` field is a feature, so it is
+  Daniel's call; a check that fires when the study calendar starts before the
+  transition and the code sets name only ICD-10 is not, and is the cheap half.
+- **The defaults assert a study nobody specified.** Three metrics, four strata
+  and four sensitivity analyses ship ticked, so a fresh page exports three full
+  methods sections; `missing()` never fires for metrics because the defaults
+  satisfy it; and the first two red ✕ a user ever sees are caused entirely by
+  defaults, which trains them to ignore the panel. Conversely the incidence
+  prevalent-case check is *silently satisfied* by the authored `indexDateRule`
+  containing the word "washout". Same class as the ACNU, case-control and CCW
+  defaults notes. **Defaults policy — Daniel's call.**
+- **`validation:` fields that are not validation studies**, exported under a
+  modal captioned *Validated phenotype library* and merged into "Key references".
+  The self-harm entry cites PMID 39241791, which a search record says is a
+  psychotropic-**prescribing** trends paper (Lancet Psychiatry 2024) — the brief's
+  third run flagged this independently, so two runs now agree. The dementia entry
+  cites a real, correctly-attributed paper (PMID 38146486) that is a database
+  *inventory*, not a phenotype validation. The COVID and pregnancy entries label
+  as "AsPEN" networks that are not AsPEN. **Leads, not findings** — the honest
+  fix is structural (split `validation` into a PPV/sensitivity citation and a
+  "used in" provenance line, with `pmid`/`doi` fields that can be machine-checked)
+  and that is a schema change worth doing deliberately.
+- **Nine `validation:` strings are UNCHECKABLE as written** — "Lin CY et al,
+  NHIRD diabetes definition", "cite Wong MCS et al where applicable", "Cheng CL
+  et al NHIRD validation", "Hsu CC et al; Shao SC et al CGRD CKD work", "Yeh JJ
+  et al NHIRD HF definition", "Lai EC et al, BMJ Open 2021/2023". No title, year,
+  volume or identifier, and they export into the reference list verbatim.
+- **No cross-field date check.** `studyCalendar = 2015-01-01 to 2015-12-31` with
+  `trendYears = 2010–2023` exports both, four sections apart, with no objection —
+  a one-year study cannot yield a fourteen-point annual series. This is the
+  commonest copy-paste error when adapting a previous protocol.
+- **Persistence and switching are forced into a numerator/denominator table where
+  neither is one**, on the page whose stated purpose is catching
+  numerator/denominator mismatch. Persistence's "numerator" is a duration and its
+  formula a Kaplan-Meier median; its `unit` says "% at 1 y" while the formula says
+  "6 / 12 months"; and it specifies **no censoring rule and no treatment of
+  death**, which is a competing risk for discontinuation and materially
+  overstates persistence in the ≥65 and heart-failure cohorts the library ships.
+  Switching's numerator ÷ denominator can exceed 1 (a person may switch twice)
+  and it never defines whether an overlapping start is a switch or an add-on —
+  the difference between it and the `concomitant` metric two rows down.
+- **Point prevalence's numerator is "members with an *active* condition on the
+  prevalence date"**, which is not observable in claims without a look-back rule;
+  period prevalence's is "≥1 qualifying record during the window", which is
+  *treated* prevalence and misses a prevalent case with no encounter. Both are
+  implementable only after the analyst re-specifies them.
+- **Missing checks a multi-country descriptive study is rejected for**: no check
+  on comparability of case ascertainment across countries (the dominant threat in
+  this design, and the "Alternative case-finding rule" sensitivity analysis is
+  *not* default-ticked); no mention of overdispersion, though exact Poisson is
+  offered for annual aggregated counts with recurrent events and geographic
+  clustering; no multiplicity note, though the default four strata crossed give
+  thousands of intervals; nothing catches that a DDD numerator from a 60%-coverage
+  claims database is divided by 100% of a country's inhabitants; and ticking two
+  overlapping cause-of-death groups ("Cardiovascular I00-I99" and "Cerebrovascular
+  I60-I69") double-counts in silence.
+- **The Dobson interval is hard-coded for direct standardisation** while Section
+  10 lets the user pick a bootstrap, so both print in one document. Dobson is
+  **correct** for a directly standardised rate (Dobson AJ, Kuulasmaa K, Eberle E,
+  Scherer J, Stat Med 1991;10:457-462, confirmed) — **do not "fix" it**; the
+  problem is only that it ignores the user's choice.
+- **The standardised unit does not follow what is being standardised.** Ticking
+  `pointPrev` (a %) or `ddd` with `ageStandardised` still prints "per 1000
+  (standardised)", and a standardised incidence rate loses its person-time
+  dimension.
+- **`enrolmentRestricted` ends in a bare `|enrol`** and `popBlob` always contains
+  the authored `indexDateRule` ("database enrolment + 365 d washout"), so the DDD
+  source-population warning fires unconditionally — including for a user who
+  correctly writes "all inhabitants; no enrolment requirement".
+- **`PC.mountAmendments(form)` is not called here either.** Seven builders,
+  unchanged since the third run.
+- **Wagner 2002 (segmented regression / ITS) sits in the default reference list**
+  though no part of this protocol uses ITS; Dobson 1991, Lerman 1980 (the grid
+  search) and Clegg 2009 (AAPC) are used and uncited; RECORD-PE is not offered,
+  though it is the expected extension for a routinely-collected-data protocol.
+- **STROBE item 1a answers "Multi-national descriptive epidemiology study"**,
+  which is not one of the commonly used terms STROBE item 1a asks for — a
+  DDD/prevalence study is a repeated cross-sectional, an incidence study a cohort.
+  Item 12 omits missing data, which STROBE names and the form has no field for.
+
+#### Checked and clean (do not re-derive)
+
+- **DDD/1000 inhabitants/day**: `(DDDs × 1000) / (population × days)` and the
+  mid-period source-population denominator both match the WHO ATC/DDD convention.
+  Unit correct.
+- **Trend-in-trend apart from stage 2**: CPE expansion, quintiles, the stage-1
+  description and `exp(β₁)` as an odds ratio are all right, and the check
+  correctly refuses it as a descriptive metric.
+- **Initiation rate and concomitant use** cohere; period vs point prevalence are
+  each internally matched to their own numerators and the check correctly refuses
+  to let them share a column.
+- **Direct standardisation** `Σ (age-stratum rate × reference proportion)` correct.
+- **Citations confirmed from search records, unchanged**: Lai ECC 2015 Curr
+  Epidemiol Rep 2(4):229-238; Lai EC 2015 Epidemiology 26(6):815-820; Kim HJ, Fay
+  MP, Feuer EJ, Midthune DN 2000 Stat Med 19(3):335-351; Ji X, Small DS, Leonard
+  CE, Hennessy S 2017 Epidemiology 28(4):529-536; Wagner AK 2002 J Clin Pharm Ther
+  27(4):299-309; WHO GPE Discussion Paper 31 (Ahmad OB et al); Hsieh CY 2019 Clin
+  Epidemiol 11:349-58; Shao SC 2019 PDS 28(5):593-600; Cheng CL 2014 J Epidemiol
+  24(6):500-7; Hsieh CY 2015 J Formos Med Assoc 114(3):254-9; von Elm 2007 PLoS
+  Med 4:e296. Author lists, journals, volumes and pages all match the file.
+- **The library modal**: all four buttons carry the right `data-target-*`, so the
+  ACNU/case-control name-only-button bug is **not** present. This page has its own
+  modal and does **not** mount `PhenotypeLibrary.astro` — whose `PHENOTYPES` has
+  `indications` but neither `populations` nor `mortalityCauses`, so adding
+  `<PhenotypeLibrary />` here later would bind a second handler to the same
+  buttons and break two of the four categories. The filtered-index lookup is right.
+- **`renderScheme`** already refuses to read a calendar range as a duration;
+  `1e3 days`, `2010-2023` and `Calendar years 2010–2023 (annual)` all fall back to
+  the labelled schematic. No `parseInt` foot-gun remains on this page.
+- **390 px and 1024 px viewports**: no horizontal overflow (390/390, 1024/1024).
+- The design diagram is exported (`designDiagramFigure` + `designDiagramDocx`) and
+  `lastFigNote` was empty on every run — Figure 1 embedded every time.
