@@ -58,19 +58,19 @@ const PHENOTYPES = {
       name: "All adults (≥18 y) continuously enrolled",
       codes: "Define by age at observation start; continuous enrolment ≥365 d before index date.",
       definition: "Base denominator for prevalence / drug-utilisation across age-eligible enrollees.",
-      validation: "Standard practice; cite the database-specific enrolment construct (e.g. Lai EC et al, Clin Epidemiol 2019 for NHIRD).",
+      validation: "Standard practice; cite the database-specific enrolment construct (e.g. Hsieh CY et al, Clin Epidemiol 2019;11:349-58 for the NHIRD; the full record is in the default reference list).",
     },
     {
       name: "Adults ≥65 y (older-adult cohort)",
       codes: "Age ≥65 at observation start; continuous enrolment ≥365 d.",
       definition: "Denominator for geriatric polypharmacy, falls, dementia-medication studies.",
-      validation: "AsPEN polypharmacy work; Tan EC et al, Pharmacoepidemiol Drug Saf 2023 (PMID 36821644).",
+      validation: "Multinational polypharmacy work; Lee H et al, Age Ageing 2023;52(2):afad014 (PMID 36821644).",
     },
     {
       name: "Diabetes mellitus (any type)",
       codes: "ICD-10 E10.*, E11.*, E13.*, E14.* (≥1 inpatient or ≥2 outpatient claims ≥30 d apart) OR ≥1 antidiabetic dispensing (ATC A10*).",
       definition: "Adult diabetes cohort, sensitive case-finding combining diagnosis + dispensing.",
-      validation: "Lin CY et al, NHIRD diabetes definition; cross-walked with the AsPEN antidiabetic-penetration work (Ooba N et al PDS 2018; PMID 30540837).",
+      validation: "Lin CY et al, NHIRD diabetes definition; cross-walked with the antidiabetic-penetration work (Kubota K et al, PLoS One 2018;13(12):e0208796; PMID 30540837).",
     },
     {
       name: "Type 2 diabetes (T2DM specifically)",
@@ -140,13 +140,13 @@ const PHENOTYPES = {
     {
       name: "Myocardial infarction (MI)",
       codes: "ICD-10 I21.*, I22.* (primary discharge diagnosis)",
-      definition: "First hospitalisation with a primary discharge diagnosis of acute MI during the observation period.",
+      definition: "First hospitalisation with a primary discharge diagnosis of acute MI during the observation period. Note that I22 is SUBSEQUENT myocardial infarction (a recurrent event within 28 days) and so is not itself a first event: include it to identify prior MI or to define recurrence, and drop it from the numerator of an incident-MI rate.",
       validation: "Cheng CL et al. J Epidemiol 2014;24(6):500-7.",
     },
     {
       name: "Ischemic stroke",
       codes: "ICD-10 I63.*, I64.* (primary discharge diagnosis)",
-      definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke.",
+      definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke. Note that I64 is stroke NOT SPECIFIED as haemorrhage or infarction, and the share of strokes coded I64 varies widely between countries and with imaging availability — so including it can dominate a cross-country comparison. Report the I64 share per site, or treat the I64-inclusive definition as a pre-specified sensitivity analysis.",
       validation: "Hsieh CY et al, J Formos Med Assoc 2015;114(3):254-9.",
     },
     {
@@ -196,7 +196,7 @@ const PHENOTYPES = {
     {
       name: "External causes (injury / suicide / accident)",
       codes: "ICD-10 V01–Y89 as underlying cause.",
-      definition: "Death from external causes; important denominator for excess-mortality calculations.",
+      definition: "Death from external causes; the usual comparison numerator in excess-mortality calculations, and the group most often excluded when a natural-cause rate is wanted.",
       validation: "WHO standard.",
     },
     {
@@ -233,7 +233,7 @@ const OUTPUT_METRICS = [
   { id: "switching",       group: "Utilisation",  label: "Switching pattern (Sankey)",     unit: "flows between drug classes",     hint: "First-line → second-line → … transitions." },
   { id: "concomitant",     group: "Utilisation",  label: "Concomitant use",                unit: "% on ≥2 classes",                hint: "Proportion using multiple drug classes within a window." },
   { id: "ageStandardised", group: "Adjustment",   label: "Age-standardised rates",         unit: "per 1000 (standardised)",        hint: "Direct or indirect standardisation to a reference population." },
-  { id: "joinpoint",       group: "Trends",       label: "Joinpoint / segmented trend",    unit: "APC / AAPC",                     hint: "Annual percent change with break-point detection (Kim 2000)." },
+  { id: "joinpoint",       group: "Trends",       label: "Joinpoint / segmented trend",    unit: "APC / AAPC",                     hint: "Annual percent change, with the joinpoints located by grid search and their number chosen by a separate selection rule (Kim 2000)." },
   { id: "trendInTrend",    group: "Trends",       label: "Trend-in-trend (Ji 2017)",       unit: "odds ratio, exp(β₁)",            hint: "Advanced causal design; strata are quantiles of each person's predicted probability of exposure. Better done in its own template." },
 ];
 
@@ -563,10 +563,10 @@ const TIMELINE_PRESETS: Record<string, string> = {
               </select>
             </label>
             <label class="flex flex-col gap-1">
-              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Segment-fit method</span>
+              <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Joinpoint fitting and selection</span>
               <select name="trendMethod" class="border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
-                <option value="grid" selected>Grid search (NCI Joinpoint Regression Program default)</option>
-                <option value="permutation">Permutation test (more conservative)</option>
+                <option value="grid" selected>Grid search over candidate joinpoints, number chosen by the software's default rule</option>
+                <option value="permutation">Permutation test for the number of joinpoints (Kim 2000)</option>
               </select>
             </label>
             <label class="flex flex-col gap-1">
@@ -577,6 +577,9 @@ const TIMELINE_PRESETS: Record<string, string> = {
                 <option value="aapc">AAPC only</option>
               </select>
             </label>
+            <p class="sm:col-span-2 text-[11px] text-slate-500 leading-relaxed bg-amber-50 border border-amber-200 rounded p-2">
+              <strong>These are two stages, not two alternatives.</strong> A grid search <em>locates</em> candidate joinpoints; a separate rule then decides <em>how many</em> there are, and the two are used together — Kim HJ et al (Stat Med 2000) do exactly that. This control previously offered "Grid search" labelled as the NCI Joinpoint Regression Program's default, which it has never been: that program's default rule for choosing the number of joinpoints was the permutation test through v4.9 and is a weighted BIC from v5.0. Whichever you pick, <strong>name the software and version in the protocol</strong> — "the software default" is not a fixed specification.
+            </p>
             <p class="sm:col-span-2 text-[11px] text-slate-500 leading-relaxed bg-slate-50 border border-slate-200 rounded p-2">
               <strong>Trend-in-trend</strong> (Ji X, Small DS, Leonard CE, Hennessy S. <em>Epidemiology</em> 2017;28(4):529-536) is not a descriptive metric — it is a causal design. It stratifies the population by each person's <em>predicted probability of exposure</em> (the cumulative probability of exposure, CPE) from a stage-1 logistic model, then compares outcome trends across those strata. If you tick it in Section 6 the protocol carries a methods stub only; use the
               <a class="underline font-semibold" href={`${base}/tools/trend-in-trend/`}>dedicated trend-in-trend builder</a> if it is your central analytic question.
@@ -682,7 +685,7 @@ Kim HJ, Fay MP, Feuer EJ, Midthune DN. Permutation tests for joinpoint regressio
 Ji X, Small DS, Leonard CE, Hennessy S. The Trend-in-trend research design for causal inference. Epidemiology 2017;28(4):529-536. doi:10.1097/EDE.0000000000000579
 Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time-series studies in medication use research. J Clin Pharm Ther 2002;27(4):299-309. doi:10.1046/j.1365-2710.2002.00430.x
 WHO. Age-standardisation of rates: a new WHO standard. GPE Discussion Paper 31, 2001 (Ahmad OB et al).
-Tan EC, Pratt NL, Ilomäki J et al. Multi-country comparison of polypharmacy. Pharmacoepidemiol Drug Saf 2023 (PMID 36821644).
+Lee H, Baek YH, Kim JH, Liao TC, Lau WCY, Man KKC, et al. Trends of polypharmacy among older people in Asia, Australia and the United Kingdom: a multinational population-based study. Age Ageing 2023;52(2):afad014. doi:10.1093/ageing/afad014 (PMID 36821644)
 Hsieh CY, Su CC, Shao SC, Sung SF, Lin SJ, Kao Yang YH, Lai EC. Taiwan's NHIRD: past and future. Clin Epidemiol 2019;11:349-58.
 Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database. Pharmacoepidemiol Drug Saf 2019;28(5):593-600.</textarea>
             </label>
@@ -784,13 +787,28 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // Permissive regex: scan user-typed text for cues that imply a site
       // feature beyond Rx + Dx. We also check ticked metrics directly
       // (mortAll / mortCause / etc. force the mortality feature).
+      // Each alternative carries its own word boundaries, deliberately, and most
+      // of them are STEMS with no trailing boundary: "carcinom" has to match
+      // "carcinoma", "pregnan" has to match "pregnancy". The earlier version
+      // wrapped each whole alternation in \b( … )\b, which made the trailing
+      // boundary mandatory and so killed every stem in the file — "carcinoma",
+      // "pregnancy", "pregnant", "gestational", "radiology", "echocardiogram",
+      // "genomics", "tumours", "deaths" and "leukaemia" all matched nothing,
+      // and the panel stayed hidden, which reads on screen as "no gaps".
+      // (`labs` was the one group written without the trailing \b, and it is
+      // the one group that behaved as intended; the rest now match it.)
+      // Short ambiguous tokens — smr, sir, mri, inr, tsh, lab — keep boundaries
+      // on both sides on purpose, or they match inside longer words.
       const FEATURE_TRIGGERS = {
-        labs:      /\b(hba1c|egfr|creatinine|bmi|blood\s*pressure|systolic|diastolic|ldl|hdl|cholesterol|glucose|albumin|hemoglobin|haemoglobin|inr|tsh|lipid|biochemical|biochemist|labora?tor[yi]|lab[s]?\b)/i,
-        mortality: /\b(mortality|all-?cause death|cv death|cardiovascular death|cause of death|died|fatal|death|survival|smr|sir)\b/i,
-        cancer:    /\b(cancer|carcinom|malignan|neoplasm|tumou?r|sarcoma|leuk[ae]mia|lymphoma|registr[yi].*cancer|cancer.*registr[yi]|sir)\b/i,
-        pregnancy: /\b(pregnan|birth|neonatal|gestation|trimester|maternal|fetal|foetal|infant|mother)\b/i,
-        imaging:   /\b(imaging|mri|ct\s*scan|x-?ray|ultrasound|echocardio|angio|radiolog)\b/i,
-        genomics:  /\b(genomic|snp|gwas|biobank|genotype|exome|gene(?:tic)?\b)\b/i,
+        labs:      /\bhba1c|\begfr|\bcreatinine|\bbmi\b|\bblood\s*pressure|\bsystolic|\bdiastolic|\bldl\b|\bhdl\b|\bcholesterol|\bglucose|\balbumin|\bh[ae]?emoglobin|\binr\b|\btsh\b|\blipid|\bbiochemi|\blabora?tor[yi]|\blabs?\b/i,
+        mortality: /\bmortality|\ball-?cause\s+death|\bcv\s+death|\bcardiovascular\s+death|\bcause[\s-]of[\s-]death|\bdied\b|\bfatal|\bdeath|\bsurvival|\bsmr\b|\bsir\b/i,
+        cancer:    /\bcancer|\bcarcinom|\bmalignan|\bneoplas|\btumou?r|\bsarcoma|\bleuk[ae]?[ae]mia|\blymphom|\bmyeloma|\boncolog|\bsir\b/i,
+        pregnancy: /\bpregnan|\bbirth|\bneonat|\bgestation|\btrimester|\bmaternal|\bfo?etal|\binfant|\bmother/i,
+        // "angio" on its own matched nothing while the trailing \b was in force,
+        // and matches "angiotensin" — an entire drug class — without it, so the
+        // imaging cue is the narrower "angiograph".
+        imaging:   /\bimaging|\bmri\b|\bct\s*scan|\bx-?ray|\bultrasound|\bechocardio|\bangiograph|\bradiolog/i,
+        genomics:  /\bgenomic|\bsnp\b|\bgwas\b|\bbiobank|\bgenotyp|\bexome|\bgene\b|\bgenetic/i,
       };
       const FEATURE_TEXT_FIELDS = [
         "populationName","populationDef","populationCodes",
@@ -817,15 +835,18 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         return req;
       };
 
-      const renderFeasibility = (state) => {
-        const panel  = document.querySelector("[data-feasibility]");
-        const list   = document.querySelector("[data-feasibility-list]");
-        if (!panel || !list) return;
+      // The gap analysis, separated from its rendering so it can travel. It used
+      // to exist only inside renderFeasibility, i.e. only in an amber box in a
+      // browser tab: a protocol could name three databases with no mortality
+      // linkage under "Numerator: all-cause deaths in cohort (mortality-linked
+      // records)" and the exported document — the artefact a site actually
+      // receives and executes — carried no trace of the objection, while the
+      // STROBE checklist claimed the gap had been reported.
+      const featureGaps = (state) => {
         const required = computeRequiredFeatures(state);
         const selected = state.sites || [];
-        if (selected.length === 0) { panel.classList.add("hidden"); return; }
-
         const gaps = [];
+        if (selected.length === 0) return gaps;
         for (const featId of required) {
           if (featId === "rx" || featId === "dx") continue;
           const featLabel = (FEATURES.find((f) => f.id === featId) || {}).label || featId;
@@ -836,11 +857,18 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             if (!d) continue;
             (d.features.includes(featId) ? have : missing).push(d.short);
           }
-          if (missing.length > 0) {
-            gaps.push({ feature: featLabel, missing, have });
-          }
+          if (missing.length > 0) gaps.push({ id: featId, feature: featLabel, missing, have });
         }
+        return gaps;
+      };
+      const gapLine = (g) => g.feature + " — not available at: " + g.missing.join(", ") +
+        (g.have.length ? ". Available at: " + g.have.join(", ") + "." : ". Available at none of the selected sites.");
 
+      const renderFeasibility = (state) => {
+        const panel  = document.querySelector("[data-feasibility]");
+        const list   = document.querySelector("[data-feasibility-list]");
+        if (!panel || !list) return;
+        const gaps = featureGaps(state);
         if (gaps.length === 0) { panel.classList.add("hidden"); return; }
         list.innerHTML = gaps.map((g) =>
           `<li><strong>${g.feature}</strong>; implied by your study text / chosen metrics. Missing at: <strong>${g.missing.join(", ")}</strong>` +
@@ -863,11 +891,29 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       };
       const writeForm = (state) => {
         const multi = new Set(["sites", "metricsPick", "strataPick", "sensitivityPick"]);
+        staleSelects = [];
         for (const el of form.querySelectorAll("input, textarea, select")) {
           const name = el.name;
           if (!name) continue;
           if (el.type === "checkbox" && multi.has(name)) el.checked = (state[name] || []).includes(el.value);
-          else if (state[name] !== undefined) el.value = state[name];
+          else if (state[name] !== undefined) {
+            // A <select> whose stored value is no longer one of its options
+            // used to be assigned anyway: el.value = x is a no-op that leaves
+            // selectedIndex = -1, so the control showed an empty box and
+            // FormData omitted it, and the exports supplied a definite choice
+            // of their own. Keep the option the markup declares, and say what
+            // was dropped rather than absorbing it silently.
+            if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === state[name])) {
+              staleSelects.push({
+                name,
+                value: String(state[name]),
+                label: (el.closest("label")?.querySelector("span")?.textContent || name).trim(),
+                kept: el.value,
+              });
+              continue;
+            }
+            el.value = state[name];
+          }
         }
       };
       const mergeList = (picks, customText) => {
@@ -877,6 +923,141 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const bullets = (arr) => arr.length === 0 ? "_(none specified)_" : arr.map((l) => "- " + l).join("\n");
       const numbered = (arr) => arr.length === 0 ? "_(none)_" : arr.map((l, i) => (i + 1) + ". " + l).join("\n");
       const orFb = (s, fb) => (s && s.trim()) ? s : fb;
+      // Every cell of every Markdown table below interpolates user text, and a
+      // pipe in that text opens a new column. "Dementia | any cause" in the
+      // outcome name emitted a three-cell row against a two-column header, so
+      // the rendered table showed "Dementia" against the label and dropped
+      // "any cause"; an ICD list written "F00-F03 | G30" did the same to the
+      // code set, and the metric tables embed those same strings again. Pipes
+      // are escaped on the way into a cell — same rule the amendments log and
+      // RWE Studio's Table 1 already follow.
+      const td = (v) => String(v ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+      // A <select> restored from a stale draft or a ?seed= link with a value
+      // that is no longer one of its options is left at selectedIndex = -1: it
+      // shows nothing, contributes nothing to FormData, and every `|| "…"`
+      // fallback in the exports then supplied a specific, definite choice the
+      // user never made — a protocol asserting "Exact Poisson / Wilson" beside a
+      // blank dropdown. Name it as unset instead, and say what the dead value was.
+      const UNSET = (what) => "NOT SET — " + what + " has no value. Choose one before this protocol is circulated.";
+      // The same rule for free-text boxes. Every one of these used to export a
+      // plausible, unmarked specification for a field the user had left empty:
+      // an untouched Section 9 exported "Time-series of 2010-2023" — a specific
+      // fourteen-year series — while the checks panel simultaneously said the
+      // trend year range was not given, and a cleared suppression box exported
+      // "Suppress cells with <5 events" under a panel saying no suppression rule
+      // was set. A governance reviewer then approves a rule the protocol has not
+      // got. Blank exports as blank, and says which field it was.
+      const NOTSET = (what) => "(not specified — " + what + ")";
+      // Which selects a restored draft left with nothing selected, so the checks
+      // panel can say so by name. `writeForm` assigns el.value with no
+      // membership check; an unmatched value leaves selectedIndex = -1, the
+      // control shows an empty box that reads as merely unremarkable, and
+      // FormData omits it entirely — so the dead value is not recoverable from
+      // the state object and has to be captured at the moment of restore.
+      let staleSelects = [];
+      // ONE map per <select>, consumed by the preview, the Markdown, the Word
+      // protocol and the STROBE checklist. They were four pairs of copy-pasted
+      // lookups with drifting wording, which is the defect this repo keeps
+      // paying for; `auditSelectMaps` below asserts at load that each map's keys
+      // are exactly the option values the form offers, so a new option cannot be
+      // added to the markup and silently fall through to a fallback.
+      const SELECT_TXT = {
+        metaMethod: {
+          descriptive: "Descriptive only; side-by-side tables and ranked figures; no pooled estimate.",
+          re: "Random-effects (DerSimonian–Laird) pooled estimates across sites; report I² and τ². Forest plot.",
+          "re-reml": "Random-effects (REML) pooled estimates across sites; report I² and τ². Forest plot.",
+        },
+        arch: {
+          federated: "Federated; each site executes the common analytic package locally and shares aggregate counts + person-time only.",
+          cdm: "Common Data Model; each site transforms data into an agreed CDM, runs the shared package.",
+          centralised: "Centralised; site-level individual data pooled under DUA.",
+        },
+        ciMethod: {
+          "poisson-exact": "Exact Poisson (rates) and Wilson score (proportions); preferred for sparse cells.",
+          "normal": "Normal approximation (only valid for cells with ≥10 events).",
+          "bootstrap": "Non-parametric bootstrap (1000 resamples).",
+        },
+        contribution: {
+          aggregate: "Site-level aggregate (counts + person-time) only.",
+          anonymised: "De-identified record-level subset.",
+          full: "Centralised pooled individual data (DUA permits).",
+        },
+        ageStdRef: {
+          who2000: "WHO World Standard 2000",
+          esp2013: "European Standard Population 2013",
+          segi1960: "Segi 1960",
+          internal: "Internal-pooled (sum across the selected sites)",
+        },
+        ageStdMethod: {
+          direct: "Direct: Σ (age-stratum rate × reference proportion); reported with 95% CI by the Dobson method.",
+          indirect: "Indirect: standardised mortality / incidence ratio (SMR / SIR) = observed events ÷ events expected from the reference age-specific rates. This is a ratio, not a rate: it is not expressed per 1000 and it is not comparable between populations with different age structures.",
+          both: "Direct AND indirect, reported side by side: the direct age-standardised rate (per 1000, with a Dobson 95% CI) and the SMR / SIR (a ratio, observed ÷ expected).",
+        },
+        trendMaxJp: { "2": "2", "3": "3", "4": "4" },
+        trendMethod: {
+          grid: "a grid search over candidate joinpoint locations, with the number of joinpoints chosen by the analysis software's default rule — name the software and its version, because that rule is not fixed (the NCI Joinpoint program used a permutation test through v4.9 and a weighted BIC from v5.0)",
+          permutation: "a grid search over candidate joinpoint locations, with the number of joinpoints chosen by a permutation test (Kim HJ et al, Stat Med 2000;19(3):335-51)",
+        },
+        trendReport: { "apc-aapc": "APC per segment + AAPC over the full window", apc: "APC per segment", aapc: "AAPC only" },
+      };
+      const SELECT_WHAT = {
+        metaMethod: "the cross-site comparison method",
+        arch: "the execution architecture",
+        ciMethod: "the confidence-interval method",
+        contribution: "the site contribution model",
+        ageStdRef: "the standardisation reference population",
+        ageStdMethod: "the standardisation method",
+        trendMaxJp: "the maximum number of joinpoints",
+        trendMethod: "the segment-fit method",
+        trendReport: "the trend reporting choice",
+      };
+      const pickTxt = (name, val) => SELECT_TXT[name][val] || UNSET(SELECT_WHAT[name]);
+      // Short form, for a value that sits inside a sentence rather than in its
+      // own table cell.
+      const pickInline = (name, val) => SELECT_TXT[name][val] || "(NOT SET: " + SELECT_WHAT[name] + ")";
+      // Loud in the console rather than silent: if the markup and the map ever
+      // disagree, the export names an analysis different from the one chosen.
+      const auditSelectMaps = () => {
+        for (const name of Object.keys(SELECT_TXT)) {
+          const el = form.querySelector(`select[name="${name}"]`);
+          if (!el) { console.error("[DA] no <select> named " + name + " for its text map"); continue; }
+          const opts = [...el.options].map((o) => o.value).sort();
+          const keys = Object.keys(SELECT_TXT[name]).sort();
+          if (opts.join("|") !== keys.join("|"))
+            console.error("[DA] " + name + ": the <select> offers [" + opts.join(", ") + "] but the text map has [" + keys.join(", ") + "]");
+        }
+      };
+      const metricLabel = (id) => ((OUTPUT_METRICS.find((m) => m.id === id) || {}).label || id);
+      // The one sentence a reviewer reads first. It used to be a constant —
+      // "age-standardised rates / proportions with 95% CIs … and pooled across
+      // sites" — printed whatever the form said, so the default protocol's
+      // abstract claimed age-standardisation that was not ticked and pooling
+      // three sections above "Cross-site comparison: Descriptive only … no
+      // pooled estimate". It is read from the form now, and where an option is
+      // unset it says so rather than naming a plausible one.
+      const CI_ABSTRACT = {
+        "poisson-exact": "exact Poisson (rates) and Wilson score (proportions) 95% confidence intervals",
+        "normal": "normal-approximation 95% confidence intervals",
+        "bootstrap": "non-parametric bootstrap 95% confidence intervals",
+      };
+      const POOL_ABSTRACT = {
+        "descriptive": "compared side by side across sites, with no pooled estimate",
+        "re": "pooled across sites by random-effects (DerSimonian–Laird) meta-analysis",
+        "re-reml": "pooled across sites by random-effects (REML) meta-analysis",
+      };
+      const analysisSentence = (s) => {
+        const ticked = s.metricsPick || [];
+        const strata = mergeList(s.strataPick, s.strataCustom);
+        // Do not prefix "age-standardised" here: it is one of the metrics, and
+        // when it is ticked its own label already appears in the list.
+        const what = ticked.length
+          ? ticked.map(metricLabel).join(", ")
+          : "(no output metric is selected, so this protocol does not yet say what it reports)";
+        const byStrata = strata.length ? ", reported overall and by " + strata.join(", ") : ", reported overall (no strata are selected)";
+        const ci = CI_ABSTRACT[s.ciMethod] || "confidence intervals whose method has not been set";
+        const pool = POOL_ABSTRACT[s.metaMethod] || "cross-site comparison whose method has not been set";
+        return what + byStrata + ", with " + ci + ", and " + pool;
+      };
       const pcOf = (s) => ({
         design: "multi-national descriptive study",
         tte: false,
@@ -886,11 +1067,14 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         comparator: "",
         outcome: orFb(s.picoMeasure, "(measure)"),
         data: (s.sites && s.sites.length ? s.sites.length + " data source(s)" : "multi-national data sources"),
-        analysis: "age-standardised rates / proportions with 95% CIs, described overall and by the pre-specified strata, and pooled across sites",
+        analysis: analysisSentence(s),
         groupBy: "stratum",
         skip: ["ethics"],
-        limitations: "Descriptive estimates are sensitive to case-ascertainment and denominator definitions and to between-site coding differences; no causal interpretation is intended.",
-        plannedOutputs: ["Population-selection flow diagram.", "Table 1 of the study population.", "Age-standardised rate / trend figures by stratum and site."],
+        limitations: "They are sensitive to case-ascertainment and denominator definitions, and to differences in coding and capture practice between the contributing databases.",
+        // The shared tail already supplies the flow diagram and the Table 1 row;
+        // repeating them here printed each of them twice in the planned-outputs
+        // list of every export.
+        plannedOutputs: ["Rate / trend figures by stratum and site."],
       });
       // What is still blank. A protocol that reads as finished while it does not
       // say who is counted or what is measured is worse than one that says so, so
@@ -903,6 +1087,116 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         [!(s.metricsPick || []).length, "at least one output metric (Section 6) — without one the protocol does not say what it reports"],
         [!orFb(s.studyCalendar, ""), "the study calendar period"],
       ].filter((x) => x[0]).map((x) => x[1]);
+
+      // The states in which the exported document asserts a design the form does
+      // not support. These are NOT ordinary blanks — `missing()` covers those,
+      // and a blank exports as a visible placeholder that needs no refusal. Each
+      // of these instead makes the metric sections below print a numerator, a
+      // denominator and a formula for a metric whose defining input was never
+      // given, and they read as settled decisions.
+      //
+      // Until this existed the refusals lived only in the consistency-check
+      // panel: a protocol could show two red ✕ on screen and still download a
+      // Word file specifying age-standardisation for a study with no age bands,
+      // under the message "Downloaded …". One computation, four surfaces — the
+      // panel, the Markdown, the Word protocol and the STROBE checklist. Same
+      // pattern as clone-censor-weight's blockers() and case-control's
+      // conflicts(); do not re-introduce a second copy of any of these rules.
+      const blockers = (s) => {
+        const out = [];
+        const ticked = s.metricsPick || [];
+        const has = (id) => ticked.includes(id);
+        const txt = (k) => String(s[k] || "").trim();
+        const label = (id) => ((OUTPUT_METRICS.find((m) => m.id === id) || {}).label || id);
+
+        const needsOutcome = ["incidence", "periodPrev", "pointPrev"].filter(has);
+        if (needsOutcome.length && !txt("outcomeName") && !txt("outcomeCodes"))
+          out.push(needsOutcome.map(label).join(" and ") + (needsOutcome.length > 1 ? " count" : " counts") +
+            " outcome events in the numerator, but no outcome name or code set is defined (Section 5). The protocol currently specifies a denominator and no numerator, and the metric section below still prints one — “Incident (outcome) events” — as though it had been chosen.");
+
+        const util = ["ddd", "initiation", "persistence", "switching", "concomitant"].filter(has);
+        if (util.length && !txt("exposureName") && !txt("exposureCodes"))
+          out.push("A drug-utilisation metric is ticked (" + util.map(label).join(", ") +
+            ") but no drug exposure or ATC code set is defined (Section 5). DDD, initiation, persistence, switching and concomitant use all take the drug as their numerator, so the metric sections below describe counting a drug that has not been named.");
+
+        if (has("mortCause") && !txt("mortCauseCodes"))
+          out.push("Cause-specific mortality is ticked but no cause-of-death code set is defined (Section 5). Without it the numerator is “some deaths” and the rate is uninterpretable; the metric section still prints a cause-specific mortality formula.");
+
+        // Indirect standardisation is not "standardising to" a population. It
+        // applies a REFERENCE SCHEDULE OF AGE-SPECIFIC RATES to the study
+        // population's own age structure to obtain expected events, and the
+        // three published standards on this menu are age-STRUCTURE weight
+        // vectors — WHO 2000, ESP 2013 and Segi 1960 carry proportions, not
+        // rates. So the indirect and both branches used to print "Standardised
+        // to: WHO World Standard 2000" beside an observed/expected formula that
+        // cannot be computed from the object named. The internal-pooled option
+        // is different: pooling the selected sites does yield age-specific
+        // rates, so it is the one choice on this menu that indirect can use.
+        if (has("ageStandardised") && (s.ageStdMethod === "indirect" || s.ageStdMethod === "both") &&
+            ["who2000", "esp2013", "segi1960"].includes(s.ageStdRef))
+          out.push("Indirect standardisation (SMR / SIR) is selected together with " + (SELECT_TXT.ageStdRef[s.ageStdRef] || s.ageStdRef) +
+            " as the reference. Those standards are age-STRUCTURE weights — a set of proportions — and the direct method is what uses them. Indirect standardisation needs a reference schedule of age-specific RATES, applied to your own age structure, to get the expected number of events; none of the three published standards contains rates, so the expected count cannot be computed from the reference this protocol names. State the source of the reference rates instead (for example the national rates of a named country over the same calendar years), or use the internal-pooled option, which does yield age-specific rates.");
+
+        // A metric whose required linkage is carried by NONE of the selected
+        // sites cannot be computed anywhere, which is a different statement from
+        // the amber feasibility panel's "some sites are missing this".
+        for (const g of featureGaps(s)) {
+          if (g.have.length === 0 && (g.id === "mortality" ? (has("mortAll") || has("mortCause")) : false))
+            out.push("A mortality metric is ticked, but none of the selected data sources carries mortality linkage (" + g.missing.join(", ") + "). The numerator is “deaths in the cohort (mortality-linked records)” and there are no such records at any site, so the rate cannot be computed anywhere in this study as specified.");
+        }
+
+        const strataAll = mergeList(s.strataPick, s.strataCustom);
+        if (has("ageStandardised") && !strataAll.some((x) => /age/i.test(x)))
+          out.push("Age-standardised rates are ticked but no age stratum is selected in Section 7. Standardisation is arithmetic on age-specific rates — direct applies them to a reference age structure, indirect applies the reference rates to your age structure — so with no age bands there is nothing to standardise, either way. The protocol nonetheless prints the standardisation formula and names a reference population.");
+
+        // Both of these describe themselves as operating on "the relevant metric
+        // above" / "the primary metric (above)". Ticked on their own there is no
+        // metric above, and nothing said so.
+        const base = ["incidence", "periodPrev", "pointPrev", "mortAll", "mortCause", "ddd", "initiation"].filter(has);
+        if (!base.length) {
+          if (has("ageStandardised"))
+            out.push("Age-standardised rates are ticked but no occurrence, mortality or utilisation metric is ticked with them. Standardisation is an adjustment applied to a rate that some other metric produces — with none selected there is nothing to standardise, and the section below refers to “the relevant metric above”, which does not exist.");
+          if (has("joinpoint"))
+            out.push("Joinpoint / segmented trend is ticked but no occurrence, mortality or utilisation metric is ticked with it. A joinpoint model is fitted to a series of rates that some other metric produces; the section below refers to “the primary metric (above)”, which does not exist.");
+        }
+
+        if (has("joinpoint")) {
+          const yrs = (txt("trendYears").match(/\d{4}/g) || []).map(Number);
+          const jp = parseInt(s.trendMaxJp, 10) || 3;
+          if (yrs.length >= 2) {
+            const npts = Math.max(...yrs) - Math.min(...yrs) + 1;
+            if (npts < (jp + 1) * 2)
+              out.push("Joinpoint: " + npts + " annual data point(s) with up to " + jp + " joinpoint(s) means " + (jp + 1) +
+                " segments over " + npts + " points. A segment fitted to one or two points is not a trend — the model will still return an annual percent change, and the protocol still prescribes one. Reduce the maximum joinpoints or lengthen the series.");
+          }
+        }
+        return out;
+      };
+      // Rendered the same way wherever the refusals travel.
+      const blockerMd = (s) => {
+        const b = blockers(s);
+        return b.length
+          ? "> **This draft specifies a metric it cannot compute.**\n>\n" + b.map((x) => "> - " + x).join("\n>\n") + "\n\n"
+          : "";
+      };
+
+      // Which auto-appended validation citations still belong to this protocol.
+      // `pickedCitations` is keyed by phenotype name and was never pruned, so
+      // picking MI and then stroke left the reference list citing an MI
+      // validation study for a stroke-only protocol — and because it has its own
+      // localStorage key, citations accumulated across unrelated protocols
+      // drafted in the same browser. A citation now travels only while the
+      // phenotype it validates is still the value of one of the four name
+      // fields; editing the field by hand drops it too, which is right, because
+      // it is then no longer the library's validated definition.
+      const PHENO_NAME_FIELDS = ["populationName", "exposureName", "outcomeName", "mortCauseName"];
+      const activeCitations = (s) => {
+        const named = new Set(PHENO_NAME_FIELDS.map((f) => String(s[f] || "").trim()).filter(Boolean));
+        return Object.entries(pickedCitations)
+          .filter(([pheno]) => named.has(pheno))
+          .map(([, cite]) => String(cite || "").trim())
+          .filter(Boolean);
+      };
 
       const sitesLine = (ids, otherText) => {
         const parts = (ids || []).map((c) => "- " + formatSiteFull(c));
@@ -994,24 +1288,31 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             stratifyBy: strataLine,
           };
           case "ageStandardised": return {
-            name: m.label, unit: m.unit,
+            name: m.label,
+            // The unit follows the method. An SMR / SIR is observed ÷ expected —
+            // a dimensionless ratio — and the metric list's "per 1000
+            // (standardised)" is only true of the direct form. The indirect
+            // branch used to print "observed / expected events × 1000" under
+            // that same unit, which named a rate for a quantity that is not one.
+            unit: ({ indirect: "ratio (observed ÷ expected); dimensionless, conventionally reported as a percentage of expected",
+                     both: "per 1000 (direct) and a dimensionless ratio (indirect)" })[s.ageStdMethod] || m.unit,
             numerator: "(See age-stratum-specific rates from the relevant metric above)",
-            denominator: "Standardised to: " + (({who2000:"WHO World Standard 2000",esp2013:"European Standard Population 2013",segi1960:"Segi 1960",internal:"Internal-pooled (sum across the selected sites)"})[s.ageStdRef] || "WHO 2000"),
-            formula: ((s.ageStdMethod === "indirect") ? "Indirect (SMR / SIR): observed / expected events × 1000" : (s.ageStdMethod === "both" ? "Direct AND Indirect (SMR / SIR), reported side-by-side" : "Direct: Σ (age-stratum rate × reference proportion); reported with 95% CI by Dobson method")),
-            stratifyBy: "Age bands: " + orFb(s.ageStdBands, "5-year bands 0–4 through 85+"),
+            denominator: "Standardised to: " + pickTxt("ageStdRef", s.ageStdRef),
+            formula: pickTxt("ageStdMethod", s.ageStdMethod),
+            stratifyBy: "Age bands: " + orFb(s.ageStdBands, NOTSET("no age bands for standardisation were given in Section 8")),
           };
           case "joinpoint": return {
             name: m.label, unit: m.unit,
             numerator: "Annual rates from the primary metric (above) over the trend window",
-            denominator: "Time-series of " + orFb(s.trendYears, "2010–2023"),
-            formula: "Joinpoint regression: identify up to " + (s.trendMaxJp || "3") + " break-points using " + ((s.trendMethod === "permutation") ? "permutation test" : "grid search") + "; report " + (({"apc-aapc":"APC per segment + AAPC over full window","apc":"APC per segment","aapc":"AAPC only"})[s.trendReport] || "APC + AAPC") + ". Reference: Kim HJ et al, Stat Med 2000.",
+            denominator: "Time-series of " + orFb(s.trendYears, NOTSET("no trend year range was given in Section 9, so the length of the series is not stated and could not be checked against the number of joinpoints")),
+            formula: "Joinpoint regression, allowing at most " + pickInline("trendMaxJp", s.trendMaxJp) + " joinpoint(s): " + pickInline("trendMethod", s.trendMethod) + ". Report " + pickInline("trendReport", s.trendReport) + ".",
             stratifyBy: strataLine,
           };
           case "trendInTrend": return {
             name: m.label, unit: m.unit,
             numerator: "Outcome trend across calendar periods within each CPE stratum",
             denominator: "Exposure-prevalence trend across calendar periods within each CPE stratum",
-            formula: "Trend-in-trend (Ji X, Small DS, Leonard CE, Hennessy S. Epidemiology 2017;28(4):529-536; doi:10.1097/EDE.0000000000000579). Stage 1: a logistic model of exposure on covariates that affect exposure but are not affected by it gives each person's cumulative probability of exposure (CPE); the population is cut into quantiles of CPE (quintiles in the original paper). Stage 2: for each CPE stratum and calendar period, a 2×2 table of exposed/unexposed by case/non-case is tabulated and the trend-in-trend likelihood maximised, giving exp(β₁), an odds ratio. **This is a causal design, not a descriptive metric — use the dedicated Trend-in-trend protocol builder if it is the central question.**",
+            formula: "Trend-in-trend (Ji X, Small DS, Leonard CE, Hennessy S. Epidemiology 2017;28(4):529-536; doi:10.1097/EDE.0000000000000579). Stage 1: a logistic model of exposure on covariates that affect exposure but are not affected by it gives each person's cumulative probability of exposure (CPE); the population is cut into quantiles of CPE (quintiles in the original paper). Stage 2: for each CPE stratum and calendar period, the number at risk, the number exposed and the number of outcomes are tabulated, and a covariates-free likelihood over those counts is maximised, giving exp(β₁), an odds ratio. It works on those marginals — it does not need the individual-level exposure-by-outcome cross-classification, which is what lets it run on aggregate stratum-period data under a federated agreement. **This is a causal design, not a descriptive metric — use the dedicated Trend-in-trend protocol builder if it is the central question.**",
             stratifyBy: strataLine,
           };
           default: return null;
@@ -1021,25 +1322,13 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const buildMarkdown = (s) => {
         const today = new Date().toISOString().slice(0, 10);
         const title = orFb(s.title, "(Untitled multi-national descriptive study)");
-        const meta = ({
-          re: "Random-effects (DerSimonian-Laird) pooled estimates across sites; report I² and τ². Forest plot.",
-          "re-reml": "Random-effects (REML) pooled estimates across sites; report I² and τ². Forest plot.",
-          descriptive: "Descriptive only; side-by-side tables and ranked figures; no pooled estimate.",
-        })[s.metaMethod] || "Descriptive comparison across sites.";
-        const arch = ({
-          federated: "Federated; each site executes the common analytic package locally and shares aggregate counts + person-time only.",
-          cdm: "Common Data Model; each site transforms data into an agreed CDM, runs the shared package.",
-          centralised: "Centralised; site-level individual data pooled under DUA.",
-        })[s.arch] || "Federated";
-        const ciMethod = ({
-          "poisson-exact": "Exact Poisson (rates) and Wilson score (proportions); preferred for sparse cells",
-          "normal": "Normal approximation (only valid for cells with ≥10 events)",
-          "bootstrap": "Non-parametric bootstrap (1000 resamples)",
-        })[s.ciMethod] || "Exact Poisson / Wilson";
+        const meta = pickTxt("metaMethod", s.metaMethod);
+        const arch = pickTxt("arch", s.arch);
+        const ciMethod = pickTxt("ciMethod", s.ciMethod);
         const ticked = (s.metricsPick || []);
 
         const refsUser = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const refs = (() => { const set = new Set(refsUser); for (const c of Object.values(pickedCitations)) if (c && c.trim()) set.add(c.trim()); return Array.from(set); })();
+        const refs = (() => { const set = new Set(refsUser); for (const c of activeCitations(s)) set.add(c); return Array.from(set); })();
         const milestones = (s.timeline || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const strata = mergeList(s.strataPick, s.strataCustom);
         const inclusion = (s.inclusionCriteria || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -1055,10 +1344,10 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           metricSection += `\n## ${n}. ${block.name}\n\n` +
             `**Unit.** ${block.unit}\n\n` +
             `| | |\n|---|---|\n` +
-            `| **Numerator** | ${block.numerator} |\n` +
-            `| **Denominator** | ${block.denominator} |\n` +
-            `| **Formula** | ${block.formula} |\n` +
-            `| **Stratify by** | ${block.stratifyBy} |\n`;
+            `| **Numerator** | ${td(block.numerator)} |\n` +
+            `| **Denominator** | ${td(block.denominator)} |\n` +
+            `| **Formula** | ${td(block.formula)} |\n` +
+            `| **Stratify by** | ${td(block.stratifyBy)} |\n`;
           n++;
         }
         // n must advance here too, or the next heading repeats "## 7." — the
@@ -1075,20 +1364,20 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
 
 ---
 
-${missing(s).length ? "> **This draft is incomplete.** Still to be specified: " + missing(s).join("; ") + ".\n\n" : ""}${window.PC.abstractMd(pcOf(s))}
+${missing(s).length ? "> **This draft is incomplete.** Still to be specified: " + missing(s).join("; ") + ".\n\n" : ""}${blockerMd(s)}${window.PC.abstractMd(pcOf(s))}
 ## 1. Research question
 
 | | |
 |---|---|
-| **Population** | ${orFb(s.picoP, "_(population)_")} |
-| **What we measure** | ${orFb(s.picoMeasure, "_(metric)_")} |
-| **Time window** | ${orFb(s.picoWindow, "_(window)_")} |
+| **Population** | ${td(orFb(s.picoP, "_(population)_"))} |
+| **What we measure** | ${td(orFb(s.picoMeasure, "_(metric)_"))} |
+| **Time window** | ${td(orFb(s.picoWindow, "_(window)_"))} |
 
 ## 2. Sites
 
 ${sitesLine(s.sites, s.sitesOther)}
 
-## 3. Population (denominator)
+${(() => { const g = featureGaps(s); return g.length ? "**Per-site metric feasibility.** The metrics and study text imply data features that some selected sites do not carry:\n\n" + g.map((x) => "- " + gapLine(x)).join("\n") + "\n\nState which sites contribute to which metric.\n\n" : ""; })()}## 3. Population (denominator)
 
 **Name.** ${orFb(s.populationName, "_(population name)_")}
 
@@ -1112,13 +1401,13 @@ ${bullets(exclusion)}
 
 | | Value |
 |---|---|
-| **Drug exposure; name** | ${orFb(s.exposureName, "_(n/a)_")} |
-| **Drug exposure; codes** | ${orFb(s.exposureCodes, "_(n/a)_")} |
-| **Outcome; name** | ${orFb(s.outcomeName, "_(n/a)_")} |
-| **Outcome; codes** | ${orFb(s.outcomeCodes, "_(n/a)_")} |
-| **Outcome; operational definition** | ${orFb(s.outcomeDef, "_(n/a)_")} |
-| **Cause of death; name** | ${orFb(s.mortCauseName, "_(n/a)_")} |
-| **Cause of death; codes** | ${orFb(s.mortCauseCodes, "_(n/a)_")} |
+| **Drug exposure; name** | ${td(orFb(s.exposureName, "_(n/a)_"))} |
+| **Drug exposure; codes** | ${td(orFb(s.exposureCodes, "_(n/a)_"))} |
+| **Outcome; name** | ${td(orFb(s.outcomeName, "_(n/a)_"))} |
+| **Outcome; codes** | ${td(orFb(s.outcomeCodes, "_(n/a)_"))} |
+| **Outcome; operational definition** | ${td(orFb(s.outcomeDef, "_(n/a)_"))} |
+| **Cause of death; name** | ${td(orFb(s.mortCauseName, "_(n/a)_"))} |
+| **Cause of death; codes** | ${td(orFb(s.mortCauseCodes, "_(n/a)_"))} |
 
 ## 5. Output metrics; selected
 
@@ -1133,8 +1422,8 @@ ${metricSection}
 
 - **CI method:** ${ciMethod}
 - **Cross-site comparison:** ${meta}
-- **Site contribution model:** ${(({aggregate:"Site-level aggregate (counts + person-time) only",anonymised:"De-identified record-level subset",full:"Centralised pooled individual data (DUA permits)"})[s.contribution] || "Site-level aggregate")}
-- **Suppression rule:** ${orFb(s.suppression, "Suppress cells with <5 events; report as '<5'.")}
+- **Site contribution model:** ${pickTxt("contribution", s.contribution)}
+- **Suppression rule:** ${orFb(s.suppression, NOTSET("no small-cell suppression rule has been set"))}
 
 **Sensitivity analyses**
 
@@ -1150,9 +1439,9 @@ ${numbered(milestones)}
 
 ## ${n+2}. Ethics, data sharing, dissemination
 
-**Ethics.** ${orFb(s.ethics, "Each participating site obtains local IRB / ethics approval before data extraction.")}
+**Ethics.** ${orFb(s.ethics, NOTSET("the ethics section was left empty"))}
 
-**Dissemination.** ${orFb(s.dissemination, "Primary manuscript to a peer-reviewed pharmacoepidemiology / public-health journal.")}
+**Dissemination.** ${orFb(s.dissemination, NOTSET("the dissemination section was left empty"))}
 
 ${window.PC.tailMd(pcOf(s))}
 
@@ -1181,23 +1470,35 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         const label = (id) => ((OUTPUT_METRICS.find((m) => m.id === id) || {}).label || id);
         const popBlob = (txt("populationDef") + " " + txt("populationCodes") + " " + txt("inclusionCriteria") + " " + txt("indexDateRule")).toLowerCase();
 
+        if (staleSelects.length) c.push({ level: "warn", msg:
+          "A saved draft or a ?seed= link carried " + staleSelects.length + " value(s) this builder no longer offers, and they were NOT applied: " +
+          staleSelects.map((x) => "“" + x.label + "” asked for “" + x.value + "”, left at “" + x.kept + "”").join("; ") +
+          ". Check each of them before circulating this protocol — the option may have been renamed since the draft was saved." });
+
         const miss = missing(s);
         if (miss.length) c.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft is printed with placeholders so you can see its shape — it is not a finished protocol." });
 
-        // ── Numerator defined? Each metric names its own numerator source. ──
-        const needsOutcome = ["incidence", "periodPrev", "pointPrev"].filter(has);
-        if (needsOutcome.length && !txt("outcomeName") && !txt("outcomeCodes"))
-          c.push({ level: "error", msg: needsOutcome.map(label).join(" and ") + (needsOutcome.length > 1 ? " count" : " counts") + " outcome events in the numerator, but no outcome name or code set is defined (Section 5). The protocol currently specifies a denominator and no numerator." });
-        if ((has("ddd") || has("initiation") || has("persistence") || has("switching") || has("concomitant")) && !txt("exposureName") && !txt("exposureCodes"))
-          c.push({ level: "error", msg: "A drug-utilisation metric is ticked but no drug exposure or ATC code set is defined (Section 5). DDD, initiation, persistence, switching and concomitant use all take the drug as their numerator." });
-        if (has("mortCause") && !txt("mortCauseCodes"))
-          c.push({ level: "error", msg: "Cause-specific mortality is ticked but no cause-of-death code set is defined (Section 5). Without it the numerator is 'some deaths' and the rate is uninterpretable." });
+        // Every refusal comes from blockers(), which the Markdown, the Word
+        // protocol and the STROBE checklist also print, so the panel and the
+        // documents cannot disagree about what this draft cannot compute.
+        blockers(s).forEach((m) => c.push({ level: "error", msg: m }));
+
+        // The gap list, in the panel as well as the amber box, so that what
+        // travels into the exports and what the user reads are one thing.
+        for (const g of featureGaps(s)) {
+          if (g.have.length === 0) continue;   // the blocker above covers those
+          c.push({ level: "warn", msg: "Site feasibility — " + gapLine(g) + " Say in the per-site analytic plan which sites contribute to which metric; this gap now travels into the exported protocol." });
+        }
 
         // ── The classic denominator mismatch. ──
         const enrolmentRestricted = /continuous enrol|continuous enrol?ment|washout|≥\s*365|365\s*d|1 year of baseline|enrol/i.test(popBlob);
         if (has("ddd") && enrolmentRestricted)
           c.push({ level: "warn", msg: "DDD/1000 inhabitants/day is defined against the SOURCE POPULATION, but your denominator population is restricted (continuous enrolment / washout). If the numerator counts every dispensing while the denominator counts only the enrolment-qualified cohort, the two are drawn from different people and the rate is neither a population DDD nor a cohort rate. State explicitly which population each side of the fraction uses." });
-        if (has("ddd") && !/mid-?year|inhabitant|population/i.test(txt("populationDef") + " " + txt("suppression")))
+        // The second field here was `suppression`, a copy-paste: a small-cell
+        // rule has nothing to say about where the inhabitant denominator comes
+        // from, and any populationDef containing the word "population" silenced
+        // the check on its own.
+        if (has("ddd") && !/mid-?year|inhabitant|source population|census|resident/i.test(txt("populationDef") + " " + txt("picoP") + " " + txt("populationCodes")))
           c.push({ level: "info", msg: "The DDD denominator is the mid-period source-population estimate × days in the window. Say where that population figure comes from for each database — it is usually not the same object as the analytic cohort." });
 
         if (has("incidence") && !/washout|prior|history|prevalent|na[iï]ve|first[- ]ever|incident/i.test(popBlob + " " + txt("exclusionCriteria").toLowerCase()))
@@ -1207,25 +1508,46 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         if (has("periodPrev") && has("pointPrev"))
           c.push({ level: "info", msg: "Period and point prevalence have different denominators — everyone enrolled at any time in the window, versus everyone enrolled on one date. Report them as separate rows, never in the same column." });
 
-        // ── Standardisation. ──
-        const hasAgeStratum = strata.some((x) => /age/i.test(x));
-        if (has("ageStandardised") && !hasAgeStratum)
-          c.push({ level: "error", msg: "Age-standardised rates are ticked but no age stratum is selected in Section 7. Direct standardisation applies age-specific rates to a reference age structure — with no age bands there are no age-specific rates to apply, and nothing can be standardised." });
+        // ── Standardisation. (The "no age stratum" refusal is in blockers().) ──
+        // The default bands stop at 85+, WHO 2000 runs to 100+ and ESP 2013 to
+        // 95+. Two sites collapsing the reference's top bands differently — or
+        // one truncating rather than summing — produce "WHO-2000-standardised"
+        // rates that are not comparable, which is the failure this whole page
+        // exists to prevent, and it bites hardest on dementia, hip fracture and
+        // all-cause mortality: the metrics this phenotype library is built for.
+        const TERMINAL = { who2000: "100+", esp2013: "95+", segi1960: "85+" };
+        if (has("ageStandardised") && TERMINAL[s.ageStdRef] && TERMINAL[s.ageStdRef] !== "85+" &&
+            /\b85\s*\+/.test(txt("ageStdBands")))
+          c.push({ level: "warn", msg: "Your age bands stop at 85+, but " + (SELECT_TXT.ageStdRef[s.ageStdRef] || s.ageStdRef) + " runs to " + TERMINAL[s.ageStdRef] + ". The reference weights above 85 have to be SUMMED into a single 85+ weight, and the protocol does not say so — a site that truncates them instead of summing produces a standardised rate that is not comparable with the other sites', or with any published rate standardised to the same reference. Either extend the bands to " + TERMINAL[s.ageStdRef] + " or state the collapsing rule explicitly." });
         if (has("ageStandardised") && s.ageStdRef === "internal")
           c.push({ level: "warn", msg: "An internal-pooled reference population makes your standardised rates comparable within this study only. They cannot be placed beside published WHO-2000 or ESP-2013 standardised rates. If cross-study comparison matters, report a WHO/ESP-standardised version too." });
-        if (!has("ageStandardised") && (strata.some((x) => /country|site/i.test(x)) || (s.sites || []).length > 1))
-          c.push({ level: "warn", msg: "You are comparing more than one country or site without age-standardisation. Populations with different age structures produce different crude rates for the same underlying risk, so a ranked crude-rate figure across countries mostly ranks their age distributions." });
+        // Count the sites the user actually chose. Ticking the "Country / site"
+        // stratum is not evidence that more than one site exists: it ships
+        // ticked, so a fresh page with nothing selected used to be told "You are
+        // comparing more than one country or site" about a study with no sites.
+        const nSites = (s.sites || []).length + (txt("sitesOther").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).length);
+        if (!has("ageStandardised") && nSites > 1)
+          c.push({ level: "warn", msg: "You are comparing " + nSites + " data sources without age-standardisation. Populations with different age structures produce different crude rates for the same underlying risk, so a ranked crude-rate figure across countries mostly ranks their age distributions." });
 
         // ── Trends. ──
         if (has("joinpoint")) {
           const yrs = (txt("trendYears").match(/\d{4}/g) || []).map(Number);
           const jp = parseInt(s.trendMaxJp) || 3;
           if (yrs.length >= 2) {
-            const npts = Math.abs(yrs[yrs.length - 1] - yrs[0]) + 1;
-            if (npts < (jp + 1) * 2) c.push({ level: "error", msg: "Joinpoint: " + npts + " annual data point(s) with up to " + jp + " joinpoint(s) means " + (jp + 1) + " segments over " + npts + " points. A segment fitted to one or two points is not a trend — the model will still return an APC. Reduce the maximum joinpoints or lengthen the series." });
-            else if (npts < (jp + 1) * 3) c.push({ level: "warn", msg: "Joinpoint: " + npts + " points across " + (jp + 1) + " possible segments leaves roughly " + Math.floor(npts / (jp + 1)) + " points per segment. APCs from segments that short are very unstable; consider fewer joinpoints." });
+            const npts = Math.max(...yrs) - Math.min(...yrs) + 1;
+            // The too-few-points-per-segment case is a blocker and is pushed above.
+            // Adjacent segments SHARE the joinpoint observation, so the total
+            // number of point-memberships is npts + jp, not npts. Dividing npts
+            // by the number of segments understated the average by 40-80% and
+            // printed the understatement as a bare integer.
+            if (npts >= (jp + 1) * 2 && npts < (jp + 1) * 3) c.push({ level: "warn", msg: "Joinpoint: " + npts + " points across " + (jp + 1) + " possible segments averages " + ((npts + jp) / (jp + 1)).toFixed(1) + " points per segment (adjacent segments share their joinpoint). APCs from segments that short are very unstable; consider fewer joinpoints. For reference, the NCI Joinpoint program's own guidance is that a series should have at least seven points before a joinpoint is allowed at all, and about four points on average between consecutive joinpoints." });
           } else if (!txt("trendYears")) {
             c.push({ level: "warn", msg: "Joinpoint trend is ticked but no trend year range is given (Section 9), so the number of data points cannot be checked against the maximum number of joinpoints." });
+          } else {
+            // Non-empty but unreadable. This used to be silent, and silence here
+            // is indistinguishable from "your series is long enough": "14 years"
+            // and a bare "2023" both skipped the check entirely.
+            c.push({ level: "warn", msg: "Joinpoint trend is ticked, but the trend year range reads “" + txt("trendYears") + "”, from which fewer than two four-digit years could be read. The length of the series was therefore NOT checked against the maximum number of joinpoints — this is not a statement that it is long enough. Write the range as calendar years, e.g. 2010–2023." });
           }
         }
         if (has("trendInTrend"))
@@ -1242,7 +1564,7 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
           c.push({ level: "warn", msg: "No small-cell suppression rule is set. Multi-database descriptive output is where re-identification risk actually lives; every site's governance will ask for one." });
 
         if (s.ciMethod === "normal")
-          c.push({ level: "warn", msg: "A normal-approximation confidence interval is only valid with large counts. Descriptive work stratified by age, sex and year produces sparse cells, where it gives intervals that cross zero or exceed 1. Exact Poisson / Wilson is the safe default." });
+          c.push({ level: "warn", msg: "A normal-approximation confidence interval is only reliable with large counts. Descriptive work stratified by age, sex and year produces sparse cells, where it gives a lower limit below zero for a rate that cannot be negative, and for a proportion an interval that runs outside 0-1. Exact Poisson (rates) and Wilson score (proportions) are the safe defaults." });
 
         return c;
       };
@@ -1291,6 +1613,7 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
       };
       try { window.PC && PC.restore ? PC.restore(form, STORAGE_KEY, writeForm) : (localStorage.getItem(STORAGE_KEY) && writeForm(JSON.parse(localStorage.getItem(STORAGE_KEY)))); }
       catch (err) { console.warn("[DA] could not restore the saved draft", err); }
+      auditSelectMaps();
       const timelineTa = form.querySelector('[name="timeline"]');
       if (timelineTa && !timelineTa.value) timelineTa.value = TIMELINE_PRESETS["12-month"];
       render();
@@ -1332,10 +1655,30 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_CITATIONS_KEY);
         pickedCitations = {};
+        // The draft that carried them is gone and every select is back at its
+        // authored default, so the "values were not applied" warning no longer
+        // describes anything the user can act on.
+        staleSelects = [];
         form.querySelectorAll("input, textarea, select").forEach((el) => {
           if (el.type === "checkbox" || el.type === "radio") el.checked = false;
-          else if (el.tagName === "SELECT") el.selectedIndex = 0;
-          else el.value = "";
+          // Restore the option the markup declares, not index 0. "Max
+          // joinpoints" is authored 3 and its first option is 2, so Clear all
+          // used to change an exported analysis parameter — "identify up to 3
+          // break-points" became "up to 2" — with nothing on screen saying so,
+          // and it moved the threshold of the check that guards it.
+          else if (el.tagName === "SELECT") {
+            const authored = el.querySelector("option[selected]");
+            if (authored) el.value = authored.value; else el.selectedIndex = 0;
+          }
+          // `el.defaultValue` is the value/textarea content the markup ships
+          // with, so Clear restores the page rather than stripping it. Emptying
+          // these instead deleted nine curated references, the ethics and
+          // dissemination paragraphs, the index-date rule, the standardisation
+          // age bands and the suppression rule — permanently, because render()
+          // saves the empty state to localStorage on the next tick, so a reload
+          // did not bring them back. "Clear & start over" left the tool
+          // strictly worse than it was for the previous protocol.
+          else el.value = el.defaultValue;
         });
         render();
         setMsg("Cleared.");
@@ -1386,23 +1729,56 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         const sens = mergeList(s.sensitivityPick, s.sensitivityCustom);
         const strata = mergeList(s.strataPick, s.strataCustom);
         const metricLabels = (s.metricsPick || []).map((id) => ((OUTPUT_METRICS.find((m) => m.id === id) || {}).label || id));
-        const metaTxt = ({ re: "random-effects (DerSimonian-Laird)", "re-reml": "random-effects (REML)", fe: "fixed-effects (inverse-variance)" })[s.metaMethod] || "descriptive cross-site comparison";
-        return {
+        // One map again: this used to carry a fourth key ("fe") the form has
+        // never offered, and to fall through to "descriptive cross-site
+        // comparison" for anything it did not recognise — including a select
+        // left unset by a stale draft.
+        const metaTxt = pickTxt("metaMethod", s.metaMethod);
+        const map = {
           "1a": "Multi-national descriptive epidemiology study (disease frequency / drug utilisation).",
           "3": "Characterise " + (s.picoMeasure || "(metric)") + " among " + (s.picoP || "(population)") + " across the participating sites. Descriptive; no causal hypothesis.",
           "4": "Descriptive cross-national analysis. Population-level rates / proportions are computed within each site and compared; no exposure-outcome causal contrast.",
-          "5": "Participating sites: " + sitesPlain + ". Observation period and calendar window as defined in the protocol.",
+          "5": "Participating sites: " + sitesPlain + ". Study calendar period: " + (s.studyCalendar || "(not specified)") +
+               ". Reporting window: " + (s.picoWindow || "(not specified)") +
+               ". Observation start / index-date rule: " + (s.indexDateRule || "(not specified)") + ".",
           "6": "Source population: " + (s.populationDef || s.picoP || "(population)") + (s.populationCodes ? " (" + s.populationCodes + ")" : "") + ". Eligibility (e.g. continuous enrolment) per the protocol.",
-          "7": "Output metrics:\n" + bul(metricLabels) + "\nNumerator(s): " + (s.outcomeName || s.outcomeDef || "exposures / outcomes / mortality causes per the protocol") + (s.outcomeCodes ? " (" + s.outcomeCodes + ")" : "") + ".",
+          // The exposure fields were never referenced here, though the whole
+          // Utilisation half of this builder depends on them: a DDD-only
+          // protocol reported "Numerator(s): exposures / outcomes / mortality
+          // causes per the protocol" and named nothing.
+          "7": "Output metrics:\n" + bul(metricLabels) +
+               "\nDrug exposure: " + (s.exposureName || "(none defined)") + (s.exposureCodes ? " (" + s.exposureCodes + ")" : "") +
+               "\nOutcome: " + (s.outcomeName || "(none defined)") + (s.outcomeCodes ? " (" + s.outcomeCodes + ")" : "") + (s.outcomeDef ? ". Operational definition: " + s.outcomeDef : "") +
+               "\nCause of death: " + (s.mortCauseName || "(none defined)") + (s.mortCauseCodes ? " (" + s.mortCauseCodes + ")" : "") +
+               "\nDenominator population: " + (s.populationDef || s.populationName || "(none defined)") + ".",
           "8": "Routinely-collected health data from the contributing databases (" + sitesPlain + "). Each metric's numerator and denominator ascertained from the protocol code sets and enrolment data.",
-          "9": "Differential data capture across databases addressed by reporting which sites contribute to each metric and by sensitivity analyses:\n" + bul(sens),
+          "9": (() => {
+            const g = featureGaps(s);
+            return (g.length
+              ? "Differential data capture across databases is reported in the protocol's per-site metric feasibility list:\n" + bul(g.map(gapLine))
+              : "No gap was detected between the data features the chosen metrics require and the features the selected sites carry.")
+              + "\nSensitivity analyses:\n" + bul(sens);
+          })(),
           "11": "Age handled by standardisation and/or banding where indicated in the metric definitions; rates expressed per person-time / per 1000 as specified.",
-          "12": "Per-site computation of each selected metric (incidence / prevalence / utilisation, etc.) with the stated denominators and age-standardisation where indicated; site estimates compared / pooled by " + metaTxt + ". Stratified by:\n" + bul(strata) + "\nSensitivity analyses:\n" + bul(sens),
+          "12": "Per-site computation of each selected metric (incidence / prevalence / utilisation, etc.) with the stated denominators and age-standardisation where indicated; site estimates compared / pooled as follows: " + metaTxt + " . Stratified by:\n" + bul(strata) + "\nSensitivity analyses:\n" + bul(sens),
+          // STROBE 10 (study size) and 22 (funding) were both deferred to "[To
+          // be completed at the time of reporting]" while the exported protocol
+          // devotes a section to each — the checklist told the reader the
+          // protocol was silent on items it addresses.
+          "10": "No effect size is being tested, so the study is sized for precision rather than power; see \u201cStudy size and feasibility\u201d in the protocol. The available size is fixed by the contributing data sources (" + sitesPlain + ") over the study calendar period, and the expected width of each 95% confidence interval is reported per site and per stratum.",
           "14": "Per-site population characteristics and denominators to be tabulated (Table 1).",
           "17": "Stratified analyses:\n" + bul(strata) + "\nSensitivity analyses:\n" + bul(sens),
           "19": "Descriptive estimates reflect coding and capture practices that differ across databases; cross-site comparisons should account for differential ascertainment; no causal interpretation is intended.",
           "21": "Estimates generalise to the source populations of the contributing databases: " + sitesPlain + ".",
+          "22": "See \u201cFunding and conflicts of interest\u201d in the protocol: the funding source(s) and each author's conflicts are declared in the final report.",
         };
+        // The checklist describes the study as the form has it, so it must carry
+        // the same refusals as the protocol: a reporting checklist that reads
+        // confidently while the design underneath it cannot be computed is
+        // exactly the artefact a reviewer takes at face value.
+        const blk = blockers(s);
+        if (blk.length) map["1a"] = "THIS DRAFT SPECIFIES A METRIC IT CANNOT COMPUTE: " + blk.join(" ") + "\n\n" + map["1a"];
+        return map;
       };
 
       const buildStrobeDocx = async (s) => {
@@ -1416,6 +1792,9 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         const cell = (children, opt = {}) => new D.TableCell({ borders: cb, margins: { top: 60, bottom: 60, left: 120, right: 120 }, ...opt, children });
         const headerCell = (str) => new D.TableCell({ borders: cb, shading: { fill: "21443E", type: D.ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 120, right: 120 }, children: [p([text(str, { bold: true, color: "FFFFFF" })])] });
         const where = strobeWhere(s);
+        const allIds = STROBE_ITEMS.flatMap((sec) => sec.items.map(([n]) => n));
+        const total = allIds.length;
+        const filled = allIds.filter((n) => where[n]);
         const rows = [new D.TableRow({ tableHeader: true, children: [headerCell("#"), headerCell("STROBE recommendation"), headerCell("Where addressed in this protocol")] })];
         for (const sec of STROBE_ITEMS) {
           rows.push(new D.TableRow({ children: [new D.TableCell({ borders: cb, columnSpan: 3, shading: { fill: "E8F0EE", type: D.ShadingType.CLEAR }, margins: { top: 60, bottom: 60, left: 120, right: 120 }, children: [p([text(sec.section, { bold: true, color: "21443E" })])] })] }));
@@ -1431,7 +1810,14 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         const table = new D.Table({ width: { size: 9026, type: D.WidthType.DXA }, columnWidths: [700, 4163, 4163], rows });
         const children = [
           new D.Paragraph({ children: [text("STROBE checklist; " + (s.title || "(Untitled multi-national descriptive study)"), { bold: true, size: 32 })], spacing: { after: 120 } }),
-          p([new D.TextRun({ text: "This document maps the protocol fields to the STROBE statement (von Elm E, et al. PLoS Med 2007;4:e296). Methods items are pre-filled from your protocol; Results / Discussion items are placeholders to complete at the time of reporting. Full checklist with elaboration: strobe-statement.org.", font: FONT, size: 20, italics: true, color: "555555" })]),
+          // Computed, not asserted. The sentence used to claim "Methods items
+          // are pre-filled; Results / Discussion items are placeholders", and it
+          // was false in both directions — a Methods item was deferred while
+          // four Results/Discussion items were pre-filled — so the checklist
+          // misdescribed its own completeness on its first line.
+          p([new D.TextRun({ text: "This document maps the protocol fields to the STROBE statement (von Elm E, et al. PLoS Med 2007;4:e296). " +
+            filled.length + " of the " + total + " checklist items are pre-filled from your protocol (" + filled.join(", ") + "); the remaining " + (total - filled.length) +
+            " are placeholders to complete at the time of reporting, and are mostly Results and Discussion items that a protocol cannot answer in advance. Full checklist with elaboration: strobe-statement.org.", font: FONT, size: 20, italics: true, color: "555555" })]),
           p([new D.TextRun({ text: "Generated " + today + " from the Protocol Generator descriptive-analysis builder.", font: FONT, size: 18, italics: true, color: "777777" })]),
           table,
         ];
@@ -1464,7 +1850,7 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         });
 
         const refsUser = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const refs = (() => { const set = new Set(refsUser); for (const c of Object.values(pickedCitations)) if (c && c.trim()) set.add(c.trim()); return Array.from(set); })();
+        const refs = (() => { const set = new Set(refsUser); for (const c of activeCitations(s)) set.add(c); return Array.from(set); })();
         const milestones = (s.timeline || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const strata = mergeList(s.strataPick, s.strataCustom);
         const inclusion = (s.inclusionCriteria || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -1473,21 +1859,9 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         const sitesPart = (s.sites && s.sites.length > 0) ? s.sites.map((c) => formatSiteFull(c)).join("; ") : "";
         const sitesOthersList = (s.sitesOther || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const sitesText = !sitesPart && sitesOthersList.length === 0 ? "(no sites selected)" : [sitesPart, sitesOthersList.length > 0 ? ("Others: " + sitesOthersList.join("; ")) : ""].filter(Boolean).join(" | ");
-        const meta = ({
-          re: "Random-effects (DerSimonian-Laird) pooled estimates; report I² and τ²; forest plot.",
-          "re-reml": "Random-effects (REML); report I² and τ²; forest plot.",
-          descriptive: "Descriptive only; side-by-side tables and ranked figures.",
-        })[s.metaMethod] || "Descriptive across sites";
-        const arch = ({
-          federated: "Federated; each site executes locally; aggregate counts + person-time leave the site.",
-          cdm: "Common Data Model; site transforms to agreed CDM, runs shared package.",
-          centralised: "Centralised; pooled individual data under DUA.",
-        })[s.arch] || "Federated";
-        const ciMethod = ({
-          "poisson-exact": "Exact Poisson / Wilson score",
-          "normal": "Normal approximation",
-          "bootstrap": "Non-parametric bootstrap (1000 resamples)",
-        })[s.ciMethod] || "Exact Poisson / Wilson";
+        const meta = pickTxt("metaMethod", s.metaMethod);
+        const arch = pickTxt("arch", s.arch);
+        const ciMethod = pickTxt("ciMethod", s.ciMethod);
         const ticked = s.metricsPick || [];
 
         let __phdcLogo = null; try { const __r = await fetch("/images/networks/phdc.png"); if (__r.ok) __phdcLogo = new Uint8Array(await __r.arrayBuffer()); } catch (e) {}
@@ -1502,6 +1876,14 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         ]));
         const miss = missing(s);
         if (miss.length) children.push(p([text("This draft is incomplete. Still to be specified: " + miss.join("; ") + ".", { bold: true, color: "9E3A2C" })], { spacing: { before: 120, after: 120 } }));
+        // The refusals, at the top, where a reader of the Word file cannot miss
+        // them. Without this the whole error half of the consistency-check panel
+        // stayed behind on the screen while the document read as settled.
+        const blk = blockers(s);
+        if (blk.length) {
+          children.push(p([text("This draft specifies a metric it cannot compute.", { bold: true, color: "9E3A2C" })], { spacing: { before: 120, after: 40 } }));
+          blk.forEach((b) => children.push(new D.Paragraph({ children: [text(b, { color: "9E3A2C" })], bullet: { level: 0 }, spacing: { before: 0, after: 40 } })));
+        }
 
         window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
         children.push(h1("1. Research question"));
@@ -1513,6 +1895,11 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
 
         children.push(h1("2. Sites"));
         children.push(para(sitesText));
+        const gaps = featureGaps(s);
+        if (gaps.length) {
+          children.push(p([text("Per-site metric feasibility. ", { bold: true }), text("The metrics and study text imply data features that some selected sites do not carry. State which sites contribute to which metric.")]));
+          gaps.forEach((g) => children.push(bullet(gapLine(g))));
+        }
 
         children.push(h1("3. Population (denominator)"));
         children.push(labelTable([
@@ -1561,8 +1948,14 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         if (strata.length === 0) children.push(para("Overall only (no strata)"));
         else strata.forEach((l) => children.push(bullet(l)));
 
-        // One section per ticked metric.
+        // One section per ticked metric. The no-metric fallback below must stay
+        // in lock-step with buildMarkdown's: it emits a section and advances the
+        // counter, and when this file did not, a protocol with nothing ticked
+        // numbered Statistical analysis "8." in the Markdown and "7." in the
+        // Word file — and every section after it — so "as stated in section 9"
+        // meant different sections depending on which export the reader had.
         let n = 7;
+        let emitted = 0;
         for (const id of ticked) {
           const block = metricBlock(id, s);
           if (!block) continue;
@@ -1574,6 +1967,11 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
             ["Formula", block.formula],
             ["Stratify by", block.stratifyBy],
           ]));
+          n++; emitted++;
+        }
+        if (!emitted) {
+          children.push(h1(`${n}. Output metrics`));
+          children.push(p([text("No output metric is selected, so this protocol does not yet say what it measures. Tick at least one metric in Section 6 of the form.", { bold: true, color: "9E3A2C" })]));
           n++;
         }
 
@@ -1581,8 +1979,8 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         children.push(labelTable([
           ["CI method", ciMethod],
           ["Cross-site comparison", meta],
-          ["Site contribution model", (({aggregate:"Site-level aggregate (counts + person-time) only",anonymised:"De-identified record-level subset",full:"Centralised pooled individual data (DUA permits)"})[s.contribution] || "Site-level aggregate")],
-          ["Suppression rule", s.suppression || "Suppress cells with <5 events"],
+          ["Site contribution model", pickTxt("contribution", s.contribution)],
+          ["Suppression rule", orFb(s.suppression, NOTSET("no small-cell suppression rule has been set"))],
         ]));
         children.push(h2("Sensitivity analyses"));
         if (sensitivity.length === 0) children.push(para("(none specified)"));
@@ -1597,8 +1995,8 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         n++;
 
         children.push(h1(`${n}. Ethics, data sharing, dissemination`));
-        children.push(p([text("Ethics. ", { bold: true }), text(s.ethics || "Each participating site obtains local IRB / ethics approval before data extraction.")]));
-        children.push(p([text("Dissemination. ", { bold: true }), text(s.dissemination || "Primary manuscript to a peer-reviewed pharmacoepidemiology / public-health journal.")]));
+        children.push(p([text("Ethics. ", { bold: true }), text(orFb(s.ethics, NOTSET("the ethics section was left empty")))]));
+        children.push(p([text("Dissemination. ", { bold: true }), text(orFb(s.dissemination, NOTSET("the dissemination section was left empty")))]));
         n++;
 
         window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
