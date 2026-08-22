@@ -523,10 +523,10 @@ const TIMELINE_PRESETS: Record<string, string> = {
       </button>
     </div>
 
-    <div data-state="ready" class="grid gap-8 lg:grid-cols-[1fr,1fr] items-start">
+    <div data-state="ready" class="grid gap-8 lg:grid-cols-[1fr_1fr] items-start">
 
       <!-- ── Wizard form (left) ─────────────────────────────── -->
-      <form data-builder class="space-y-6">
+      <form data-builder class="protocol-form space-y-6">
 
         <details open class="border border-slate-200 rounded-2xl bg-white shadow-sm">
           <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">
@@ -977,8 +977,8 @@ const TIMELINE_PRESETS: Record<string, string> = {
             <div class="border border-slate-200 rounded-xl p-3 space-y-2 bg-white">
               <div class="flex items-center justify-between gap-2 flex-wrap">
                 <p class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Import a calibration handoff (JSON)</p>
-                <div class="flex items-center gap-2">
-                  <input type="file" data-psc-import-file accept=".json,application/json" class="text-[11px] max-w-[15rem]" />
+                <div class="flex items-center gap-2 flex-wrap">
+                  <input type="file" data-psc-import-file accept=".json,application/json" class="text-[11px] max-w-full sm:max-w-[15rem]" />
                   <button type="button" data-psc-import-paste class="text-[10px] uppercase tracking-widest font-bold text-slate-600 border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded transition">Paste instead</button>
                 </div>
               </div>
@@ -2090,9 +2090,13 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
           const btn = (val, label) =>
             '<button type="button" data-psc-set="' + pscEsc(val) + '" data-psc-var="' + pscEsc(n) + '" class="text-[10px] font-semibold px-2 py-0.5 rounded border transition ' +
             (cls === val ? PSC_CHIP[val] : "bg-white text-slate-500 border-slate-200 hover:border-slate-400") + '">' + label + "</button>";
-          return '<div class="flex items-center gap-2 text-xs bg-white border border-slate-200 rounded px-2 py-1" title="' + pscEsc(ai ? ai.reason : "") + '">' +
+          // The three chips are a fixed ~300px wide together. Without wrapping,
+          // that is a floor the row cannot shrink below, and on a phone it held
+          // section 8b — and therefore the whole form column — open past the
+          // card edge. Let the chip group drop to its own line instead.
+          return '<div class="flex flex-wrap items-center gap-2 text-xs bg-white border border-slate-200 rounded px-2 py-1" title="' + pscEsc(ai ? ai.reason : "") + '">' +
             '<span class="flex-1 min-w-0 truncate">' + pscEsc(n) + badge + "</span>" +
-            '<span class="flex gap-1 shrink-0">' + btn("claims", "Claims") + btn("clinical", "Clinical-only") + btn("exclude", "Exclude") + "</span></div>";
+            '<span class="flex flex-wrap gap-1 shrink-0">' + btn("claims", "Claims") + btn("clinical", "Clinical-only") + btn("exclude", "Exclude") + "</span></div>";
         }).join("");
       };
 

@@ -37,6 +37,19 @@ body { font-family: var(--font-sans); }
 /* Make headings slightly bolder (extrabold) for a stronger visual */
 h1, h2, h3 { font-weight: 800; }
 
+/* Protocol builders: the wizard form is the left column of a two-column grid.
+   A <select> is as wide as its widest <option>, and a grid item's default
+   min-width:auto turns that width into a floor the column cannot shrink below.
+   So a single long option — "Case-case-time-control (CCTC); pairs current-case
+   crossover with a future-case control crossover" — held the whole form open at
+   1220px on a 360px phone, pushing every field in every section off the right
+   edge of the card. Measured: case-crossover +876px, SCCS +828px, ACNU +304px,
+   descriptive +207px. Let the control shrink and fill its label instead; the
+   full option text is still readable in the open dropdown, which the browser
+   sizes to its content rather than to the box. */
+.protocol-form { min-width: 0; }
+.protocol-form select { min-width: 0; width: 100%; max-width: 100%; }
+
 /* Subtle PHDc-green tint on home page (and any page using <body class="home-tint">) */
 .home-tint { background: linear-gradient(180deg, #ffffff 0%, #f6faf8 60%, #eef5f1 100%); }
 
