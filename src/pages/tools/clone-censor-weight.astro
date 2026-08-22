@@ -319,7 +319,12 @@ Comedications | 180</textarea>
     // Free text the user typed is followed by more of our prose. Without this the
     // exported Word ran the two together ("…whichever comes first Maximum follow-up…");
     // with a naive "." appended it double-punctuated anyone who typed one.
-    const stop = (t) => { const s = String(t == null ? "" : t).trim(); return s && !/[.!?:;)]$/.test(s) ? s + "." : s; };
+    // A closing bracket is not sentence-ending punctuation, and treating it as
+    // one made the tool's own placeholders run on: "…eligible for, all
+    // strategies) Eligibility, strategy assignment, and the start of follow-up
+    // are all aligned at time zero." A user's "(whichever first)" did the same.
+    // The bracket is only terminal when it closes something already punctuated.
+    const stop = (t) => { const s = String(t == null ? "" : t).trim(); return s && !/[.!?:;]\)?$/.test(s) ? s + "." : s; };
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     function renderScheme(s) {

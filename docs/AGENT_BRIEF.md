@@ -1229,3 +1229,285 @@ export claims asserted by unzipping a generated `.docx` and reading
 - The methodologist's frequency-matching point **overturned this run's own
   earlier fix**, which had shipped as a flat error. The fix was softened to name
   the fork. Had the two reviewers only agreed, that error would still be live.
+
+### Found 2026-08-22 by an eighth run — clone-censor-weight, and three shared components
+
+Seven runs had worked ACNU (×3), RWE Studio (×2), the Protocol Checker and
+case-control. This one rotated to **`src/pages/tools/clone-censor-weight.astro`**
+(746 lines, never opened by a run) plus the shared components it depends on —
+`DesignDiagram.astro`, `SitesPicker.astro`, `ProtocolCommon.astro`,
+`PhenotypeLibrary.astro`, `TargetChecklist.astro`. Two reviewers ran
+concurrently with genuinely different briefs, then each was given the other's
+list and told to attack it. **The second round changed the answer** — see
+"who was right" below.
+
+#### Environment: one harness trap that will cost you an hour
+
+- **`URL.createObjectURL` must not be stubbed when capturing a download.** The
+  obvious way to grab a `.docx` from a builder — monkey-patch
+  `URL.createObjectURL` to keep the blob and return a placeholder string — makes
+  `svgToPng` fail, because it rasterises the diagram by loading *its own* blob:
+  URL into an `<img>`. The page then correctly reports "the browser could not
+  render the diagram" and you conclude the site is broken when your harness is.
+  Record the blob and return the **real** URL. And take the blob whose type is
+  `wordprocessingml`, not the first one: on the five builders that embed the
+  figure the first blob is the SVG.
+- The session started on a **detached HEAD** again. `git push origin HEAD:main`.
+  (The seventh run saw a normal branch, so keep checking `git status`.)
+- Everything else in the fourth/sixth/seventh runs' notes still holds: `npm i
+  --no-package-lock --no-audit --fund=false` (26s); `npm pack docx@8.5.0` +
+  `page.route('**unpkg.com/**', …)` for a real `.docx`; Crossref/PubMed/doi.org
+  blocked, `WebSearch` only; the live site unreachable, so nothing here was
+  checked against `danielhttsai.github.io`.
+- **Do not rebuild the directory your reviewers are driving.** Build your own
+  changes to a second `--outDir` and leave theirs alone, or their round-two
+  observations are made against a tree that moved under them. One reviewer's
+  round-two list correctly flagged this: it had found a defect in `SitesPicker`
+  that had been fixed and rebuilt while it was reading.
+- The reusable harness (`harness.mjs` in this run's scratch) is small: serve
+  `dist-*` from `node:http`, `page.route` unpkg to the local docx copy,
+  `setFields` by `name`, then `preview`/`checks`/`diagramText`/`saveDocx`. The
+  whole script block is `is:inline`, so `page.evaluate(() => readForm())` and
+  `buildMarkdown(readForm())` work directly.
+
+#### Fixed this run
+
+Shared components first — these reach several builders each.
+
+- ~~**`DesignDiagram`'s `fmtDay` rounded a window into a different window.**~~
+  The brief's own open item, and worse than recorded. It abbreviated by
+  rounding: 350 d → "−1y", 364 d → "−1y", 89 d → "−3mo", 61 d → "−2mo". Not
+  decoration — `describeSpec` turns these into the written window list that
+  `designDiagramDocx` ships inside the `.docx`, the only machine-readable
+  description of the figure a Word reader gets. Worst case: an inclusion
+  look-back of 350 and an exclusion look-back of 365 both read "day −1y to 0",
+  so the figure asserted two different windows were the same one. **The
+  Protocol Checker had already fixed its own copy of this function** (sixth
+  run) and the two then disagreed — the drift this repo keeps paying for. Now
+  the checker's rule: abbreviate only exact conversions, "?" for a non-number.
+  Verified end to end in a real case-control `.docx`: "day −1y to 0" →
+  "day −350d to 0".
+- ~~**`SitesPicker`: one click to add a data source deleted the others.**~~
+  Found independently by this run and by the applied reviewer. It rewrote the
+  whole field from whichever boxes were ticked and skipped the write when none
+  were. Three failures: untick every site and the guard `sel.length` blocked
+  the last write, so zero boxes ticked left "Taiwan (TWB)" named as the data
+  source; the boxes have no `name`, so they are outside `readForm`/localStorage
+  and after a reload the field held three sites with nothing ticked; which made
+  the next click destructive — ticking a fourth site **replaced all three**.
+  Each box now owns exactly its own token, the boxes follow the field on load /
+  edit / reset, and hand-typed text is left alone. Shared by case-control, CCW,
+  ITS, sequential-trial and trend-in-trend.
+- ~~**A `?seed=` link destroyed the saved draft under a banner promising it was
+  recoverable.**~~ **Both reviewers ranked this first**, from different
+  directions, and it is the only defect either found that destroys the user's
+  *input* rather than producing a document a co-author could catch. The builder's
+  first `render()` autosaves to the same localStorage key the draft is in;
+  instrumented, that write lands ~66 ms after navigation with `readyState`
+  still `"loading"`. The banner then said — in Chinese, on pages written in
+  English — that the draft was still in the browser and that reloading without
+  the seed would bring it back. It brings back the seed. The draft is copied to
+  a `<key>.before-seed` backup before the seed is applied; the banner says
+  plainly that reloading will NOT recover it and offers a button that restores
+  it and reloads without the seed; it is bilingual. **Note the mechanism trap**:
+  one reviewer first proposed re-ordering the banner paint, and on re-deriving
+  it showed that cannot work — `applySeed` and the autosave write the same key,
+  so the draft dies on the first render whatever the paint order. It needed a
+  second key. Shared by every builder accepting `?seed=`.
+
+Then CCW itself.
+
+- ~~**The refusals never left the screen.**~~ The checks panel was the only place
+  this page said no. Grace 400 d against 90 d of follow-up showed a red ✕ and
+  exported a Word protocol *and* a TARGET checklist stating both numbers as
+  settled decisions, under "Word document downloaded." `blockers()` now paints
+  the panel, heads both exports and prefixes TARGET item 1a — one computation,
+  four surfaces, following case-control's `conflicts()`.
+- ~~**Three incoherent designs had no check at all.**~~ Maximum follow-up of 0
+  (which also disabled the grace-vs-follow-up rule, since that required
+  follow-up > 0); strategy A identical to strategy B; and **the outcome also
+  listed among the IPCW-weighted censoring events** — a persistence study could
+  export "Outcome: Treatment discontinuation" three paragraphs below "Events
+  weighted by IPCW: Treatment discontinuation", censoring every patient at the
+  event being counted. The applied reviewer called that last one the worst
+  thing either list contained, and it is the only one that produces *no* number
+  rather than a wrong one.
+- ~~**An off-list effect measure fell through to confident generic prose.**~~ The
+  brief's `selectedIndex = -1` family, live here. A stale draft or `?seed=`
+  leaves the select unmatched, the value reads back `""`, and §10 named "the
+  per-protocol effect on the risk of the outcome" — no measure, no horizon, no
+  contrast — with the HR caveat and the RMST-horizon error silently off too.
+  The five values are checked against the markup at load; an unset measure is
+  refused by name.
+- ~~**A parser used as a decision procedure** (the methodologist's framing, and
+  the right one — it was four bugs with one cause).~~ `parseRows` read the day
+  count through `dayInt`, which turns anything unreadable into **0**, and split
+  each row on its **first** pipe. "Comedications | one year" exported as a
+  look-back of "(0 d)"; "Chronic kidney disease | stage 3+ | 365" lost half its
+  name and read "stage 3+" as zero days. This happened on **every keystroke** —
+  the applied reviewer's original claim that a drag or a chip click caused it
+  was OVERSTATED in mechanism and UNDERSTATED in damage; the click only made it
+  permanent, by writing the guess back over the textarea that held the only
+  copy. Rows are read by `numDays` now, exactly as the three boxes are; the name
+  keeps its pipes; the figure omits a window it cannot place; `rowsJoin`
+  preserves the raw text of untouched rows. Same cause, same pass: `/^death/i`
+  was anchored, so a custom "All-cause death" was listed as an IPCW-weighted
+  censoring event with the Young 2020 note and the panel warning both silent;
+  and `/truncat/i` was substring-matched over the ticked list **and** the free
+  text together, so unticking truncation and writing "No truncation of the
+  weights is applied" made §8 assert truncation *was* pre-specified, three
+  paragraphs above §13 listing the denial.
+- ~~**Two free-text fields were filled in for the user, differently in each
+  export.**~~ Every other unfilled field exports a visible bracket, but the
+  deviation rule — the one decision that defines a CCW study, and not symmetric
+  between the arms — exported as finished prose describing a rule nobody chose.
+- ~~**The Word protocol carried no design diagram.**~~ `DesignDiagram.astro`
+  documents the recipe and `designDiagramMd` states that HARPER 7.2 requires
+  one. Five builders follow it; this one drew a diagram on screen and shipped
+  the document without it, silently. **Sequential-trial, SCCS and case-crossover
+  still do not** — the same three-line change each.
+- ~~**"The caveat in Section 10".**~~ One `effectText` feeds four surfaces that
+  number their sections differently or not at all: right in the Markdown
+  (1–13), pointing at "Subgroup analyses" in the Word file (1–11), dangling in
+  the abstract and TARGET. Nothing in that function may cite a section number;
+  there is a comment saying so.
+- ~~**TARGET item 7b prefixed a literal "Initiate ".**~~ The Strategy A box's own
+  worked example begins "Initiate anticoagulation…", so the tool's placeholder
+  produced "Initiate Initiate anticoagulation…" in the checklist a reviewer
+  reads — for a design where neither arm need be an initiation strategy.
+- ~~**The "as-started (ITT-analogue)" comparison paragraph.**~~ Unconditional, in
+  three documents, three untrue claims: it is an as-treated analysis, not an ITT
+  analogue (an ITT effect needs an assignment at time zero, and this design
+  exists *because* there is none); the gap between it and the CCW estimate does
+  not "index the immortal-time bias removed" (they differ in ≥5 respects); and
+  it prescribed Fine-Gray for "the competing risk of death" even when the
+  outcome *is* death. One string now, and it asks for the competing-risk choice
+  instead of making it.
+- ~~**The estimand had no direction, and the risk ratio was filed as an absolute
+  effect.**~~ All five branches now name strategy A minus strategy B and say
+  once that risk = 1 − survival.
+- ~~**`stop()` treated a closing bracket as sentence-ending punctuation**~~, so
+  the tool's own placeholder ran on: "…eligible for, all strategies) Eligibility,
+  strategy assignment, and…". A bracket is terminal only when it closes
+  something already punctuated.
+
+#### What the two reviewers disagreed about, and who was right
+
+**The headline: the methodologist's strongest finding was wrong, and it was the
+methodologist who broke it.** Asked to attack its own list, it withdrew its
+#2 ("positivity stated backwards", four emission sites, ranked second overall).
+The strategies in this design are **complementary**, so deviating from arm A
+*is* adhering to arm B: `P(deviate) > 0 in both arms` ⟺ `P(adhere) > 0 in both
+arms` ⟺ `0 < P(initiate by G | L) < 1`. The file's condition is **equivalent to
+the correct one**, and its "the next sentence contradicts it" argument
+collapsed — the next sentence agrees with it. **Do not "fix" that paragraph to
+say the opposite.** Had the two reviewers only agreed, a correct statement about
+positivity would have been replaced with a wrong one, in four places, in the
+identifying-assumptions section of every exported protocol.
+
+- Its #3 ("stabilised weight defined as the unstabilised weight") went the same
+  way: the numerator is a modelling *choice*, and the em-dash clause glosses
+  what an IPCW is. **Under-specified, not wrong.**
+- Its #1 (the survival-difference/risk-difference sign) was OVERSTATED as
+  "licenses reporting a benefit as a harm" — magnitude-only shorthand is
+  ordinary, and Maringe's own abstract uses it. What survived is smaller and was
+  fixed: no direction was ever stated, and the `both` branch was flatly wrong.
+- The applied reviewer's #6 verdict ("the tool never refuses") was **SPLIT**: two
+  of its five cases *did* raise red ✕ on screen and were a restatement of "the
+  panel does not travel"; three raised nothing anywhere and were new to both
+  lists. Worth copying: make a reviewer separate "the tool did not detect it"
+  from "the tool detected it and did not deliver it".
+- **Neither reviewer's top finding appeared on the other's list** — the same
+  result as the seventh run. The applied reviewer led with the seed path
+  destroying a draft; the methodologist led with the estimand. Both were right,
+  and both lists independently contained the `?seed=` item by the end.
+
+#### Open, examined this run, deliberately left
+
+Ranked. The first two are the same question and are **Daniel's call**.
+
+- **The CCW form cannot state how any variable is measured.** There is no
+  control matching `/code|def|algorith|valid/` anywhere on the page — no code
+  set, no operational definition, for population, outcome or anything else. So
+  the phenotype-library buttons, which declare only `data-target-name`, write a
+  bare label with nowhere to put the ICD codes the modal has just displayed
+  under the heading *Validated phenotype library*. This is the third run to find
+  this button pattern (ACNU's indication, case-control's three, now these), and
+  the audit is done: **`clone-censor-weight`, `interrupted-time-series`,
+  `sequential-trial` and `trend-in-trend` all have name-only buttons and no
+  field to point a `data-target-codes` at.** ACNU, case-crossover, SCCS,
+  descriptive-analysis and case-control do have the fields. So this is not a
+  wiring bug in four files; it is four builders that never asked for an
+  operational definition — TARGET 7e and HARPER's operational-definition items,
+  omitted outright. Adding the fields is a feature.
+- **The defaults assert a design nobody made.** Four subgroups and five
+  sensitivity analyses ship ticked and export as pre-specified. The sharp half
+  is not the lists: §8 *reasons* from a default tick — "Truncation at the
+  1st/99th percentiles is examined as a pre-specified sensitivity analysis" — a
+  statistical decision asserted as pre-specified that nobody made. (The
+  free-text half of that sentence was fixed; the default tick still drives it.)
+  Same class as the ACNU and case-control defaults notes. **Defaults policy.**
+- **`PC.mountAmendments(form)` is still not called here**, and `readForm()`
+  omits `amendments`. Better evidenced than the third and seventh runs' version:
+  a seeded amendments log prints a full HARPER table in the export, then one
+  reload and the same draft says "no amendments have been made" — because the
+  field is never saved. That is data loss, not only an unsupported claim. Seven
+  builders, unchanged.
+- **§7's censoring schedule is hard-coded to initiate-vs-defer.** For strategies
+  "Continue statin indefinitely" vs "Discontinue within the grace period" it
+  still emits "a clone in the **initiate** arm can only deviate at one time …
+  whereas a clone in the **deferred** arm can deviate at any moment" and
+  prescribes a time-fixed weight model for one and a time-varying model for the
+  other — the wrong models, for arms that do not exist. Fixing it needs the form
+  to know what kind of strategy pair it has, which is a new control.
+- **A non-grace strategy pair is not detected** (e.g. "Rivaroxaban" vs
+  "Warfarin"), and the protocol asserts "Grace period: 14 days … during which
+  the data are still compatible with either strategy" — a false claim about the
+  data. Left deliberately: the tool cannot tell two drug names from two
+  strategies, and guessing would manufacture exactly the wrong-label bug this
+  brief hunts.
+- **What survives of the positivity finding**, having lost the "backwards"
+  claim: the condition as written does not generalise to the non-complementary
+  strategy pairs the form permits (a patient may take neither drug); it is
+  scoped "within the grace period" while §8 says the weights are cumulative over
+  follow-up and the default censoring events occur after it; and "non-zero"
+  should be "bounded away from zero". Small, and it needs the item above first.
+- **"Stabilised" is said four times and the numerator model is never stated**,
+  while §8 commits the primary analysis to untruncated weights. An analyst
+  cannot implement the section as written.
+- **The variance claim may overstate.** "Model-based standard errors must not be
+  used … they are too small" — clone duplication is anticonservative but
+  treating estimated weights as fixed is conservative, so the net sign is not a
+  theorem; and a patient-clustered robust variance, the standard alternative, is
+  excluded by implication without being mentioned. No bootstrap replicate count
+  is pre-specified. **The reviewer marked this SUSPECT, not established, and it
+  was not simulated. Treat it as a lead.**
+- **A blank inclusion look-back is not a blocker**, so "inclusion criteria
+  assessed over (not specified)" appears inside the sentence defining the weight
+  model, and in TARGET item 7a.
+- **A row's day count is rounded silently** (365.7 → 366) — the "rounded to whole
+  days" info check still covers only the three numeric boxes.
+- **`SitesPicker` tokenises on ";"**, so a hand-typed data source containing a
+  semicolon is split into two tokens. Harmless today (non-site tokens are
+  preserved verbatim) but it is the same species.
+- **`ProtocolCommon`'s tail asserts facts about the study it cannot know** —
+  that IRB approval is obtained, that the protocol is registered, that ≥80%
+  power is targeted, that analytic code is peer-reviewed. Every builder, every
+  export.
+- **Sequential-trial, SCCS and case-crossover export no design diagram**, as
+  above.
+
+#### Citations — checked, nothing changed
+
+All seven `REFS` entries were confirmed from search snippets, author lists,
+journals, volumes and page ranges matching the file exactly, including Gaber CE,
+Hanson KA, Kim S, Lund JL, Lee TA, Murray EJ (Curr Epidemiol Rep 2024;11(3):
+164-174) with all six authors in order, and "Reflection" singular in Maringe.
+The inline attributions were checked too: Maringe's 1-year survival + 1-year
+RMST pair is confirmed, Maringe on the Cox model and the causal HR is supported
+in substance, Young 2020 for the death/hypothetical estimand is correct.
+**Search-snippet evidence only — Crossref, PubMed and doi.org are blocked; this
+is not "verified against Crossref".** No fabricated reference was found and
+**no citation was changed**. Two housekeeping notes: the Cashin 2025 reference
+is rendered two different ways across the protocol and the TARGET export, and
+Gran 2010 and Gaber 2024 are in the reference list but never cited in the text.
