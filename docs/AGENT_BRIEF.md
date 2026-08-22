@@ -1835,3 +1835,285 @@ Ranked. The first is the highest-value thing left in this file.
 - **390 px and 1024 px viewports**: no horizontal overflow (390/390, 1024/1024).
 - The design diagram is exported (`designDiagramFigure` + `designDiagramDocx`) and
   `lastFigNote` was empty on every run — Figure 1 embedded every time.
+
+### Found 2026-08-22 by a tenth run — self-controlled case series, the biggest never-opened builder
+
+Nine runs had worked ACNU (×3), RWE Studio (×2), the Protocol Checker,
+case-control, clone-censor-weight and descriptive-analysis. This one rotated to
+**`src/pages/tools/self-controlled-case-series.astro`** (1529 lines, never
+opened). Two reviewers ran concurrently with genuinely different briefs, and the
+orchestrator worked its own list; **the orchestrator and the methodologist
+converged independently on two defects from different starting points**, which
+is the usual good evidence that they were real.
+
+The focus chosen was deliberately narrow: **the numbers that define the SCCS
+estimand, and whether the exported document says what the form says.** In an
+SCCS the period strip *is* the estimand — the IRR is exposed person-time against
+reference person-time — so a window length is not a presentational detail.
+
+#### Environment: nothing newly blocked, three harness notes
+
+- `npm i --no-package-lock --no-audit --fund=false`, `npm pack docx@8.5.0` +
+  `page.route('**unpkg.com/**', …)`, Crossref/PubMed/doi.org blocked with
+  `WebSearch` only, the live site unreachable — all still true. **Nothing here
+  was checked against `danielhttsai.github.io`.**
+- The session was on a **detached HEAD** again. `git push origin HEAD:main`.
+- **Pick a port your reviewers are not on.** Two subagents and the orchestrator
+  all defaulted to 8099 and the second one died on `EADDRINUSE` before printing
+  anything useful. Give each a distinct port up front.
+- **`page.mouse` does not drive this page's drag handles.** They listen for
+  `pointerdown` and filter on `pointerId`, and Playwright's mouse API produced
+  no change at all — on the pre-change build too, which is how it was confirmed
+  to be the harness and not a regression. Dispatch real `PointerEvent`s from
+  `page.evaluate` instead (`pointerdown` on the handle, `pointermove` on
+  `document` with the same `pointerId`, wait two `requestAnimationFrame`s
+  because `apply()` is rAF-throttled, then `pointerup`). That works.
+- `window.__builder = { readForm, buildMarkdown, buildDocx }` is already exported
+  from the IIFE on this page, so `page.evaluate(() => window.__builder.buildDocx(...))`
+  gives you a real .docx without touching the DOM.
+
+#### Fixed this run
+
+All executed in Chromium against a local build, before and after. Every export
+claim was asserted by unzipping a generated `.docx` and reading
+`word/document.xml`, never inferred.
+
+- ~~**Every unreadable window length silently became one day.**~~ The sharpest
+  thing in the file, and the house `parseInt` family in the field that defines
+  the estimand. `parseRows` and `parsePeriods` both read the day count as
+  `Math.max(1, parseInt(p[1]) || 1)`. Executed on the exported protocol table:
+  `1e3` → 1 d (parseInt stops at the "e"), `thirty` → 1 d, `0.5` → 1 d, `-30` →
+  1 d, `1,000` → 1 d, blank → 1 d, and a line that had lost its "|"
+  (`Reference 90`) exported as a period *named* "Reference 90" lasting one day.
+  **The write path was worse than the read path**: `rowsJoin`/`periodsJoin`
+  rebuild the whole textarea from parsed rows and run on every chip click and
+  every edge drag, so clicking "+ Frailty" rewrote `Comedications | one year` to
+  `Comedications | 1` — the textarea was the only copy. Both parsers are
+  tri-state now (`DAYS_RE`/`readDays`, the cohort builder's reading), unreadable
+  is carried as `raw` and never becomes a number, the joins write the original
+  text back, the exports name the line, the strip refuses to draw rather than
+  assert a geometry the form does not determine, and a `stop` check names the
+  field. **`30 days` still reads as 30** — that case was already right.
+  Splitting on the **last** "|" also lets a period name contain one
+  (`Sex (M|F) window | 30` parses correctly) and turns a pipe-less line into a
+  named period with a missing length rather than a silent one-day one.
+- ~~**Zero could never be said.**~~ Once lengths are read rather than clamped up
+  to 1, the two zeros differ: a 0-day pre/post/washout segment is legitimate
+  (this page's own sensitivity list offers "Alternative pre-risk window (0, 30,
+  60 d)") and gets an info note; a 0-day *exposure* window leaves no exposed
+  person-time, so the IRR has no numerator, and that is a blocker.
+- ~~**The structured abstract was a constant.**~~ The `pcOf` bug in a third
+  file. It asserted "a conditional Poisson (self-controlled) model contrasting
+  exposed vs unexposed person-time within each case" for **all three** design
+  variants — including active-comparator, whose own option text promises "no
+  reliance on a 'no-drug' baseline", so there is no unexposed time in the
+  contrast at all. It also outlived `primaryModel`, `effectMeasure` and
+  `metaMethod`. Read from the form now; an unset field names its section rather
+  than being replaced by a plausible constant.
+- ~~**"Pretreatment" was not a pre-exposure window.**~~ The page header tells the
+  user to "separate a short **pretreatment** window (e.g., 14 days)"; typing
+  exactly that produced a purple "Custom period" and then the panel reported
+  "No pre-exposure risk window". The tool contradicting its own instructions.
+- ~~**A washout was a post-exposure risk window.**~~ Different objects: a
+  post-risk window is a parameter the conditional Poisson model estimates, a
+  washout is person-time removed from the likelihood. A segment labelled
+  "Washout" was drawn in the colour the legend called "Post-exposure risk" — the
+  figure's key disagreeing with the label on the bar. Own kind, colour and
+  legend entry now, and because the tool genuinely cannot tell which is meant,
+  it asks.
+- ~~**Nothing compared the period strip with the risk-window dropdown**~~, though
+  §6 prints both in one table: a strip reading "Exposure risk 30 d" was exported
+  directly above "Days 0-180 after exposure start". Two statements of the
+  estimand, two different IRRs. Deliberately **silent on the authored defaults**
+  ("Entire exposure episode" beside a 30-day segment), where the strip is a
+  schematic rather than a contradiction — a red mark on an untouched page
+  teaches people to ignore the panel.
+- ~~**An active-comparator SCCS with an untreated baseline and no comparator.**~~
+  Section 5 says "no reliance on a 'no-drug' baseline"; section 6's baseline
+  field still read "All observation time NOT in pre-risk, risk, or post-risk
+  windows", which is precisely that baseline; and the comparator drug is named
+  **nowhere** in the document because the form has no field for one. The tool
+  cannot supply the drug, so it says what is wrong and where the answer goes.
+- ~~**A stale draft blanked a `<select>` and the export answered for it.**~~ The
+  brief's own standing item, live here. `writeForm` assigned `el.value` with no
+  membership check; `selectedIndex = -1` renders an empty box, `FormData` omits
+  the control entirely, and each export's `|| …` supplied a definite choice.
+  Reproduced from a draft carrying `sccsVariant: "nested-case-control"`: the
+  Design line and §5 both asserted "Standard SCCS (Farrington 1995)" and §10 a
+  DerSimonian–Laird meta-analysis, none of it chosen, nothing on screen. The
+  dead value **must be captured at restore** — it is not recoverable afterwards.
+- ~~**The Word protocol shipped without the design diagram.**~~ HARPER item 7.2,
+  and one of the brief's own open items ("Sequential-trial, SCCS and
+  case-crossover export no design diagram"). Verified by unzipping: `word/media`
+  now carries the figure beside the logo, under a numbered caption. **One trap
+  the shared helper does not cover**: `fig.lines` comes from a WeakMap that only
+  `renderDesignDiagram` fills, and this page draws its own bespoke SVG, so the
+  plain-text window list came back **empty** — and that text is what an automated
+  checker reading the .docx sees, since it cannot see the picture at all. Built
+  from the same parse the strip is drawn from. When a length is unreadable there
+  is no diagram, and the document says so where the figure should be.
+- ~~**A "validated phenotype library" citing a paper that says otherwise.**~~ The
+  `validation` field was hidden from the user, and appended verbatim to the
+  numbered reference list. The self-harm entry read "Man KKC et al Lancet
+  Psychiatry 2024 (PMID 39241791) used a comparable composite definition". PMID
+  39241791 is **Luo H, Chai Y, Li S, et al, "Psychotropic drug prescribing before
+  and during the COVID-19 pandemic among people with depressive and anxiety
+  disorders: a multinational network study", Lancet Psychiatry
+  2024;11(10):807-817** — a drug-utilisation trends study defining no self-harm
+  outcome, first author not Man. **The brief's third and ninth runs flagged this
+  same PMID from other files; that is now four independent agreements.** The
+  GI-bleeding entry cited "Andersen M, Pratt N et al. PDS 2013" for "AsPEN PSSA
+  NSAID/PPI safety work"; that record is the AsPEN **network description** paper,
+  PDS 2013;22(7):700-704, PMID 23653370 — not PSSA work, not NSAIDs or PPIs, not
+  a validation. Both confirmed twice, independently. **Neither was replaced with
+  a substitute citation**: removing a claim shown false is safe, inventing its
+  replacement is how a fabricated reference got in here once already.
+  `validation` (a real validation study, the only thing reaching the reference
+  list) is now split from `provenance` (a "used in / see also" note, shown but
+  never a numbered reference) — the structural fix the ninth run recommended.
+  Two entries keep a validation study; six say plainly they have none, **in the
+  modal, at the moment of picking**. The two survivors both validated ICD-9-CM
+  coding while the code sets shown are ICD-10, and now say so.
+- ~~**`pickedCitations` was never pruned**~~ (standing brief item). Pick MI then
+  stroke and the MI validation study stayed in a stroke-only protocol's
+  reference list, and survived a reload. A citation travels only while the
+  phenotype it validates is still named in the form. The reference list was also
+  built by **two copies of one expression**, one per export — the drift pattern
+  this codebase keeps getting caught by — and is built once now.
+- ~~**Every cross-reference named a section of the form, printed into the
+  export**~~, whose numbering differs: "(Event handling, section 4)" pointed at
+  the exposure table. They name the field now.
+- ~~**STROBE items 5 and 12 asserted what the protocol denied.**~~ Item 5 said
+  pre-exposure windows were "as defined in the protocol" even when the same
+  document carried "No pre-exposure risk window"; item 12 made season a
+  time-varying covariate directly under item 11 reporting it not adjusted.
+- ~~**"No assumption checks are outstanding for this draft."**~~ Printed over a
+  wholly blank protocol, where it reads as an attestation. It says what it
+  actually means now — that four pattern matches found nothing.
+- ~~**Table 1 had identical columns by construction.**~~ `groupBy: "risk vs
+  baseline period"` → "Table 1 — baseline characteristics by risk vs baseline
+  period", in a design where every case contributes person-time to both. By site
+  now.
+- ~~**A sensitivity analysis that was the primary analysis.**~~ "Restrict to
+  first event only (vs all events)" ships ticked; set the case definition to
+  first-event-only and the protocol pre-specifies its own primary analysis as a
+  check on itself.
+- ~~**The feasibility regexes were mostly dead.**~~ The trailing-`\b` defect the
+  ninth run fixed in descriptive-analysis, live here in a second copy: every stem
+  in five of six groups matched nothing — "carcinoma", "malignancy", "tumours",
+  "pregnancy", "gestational age", "births", "echocardiogram", "angiography",
+  "radiology", "genomics", "deaths". `labs` was again the one group written
+  without the trailing `\b` and the one group that worked. The vetted
+  descriptive-analysis replacements were mirrored rather than re-derived,
+  including the deliberate `angio` → `angiograph` narrowing.
+
+#### Checked and clean (do not re-derive)
+
+- **The four assumption statements** (`ASSUMPTIONS`, lines ~135-164) are
+  methodologically correct — the methodologist read each `plain`/`precise`/`check`
+  against the design's actual requirements and found nothing backwards. In
+  particular assumption 1's "mirror image" argument (an excess of exposures after
+  an event ≡ an excess of events before an exposure, which is why a pre-exposure
+  window measures it) is the standard justification, stated correctly; and
+  assumption 2 correctly says the standard model does not apply at all when the
+  outcome is death.
+- **Every form control is read.** All 43 `name="…"` values resolve to a
+  `s.<x>`/`elements.<x>` read, and no read lacks a control. That is the brief's
+  own recommended per-builder audit, done — this file does **not** have the
+  `s.subgroups` vs `subgroupsPick` defect.
+- **This is one of the two builders that DO mount the amendments editor.**
+  `PC.mountAmendments(form)` is called, `amendments` is a real control, and
+  `readForm()` includes it — so the eighth run's data-loss finding does **not**
+  apply here. The residual "no amendments have been made" wording is
+  ProtocolCommon's, and is a cross-cutting item, not this page's.
+- **The seven `references` entries were all confirmed** from search records —
+  Whitaker 2006 Stat Med 25(10):1768-97; Farrington 1995 Biometrics 51(1):228-35;
+  Petersen 2016 BMJ 354:i4515; Whitaker 2018 Stat Med 37(4):643-58; Farrington
+  2011 JASA 106(494):417-26 (**and it is genuinely about event-dependent
+  observation periods**, as its annotation says); Wang 2021 BMJ 374:n1925 with the
+  14-day pretreatment window and IRR 6.17 both confirmed; Hsieh 2019 Clin
+  Epidemiol 11:349-358; Shao 2019 PDS 28(5):593-600. Author lists, journals,
+  volumes and pages match the file. **Search-record evidence, not a Crossref
+  check.** No fabricated reference was found among them and none was changed.
+- **The `protocol-generator.astro` hub entry for SCCS is accurate** — `plain`,
+  `when`, `assumes` and `fails` are all methodologically correct (fatal outcome,
+  event-dependent exposure, and chronic continuous exposure with no unexposed
+  time are the right three failure modes), and its Petersen 2016 citation is
+  confirmed. Nothing was changed there.
+- **390 / 768 / 1024 / 1440 px**: no horizontal overflow at any of them.
+- **"Clear all"** already restored each select's *authored* default rather than
+  `selectedIndex = 0`, and restores `defaultValue` for text and textareas. That
+  earlier fix is intact and was re-verified.
+- `renderScheme` geometry is right: day 0 lands at the start of the first
+  Exposure risk segment, the default strip spans -104 → +134, and the calendar
+  anchor correctly moves day 0 to cohort entry with a negative baseline block.
+
+#### Open, examined this run, deliberately left
+
+Ranked. The first two are the highest-value things left in this file.
+
+- **The protocol never says what the IRR is, or is not.** Nothing states that it
+  is a within-person relative incidence estimated in cases only, that no absolute
+  risk or risk difference is estimable without an external denominator, and that
+  it is **not** interchangeable with a cohort hazard ratio — while section 8 of
+  the same site pools SCCS IRRs with other designs' estimates. The headline
+  number goes out unqualified. This is prose, not a feature, and is the cheapest
+  large win left.
+- **`ProtocolCommon`'s "Study size and feasibility" paragraph is a cohort power
+  calculation.** "Power is assessed per data source … the study targets ≥ 80%
+  power to detect the smallest clinically important effect at a two-sided α =
+  0.05" — but nothing in this form collects a smallest clinically important
+  effect, an expected IRR, a case count or an exposed-time fraction, and SCCS
+  power depends on the number of *cases* and the proportion of observation time
+  that is exposed, not on a two-arm α/power. **Left because it is shared by all
+  nine builders** and the brief already records the ProtocolCommon tail as
+  cross-cutting; a per-page `skip: ["studySize"]` would make the nine
+  inconsistent. Worth doing deliberately, across the set.
+- **The Farrington event-dependent *exposure* sensitivity item.** The default
+  list offers "Method of Farrington for event-dependent exposure (SCCS-EDE)"
+  while the only Farrington method the protocol cites is the JASA 2011
+  event-dependent *observation periods* paper — a different problem with
+  different methods. **Left because the brief records that Daniel asked for this
+  item to be left for now**; recorded here because a reviewer reached the same
+  conclusion independently, which strengthens the case whenever he revisits it.
+- **The "AsPEN" attribution on Wang 2021 is unverified.** The page calls it "the
+  AsPEN antipsychotic-falls series" and "AsPEN exemplar" in the header and in
+  assumption 1's `check` string, which is exported into every protocol. The
+  paper's *content* is confirmed (14-day pretreatment window, pretreatment IRR
+  6.17, the authors' reading of it as underlying disease); every snippet found
+  describes it as a single-country Taiwan NHIRD analysis, and no AsPEN
+  affiliation could be confirmed either way. The phenotype-library entry was
+  reworded to "a Taiwan NHIRD self-controlled case series", which the title and
+  author affiliations support. **The header and assumption strings were left
+  alone: this is a lead, not a finding**, and the brief is explicit that
+  attributions are not rewritten on a reviewer's recollection.
+- **Multiple exposure episodes are never addressed.** The form defines
+  days-of-supply plus a grace period, which generates *many* episodes per person,
+  but the strip, the diagram and section 6 all describe exactly one. Nothing says
+  whether risk windows from successive dispensings are pooled, treated as
+  recurrent, or truncated when they overlap — and the diagram cannot show it.
+- **Cases that contribute nothing to the likelihood.** A case with no unexposed
+  (or no exposed) time drops out of the conditional likelihood entirely. The
+  protocol never says so, never estimates how many, and the flow diagram does not
+  account for them.
+- **Other missing pre-specifications a referee would ask for**: an SCCS-specific
+  sample-size statement; whether age is a factor and what happens to sparse
+  bands; a small-cell/disclosure rule and what a site does when the model will
+  not fit (separation, zero events in a window); multiplicity across four default
+  subgroups × five default sensitivity analyses × N sites; missing data (STROBE
+  item 12 asks and the form has no field); and a negative-control outcome that
+  names no outcome and no decision rule ("should show null" is not falsifiable
+  as written).
+- **`pcOf.data` ignores `sitesOther`**, so a study run entirely at hand-typed
+  sites has an abstract reading "multi-national AsPEN data sources".
+- **`ProtocolCommon`'s `defaultOutputs` uses cohort language for a case series** —
+  "Participant-flow diagram (source population → analytic cohort…)" — and this
+  page's own `plannedOutputs` adds "Case-selection flow diagram", so the planned
+  outputs list two flow diagrams. Cross-cutting; not fixable from this page
+  without making the nine builders inconsistent.
+- **The checks panel does not sort by level**, so a ⛔ can appear below a ⚠. Pre-existing;
+  cosmetic, but the blocker is the one to read first.
+- **`riskWindowDef`'s "Entire exposure episode" is data-driven** (days of supply +
+  grace) while the strip is a fixed length. The new contradiction check
+  deliberately stays silent there, treating the strip as a schematic — which is
+  defensible but means the one default combination is never questioned.
