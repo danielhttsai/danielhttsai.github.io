@@ -1420,6 +1420,13 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         if (s.eventHandling !== "first" && FATAL_RX.test(outcomeBlob)) {
           out.push({ lvl: "warn", t: "Recurrent-event handling with an outcome that can happen only once", d: "Assumption 3. The Event handling field is set to all events per person, but the outcome as written cannot recur. Set it to first event only." });
         }
+        // "Restrict to first event only (vs all events)" ships ticked. When the
+        // primary analysis is already first-event-only, the protocol
+        // pre-specifies a sensitivity analysis identical to its own primary
+        // analysis — and both statements are exported, three sections apart.
+        if (s.eventHandling === "first" && (s.sensitivityPick || []).some((x) => /Restrict to first event only/i.test(x))) {
+          out.push({ lvl: "warn", t: "A sensitivity analysis that repeats the primary analysis", d: "The case definition is set to first event only per person, and \"Restrict to first event only (vs all events)\" is also ticked as a sensitivity analysis — so the protocol pre-specifies, as a check on its primary analysis, the primary analysis. If the point is to test the independence assumption, the informative direction is the other one: allow all events per person and see whether the interval widens." });
+        }
         if (s.seasonAdj === "none") {
           out.push({ lvl: "info", t: "Season not adjusted", d: "Assumption 4. Seasonality is a within-person time-varying confounder that the self-controlled design does not remove. If the outcome or the prescribing has any seasonal pattern, adjust for calendar month; if you leave it out, state why in the protocol." });
         }
