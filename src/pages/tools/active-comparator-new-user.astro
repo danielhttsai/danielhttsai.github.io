@@ -1800,7 +1800,20 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         // calibration was still removing most of the bias. Bands below are a
         // reading of Lunt's Table 2 plus our simulation, not a published cut-off.
         const surroP = pscNum(s.pscSurroP), surroCoef = pscNum(s.pscSurroCoef);
-        const surroS = pscNum(s.pscSurroS);
+        // S is the share of the outcome information carried by both propensity
+        // scores that the gold-standard score carries alone, so by construction
+        // it lies between 0 and 100. Anything outside that is an unreadable
+        // entry, not a weak result: the min/max on the input are advisory only
+        // (nothing on this page calls checkValidity, and no button submits a
+        // form), so a mistyped 950 used to clear the `>= 90` test, return
+        // "s-high", and release the calibrated estimate this section
+        // deliberately withholds — together with the licence telling a later
+        // study it may reuse the correction with no validation data of its own.
+        // Refuse it, say so on screen, and fall back to whatever other evidence
+        // about surrogacy exists.
+        const surroSRaw = pscNum(s.pscSurroS);
+        const surroSBad = surroSRaw !== null && (surroSRaw < 0 || surroSRaw > 100);
+        const surroS = surroSBad ? null : surroSRaw;
         const surroTestable = s.pscSurroTestable !== "no";
         // A supplied S or p wins over the "no outcomes" dropdown: neither can be
         // computed without outcomes, so their presence is the better evidence
@@ -1813,7 +1826,7 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
           claims, clinical, excluded, a0, a1, a2, a1se, a2se, bT, bTse, bP,
           k, bC, naiveLo, naiveHi, bootLo, bootHi, hasBoot,
           ratio, measure, nonCollapsible, scaleLabel,
-          surroP, surroCoef, surroS, surroTestable, surroVerdict,
+          surroP, surroCoef, surroS, surroSRaw, surroSBad, surroTestable, surroVerdict,
           releaseLevel: pscRelease(surroVerdict), contradiction: pscContradiction(clinical, claims, a1, a2),
           bootB: (s.pscBootB || "").trim() || "1000",
           r2: pscNum(s.pscR2),
@@ -2773,6 +2786,7 @@ _Drafted with the AsPEN protocol builder (${today})._
           if (m.clinical.length === 0) checks.push({ level: "warn", msg: "PS calibration is switched on but no covariate is marked clinical-only — the gold-standard and error-prone scores would be identical and the correction would be a no-op. Mark the variables the claims database cannot see." });
           if (m.claims.length === 0) checks.push({ level: "warn", msg: "PS calibration is switched on but no covariate is marked claims-available — there is no error-prone propensity score to calibrate." });
           if (!(s.pscValName || "").trim()) checks.push({ level: "info", msg: "Name the validation dataset that holds both the claims and the clinical variables (Section 8b)." });
+          if (m.surroSBad) checks.push({ level: "warn", msg: "Surrogacy S was entered as " + pscFmt(m.surroSRaw, 1) + "%, which S cannot be: it is the percentage of the outcome information carried by both propensity scores that the gold-standard score carries alone, so it lies between 0 and 100. This value is being ignored rather than read as strong surrogacy, so no calibrated estimate is released on the strength of it. Re-run the S block in the R code and enter the number it prints — if you meant a proportion such as 0.93, enter 93." });
           // Wan F, Am J Epidemiol 2024;193(2):360-9 — the two bias sources.
           if (m.surroVerdict === "s-low") checks.push({ level: "warn", msg: "Surrogacy is absent (S = " + pscFmt(m.surroS, 1) + "%): the error-prone PS carries most of the outcome information. Lunt's scenarios at this level produced bias reduction of −132% to −189% — calibration roughly doubled the error. Report the naive estimate and report S as the reason calibration was not applied." });
           if (m.surroVerdict === "s-mid") checks.push({ level: "warn", msg: "Partial surrogacy (S = " + pscFmt(m.surroS, 1) + "%). This is the region where our simulation turned: at S ≈ 82% calibration was worse than doing nothing in 5 of 5 replicates. Do not present the calibrated estimate as a correction — see 'If surrogacy cannot be supported' in Section 7b of the export." });
