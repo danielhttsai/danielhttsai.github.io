@@ -839,8 +839,13 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         }
         return out;
       };
+      // Captured at restore, because it cannot be recovered afterwards: a
+      // <select> left at selectedIndex = -1 contributes NOTHING to FormData, so
+      // by the time anything reads the state the dead value is simply gone.
+      let staleSelects = [];
       const writeForm = (state) => {
         const multi = new Set(["sites", "sensitivityPick", "subgroupsPick"]);
+        staleSelects = [];
         for (const el of form.querySelectorAll("input, textarea, select")) {
           const name = el.name;
           if (!name) continue;
@@ -848,7 +853,29 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           // Radios carry the option value in .value — assigning to it would rewrite the option
           // itself (collapsing the group), so restore by ticking the matching radio instead.
           else if (el.type === "radio") { if (state[name] !== undefined) el.checked = String(state[name]) === el.value; }
-          else if (state[name] !== undefined) el.value = state[name];
+          else if (state[name] !== undefined) {
+            // A <select> whose stored value is no longer one of its options was
+            // assigned anyway. `el.value = x` is a silent no-op there: it leaves
+            // selectedIndex = -1, so the box renders empty, FormData omits the
+            // control, the state key is `undefined`, and each export's `|| …`
+            // fallback then supplied a definite choice of its own. Reproduced
+            // with a draft carrying sccsVariant "nested-case-control": the
+            // protocol's Design line and section 5 both asserted "Standard SCCS
+            // (Farrington 1995); within-person comparison of exposed vs
+            // unexposed time" — a design variant nobody picked — with nothing
+            // on screen to say so. Keep what the markup declares, and name what
+            // was dropped.
+            if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === state[name])) {
+              staleSelects.push({
+                name,
+                value: String(state[name]),
+                label: (el.closest("label")?.querySelector("span")?.textContent || name).trim(),
+                kept: (el.options[el.selectedIndex] || {}).text || el.value,
+              });
+              continue;
+            }
+            el.value = state[name];
+          }
         }
       };
       // A picked citation travels only while the phenotype it validates is still
@@ -1339,6 +1366,11 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           out.push({ lvl: "stop", t: "A window length could not be read", d:
             unreadable.map((x) => "In the " + x.where + ", “" + x.r.name + "” " + (x.r.empty ? "has no length after its “|”" : "gives its length as “" + x.r.raw + "”, which is not a whole number of days")).join(". ") +
             ". No length has been assumed for these, so they are missing from the protocol rather than wrong in it, and the design figure is not drawn. Write each line as Type | days, e.g. Exposure risk | 30. In an SCCS the window lengths are the estimand: the incidence rate ratio is exposed person-time against reference person-time, so a length the tool guessed would change the quantity being estimated." });
+        }
+        if (staleSelects.length) {
+          out.push({ lvl: "stop", t: "Your saved draft asked for a choice this form no longer offers", d:
+            staleSelects.map((x) => "“" + x.label + "” was saved as “" + x.value + "”, which is not one of its options; it has been left at “" + x.kept + "”").join(". ") +
+            ". Check that setting before you export: a value the form cannot show is a value the protocol cannot honour, and it is not recoverable from the saved draft once the page has loaded." });
         }
         const dos = readDays(s.daysOfSupply), grc = readDays(s.grace);
         if (!dos.ok || !grc.ok) {
