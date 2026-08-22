@@ -255,38 +255,145 @@ const SENSITIVITY = [
     const mergeList = (pick, custom) => [...(pick || []), ...String(custom || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean)];
     const or = (s, d) => (s && s.length ? s : d);
 
+    // A duration is read once, and every surface consumes that one reading.
+    //
+    // input[type=number] accepts "1e3" — it is a valid floating-point literal —
+    // so the box kept "1e3" while parseInt returned 1. Section 6 printed "the
+    // 1e3-day window", the figure drew a one-day exposure window inside a
+    // 365-day covariate window, and the check that exists to catch a covariate
+    // window shorter than the exposure window compared 365 with 1 and stayed
+    // silent. Three answers to one question, and the believable one was wrong.
+    //
+    // The blank case needs no exotic input at all: `V("lookback") || "90"` made
+    // an emptied box assert a 90-day ascertainment window nobody chose, and
+    // "Controls per case" did the same with 4. So — a whole number, deliberately
+    // blank, or unreadable, and the documents are allowed to say "not stated".
+    const DAYS_RE = /^\d+\s*(?:d|day|days)?$/i;
+    const readNum = (raw, re) => {
+      const t = String(raw == null ? "" : raw).trim();
+      if (t === "") return { n: null, ok: false, empty: true, raw: t };
+      if (!re.test(t)) return { n: null, ok: false, empty: false, raw: t };
+      return { n: parseInt(t, 10), ok: true, empty: false, raw: t };
+    };
+    const readDays = (raw) => readNum(raw, DAYS_RE);
+    const readCount = (raw) => readNum(raw, /^\d+$/);
+    const unread = (r) => "“" + r.raw + "” could not be read as a whole number";
+    const daysText = (raw) => {
+      const r = readDays(raw);
+      if (r.ok) return r.n + " days";
+      if (r.empty) return "(not specified)";
+      return "(not specified — " + unread(r) + " of days)";
+    };
+    const winPhrase = (raw) => {
+      const r = readDays(raw);
+      if (r.ok) return "the **" + r.n + "-day** window before index";
+      if (r.empty) return "a window before index that is **not yet specified**";
+      return "a window before index that **could not be read** (" + unread(r) + " of days)";
+    };
+    // "Controls per case" is one number with three renderings, and they had
+    // already drifted: under case-cohort sampling the Word table qualified it
+    // ("4 (state the subcohort sampling fraction instead)") while the Markdown
+    // from the same draft said "at a ratio of 4:1" twice, unqualified.
+    const controlsText = (s) => {
+      const r = readCount(s.nControls);
+      if (s.sampling === "casecohort") return (r.ok ? "**" + r.n + "** per case as entered" : "**not stated**")
+        + " — but a per-case ratio is a risk-set concept; state the subcohort's sampling fraction or size instead";
+      if (r.ok) return "**" + r.n + "** per case";
+      if (r.empty) return "**not yet specified**";
+      return "**not stated** (" + unread(r) + ")";
+    };
+
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), outcome: V("outcome"),
-      casedef: V("casedef"), indexdate: V("indexdate"), sampling: V("sampling") || "riskset", nControls: V("nControls") || "4",
+      casedef: V("casedef"), indexdate: V("indexdate"), sampling: V("sampling"), nControls: V("nControls"),
       matchingPick: MV("matchingPick"), matchingCustom: V("matchingCustom"),
-      expdef: V("expdef"), lookback: V("lookback") || "90", covlookback: V("covlookback") || "365",
+      expdef: V("expdef"), lookback: V("lookback"), covlookback: V("covlookback"),
       covariatesPick: MV("covariatesPick"), covariatesCustom: V("covariatesCustom"),
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
 
     const isMatched = (s) => mergeList(s.matchingPick, s.matchingCustom).length > 0;
-    const samplingText = (v) => ({
-      riskset: "incidence-density (risk-set) sampling — for each case, controls are sampled from those still at risk at the case's index date. A sampled control may later become a case, and a person may be sampled into more than one risk set; both are correct under this scheme",
-      cumulative: "cumulative (survivor) sampling — controls are sampled from those still outcome-free at the end of the follow-up period",
-      casecohort: "case-cohort (case-base) sampling — controls are a random subcohort of the source population drawn at baseline, so one subcohort can serve several outcomes",
-    })[v] || "the specified control-sampling scheme";
-    const samplingShort = (v) => ({ riskset: "Incidence-density (risk-set)", cumulative: "Cumulative (survivor)", casecohort: "Case-cohort (case-base)" })[v] || "-";
 
-    // What the exposure odds ratio actually estimates under each sampling scheme.
-    // Source: Vandenbroucke JP, Pearce N. Case-control studies: basic concepts.
-    // Int J Epidemiol 2012;41:1480-9 (doi:10.1093/ije/dys147).
-    const orMeans = (v) => ({
-      riskset: "the **incidence-rate ratio**, with no rare-disease assumption",
-      cumulative: "the odds ratio of the full cohort; it approximates the **risk ratio only if the outcome is rare**, and overstates it otherwise",
-      casecohort: "the **risk ratio** of the full cohort, with no rare-disease assumption",
-    })[v] || "the effect measure implied by the sampling scheme";
+    // One table, four consumers. This was three maps keyed by the same three
+    // ids plus an if/else chain in the checks panel — the shape that has
+    // already put a different analysis into three different exports elsewhere
+    // in this generator when a fourth <option> was added to one list only.
+    // `SAMPLING_DRIFT` below checks the table against the <select> at load.
+    //
+    // What the odds ratio estimates under each scheme: Vandenbroucke JP,
+    // Pearce N. Case-control studies: basic concepts. Int J Epidemiol
+    // 2012;41:1480-9 (doi:10.1093/ije/dys147).
+    const SAMPLING = {
+      riskset: {
+        short: "Incidence-density (risk-set)",
+        long: "incidence-density (risk-set) sampling — for each case, controls are sampled from those still at risk at the case's index date. A sampled control may later become a case, and a person may be sampled into more than one risk set; both are correct under this scheme",
+        or: "the **incidence-rate ratio**, with no rare-disease assumption",
+        note: { level: "ok", msg: "Incidence-density (risk-set) sampling: the odds ratio estimates the INCIDENCE-RATE RATIO with no rare-disease assumption. A sampled control who later becomes a case, or a person sampled into more than one risk set, is correct here — do not 'clean' those out." },
+      },
+      cumulative: {
+        short: "Cumulative (survivor)",
+        long: "cumulative (survivor) sampling — controls are sampled from those still outcome-free at the end of the follow-up period",
+        or: "the odds ratio of the full cohort; it approximates the **risk ratio only if the outcome is rare**, and overstates it otherwise",
+        note: { level: "warn", msg: "Cumulative (survivor) sampling: the odds ratio approximates the RISK RATIO only if the outcome is rare (roughly <10%); above that it overstates it. Sampling only end-of-period survivors also excludes people who died of other causes, which can select on exposure. Consider risk-set sampling instead." },
+      },
+      casecohort: {
+        short: "Case-cohort (case-base)",
+        long: "case-cohort (case-base) sampling — controls are a random subcohort of the source population drawn at baseline, so one subcohort can serve several outcomes",
+        or: "the **risk ratio** of the full cohort, with no rare-disease assumption",
+        note: { level: "warn", msg: "Case-cohort (case-base) sampling: the odds ratio relative to the subcohort estimates the RISK RATIO with no rare-disease assumption — but the subcohort contains people who later become cases and who contribute to several risk sets, so it needs weighted (pseudo-likelihood) estimation with a robust variance, not a plain matched or unmatched logistic fit." },
+      },
+    };
+    // A saved draft or a ?seed= link carrying a value this <select> no longer
+    // offers leaves selectedIndex = -1, and a select with no selection
+    // contributes nothing to the form — so the scheme is simply unset. It is
+    // named as unset everywhere rather than quietly resolved to risk-set.
+    const scheme = (v) => SAMPLING[v] || null;
+    const samplingText = (v) => (scheme(v) ? scheme(v).long : "a control-sampling scheme that has not been chosen");
+    const samplingShort = (v) => (scheme(v) ? scheme(v).short : "(not chosen)");
+    const orMeans = (v) => (scheme(v) ? scheme(v).or : "an effect measure that cannot be named until the sampling scheme is chosen");
     const orMeansPlain = (v) => String(orMeans(v)).replace(/\*\*/g, "");
+    const SAMPLING_DRIFT = [...document.querySelectorAll('select[name="sampling"] option')]
+      .map((o) => o.value).filter((v) => !SAMPLING[v]);
 
     const analysisText = (s) => s.sampling === "casecohort"
       ? "a case-cohort estimator — weighted (pseudo-likelihood) estimation with a robust variance, because subcohort members contribute to several risk sets and an unweighted logistic fit would misstate the precision"
       : (isMatched(s)
         ? "conditional logistic regression (conditioning on the matched sets)"
         : "unconditional logistic regression (adjusting for the covariates)");
+
+    // A matching factor is constant inside its matched set, so its coefficient
+    // is not identified — this page says so twice, in the checks panel and in
+    // section 8, and never checked whether the user had done it anyway. Only an
+    // exact match after normalising is flagged: a missed catch is much cheaper
+    // here than accusing someone of a mistake they did not make.
+    const normFactor = (x) => String(x).toLowerCase().replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+    const matchedCovariates = (s) => {
+      if (!isMatched(s)) return [];
+      const m = new Set(mergeList(s.matchingPick, s.matchingCustom).map(normFactor).filter(Boolean));
+      return mergeList(s.covariatesPick, s.covariatesCustom).filter((c) => m.has(normFactor(c)));
+    };
+
+    // Combinations this tool can see are self-contradictory. They used to live
+    // only in the checks panel, and the panel does not travel: a case-cohort
+    // draft with the three default-ticked matching factors exported a Word file
+    // headed "Matched case-control study", matched on age, sex and index date,
+    // with a case-cohort weighted estimator in the analysis section — and
+    // nothing in the document to say the two cannot both be true. The same list
+    // now feeds the panel, the Markdown and the .docx, so they cannot disagree.
+    const conflicts = (s) => {
+      const out = [];
+      const match = mergeList(s.matchingPick, s.matchingCustom);
+      if (s.sampling === "casecohort" && match.length) out.push(
+        "This draft is described as a matched case-control study and analysed as a case-cohort study, and it cannot be both. A case-cohort subcohort is drawn once at baseline, so there are no case-specific matched sets to condition on and conditional logistic regression does not apply — yet " + match.length + " individual matching factor(s) are ticked (" + match.join("; ") + "). Either drop the matching factors and adjust for them in the weighted model, or switch to incidence-density (risk-set) sampling, which is what matching on index date actually implements.");
+      const dup = matchedCovariates(s);
+      if (dup.length) out.push(
+        "Section 8 states that the matching factors are not additionally entered as covariates, and section 7 lists " + dup.length + " of them as covariates (" + dup.join("; ") + "). Within a matched set a matching factor is constant, so its coefficient is not identified. Remove it from the covariate list, or stop matching on it.");
+      return out;
+    };
+    const conflictMd = (s) => {
+      const c = conflicts(s);
+      return c.length ? c.map((x) => "> **These settings contradict each other.** " + x).join("\n>\n") + "\n\n" : "";
+    };
 
     const pcOf = (s) => ({
       design: (isMatched(s) ? "matched " : "") + "case-control study",
@@ -303,8 +410,12 @@ const SENSITIVITY = [
     });
 
     function renderScheme(s) {
-      const lb = Math.max(0, parseInt(s.lookback) || 0);
-      const cb = Math.max(0, parseInt(s.covlookback) || 0);
+      // A window the tool could not read is omitted, not drawn at a guessed
+      // width: the figure is the only part of this page a reader takes in at a
+      // glance, so a one-day bar labelled from "1e3" is worse than no bar. The
+      // checks panel names every window that was left out, and why.
+      const lb = Math.max(0, readDays(s.lookback).n || 0);
+      const cb = Math.max(0, readDays(s.covlookback).n || 0);
       const wins = [];
       if (cb > 0) wins.push({ label: "Covariate look-back", kind: "lookback", startDay: -cb, endDay: 0, edit: { field: "covlookback", edge: "start" } });
       if (lb > 0) wins.push({ label: "Exposure ascertainment", kind: "exposure", startDay: -lb, endDay: 0, edit: { field: "lookback", edge: "start" } });
@@ -338,7 +449,7 @@ const SENSITIVITY = [
 
 _Study protocol · ${isMatched(s) ? "matched " : ""}case-control study · drafted ${today}_
 
-${missingMd(s)}${window.PC.abstractMd(pcOf(s))}
+${missingMd(s)}${conflictMd(s)}${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
 This ${isMatched(s) ? "matched " : ""}**case-control** study estimates the effect of **${E}** on **${O}** in **${P}**.
 
@@ -350,7 +461,7 @@ This ${isMatched(s) ? "matched " : ""}**case-control** study estimates the effec
 Among **${P}**, does **${E}** affect the incidence of **${O}**?
 
 ## 3. Study design
-A ${isMatched(s) ? "matched " : ""}case-control study using observational data from **${or(s.data, "(data source)")}**, with **${samplingShort(s.sampling).toLowerCase()} sampling** and **${s.nControls}** control(s) per case.
+A ${isMatched(s) ? "matched " : ""}case-control study using observational data from **${or(s.data, "(data source)")}**, with **${samplingShort(s.sampling).toLowerCase()} sampling**. Controls: ${controlsText(s)}.
 
 ## 4. Cases and index date
 - **Case definition:** ${or(s.casedef, "_(not yet specified — define the outcome that identifies cases, with the code set and care setting)_")}
@@ -359,12 +470,12 @@ A ${isMatched(s) ? "matched " : ""}case-control study using observational data f
 ## 5. Control selection${isMatched(s) ? " and matching" : ""}
 **The principle.** Controls must represent the source population — the person-time — that produced the cases. If a sampled control had developed ${O}, they would have been ascertained as a case in this study. Failure of this condition biases the estimate whatever the analysis does about it (Wacholder 1992; Vandenbroucke & Pearce 2012).
 
-**The scheme.** Controls are selected by ${samplingText(s.sampling)}, at a ratio of **${s.nControls}:1**.${isMatched(s) ? ` Cases and controls are **matched** on: ${match.join("; ")}.` : " No matching is applied; confounders are adjusted for in the analysis."}
+**The scheme.** Controls are selected by ${samplingText(s.sampling)}. Number of controls: ${controlsText(s)}.${isMatched(s) ? ` Cases and controls are **matched** on: ${match.join("; ")}.` : " No matching is applied; confounders are adjusted for in the analysis."}
 
 **What this buys.** Under this scheme the exposure odds ratio estimates ${orMeans(s.sampling)}.
 
 ## 6. Exposure ascertainment
-${or(s.expdef, "_(not yet specified — e.g. at least one qualifying dispensing record in the ascertainment window before the index date)_")} Exposure is assessed in the **${s.lookback}-day** window before index; covariates in the **${s.covlookback}-day** window before index. Exposure is ascertained by the same procedure, from the same data, over the same window relative to index, for cases and for controls.
+${or(s.expdef, "_(not yet specified — e.g. at least one qualifying dispensing record in the ascertainment window before the index date)_")} Exposure is assessed in ${winPhrase(s.lookback)}; covariates in ${winPhrase(s.covlookback)}. Exposure is ascertained by the same procedure, from the same data, over the same window relative to index, for cases and for controls.
 
 ## 7. Covariates
 ${(covs.length ? covs : ["(none specified)"]).map((l) => "- " + l).join("\n")}
@@ -391,26 +502,39 @@ ${window.PC.tailMd(pcOf(s))}
 
     const computeChecks = (s) => {
       const checks = [];
-      const lb = parseInt(s.lookback) || 0, cvb = parseInt(s.covlookback) || 0, nc = parseInt(s.nControls) || 0;
+      const lbR = readDays(s.lookback), cvbR = readDays(s.covlookback), ncR = readCount(s.nControls);
+      const lb = lbR.n || 0, cvb = cvbR.n || 0;
       const miss = missing(s);
       if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft below is printed with placeholders so you can see its shape — it is not a finished protocol." });
+      conflicts(s).forEach((c) => checks.push({ level: "error", msg: c }));
+      if (SAMPLING_DRIFT.length) checks.push({ level: "error", msg: "This page offers a control-sampling option (" + SAMPLING_DRIFT.join(", ") + ") that its own description table does not define, so the protocol would fall back to generic wording for it. This is a fault in the tool, not in your study — please report it." });
 
       // The one rule, stated first, every time.
       checks.push({ level: "info", msg: "The control-selection rule: controls must represent the person-time of the source population that produced the cases. Test it by asking — if this control had developed the outcome, would my study have captured them as a case? If not, the sample is not of the study base and no analysis can repair it." });
 
-      if (s.sampling === "riskset") checks.push({ level: "ok", msg: "Incidence-density (risk-set) sampling: the odds ratio estimates the INCIDENCE-RATE RATIO with no rare-disease assumption. A sampled control who later becomes a case, or a person sampled into more than one risk set, is correct here — do not 'clean' those out." });
-      else if (s.sampling === "cumulative") checks.push({ level: "warn", msg: "Cumulative (survivor) sampling: the odds ratio approximates the RISK RATIO only if the outcome is rare (roughly <10%); above that it overstates it. Sampling only end-of-period survivors also excludes people who died of other causes, which can select on exposure. Consider risk-set sampling instead." });
-      else if (s.sampling === "casecohort") checks.push({ level: "warn", msg: "Case-cohort (case-base) sampling: the odds ratio relative to the subcohort estimates the RISK RATIO with no rare-disease assumption — but the subcohort contains people who later become cases and who contribute to several risk sets, so it needs weighted (pseudo-likelihood) estimation with a robust variance, not a plain matched or unmatched logistic fit." });
+      if (scheme(s.sampling)) checks.push(scheme(s.sampling).note);
+      else checks.push({ level: "error", msg: "No control-sampling scheme is set, so the protocol cannot say what the odds ratio estimates and declines to name a rate ratio or a risk ratio. Choose one in section 3. (If you arrived by a saved draft or a shared link, it may have carried a scheme this page no longer offers.)" });
 
-      if (s.sampling === "casecohort" && isMatched(s)) checks.push({ level: "error", msg: "Case-cohort sampling with individual matching is incoherent: a random subcohort is drawn once at baseline, so there are no case-specific matched sets to condition on, and conditional logistic regression does not apply. Either drop the matching factors and adjust for them in the weighted model, or switch to incidence-density (risk-set) sampling, which is what matching on index date actually implements." });
+      if (s.sampling === "casecohort" && isMatched(s)) { /* said once, by conflicts() above */ }
       else if (isMatched(s)) checks.push({ level: "info", msg: "Matched design → conditional logistic regression, conditioning on the matched sets. Do NOT additionally enter the matching factors as covariates: within a matched set they are constant and the coefficient is not identified." });
       else checks.push({ level: "info", msg: "Unmatched design → unconditional logistic regression, adjusting for the confounders you listed." });
 
-      if (s.sampling === "casecohort" && nc >= 1) checks.push({ level: "info", msg: "'Controls per case' is a risk-set concept. In a case-cohort study the subcohort is a fixed random sample of the cohort (a sampling fraction), so state the fraction or the subcohort size rather than a ratio per case." });
+      if (s.sampling === "casecohort") checks.push({ level: "info", msg: "'Controls per case' is a risk-set concept. In a case-cohort study the subcohort is a fixed random sample of the cohort (a sampling fraction), so state the fraction or the subcohort size rather than a ratio per case." });
 
-      if (lb <= 0) checks.push({ level: "warn", msg: "Exposure look-back is 0 days — no window means no exposure can be ascertained. Set the window before the index date over which exposure is measured." });
-      if (lb > 0 && cvb > 0 && cvb < lb) checks.push({ level: "warn", msg: "The covariate look-back (" + cvb + " d) is shorter than the exposure look-back (" + lb + " d), so some confounders are measured over a narrower history than the exposure they are meant to control. Usually the covariate window should be at least as long." });
-      if (nc < 1) checks.push({ level: "warn", msg: "Set at least 1 control per case (commonly up to 4; beyond about 4:1 the precision gain is small)." });
+      // Name the field the protocol is declining to state, and why. A refusal
+      // nobody can see on screen is just a slower silent default.
+      [["Exposure look-back", lbR, "days"], ["Covariate look-back", cvbR, "days"], ["Controls per case", ncR, "whole number"]].forEach((pair) => {
+        const label = pair[0], r = pair[1];
+        if (r.ok) return;
+        const isWin = pair[2] === "days";
+        const surfaces = isWin ? "the protocol, the figure and the Word file" : "the protocol and the Word file";
+        if (r.empty) checks.push({ level: "warn", msg: label + " is blank, so " + surfaces + " print “not specified” rather than filling in a default. Type the number you mean." });
+        else checks.push({ level: "warn", msg: label + ": “" + r.raw + "” could not be read as a whole " + (isWin ? "number of days" : "number") + ", so " + surfaces + " decline to state one" + (isWin ? " and the figure omits the window rather than drawing a guessed one" : "") + ". Write digits — " + (isWin ? "365, or 365 days" : "4") + "; not “1e3”, “1,000”, “90.5” or “about a year”." });
+      });
+      if (lbR.ok && lb <= 0) checks.push({ level: "warn", msg: "Exposure look-back is 0 days — no window means no exposure can be ascertained. Set the window before the index date over which exposure is measured." });
+      if (cvbR.ok && cvb <= 0 && mergeList(s.covariatesPick, s.covariatesCustom).length) checks.push({ level: "warn", msg: "Covariate look-back is 0 days, but section 7 lists " + mergeList(s.covariatesPick, s.covariatesCustom).length + " covariate(s). A zero-day window measures nothing, so those covariates cannot be ascertained as written." });
+      if (lbR.ok && cvbR.ok && lb > 0 && cvb > 0 && cvb < lb) checks.push({ level: "warn", msg: "The covariate look-back (" + cvb + " d) is shorter than the exposure look-back (" + lb + " d), so some confounders are measured over a narrower history than the exposure they are meant to control. Usually the covariate window should be at least as long." });
+      if (ncR.ok && ncR.n < 1) checks.push({ level: "warn", msg: "Set at least 1 control per case (commonly up to 4; beyond about 4:1 the precision gain is small)." });
 
       checks.push({ level: "info", msg: "Ascertain exposure by the same procedure, from the same data, over the same window relative to index, for cases and for controls. Differential ascertainment is the classical case-control bias and secondary data does not make it go away." });
       checks.push({ level: "info", msg: "Protopathic bias: if early, undiagnosed symptoms of the outcome prompt the exposure, a look-back that runs right up to the index date will read that as causation. A lag (excluding exposure in the days immediately before index) is the standard probe — it is in the sensitivity list." });
@@ -528,6 +652,7 @@ ${window.PC.tailMd(pcOf(s))}
       children.push(p([text("Study protocol · " + (isMatched(s) ? "matched " : "") + "case-control study · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
       const miss = missing(s);
       if (miss.length) children.push(p([text("This draft is incomplete. Still to be specified: " + miss.join("; ") + ".", { bold: true, color: "9E3A2C" })], { spacing: { after: 160 } }));
+      conflicts(s).forEach((c) => children.push(p([text("These settings contradict each other. ", { bold: true, color: "9E3A2C" }), text(c, { color: "9E3A2C" })], { spacing: { after: 160 } })));
       window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
@@ -543,10 +668,10 @@ ${window.PC.tailMd(pcOf(s))}
         ["Exposure", E],
         ["Outcome (cases)", O],
         ["Control sampling", samplingShort(s.sampling)],
-        ["Controls per case", s.sampling === "casecohort" ? s.nControls + " (state the subcohort sampling fraction instead)" : String(s.nControls)],
+        ["Controls per case", controlsText(s).replace(/\*\*/g, "")],
         ["Matching", match.length ? match.join("; ") : "None (unmatched)"],
-        ["Exposure look-back", s.lookback + " days"],
-        ["Covariate look-back", s.covlookback + " days"],
+        ["Exposure look-back", daysText(s.lookback)],
+        ["Covariate look-back", daysText(s.covlookback)],
         ["Analysis", analysisText(s)],
         ["The odds ratio estimates", orMeansPlain(s.sampling)],
       ]));
@@ -570,11 +695,11 @@ ${window.PC.tailMd(pcOf(s))}
 
       children.push(h1("4. Control selection" + (isMatched(s) ? " and matching" : "")));
       children.push(p([text("The principle. ", { bold: true }), text("Controls must represent the source population — the person-time — that produced the cases. If a sampled control had developed " + O + ", they would have been ascertained as a case in this study. Failure of this condition biases the estimate whatever the analysis does about it (Wacholder 1992; Vandenbroucke & Pearce 2012).")]));
-      children.push(p([text("The scheme. ", { bold: true }), text("Controls are selected by " + samplingText(s.sampling) + ", at " + s.nControls + ":1." + (isMatched(s) ? " Matched on: " + match.join("; ") + "." : " No matching; confounders adjusted in the analysis."))]));
+      children.push(p([text("The scheme. ", { bold: true }), text("Controls are selected by " + samplingText(s.sampling) + ". Number of controls: " + controlsText(s).replace(/\*\*/g, "") + "." + (isMatched(s) ? " Matched on: " + match.join("; ") + "." : " No matching; confounders adjusted in the analysis."))]));
       children.push(p([text("What this buys. ", { bold: true }), text("Under this scheme the exposure odds ratio estimates " + orMeansPlain(s.sampling) + ".")]));
 
       children.push(h1("5. Exposure ascertainment"));
-      children.push(para(or(s.expdef, "(not yet specified — e.g. at least one qualifying dispensing record in the ascertainment window before the index date)") + " Exposure window: " + s.lookback + " days before index; covariate window: " + s.covlookback + " days before index. Exposure is ascertained by the same procedure, from the same data, over the same window relative to index, for cases and for controls."));
+      children.push(para(or(s.expdef, "(not yet specified — e.g. at least one qualifying dispensing record in the ascertainment window before the index date)") + " Exposure window: " + daysText(s.lookback) + " before index; covariate window: " + daysText(s.covlookback) + " before index. Exposure is ascertained by the same procedure, from the same data, over the same window relative to index, for cases and for controls."));
 
       children.push(h1("6. Covariates"));
       (covs.length ? covs : ["(none specified)"]).forEach((l) => children.push(bullet(l)));
