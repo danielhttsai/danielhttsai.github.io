@@ -2222,3 +2222,26 @@ was worse than several it had inherited.
   happens to be 30 days. Agreement is still agreement, so the silence is correct
   — but the reasoning is coincidental and a future default change would need it
   re-checked.
+
+#### An honest gap in this run's method
+
+**Only one of the two reviewers ever reported.** The applied-analyst reviewer ran
+for the whole session and produced nothing, including after being asked
+explicitly to stop digging and return whatever it had already executed. So the
+"two epidemiologists who disagree" method ran, in practice, as one methodologist
+plus the orchestrator — and the disagreements recorded above are between those
+two, not between the two briefs the prompt describes.
+
+That matters for what is *not* covered here. The applied reviewer had been given
+the areas the methodologist was not: `SitesPicker`, the library modal's
+behaviour, the Markdown-vs-`.docx` divergence, and layout at 390 px. Of those the
+orchestrator checked the Markdown/`.docx` divergence (a `|` in a code set emitted
+a three-cell row against a two-column header, so the Markdown silently lost half
+the code set while the `.docx` kept it — fixed, `tc()`) and the viewports
+(390/768/1024/1440, all clean). **`SitesPicker` and the library modal on this
+page were not independently reviewed by anyone.** Treat them as unexamined.
+
+Practical note for the next run: give a subagent a deadline in its opening brief
+("report at N minutes with whatever you have executed, even if incomplete"),
+rather than trying to extract a report from it later. A reviewer that returns
+nothing costs the whole run its second perspective.
