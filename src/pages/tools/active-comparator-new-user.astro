@@ -1514,6 +1514,54 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         arr.length === 0 ? "_(none)_" : arr.map((l, i) => (i + 1) + ". " + l).join("\n");
 
       const orFb = (s, fb) => (s && s.trim()) ? s : fb;
+
+      // One reading of the primary analysis, for all three exports.
+      // This map used to be copy-pasted into buildMarkdown, the Word export and
+      // the TARGET checklist, and all three copies were missing the "landmark"
+      // option the <select> offers. A landmark analysis fell through to the
+      // `||` default and every exported document asserted "On-treatment" — a
+      // different estimand (conditional on surviving event-free to the landmark,
+      // early events discarded) from the one the user chose, while the
+      // consistency panel on screen correctly discussed a landmark design.
+      // Anything unrecognised now refuses out loud instead of naming a design.
+      const PRIMARY_ANALYSIS = {
+        OT: "On-treatment (per-protocol)",
+        ITT: "Intention-to-treat (ITT)",
+        both: "Both ITT and on-treatment",
+        landmark: "Landmark analysis (follow-up starts at the landmark; patients with the event or censored before it are excluded)",
+      };
+      const primaryAnalysisLabel = (v) =>
+        PRIMARY_ANALYSIS[v] || "**(primary analysis not specified — choose one in Section 7)**";
+      // Whether the analysis censors at treatment deviation. ITT does not; the
+      // landmark analysis assigns by treatment at the landmark and does not
+      // censor at switching either. Used where the exports describe censoring.
+      const censorsOnDeviation = (v) => v === "OT" || v === "both";
+
+      // TARGET item 7g asks which sensitivity analyses address unmeasured
+      // confounding. The filter used to require "negative control" with a
+      // space, while the checkbox reads "Negative-control outcome" with a
+      // hyphen, so the one analysis that actually speaks to residual
+      // confounding was silently dropped from the item that asks for it — with
+      // the shipped defaults, item 7g listed PS trimming and nothing else.
+      const isUnmeasuredConfoundingAnalysis = (l) =>
+        /negative[-\s]?control|trim|e[-\s]?value|hdps|high[-\s]?dimensional|unmeasured confounding|sensitivity/i.test(l);
+
+      // Item 7g is the identifying-assumptions row, so it has to name the
+      // assumptions the chosen method actually makes. An instrumental-variable
+      // analysis exists precisely because conditional exchangeability given
+      // measured covariates is not assumed; outcome-model-based methods need
+      // that assumption plus correct model specification.
+      const exchangeabilityLine = (s, psM) => {
+        const m = s.psMethod;
+        if (m === "iv") {
+          return "Conditional exchangeability given measured covariates is NOT assumed. Identification instead requires the instrument to be associated with treatment (relevance), to affect the outcome only through treatment (exclusion restriction), and to be independent of the unmeasured confounders; with monotonicity the estimand is a local average treatment effect among compliers, not the population effect. Instrument strength and the balance of measured covariates across levels of the instrument are reported, addressed via " + psM + ".";
+        }
+        if (m === "tmle" || m === "gformula" || m === "outcome-reg" || m === "drs") {
+          return "Conditional exchangeability assumed given baseline covariates listed below, together with positivity and correct specification of the outcome model (for TMLE, of either the outcome model or the treatment model), addressed via " + psM + ".";
+        }
+        return "Conditional exchangeability assumed given baseline covariates listed below, together with positivity over the covariate distribution, addressed via " + psM + ".";
+      };
+
       const pcOf = (s) => ({
         design: "active-comparator new-user cohort study under a target-trial-emulation framework",
         tte: true,
@@ -2418,7 +2466,7 @@ ${numbered(PSC_REFERENCES)}
           : (s.maxFollowupChoice || "5 years per patient, or until censoring (whichever first)");
 
         const sex      = ({ both: "both sexes", female: "female only", male: "male only" })[s.sex] || "both sexes";
-        const primAn   = ({ ITT: "Intention-to-treat (ITT)", OT: "On-treatment (per-protocol)", both: "Both ITT and on-treatment" })[s.primaryAnalysisType] || "On-treatment";
+        const primAn   = primaryAnalysisLabel(s.primaryAnalysisType);
         const psM      = PS_METHOD_DESCRIPTIONS[s.psMethod] || "PS-based adjustment";
         const eff      = ({
           HR: "Hazard ratio (95% CI) from Cox proportional-hazards models",
@@ -3309,7 +3357,7 @@ _Drafted with the AsPEN protocol builder (${today})._
           : (s.maxFollowupChoice || "5 years per patient, or until censoring (whichever first)");
 
         const sex      = ({ both: "both sexes", female: "female only", male: "male only" })[s.sex] || "both sexes";
-        const primAn   = ({ ITT: "Intention-to-treat (ITT)", OT: "On-treatment (per-protocol)", both: "Both ITT and on-treatment" })[s.primaryAnalysisType] || "On-treatment";
+        const primAn   = primaryAnalysisLabel(s.primaryAnalysisType);
         const psM      = PS_METHOD_DESCRIPTIONS[s.psMethod] || "PS-based adjustment";
         const eff      = ({ HR: "Hazard ratio (95% CI) from Cox proportional-hazards models", RR: "Risk ratio (95% CI) from Poisson regression", RD: "Risk difference (95% CI)", IRR: "Incidence rate ratio (95% CI)" })[s.effectMeasure] || "Hazard ratio";
         const meta     = ({
@@ -3551,7 +3599,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         const sensitivity = mergeList(s.sensitivityPick, s.sensitivityCustom);
         const psM   = PS_METHOD_DESCRIPTIONS[s.psMethod] || "PS-based adjustment";
         const eff   = ({ HR: "Hazard ratio (95% CI) from Cox PH models", RR: "Risk ratio (95% CI) from Poisson regression", RD: "Risk difference (95% CI)", IRR: "Incidence rate ratio (95% CI)" })[s.effectMeasure] || "Hazard ratio";
-        const primAn= ({ ITT: "Intention-to-treat (ITT)", OT: "On-treatment (per-protocol)", both: "Both ITT and on-treatment" })[s.primaryAnalysisType] || "On-treatment";
+        const primAn= primaryAnalysisLabel(s.primaryAnalysisType);
         const sitesPlain = (s.sites && s.sites.length > 0)
           ? s.sites.map((c) => formatSiteFull(c)).join("; ")
           : "(no sites selected)";
@@ -3623,18 +3671,27 @@ _Drafted with the AsPEN protocol builder (${today})._
             row7("f. Causal contrasts",
               "Effect of starting and following the assigned treatment strategy (per-protocol effect) and effect of being assigned the strategy (intention-to-treat-equivalent effect).",
               "Effect estimate: " + eff + ".\n" +
+              // The parentheses matter: `+` binds tighter than `||`, so written
+              // without them the left operand was always a truthy string, the
+              // fallback was unreachable, the trailing full stop was swallowed,
+              // and an unrecognised value printed the word "undefined".
               "Site-specific estimates pooled via " +
-              ({ re: "random-effects (DerSimonian-Laird) meta-analysis with I² and τ²",
-                 "re-reml": "random-effects (REML) meta-analysis with I² and τ²",
-                 fe: "fixed-effects (inverse-variance) meta-analysis" })[s.metaMethod] || "random-effects meta-analysis" + "."),
+              (({ re: "random-effects (DerSimonian-Laird) meta-analysis with I² and τ²",
+                  "re-reml": "random-effects (REML) meta-analysis with I² and τ²",
+                  fe: "fixed-effects (inverse-variance) meta-analysis" })[s.metaMethod]
+                || "**(pooling method not specified — choose one in Section 9)**") + "."),
             row7("g. Identifying assumptions",
               "Conditional exchangeability would hold by randomisation. No interference; consistency.",
-              "Conditional exchangeability assumed given baseline covariates listed below, addressed via " + psM + ". Covariate look-back: " + covLbText(s) + ". Sensitivity analyses for unmeasured confounding:\n" + bulletText(sensitivity.filter((l) => /negative control|trim|e-value|hdps|sensitivity/i.test(l))) + "\nBaseline covariates:\n" + bulletText(covariates.slice(0, 12)) + (covariates.length > 12 ? "\n…and " + (covariates.length - 12) + " more (see Section 7 of the protocol)." : "")),
+              exchangeabilityLine(s, psM) + " Covariate look-back: " + covLbText(s) + ". Sensitivity analyses for unmeasured confounding:\n" + bulletText(sensitivity.filter(isUnmeasuredConfoundingAnalysis)) + "\nBaseline covariates:\n" + bulletText(covariates.slice(0, 12)) + (covariates.length > 12 ? "\n…and " + (covariates.length - 12) + " more (see Section 7 of the protocol)." : "")),
             row7("h. Data analysis plan",
               "Statistical analysis estimates the causal contrasts under the identifying assumptions.",
               "Primary: " + psM + ".\n" +
               (s.psMethodDetails ? "Operational details: " + s.psMethodDetails + ".\n" : "") +
-              "Subgroup analyses:\n" + bulletText((s.subgroups || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) + "\nSensitivity analyses:\n" + bulletText(sensitivity)),
+              // Read the fields the form actually has. This said `s.subgroups`,
+              // a control that does not exist on the page, so item 7h reported
+              // "(none specified)" for every protocol ever exported — including
+              // the five subgroups ticked by default.
+              "Subgroup analyses:\n" + bulletText(mergeList(s.subgroupsPick, s.subgroupsCustom)) + "\nSensitivity analyses:\n" + bulletText(sensitivity)),
           ],
         });
 
@@ -3672,8 +3729,21 @@ _Drafted with the AsPEN protocol builder (${today})._
           ]],
           ["Discussion", [
             ["15", "Interpretation of key findings.", "[To be completed at the time of reporting.]"],
+            // Item 16 is where TARGET asks how the emulation differs from the
+            // target trial, so the censoring rule stated here has to be the one
+            // the protocol specifies. It used to assert on-treatment censoring
+            // unconditionally, contradicting Section 6 and the on-screen check
+            // whenever the user chose ITT or a landmark analysis.
             ["16", "Limitations; differences between target trial and emulation; plausibility of assumptions.",
-              "Residual / unmeasured confounding cannot be excluded. Treatment switching during follow-up is censored per the on-treatment analysis. Misclassification of outcome possible."],
+              "Residual / unmeasured confounding cannot be excluded. " +
+              (censorsOnDeviation(s.primaryAnalysisType)
+                ? "Treatment switching or discontinuation during follow-up is censored per the on-treatment analysis, which is informative censoring if the reasons for stopping are associated with the outcome."
+                : s.primaryAnalysisType === "ITT"
+                  ? "Follow-up is not censored at treatment switching or discontinuation, per the intention-to-treat analysis, so the estimate is attenuated towards the null in proportion to the amount of non-adherence and switching."
+                  : s.primaryAnalysisType === "landmark"
+                    ? "Follow-up begins at the landmark and patients with the event or censored before it are excluded, so the estimate is conditional on surviving event-free to the landmark and early events do not contribute."
+                    : "**(primary analysis not specified — the censoring rule cannot be stated; choose one in Section 7)**") +
+              " Misclassification of outcome possible."],
           ]],
           ["Other information", [
             ["17", "Ethics approval and approval number(s).", s.ethics || "Each participating site obtains local IRB / ethics approval before data extraction."],
