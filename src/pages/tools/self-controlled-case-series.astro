@@ -887,8 +887,8 @@ ${sitesLine(s.sites, s.sitesOther)}
 |---|---|
 | **Name** | ${orFb(s.exposureName, "_(exposure name)_")} |
 | **Code set** | ${orFb(s.exposureCodes, "_(codes)_")} |
-| **Days of supply (default)** | ${s.daysOfSupply || "30"} d |
-| **Grace period** | ${s.grace || "14"} d |
+| **Days of supply (default)** | ${rowDays(readDays(s.daysOfSupply))} |
+| **Grace period** | ${rowDays(readDays(s.grace))} |
 | **Exposure period rule** | ${orFb(s.exposurePeriodDef, "Continuous exposure inferred from sequential dispensings; gap > grace period ends the episode.")} |
 
 ## 5. Design variant
@@ -900,10 +900,10 @@ ${sccsVariantText}
 | | |
 |---|---|
 | **Timeline anchor** | ${s.sccsAnchor === "calendar" ? "Calendar-anchored — common start " + orFb(s.cohortStart, "(date)") + "; baseline " + (s.baselineYears || "1") + " calendar year(s) before start" : "Exposure-anchored — day 0 = first exposure"} |
-| **Risk / reference periods** | ${parsePeriods(s.periods).map((p) => p.name + " " + p.days + " d").join(" → ") || "(define the period strip)"} |
+| **Risk / reference periods** | ${parsePeriods(s.periods).map((p) => p.name + " " + rowDays(p)).join(" → ") || "(define the period strip)"} |
 | **Risk window definition** | ${riskWin} |
 | **Baseline (control) period** | ${orFb(s.baselinePeriod, "All observation time NOT in pre-risk, risk, or post-risk windows.")} |
-| **Covariate / eligibility look-back** | ${parseRows(s.covWindows).map((r) => r.name + " " + r.days + " d").join("; ") || "none (self-controlled design)"} |
+| **Covariate / eligibility look-back** | ${parseRows(s.covWindows).map((r) => r.name + " " + rowDays(r)).join("; ") || "none (self-controlled design)"} |
 
 ## 7. Observation period
 
@@ -967,21 +967,63 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       };
 
       const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));   // declared here: renderScheme() runs on first paint, before the old position
-      // Look-back windows are clamped to >= 1 day so the text and the drag handle
-      // (which floors at 1) can never disagree, and a "0 d" look-back can't be
-      // drawn as a visible bar.
-      const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: Math.max(1, parseInt(p[1]) || 1) }; }).filter((r) => r.name);
-      const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
+
+      // In an SCCS the period strip *is* the estimand: the IRR is exposed
+      // person-time against reference person-time, so a risk window's length is
+      // not a presentational detail, it is the quantity being estimated.
+      //
+      // Both row parsers used to read the day count as
+      // `Math.max(1, parseInt(p[1]) || 1)`, which turns every value it cannot
+      // read into a **one-day window** and says nothing. Observed, in Chromium,
+      // on the exported protocol table: `1e3` → 1 d (parseInt stops at the "e"),
+      // `thirty` → 1 d, `0.5` → 1 d, `-30` → 1 d, `1,000` → 1 d, and an empty
+      // day count → 1 d. A line that lost its "|" (`Reference 90`) exported as a
+      // period named "Reference 90" lasting 1 day. Every one of those is a
+      // confident, non-crashing, wrong protocol.
+      //
+      // The write path was worse than the read path. `rowsJoin`/`periodsJoin`
+      // rebuild the whole textarea from parsed rows, and they are called on
+      // every chip click and every drag of a segment edge — so clicking "+
+      // Frailty" rewrote `Comedications | one year` to `Comedications | 1` and
+      // the user's own words, the only copy, were gone.
+      //
+      // So the parsers are tri-state now, exactly like the cohort builder's
+      // `readDays`: a whole number of days, deliberately blank, or unreadable.
+      // Unreadable is carried through as `raw` and never becomes a number —
+      // the strip refuses to draw, the exports name the line they could not
+      // read, and the joins write the original text back.
+      const DAYS_RE = /^\d+\s*(?:d|day|days)?$/i;
+      const readDays = (raw) => {
+        const t = String(raw == null ? "" : raw).trim();
+        if (t === "") return { days: null, ok: false, empty: true, raw: t };
+        if (!DAYS_RE.test(t)) return { days: null, ok: false, empty: false, raw: t };
+        return { days: parseInt(t, 10), ok: true, empty: false, raw: t };
+      };
+      // Split on the LAST "|" so a name may itself contain one; a line with no
+      // "|" at all keeps its whole text as the name and reports a missing day
+      // count, rather than silently becoming a one-day period called "Reference 90".
+      const splitRow = (l) => { const i = l.lastIndexOf("|"); return i < 0 ? { name: l.trim(), raw: "" } : { name: l.slice(0, i).trim(), raw: l.slice(i + 1).trim() }; };
+      const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+        const { name, raw } = splitRow(l); const r = readDays(raw);
+        return { name, days: r.days, ok: r.ok, empty: r.empty, raw: raw };
+      }).filter((r) => r.name);
+      const rowsJoin = (rows) => rows.map((r) => r.name + " | " + (r.ok ? r.days : r.raw)).join("\n");
       const parsePeriods = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
-        const p = l.split("|"); const name = (p[0] || "").trim(); const days = Math.max(1, parseInt(p[1]) || 1); const n = name.toLowerCase();
+        const { name, raw } = splitRow(l); const r = readDays(raw); const n = name.toLowerCase();
         let kind = "custom";
         if (/pre.*(risk|expos)/.test(n)) kind = "pre";
         else if (/post.*(risk|expos)|washout/.test(n)) kind = "post";
         else if (/exposure|risk\s*window|^risk\b/.test(n)) kind = "exposure";
         else if (/reference|baseline|control|unexpos/.test(n)) kind = "reference";
-        return { name, days, kind };
+        return { name, days: r.days, ok: r.ok, empty: r.empty, raw: raw, kind };
       }).filter((r) => r.name);
-      const periodsJoin = (ps) => ps.map((p) => p.name + " | " + p.days).join("\n");
+      const periodsJoin = (ps) => ps.map((p) => p.name + " | " + (p.ok ? p.days : p.raw)).join("\n");
+      // How a document is allowed to describe a row it could not read. Never a
+      // number, and never silence.
+      const rowDays = (r) => r.ok ? (r.days + " d")
+        : r.empty ? "(no length given)"
+        : "(not specified — “" + r.raw + "” could not be read as a number of days)";
+      const badRows = (rows) => rows.filter((r) => !r.ok);
       const PKIND = { reference: { c: "#94a3b8", l: "Reference (baseline)" }, exposure: { c: "#14b8a6", l: "Exposure risk" }, pre: { c: "#f59e0b", l: "Pre-exposure risk" }, post: { c: "#fb923c", l: "Post-exposure risk" }, custom: { c: "#8b5cf6", l: "Custom period" } };
       const fmtD = (d) => { const a = Math.abs(d), s = d < 0 ? "−" : "+"; if (a >= 365) { const y = a / 365; return s + (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return s + Math.round(a / 30) + "mo"; return s + a + "d"; };
 
@@ -991,6 +1033,25 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         const covRows = parseRows(s.covWindows);
         const periods = parsePeriods(s.periods);
         const baseY = Math.max(0, parseFloat(s.baselineYears) || 0), baseDays = Math.round(baseY * 365);
+        // The strip is one continuous run of consecutive segments, so each
+        // segment's position depends on the length of every segment before it.
+        // One unreadable length therefore leaves the whole strip without a
+        // determined geometry — there is no honest partial picture to draw, and
+        // drawing the old one-day fallback is how a 1000-day risk window came to
+        // be exported beside a figure showing a single day. Refuse, and name the
+        // line, rather than draw a window the form does not specify.
+        const badP = badRows(periods);
+        if (badP.length) {
+          document.getElementById("diagram").innerHTML =
+            '<div class="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">' +
+            '<p class="font-bold">⛔ The period strip cannot be drawn</p>' +
+            '<p class="mt-1 leading-relaxed">Each segment is positioned by the lengths of the ones before it, so a length that cannot be read leaves the whole strip undetermined. No figure is drawn rather than a wrong one. ' +
+            badP.map((p) => "<strong>" + esc(p.name) + "</strong> " + esc(p.empty ? "has no length" : "has the length “" + p.raw + "”, which is not a whole number of days")).join("; ") + '.</p>' +
+            '<p class="mt-1 text-xs">Write each line as <code>Type | days</code>, for example <code>Exposure risk | 30</code>.</p></div>';
+          document.getElementById("dlegend").innerHTML = "";
+          const calBad = form.querySelector("[data-cal]"); if (calBad) calBad.classList.toggle("hidden", anchor !== "calendar");
+          return;
+        }
         // consecutive segments; shift so day 0 = start of the first exposure segment
         let cum = 0; const segs = periods.map((p) => { const seg = { name: p.name, days: p.days, kind: p.kind, start: cum, end: cum + p.days }; cum += p.days; return seg; });
         const expIdx = segs.findIndex((x) => x.kind === "exposure");
@@ -999,7 +1060,13 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         //   inside follow-up and the baseline calendar block sits before entry (negative time).
         const day0 = anchor === "calendar" ? (segs.length ? segs[0].start : 0) : (expIdx >= 0 ? segs[expIdx].start : 0);
         segs.forEach((x) => { x.start -= day0; x.end -= day0; });
-        const covMax = covRows.reduce((m, r) => Math.max(m, r.days), 0);
+        // A look-back row is anchored at day 0 on its own, so one unreadable row
+        // does not cost the others their geometry — it is simply not drawn, and
+        // the checks panel names it. `drawn` keeps each row's ORIGINAL index:
+        // the drag handles carry it in `data-idx` and write straight back into
+        // that line of the textarea, so re-indexing here would drag the wrong row.
+        const covDrawn = covRows.map((r, i) => ({ r, i })).filter((x) => x.r.ok);
+        const covMax = covDrawn.reduce((m, x) => Math.max(m, x.r.days), 0);
         const stripMin = segs.length ? segs[0].start : 0, stripMax = segs.length ? segs[segs.length - 1].end : 1;
         let lo = Math.min(stripMin, -covMax, anchor === "calendar" ? -baseDays : 0), hi = Math.max(stripMax, 1);
         const pad = (hi - lo) * 0.03 || 1; lo -= pad; hi += pad;
@@ -1017,7 +1084,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         // default protocol produced for pre-risk, exposure and post-risk.
         const segPx = (seg) => Math.max(2, ((seg.end - seg.start) / (hi - lo)) * plotW);
         const LABEL_MIN = 46, callouts = segs.filter((seg) => segPx(seg) <= LABEL_MIN).length;
-        const top = 52, rowH = 25, stripY = top + (covRows.length + extraRow) * rowH + 8;
+        const top = 52, rowH = 25, stripY = top + (covDrawn.length + extraRow) * rowH + 8;
         const calloutH = callouts ? (callouts > 1 ? 26 : 14) : 0, H = stripY + 30 + 26 + calloutH;
         const xF = (d) => plotL + ((d - lo) / (hi - lo)) * plotW, x0 = xF(0);
         let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="w-full h-auto" style="min-width:700px;overflow:visible" xmlns="http://www.w3.org/2000/svg">';
@@ -1027,7 +1094,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         [Math.ceil(lo), 0, Math.floor(hi)].forEach((d) => { svg += '<text x="' + xF(d) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="10" fill="#94a3b8">' + (d === 0 ? "0" : fmtD(d)) + '</text>'; });
         let row = 0;
         if (extraRow) { const y = top + row * rowH, xa = xF(-baseDays); svg += '<text x="' + (plotL - 10) + '" y="' + (y + 13) + '" text-anchor="end" font-size="11" fill="#334155">Baseline (calendar ' + (baseY === 1 ? "1 y" : baseY + " y") + ')</text>'; svg += '<rect x="' + xa + '" y="' + (y + 2) + '" width="' + Math.max(3, x0 - xa) + '" height="16" rx="3" fill="#94a3b8" fill-opacity="0.35" stroke="#94a3b8" stroke-dasharray="4 3"/>'; row++; }
-        covRows.forEach((r, i) => { const y = top + row * rowH, xa = xF(-r.days); svg += '<text x="' + (plotL - 10) + '" y="' + (y + 13) + '" text-anchor="end" font-size="11" fill="#334155"><title>' + esc(r.name) + '</title>' + esc(trunc(r.name, 26)) + '</text>'; svg += '<rect x="' + xa + '" y="' + (y + 2) + '" width="' + Math.max(3, x0 - xa) + '" height="16" rx="3" fill="#8b5cf6" fill-opacity="0.85"/>'; svg += '<circle cx="' + xa + '" cy="' + (y + 10) + '" r="4.5" fill="#fff" stroke="#8b5cf6" stroke-width="2" class="sccs-h" data-kind="cov" data-idx="' + i + '" style="cursor:ew-resize;touch-action:none"/>'; row++; });
+        covDrawn.forEach(({ r, i }) => { const y = top + row * rowH, xa = xF(-r.days); svg += '<text x="' + (plotL - 10) + '" y="' + (y + 13) + '" text-anchor="end" font-size="11" fill="#334155"><title>' + esc(r.name) + '</title>' + esc(trunc(r.name, 26)) + '</text>'; svg += '<rect x="' + xa + '" y="' + (y + 2) + '" width="' + Math.max(3, x0 - xa) + '" height="16" rx="3" fill="#8b5cf6" fill-opacity="0.85"/>'; svg += '<circle cx="' + xa + '" cy="' + (y + 10) + '" r="4.5" fill="#fff" stroke="#8b5cf6" stroke-width="2" class="sccs-h" data-kind="cov" data-idx="' + i + '" style="cursor:ew-resize;touch-action:none"/>'; row++; });
         svg += '<text x="' + (plotL - 10) + '" y="' + (stripY + 17) + '" text-anchor="end" font-size="11" fill="#334155" font-weight="600">Observation strip</text>';
         let lane = 0;
         segs.forEach((seg, i) => {
@@ -1045,7 +1112,8 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           svg += '<circle cx="' + xb + '" cy="' + (stripY + 13) + '" r="4.5" fill="#fff" stroke="' + meta.c + '" stroke-width="2" class="sccs-h" data-kind="seg" data-idx="' + i + '" style="cursor:ew-resize;touch-action:none"/>';
         });
         const diag = document.getElementById("diagram"); diag.innerHTML = svg + "</svg>";
-        document.getElementById("dlegend").innerHTML = ["reference", "exposure", "pre", "post"].map((k) => '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + PKIND[k].c + '"></span>' + PKIND[k].l + '</span>').join("") + '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Covariate look-back</span>';
+        document.getElementById("dlegend").innerHTML = ["reference", "exposure", "pre", "post"].map((k) => '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:' + PKIND[k].c + '"></span>' + PKIND[k].l + '</span>').join("") + '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#8b5cf6"></span>Covariate look-back</span>' +
+          (badRows(covRows).length ? '<span class="text-rose-700 font-semibold">Not drawn: ' + badRows(covRows).map((r) => esc(r.name)).join(", ") + ' (no readable length)</span>' : "");
 
         const svgXof = (cx) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = cx; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
         diag.querySelectorAll(".sccs-h").forEach((h) => {
@@ -1056,8 +1124,12 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
             const pid = ev.pointerId; try { diag.setPointerCapture(pid); } catch (e) {}
             let pending = null, raf = 0;
             const apply = () => { raf = 0; if (pending == null) return;
-              if (hkind === "cov") { const rows = parseRows(form.elements.covWindows.value); if (rows[idx]) { rows[idx].days = pending; form.elements.covWindows.value = rowsJoin(rows); } }
-              else { const ps = parsePeriods(form.elements.periods.value); if (ps[idx]) { ps[idx].days = pending; form.elements.periods.value = periodsJoin(ps); } }
+              // Dragging one edge must set that row's length and leave every
+              // other line exactly as the user typed it — `ok`/`raw` go with the
+              // number, or the join would write the old unreadable text back.
+              const setDays = (r, n) => { r.days = n; r.ok = true; r.empty = false; r.raw = String(n); };
+              if (hkind === "cov") { const rows = parseRows(form.elements.covWindows.value); if (rows[idx]) { setDays(rows[idx], pending); form.elements.covWindows.value = rowsJoin(rows); } }
+              else { const ps = parsePeriods(form.elements.periods.value); if (ps[idx]) { setDays(ps[idx], pending); form.elements.periods.value = periodsJoin(ps); } }
               render();
             };
             const move = (e) => { if (e.pointerId !== pid) return; const x = svgXof(e.clientX); if (x == null) return; const day = Math.round((lo + ((x - plotL) / plotW) * (hi - lo)) / 5) * 5;
@@ -1085,6 +1157,25 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         const out = [];
         const periods = parsePeriods(s.periods);
         const outcomeBlob = [s.picoO, s.outcomeDef, s.outcomeCodes].filter(Boolean).join(" ");
+        // A length nobody can read is the one thing that must stop the draft:
+        // the risk window's length is the estimand, and the old parser answered
+        // "1 day" for `1e3`, `thirty`, `0.5`, `-30`, `1,000` and for a line that
+        // had lost its "|". These notes reach the panel, the Markdown, the Word
+        // protocol and STROBE item 19 through the same path as every other check.
+        const unreadable = [...badRows(periods).map((r) => ({ where: "period strip", r })),
+                            ...badRows(parseRows(s.covWindows)).map((r) => ({ where: "covariate look-back", r }))];
+        if (unreadable.length) {
+          out.push({ lvl: "stop", t: "A window length could not be read", d:
+            unreadable.map((x) => "In the " + x.where + ", “" + x.r.name + "” " + (x.r.empty ? "has no length after its “|”" : "gives its length as “" + x.r.raw + "”, which is not a whole number of days")).join(". ") +
+            ". No length has been assumed for these, so they are missing from the protocol rather than wrong in it, and the design figure is not drawn. Write each line as Type | days, e.g. Exposure risk | 30. In an SCCS the window lengths are the estimand: the incidence rate ratio is exposed person-time against reference person-time, so a length the tool guessed would change the quantity being estimated." });
+        }
+        const dos = readDays(s.daysOfSupply), grc = readDays(s.grace);
+        if (!dos.ok || !grc.ok) {
+          out.push({ lvl: "warn", t: "The exposure episode rule is incomplete", d:
+            [!dos.ok ? "Days of supply is " + (dos.empty ? "blank" : "“" + dos.raw + "”, which is not a whole number of days") : "",
+             !grc.ok ? "the grace period is " + (grc.empty ? "blank" : "“" + grc.raw + "”, which is not a whole number of days") : ""].filter(Boolean).join(" and ") +
+            ". These two define where each exposure episode starts and ends, and therefore which person-time is exposed. The protocol reports them as not specified rather than filling in 30 and 14 days on your behalf." });
+        }
         if (periods.length && !periods.some((p) => p.kind === "pre")) {
           out.push({ lvl: "warn", t: "No pre-exposure risk window", d: "Assumption 1. Without a pre-exposure (pretreatment) window the strip gives you no way to see whether the event, or the illness behind it, changed the chance of being treated — the exposed period simply absorbs it. Add one from the chips under the period strip; the AsPEN antipsychotic-falls series used 14 days." });
         }
@@ -1141,13 +1232,13 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         const addRow = e.target?.closest?.("[data-add-row]");
         if (addRow) {
           const el = form.elements[addRow.dataset.target], name = addRow.dataset.name;
-          if (el) { const rows = parseRows(el.value); if (!rows.some((r) => r.name === name)) { rows.push({ name: name, days: 365 }); el.value = rowsJoin(rows); render(); } }
+          if (el) { const rows = parseRows(el.value); if (!rows.some((r) => r.name === name)) { rows.push({ name: name, days: 365, ok: true, empty: false, raw: "365" }); el.value = rowsJoin(rows); render(); } }
           return;
         }
         const addP = e.target?.closest?.("[data-add-period]");
         if (addP) {
           const el = form.elements.periods, name = addP.dataset.name;
-          if (el) { const ps = parsePeriods(el.value); ps.push({ name: name, days: /reference/i.test(name) ? 90 : 14 }); el.value = periodsJoin(ps); render(); }
+          if (el) { const ps = parsePeriods(el.value); const d = /reference/i.test(name) ? 90 : 14; ps.push({ name: name, days: d, ok: true, empty: false, raw: String(d) }); el.value = periodsJoin(ps); render(); }
           return;
         }
         const tl = e.target?.closest?.("[data-timeline-preset]");
@@ -1380,8 +1471,8 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         children.push(labelTable([
           ["Name", s.exposureName || ""],
           ["Code set", s.exposureCodes || ""],
-          ["Days of supply (default)", (s.daysOfSupply || "30") + " d"],
-          ["Grace period", (s.grace || "14") + " d"],
+          ["Days of supply (default)", rowDays(readDays(s.daysOfSupply))],
+          ["Grace period", rowDays(readDays(s.grace))],
           ["Exposure period rule", s.exposurePeriodDef || "Continuous exposure inferred from sequential dispensings; gap > grace period ends the episode."],
         ]));
 
@@ -1391,10 +1482,10 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         children.push(h1("6. Risk windows"));
         children.push(labelTable([
           ["Timeline anchor", s.sccsAnchor === "calendar" ? "Calendar-anchored — common start " + (s.cohortStart || "(date)") + "; baseline " + (s.baselineYears || "1") + " calendar year(s)" : "Exposure-anchored — day 0 = first exposure"],
-          ["Risk / reference periods", parsePeriods(s.periods).map((p) => p.name + " " + p.days + " d").join(" → ") || "(define the period strip)"],
+          ["Risk / reference periods", parsePeriods(s.periods).map((p) => p.name + " " + rowDays(p)).join(" → ") || "(define the period strip)"],
           ["Risk window definition", riskWin],
           ["Baseline (control) period", s.baselinePeriod || "All observation time NOT in pre-risk, risk, or post-risk windows"],
-          ["Covariate / eligibility look-back", parseRows(s.covWindows).map((r) => r.name + " " + r.days + " d").join("; ") || "none (self-controlled design)"],
+          ["Covariate / eligibility look-back", parseRows(s.covWindows).map((r) => r.name + " " + rowDays(r)).join("; ") || "none (self-controlled design)"],
         ]));
 
         children.push(h1("7. Observation period"));
