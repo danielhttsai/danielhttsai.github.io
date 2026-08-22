@@ -327,11 +327,11 @@ const DESIGNS = [
         </div>
         <label class="block text-xs sm:w-2/3"><span class="uppercase tracking-widest text-brand-700 font-semibold">Autocorrelation</span>
           <select id="its_ac" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">
-            <option value="auto" selected>Auto — Newey–West (HAC) SE only if Durbin–Watson flags serial correlation</option>
+            <option value="auto" selected>Auto — the wider of the model-based and Newey–West (HAC) standard error</option>
             <option value="newey">Always use Newey–West (HAC) standard errors</option>
             <option value="none">Model-based SE — report Durbin–Watson only</option>
           </select>
-          <span class="text-[11px] text-slate-500">Whichever is used is stated with the results and in the exported report.</span></label>
+          <span class="text-[11px] text-slate-500">Nothing in the data says which of the two is right, and each is badly anti-conservative in the case the other handles, so <strong>Auto</strong> takes the wider of them coefficient by coefficient. Whichever is used is stated with the results and in the exported report.</span></label>
       </div>
 
       <p id="mapmsg" class="mt-3 text-xs"></p>
@@ -952,9 +952,13 @@ const DESIGNS = [
       "(0.498–0.841), so both estimates above are where they should be.</p>" +
       "<p class='mt-1'>The same file also runs as an <strong>interrupted time series</strong>: map <code>index_date</code> and " +
       "<code>outcome</code>, aggregate by month, interruption <strong>2019-01</strong>. Expect a level change of " +
-      "<strong>≈ 1.35 (0.98–1.85)</strong>. Note that is <em>not</em> the ×" + Math.exp(DEMO.stepLHR).toFixed(1) + " that was put into the hazard, and " +
+      "<strong>≈ 1.35 (0.82–2.21)</strong>. Note that is <em>not</em> the ×" + Math.exp(DEMO.stepLHR).toFixed(1) + " that was put into the hazard, and " +
       "should not be: <code>outcome</code> is a 365-day risk rather than a rate, so the step is compressed, and with only 12 " +
-      "periods either side the interval crosses 1. The ITS here is a working example, not a second estimate of the same quantity.</p>";
+      "periods either side the interval crosses 1. The ITS here is a working example, not a second estimate of the same quantity.</p>" +
+      "<p class='mt-1 text-slate-500'>That interval is wide on purpose. Twenty-four periods is too few for either standard error " +
+      "this tool can offer to be worth 95% confidence, so <strong>Auto</strong> reports the wider of the two and says as much " +
+      "underneath the estimates. An earlier version reported 0.98–1.85 here — the Newey–West interval, which on this series is " +
+      "narrower than the model-based one it was meant to be a correction to.</p>";
 
     // Shared helpers for every demo generator.
     const lcg = (s0) => { let s = s0; return () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648; };
@@ -1738,27 +1742,57 @@ const DESIGNS = [
           // Lag is measured in PERIODS, not in rows. A missing month, or a period
           // dropped for a bad denominator, leaves neighbouring rows several periods
           // apart; treating them as lag 1 mis-weights the correction.
-          L.push("hacv<-function(fit,Lg,gv,tv){ U<-ef(fit); n<-nrow(U); M<-crossprod(U); if(Lg>0) for(l in 1:Lg){ w<-1-l/(Lg+1); same<-as.numeric(gv[(l+1):n]==gv[1:(n-l)] & (tv[(l+1):n]-tv[1:(n-l)])==l); Gm<-crossprod(U[(l+1):n,,drop=FALSE]*same, U[1:(n-l),,drop=FALSE]); M<-M+w*(Gm+t(Gm)) }; B<-brd(fit); B%*%M%*%B }");
-          L.push("Lg<-max(1,floor(4*(nrow(a)/100)^(2/9)))");
+          // The meat is scaled by n/(n-k). Without it the sandwich is HC0: the
+          // score contributions are shrunk by the hat matrix, so over a couple of
+          // dozen periods the correction it applies is smaller than the one it
+          // needs, and the interval comes out NARROWER than the model-based one it
+          // replaced. On the cohort demo (24 periods, 4 parameters) the shipped
+          // interval for the pre-intervention slope was 2.9x narrower on the log
+          // scale than the model-based interval for the same coefficient.
+          L.push("hacv<-function(fit,Lg,gv,tv){ U<-ef(fit); n<-nrow(U); k<-ncol(U); M<-crossprod(U); if(Lg>0) for(l in 1:Lg){ w<-1-l/(Lg+1); same<-as.numeric(gv[(l+1):n]==gv[1:(n-l)] & (tv[(l+1):n]-tv[1:(n-l)])==l); Gm<-crossprod(U[(l+1):n,,drop=FALSE]*same, U[1:(n-l),,drop=FALSE]); M<-M+w*(Gm+t(Gm)) }; M<-M*n/max(1,n-k); B<-brd(fit); B%*%M%*%B }");
+          // Bandwidth and series length are properties of ONE series. Using
+          // nrow(a) meant a controlled ITS of two six-period series counted as
+          // twelve, so the correction was applied to a six-period series and the
+          // lag was chosen for a series twice as long as any that exists.
+          L.push("nser<-if(HASG) min(as.numeric(table(a$g))) else nrow(a)");
+          L.push("Lg<-max(1,floor(4*(nser/100)^(2/9)))");
           L.push("Vm<-vcov(fit)[gdn,gdn,drop=FALSE]; Vh<-tryCatch(hacv(fit,Lg,a$g,a$t),error=function(e) NULL)");
           // Durbin-Watson on GLM Pearson residuals has no standard null distribution,
           // and over 24-36 periods it has little power anyway, so it is far too weak
-          // to decide whether the correction is applied. HAC is consistent either
-          // way and costs nothing here, so "auto" now means "use it", and DW is
-          // reported for information rather than used as a gate.
-          L.push("useh<-(AC=='newey') || (AC=='auto' && nrow(a)>=12)");
-          L.push("if(useh && is.null(Vh)) useh<-FALSE");
+          // to decide which standard error is used. It is reported for information;
+          // the choice is made by "semode" below, which does not consult it.
           // A (near-)perfect fit makes every score contribution zero, so the sandwich
           // meat vanishes and the intervals come out zero-width. Never report that.
-          L.push("hacdeg<-FALSE");
-          L.push("if(useh){ dg<-diag(Vh); dm<-diag(Vm); if(any(!is.finite(dg)) || any(dg<=0) || any(dg < 1e-6*dm)){ useh<-FALSE; hacdeg<-TRUE } }");
-          L.push("V<-if(useh) Vh else Vm; dimnames(V)<-dimnames(Vm)");
-          L.push("selab<-if(useh) sprintf('Newey-West HAC standard errors (Bartlett kernel, lag %d)',Lg) else 'model-based standard errors'");
+          L.push("hacdeg<-FALSE; hacfail<-is.null(Vh)");
+          L.push("if(!is.null(Vh)){ dg<-diag(Vh); dm<-diag(Vm); if(any(!is.finite(dg)) || any(dg<=0) || any(dg < 1e-6*dm)){ Vh<-NULL; hacdeg<-TRUE } }");
+          // "auto" used to mean "apply the sandwich to anything with >= 12 rows".
+          // Simulating this file's own sandwich under the null (segmented model,
+          // 2000-2500 replicates, two seeds) put the rejection rate of a nominal
+          // 5% test at 0.38 at 12 periods, 0.21 at 24 and 0.09 at 100 — and worse
+          // than the model-based SE it replaces at every length below about 60,
+          // INCLUDING under the AR(1) errors it exists to handle. The model-based
+          // SE is not a safe default either: it is nominal only when the residuals
+          // are independent, and rejects at 0.19-0.39 once they are not.
+          // Neither is right, and nothing in the data says which regime you are in,
+          // so "auto" takes the WIDER of the two, coefficient by coefficient. That
+          // rule was simulated alongside the other two and is at least as good as
+          // whichever happens to be better, in every cell tested: 0.05 at rho=0 at
+          // every length, and below both alternatives at rho=0.3/0.5/0.7.
+          L.push("semode<-if(AC=='none' || is.null(Vh)) 'model' else if(AC=='newey') 'hac' else 'wider'");
+          L.push("sem<-sqrt(diag(Vm)); seh<-if(is.null(Vh)) sem else sqrt(diag(Vh))");
+          L.push("selab<-if(semode=='hac') sprintf('Newey-West HAC standard errors (Bartlett kernel, lag %d, meat scaled by n/(n-k))',Lg) else if(semode=='wider') sprintf('the wider of the model-based and the Newey-West HAC standard error (Bartlett kernel, lag %d), taken coefficient by coefficient',Lg) else 'model-based standard errors'");
+          // R itself uses t for lm and quasi-Poisson and z for Poisson and negative
+          // binomial. A blanket 1.96 was therefore too narrow for two of the four
+          // families this file can fit. The sandwich is finite-sample sensitive
+          // whatever the family, so it always gets t.
+          L.push("dfres<-df.residual(fit); ist<-any(grepl('^t ',colnames(summary(fit)$coefficients)))");
+          L.push("crit<-if((semode!='model' || ist) && is.finite(dfres) && dfres>0) qt(0.975,dfres) else 1.96");
+          L.push("critlab<-if(crit>1.9601) sprintf('t with %d degrees of freedom',dfres) else 'a normal approximation'");
           L.push("");
-          L.push("nmv<-gdn; se<-sqrt(diag(V)); names(se)<-nmv");
+          L.push("nmv<-gdn; se<-if(semode=='model') sem else if(semode=='hac') seh else pmax(sem,seh); names(se)<-nmv");
           L.push("# rates can be tiny, so fall back to significant digits rather than printing +0.000");
           L.push("fmt<-function(x) if(!is.finite(x)) 'NA' else if(abs(x)>=0.01 || x==0) sprintf('%+.3f',x) else sprintf('%+.3g',x)");
-          L.push("rep1<-function(lab,nm){ if(!(nm %in% nmv) || is.na(cf[[nm]])) return(invisible()); b<-as.numeric(cf[[nm]]); s<-as.numeric(se[[nm]]); lo<-b-1.96*s; hi<-b+1.96*s");
+          L.push("rep1<-function(lab,nm){ if(!(nm %in% nmv) || is.na(cf[[nm]])) return(invisible()); b<-as.numeric(cf[[nm]]); s<-as.numeric(se[[nm]]); lo<-b-crit*s; hi<-b+crit*s");
           L.push("  if(expo) cat(sprintf('RESULT_ESTIMATE|%s|%.3f (95%% CI %.3f-%.3f)\\n',lab,exp(b),exp(lo),exp(hi)))");
           L.push("  else cat(sprintf('RESULT_ESTIMATE|%s|%s (95%% CI %s to %s)\\n',lab,fmt(b),fmt(lo),fmt(hi))) }");
           L.push("sc<-if(expo) ' (rate ratio)' else ' (absolute change)'");
@@ -1773,10 +1807,15 @@ const DESIGNS = [
           L.push("zn<-if(HASG) c('g:level','g:tsince') else c('level','tsince')");
           L.push("if(zn[1] %in% nmv) L0[zn[1]]<-1; if(zn[2] %in% nmv) L0[zn[2]]<-tsn");
           L.push("cfv<-cf[nmv]; cfv[is.na(cfv)]<-0");
-          L.push("ct<-sum(L0*cfv); vct<-as.numeric(t(L0)%*%V%*%L0); sct<-if(is.finite(vct) && vct>0) sqrt(vct) else NA_real_");
+          // The contrast is a linear combination, so "the wider of the two" has to
+          // be applied to the two quadratic forms, not to the two diagonals.
+          L.push("ct<-sum(L0*cfv)");
+          L.push("vm0<-as.numeric(t(L0)%*%Vm%*%L0); vh0<-if(is.null(Vh)) vm0 else as.numeric(t(L0)%*%Vh%*%L0)");
+          L.push("vct<-if(semode=='model') vm0 else if(semode=='hac') vh0 else max(vm0,vh0)");
+          L.push("sct<-if(is.finite(vct) && vct>0) sqrt(vct) else NA_real_");
           L.push("endlab<-ukey[tn]");
-          L.push("if(!is.na(sct)){ if(expo) cat(sprintf('RESULT_ESTIMATE|Observed vs counterfactual at %s (end of follow-up)|%.3f (95%% CI %.3f-%.3f)\\n',endlab,exp(ct),exp(ct-1.96*sct),exp(ct+1.96*sct)))");
-          L.push("  else cat(sprintf('RESULT_ESTIMATE|Observed minus counterfactual at %s (end of follow-up)|%s (95%% CI %s to %s)\\n',endlab,fmt(ct),fmt(ct-1.96*sct),fmt(ct+1.96*sct))) }");
+          L.push("if(!is.na(sct)){ if(expo) cat(sprintf('RESULT_ESTIMATE|Observed vs counterfactual at %s (end of follow-up)|%.3f (95%% CI %.3f-%.3f)\\n',endlab,exp(ct),exp(ct-crit*sct),exp(ct+crit*sct)))");
+          L.push("  else cat(sprintf('RESULT_ESTIMATE|Observed minus counterfactual at %s (end of follow-up)|%s (95%% CI %s to %s)\\n',endlab,fmt(ct),fmt(ct-crit*sct),fmt(ct+crit*sct))) }");
           L.push("");
           L.push("# --- fitted and counterfactual series ---");
           L.push("X<-model.matrix(fit); Xc<-X");
@@ -1800,19 +1839,37 @@ const DESIGNS = [
           L.push("if(useoff) cat(sprintf('TABLE1|Denominator per period, mean|%.6g|%.6g\\n', mean(a$N[pre]), mean(a$N[pst])))");
           L.push("if(HASG) cat(sprintf('TABLE1|Control-series periods|%d|%d\\n', sum(a$g!=gref & a$t<t0), sum(a$g!=gref & a$t>=t0)))");
           L.push("dwt<-if(is.na(dw)) 'not computable' else sprintf('%.2f (lag-1 residual autocorrelation %+.2f)',dw,r1)");
-          L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s) fitted: %d before and %d from %s onward%s. Inference uses %s. Durbin-Watson %s (descriptive only - on GLM Pearson residuals it has no standard null distribution).\\n', famlab, nfit, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, dwt))");
+          L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s) fitted: %d before and %d from %s onward%s. Inference uses %s, with %s for the 95%% intervals. Durbin-Watson %s (descriptive only - on GLM Pearson residuals it has no standard null distribution).\\n', famlab, nfit, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, critlab, dwt))");
           L.push("cat(sprintf('RESULT_NOTE|Periods were ordered by %s. Level change is the immediate step at %s; slope change accrues from the period after it (Wagner 2002 convention, time-since-intervention = 0 at the first affected period).\\n', ordmode, ukey[t0]))");
           L.push("if(HASN) cat(sprintf('RESULT_NOTE|The denominator was combined within each period by taking the %s of the rows in that period%s.\\n', dmode, if(DCOMB=='auto' && dmode=='first') ' (chosen automatically because it is constant within every period)' else ''))");
           // A count model with no offset silently assumes a constant population.
           L.push("if(hacdeg) cat('RESULT_NOTE|The Newey-West correction was skipped: the model fits the series so closely that the sandwich estimator degenerates to zero variance, which would print impossibly narrow intervals. Model-based standard errors are reported instead.\\n')");
+          // The sandwich failing outright used to be completely silent: useh was
+          // set FALSE and the run carried on with model-based SEs. Someone who
+          // explicitly chose "always use Newey-West" got the opposite, and was then
+          // told they had requested it.
+          L.push("if(hacfail) cat(sprintf('RESULT_NOTE|The Newey-West correction could not be computed on this fit%s, so the model-based standard errors are reported instead. That is not a request you made; if the residuals are correlated from one period to the next these intervals are too narrow.\\n', if(AC=='newey') ' even though you asked for it' else ''))");
           L.push("if(expo && !useoff) cat('RESULT_NOTE|No denominator was mapped, so this models the count per period and assumes the population at risk is the same in every period. If your outcome is already a rate, map its denominator or choose the linear model - otherwise a changing population will be read as a trend.\\n')");
           L.push("if(length(alias)>0) cat(sprintf('RESULT_NOTE|%d model term(s) could not be estimated because they are collinear with the rest of the model (%s), and were dropped. Over only a couple of complete cycles, calendar dummies and a linear time trend are not separately identifiable — shorten the seasonal terms, switch to harmonic terms, or lengthen the series.\\n', length(alias), paste(alias,collapse=', ')))");
           L.push("if(ratemode) cat('RESULT_NOTE|A denominator was mapped with a linear model, so the outcome is the rate (value divided by the denominator); the level and slope changes are on that rate scale.\\n')");
           L.push("if(npre<8) cat(sprintf('RESULT_NOTE|Only %d pre-intervention period(s) — the baseline trend, and therefore the counterfactual, is poorly estimated. Aim for at least 8 (ideally 12).\\n',npre))");
           L.push("if(npost<8) cat(sprintf('RESULT_NOTE|Only %d post-intervention period(s) — a slope change is hard to detect. Aim for at least 8 (ideally 12).\\n',npost))");
-          L.push("if(!is.na(dw) && (dw<1.5||dw>2.5) && !useh) cat('RESULT_NOTE|Durbin-Watson indicates residual autocorrelation but model-based standard errors were requested, so the confidence intervals are likely too narrow.\\n')");
+          // One note used to cover both of these, and got two things wrong. It said
+          // the model-based SEs "were requested" in every branch that reached it,
+          // including the ones where nothing was requested and the run had fallen
+          // back on its own; and it asserted a single direction under a two-sided
+          // condition, when a Durbin-Watson above 2.5 is NEGATIVE serial
+          // correlation, where ignoring it makes the intervals too wide.
+          L.push("if(!is.na(dw) && dw<1.5 && semode=='model' && AC=='none') cat(sprintf('RESULT_NOTE|Durbin-Watson %.2f: the residuals are positively correlated from one period to the next, and you asked for model-based standard errors, which assume they are not. These intervals are too narrow.\\n', dw))");
+          L.push("if(!is.na(dw) && dw>2.5 && semode=='model' && AC=='none') cat(sprintf('RESULT_NOTE|Durbin-Watson %.2f: the residuals alternate in sign from one period to the next (negative serial correlation). Model-based standard errors are conservative in that case, so these intervals are if anything too wide - but alternation this strong usually means the period length or the aggregation rule does not match how the data were collected, which is worth checking before reading the estimates.\\n', dw))");
+          // Neither standard error is trustworthy on a short positively-correlated
+          // series, and no choice available here fixes that. Say so rather than
+          // letting the interval speak for itself. The claim is restricted to
+          // positive autocorrelation because that is the case simulated above;
+          // negative autocorrelation runs the other way and is handled just above.
+          L.push("if(nser<48 && !is.na(r1) && r1>=0.2) cat(sprintf('RESULT_NOTE|Read this interval as indicative, not as a 95%% interval. With %d period(s) per series and a lag-1 residual autocorrelation of %+.2f, no standard error on offer here delivers its nominal coverage: a sandwich estimated from %d score contributions is itself noisy, and the model-based one assumes an independence the residuals do not have. Both reject a true null more often than 5%% at this length, so an interval that only just excludes the null is not evidence of an effect. A longer series is the only real remedy.\\n', nser, r1, nser))");
           // Say where the HAC correction stops, next to the numbers it produced.
-          L.push("if(HASG && useh) cat('RESULT_NOTE|With a control series the HAC correction is applied within each series: lag products that cross the two series are excluded, so serial correlation is handled but any contemporaneous correlation between the intervention and control series at the same time point is assumed to be zero. If the two series move together period by period, these standard errors are too narrow.\\n')");
+          L.push("if(HASG && semode!='model') cat('RESULT_NOTE|With a control series the HAC correction is applied within each series: lag products that cross the two series are excluded, so serial correlation is handled but any contemporaneous correlation between the intervention and control series at the same time point is assumed to be zero. If the two series move together period by period, these standard errors are too narrow.\\n')");
           L.push("");
           L.push("cat('\\n--- Segmented regression coefficients ---\\n'); print(summary(fit)$coefficients)");
           L.push("cat(sprintf('\\nPeriods: %d (%s to %s); interruption at %s (period %d).\\n',np,ukey[1],ukey[np],ukey[t0],t0))");
