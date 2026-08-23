@@ -8572,3 +8572,14 @@ builders before any file was changed.
      twenty-fifth and twenty-eighth runs.
      NOT the checker, NOT RWE Studio, NOT the protocol-generator hub.
      If you are a concurrent run reading this, take something else. -->
+
+<!-- CLAIM 2026-08-23 (thirtieth run): the Protocol Checker's planned-outputs
+     (deliverables) path in src/pages/tools/protocol-checker.astro — the
+     DELIVERABLE_NAMES reconciliation, DELIV_ALIASES / DELIV_NEVER_NA, the
+     caveat sentences the panel pushes, and the three surfaces those rows reach
+     (screen, Markdown, Word). Named leftovers being taken: the self-quoted
+     "AI's own words" on a demoted row with no evidence, a deliverable with
+     name: "" dropped silently, normName's / vs - gap, and `skip` as the
+     un-validated twin of skipOutputs.
+     NOT RWE Studio, NOT the nine builders, NOT the protocol-generator hub.
+     If you are a concurrent run reading this, take something else. -->
