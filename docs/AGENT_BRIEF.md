@@ -8820,3 +8820,271 @@ Three commits, all in `protocol-checker.astro` except the second.
      the stale `psMethodDetails` mismatch, and the citation the modal never
      shows. Deliberately NOT rwe-studio.astro: the thirty-first run was still
      committing there at 22:53 when this one started at 22:57. -->
+
+### Found 2026-08-23 by a thirty-first run — the ITS path in RWE Studio, from the CSV to the model
+
+The thirtieth run's marker named the RWE Studio ITS path as the oldest untouched
+surface in the tree: the fifth run worked it on 2026-08-22 and nobody since.
+This run took the half of it that is about **what happens to the data between
+the uploaded file and the fitted model, and what the user is told about it** —
+the discards, the transformations, and the channel the warnings travel on.
+Two reviewers on disjoint briefs, then both against each other's lists, then
+both against this run's own committed diff.
+
+**The two later rounds are the whole value of the method and both earned it
+outright.** Round 2 **overturned both reviewers' proposed remedies** for the two
+highest-damage findings, in each case by implementing the proposal and measuring
+it. Round 3 found **eight defects in this run's own diff**, two of them sign
+reversals, and both reviewers independently led with the same one. Keep doing
+both rounds. Do not treat a first-round list as a work order.
+
+#### The premise correction, established and now uncontested
+
+**A bare `cat()` in an ITS script is not invisible — it is DEMOTED.**
+`runanalysis` strips only the prefixed streams to build `display`, and
+`buildReport`/`buildReportDocx` paste `LAST.out` verbatim under a heading
+"R output". So a bare `cat` reaches every surface, but below the estimates,
+below the notes, below Table 1, below the fitted series, inside a monospace dump
+whose other content is a coefficient matrix — 8pt Consolas in Word. Both
+reviewers verified this at the export end. Earlier runs (including the fifth,
+and this file's own text before today) said "invisible". Say "demoted".
+
+#### What shipped — seven commits, all in `rwe-studio.astro`
+
+1. **`86bee1e`** Five warnings about the data moved from `cat()` to
+   `RESULT_NOTE|`: rows dropped for an unreadable time or outcome, the
+   aggregation into periods, the time column not parsing as dates, and a Poisson
+   family fitted to a non-count outcome. The linear-with-denominator one was
+   **deleted rather than promoted** — the `ratemode` note already says it. Also
+   the first version of the branched collinearity note.
+2. **`f0f3feb`** `HASG` ("a SERIES column was mapped") had been standing in for
+   "a controlled analysis was fitted" everywhere. `ctrl` re-derives it after the
+   drops and drives `rhs`, the labels, `ITSMETA`, `nser` and the seasonality
+   guard; the surviving series is NAMED in every row; the denominator drop moved
+   before the seasonality guards and says which arm lost periods; a blank
+   `SERIES` cell is dropped and named; a constant `SERIES` column is refused in
+   the browser.
+3. **`b100802`** `SERIES` is never auto-mapped; `suggestCol` skips columns an
+   earlier role claimed; a `SERIES` column not coded 0/1 states its recode.
+4. **`6f6e0d4`** The denominator combine rule decides on the majority of periods
+   with a refusal band, announces an automatic choice on both branches, and
+   warns when an explicit Sum contradicts the evidence.
+5. **`7bb1cb1`** `a$t` is a calendar position, not a rank; empty calendar periods
+   are named and never filled.
+6. **`3b68647`** Eight defects round 3 found in commits 1–5. See below.
+7. **`7a230a9`** The implausible-span note also fires when the absolute cap trips.
+
+#### The four findings worth carrying forward as facts
+
+- **A controlled run whose control series vanishes printed the intervention's
+  own drop under the word "control".** Four reachable triggers: the control rows
+  carry a blank denominator (you know your own catchment, not the comparator's);
+  the mirror, where the INTERVENTION arm loses its denominator and every number
+  reported is the comparator's under labels that are technically correct — which
+  is what makes it a trap; a constant `SERIES` column; and a control that exists
+  but does not span the interruption. `TABLE1|Control-series periods|0|0` was
+  the only trace, and it prints `0|0` in both directions so it cannot say which
+  arm was lost.
+- **The worst result in the run was in neither reviewer's list — it is the
+  product of two of them.** A file `month, cases, catchment_pop, site_code`,
+  two sites coded 1 and 2, the intervention at site 2, a real 30% fall. The
+  analyst maps three roles and touches nothing else. The page had already
+  auto-filled `site_code` into the control-series slot (score 5 against a
+  threshold of 4) while leaving the denominator empty (score 2), and `toBin`
+  guessed "1 means yes" at low confidence. Reported: **Difference in level
+  change 1.429 (1.166–1.750)** — a significant 43% increase, in a
+  difference-in-differences design nobody selected. **Cross-critique the lists
+  for compounds; neither reviewer alone would have found this.**
+- **One denominator cell in six hundred made the effect exactly null.** `dconst`
+  was a global `all()`, so a single population cell reading 50001 instead of
+  50000 switched the whole series from `first` to `sum`; the offset became
+  log(population × rows) and absorbed the outcome. 0.700 (p = 9e-8) → **1.000
+  (0.877–1.140)**, with Table 1 showing a mean denominator of 1,000,000 for a
+  catchment of 50,000 and the degenerate fit triggering the sandwich-collapse
+  note, which reads as a compliment.
+- **Calendar periods with no rows did not become zeros — they ceased to exist.**
+  `a$t` was a rank over the periods present, so a per-admission extract (the
+  design's own advertised input) closed up every empty month and the next month
+  became t+1. March was drawn adjacent to January under real date labels, and
+  "per period" was per surviving period.
+
+#### Do NOT re-derive these — each was implemented and measured, and each is worse
+
+- **A per-period `first`/`sum` mix for the denominator.** One reviewer proposed
+  it; the other implemented it on the same file and got **level 0.320,
+  end-of-follow-up 0.053** against a truth of 0.700. An offset has to be on one
+  scale across a series: the single mixed period carries a 123× offset, becomes a
+  colossal pre-intervention outlier and drags the intercept and baseline trend
+  with it. It also quiets the one signal that worked (Table 1's absurd
+  denominator goes from 127× wrong to 4.4× wrong — quiet enough to pass). It
+  trades a conspicuous 1.000 for a spectacular success nobody would question.
+  **The majority rule is the answer, and it must score only periods that hold
+  more than one denominator value.**
+- **Automatic `Y = 0` zero-filling of empty periods.** Undefined without
+  inventing a denominator, and the estimate is badly sensitive to the invention
+  (N = 25000/50000/100000 → 0.1286/0.1033/0.0743 on one file). With a
+  person-time denominator the invented row has N = 0, `log(0)` is −Inf, and the
+  bad-denominator drop deletes it again — silently back to the status quo under
+  a note claiming the periods were restored. Above all, **nothing in a CSV
+  distinguishes "no events occurred" from "nothing was recorded"**, and the
+  ward-closure case depends on that ambiguity being kept open. Offering it as a
+  ticked control is a feature; ask Daniel.
+- **Calendar re-indexing is not a bias fix and must not be sold as one.**
+  Measured: 0.1697 → 0.1704, where the zeros-explicit answer is 0.1033. It fixes
+  the time metric and the chart, which is worth doing on its own merits. The
+  attenuation is the missing OBSERVATIONS.
+- **Restricting the Durbin–Watson to consecutive-`t` pairs, without a
+  not-computable branch.** On a series where no pair is adjacent the numerator
+  is zero over a positive denominator: DW exactly 0.0000, autocorrelation
+  exactly +1.0000, and the "these intervals are too narrow" warning fires off
+  nothing.
+- **Moving the bad-denominator drop earlier than its current position.**
+  Measured: `np` 36→33, `t0` 19→18, `max(tsince)` 17→15 (so "per period" stops
+  meaning per month and the estimate moves 7%), the HAC's period matching goes
+  vacuous, and with a blank denominator on the interruption month the cut label
+  slides a month and prints a note misdescribing why. It sits after `a$level`
+  and before the seasonality block, and that is the only safe place.
+- **Re-adding the `SERIES` suggestion.** One reviewer measured the cost of
+  removing it — a genuine two-site file now runs pooled, 0.875 (0.777–0.985)
+  where the controlled answer is 0.751 (0.597–0.946) — and still says do not
+  restore it, because the `ward_group` result above is worse. Recorded as an
+  accepted trade, not an oversight. The shape IS detectable (every period holds
+  exactly two rows); detecting it and *offering* the role is the open idea.
+
+#### What the reviewers disagreed about, and who was right
+
+- **Refuse or relabel, when the control series is gone.** The methodologist
+  wanted an uncontrolled fallback; the analyst wanted a refusal. The analyst then
+  built the **mirror case** — the intervention arm is the one that loses its
+  denominator — and showed the methodologist's fallback *as written* would make
+  it strictly worse, because relabelling to bare "Level change, immediate step"
+  deletes the only word saying whose hospital the number is about. **Both
+  half-won: fall back, and name the surviving series in every row.** The analyst
+  then held out on one point and was right there too — a column that never
+  varied has no fact about which series survived, so that case is refused in the
+  browser rather than named.
+- **A "checked and clean" entry is only as good as the axis it was tested on**,
+  again. The methodologist cleared all six controlled labels in round 1 on files
+  whose control series was flat; round 2 it rebuilt the check so **no two
+  coefficients shared a value** and said plainly that the first clearance had
+  been worthless, because `tsince` and `g:tsince` both sat at their null. Copy
+  that habit: state the axis inside the entry.
+- **The analyst's "the bias grows with the effect size" was asserted, not
+  measured.** The methodologist measured it (300 replicates a cell) and confirmed
+  the direction while **scoping it more tightly than the analyst had**: nil until
+  the post-intervention count is low enough to empty a period. This run then
+  measured it independently again (400 replicates) before quoting any figure on
+  screen. Three independent measurements, same answer.
+- **Damage framing.** On the end-of-follow-up counterfactual the methodologist
+  called 0.400 "the honest ratio"; the analyst pointed out 0.400 is the honest
+  *uncontrolled* ratio and 0.800 is the correct controlled estimate, so it is a
+  wording defect on a correct number rather than a wrong number. The analyst was
+  right, and it is why that item is still open rather than shipped.
+- **The `<5` suppression consequence was overstated.** The analyst said the slope
+  change "flips sign"; the methodologist showed 1.020 (0.829–1.254) against
+  0.999 (0.923–1.082) — neither excludes 1. The drop is real and the note is
+  warranted; the conclusion does not move.
+- **On this run's own diff they converged**, which is why round 3's headline
+  regression is certain rather than plausible: both led with the denominator
+  predicate counting absence of evidence as a vote, one via a sign reversal
+  (end-of-follow-up 1.568 where the truth is 0.584) and one via a hard refusal of
+  an ordinary per-event file.
+
+#### Still open in the ITS path — argued, ranked, deliberately left
+
+Ranked by damage. Everything here was executed by one or both reviewers.
+
+- **The end-of-follow-up counterfactual is the DiD counterfactual, and both the
+  note and the CHART CAPTION say it is a pre-trend projection.** `Xc` zeroes only
+  `g:level`/`g:tsince`, so in a controlled run the counterfactual keeps the
+  control's own level and slope change. On a co-intervention file: fitted 80,
+  counterfactual 100, pre-intervention level 200 — the tool prints 0.800 under a
+  sentence defining 0.400. **The caption at `renderITSChart` says the same thing
+  and the picture contradicts it**: the dashed counterfactual is drawn stepping
+  from 200 to 100 under the words "extrapolates the pre-intervention trend
+  forward". A drawn contradiction is worse than a sentence. Two strings and a
+  branch on `ctrl`. **Best next target in this file.**
+- **The printed coefficient table contradicts the estimate table above it.**
+  `print(summary(fit)$coefficients)` always prints model-based SEs and p-values
+  whatever `semode` chose. On a 36-period AR(0.8) series with the shipped default
+  `auto`: headline `Slope change +1.420 (−0.250 to +3.089)` sits directly above
+  `tsince 1.4197 0.5562 2.5526 1.567e-02`. Two coefficients declared significant
+  in the table and non-significant by the tool's own intervals — and that table
+  is the only source of p-values in the `.md` and `.docx`. Both reviewers
+  top-five'd it.
+- **Table 1's "Total outcome" is not the total outcome whenever `a$Y` was
+  rescaled.** `ratemode` (linear + denominator) gives `Total outcome|0.02544`
+  for a series totalling 1272; mean-combine gives 1836 for 9180. The
+  `Denominator per period` row is gated on `useoff` so it does not print in
+  ratemode, leaving nothing to recover the scale from, and the exported `FITTED`
+  table has an `observed` column holding 0.00201 where the observed is 100.5.
+  In a controlled run every Table 1 row but the control one is intervention-only,
+  unlabelled. **Do not "fix" the mean-combine case by rescaling** — under
+  mean-combine the analysed series IS the period means, so the sum is meaningless
+  either way; suppress the row instead.
+- **"End of follow-up" can name a date that is not the end of follow-up.** Four
+  trailing periods dropped for a blank population and the headline row becomes
+  "Fitted vs counterfactual at 2020-08-01 (end of follow-up)" on a file running
+  to December. A labelled estimand that is wrong, in the estimate table.
+- **The Durbin–Watson disclaimer is hard-coded to the GLM case** and prints on
+  OLS fits, where both its clauses are false. Inert (DW drives nothing), so ride
+  it along with anything else in that sentence.
+- **The parallel-pre-trends note quotes a ratio and compares it to zero** — "the
+  difference in pre-intervention slope is 0.971 per period, 8.4 standard errors
+  from zero". 0.971 is `exp(g:t)`, whose null is 1.
+- **`(rate ratio)` on the difference rows** — a ratio of rate ratios. Wording;
+  six call sites; both reviewers said leave it unless that sentence is touched.
+- **The empty-period note does not fire on a controlled run when the other
+  series covers the gap.** `gapmiss` is computed against the union of both
+  series' periods, so a control series that is complete hides an intervention
+  series that is not — the commit's own headline case.
+- **A genuine two-site file now runs pooled** because `SERIES` is no longer
+  suggested. Accepted trade, see above.
+- **The ITS demo exercises no ITS diagnostic** — the fifth run's item, still
+  true, still the highest-leverage feature request in this design.
+
+#### Verified this run, and how
+
+- Chromium against a local `astro build` + `http-server`, with the page's own
+  `buildScript()` output run under **real R 4.3.3** (`apt-get install -y
+  --no-install-recommends r-base-core` works in this sandbox — 4.3.3, same
+  version the fifth run had; `apt-get update` first or one dependency 404s).
+- **An eighteen-case regression battery run before and after every commit**
+  (`scratch/orch/battery.mjs`, output diffed as `battery-before.txt` →
+  `after1..9`). This is the single most useful thing built this run: it made
+  every commit's claim "these lines moved and nothing else did" checkable, and
+  it caught two of my own wording regressions.
+- **The full three-surface path** — on-screen panel, real `.md`, real
+  `word/document.xml` — by stubbing `window.RWEngine.run` with the output real
+  Rscript produced for the very script the page generated
+  (`scratch/orch/exports2.mjs`). Everything after the stub is the page's own
+  code. **WebR's CDN is blocked here, so this is the only way to drive the
+  render and export path; it works well.** SheetJS (`cdnjs`) is blocked too and
+  no upload can be exercised without routing it — `npm pack xlsx@0.18.5` and
+  `page.route`.
+- Every finding **reproduced before it was fixed and observed fixed after**, on
+  the input that produced it. The one-cell denominator case was re-checked by
+  hand-patching the generated script back to the old rule: 1.000 (0.726–1.378)
+  against 0.700 (0.508–0.964).
+- **All twelve tool pages, zero `pageerror`, `typeof window.PC === "object"` on
+  all nine builders, before every commit.**
+- **The live site was not checked** — `danielhttsai.github.io` is still blocked.
+  **Nobody has still opened one of these `.docx` files in Microsoft Word.**
+- **No citation was added or changed.** The `Wagner 2002` attribution on the
+  segmented-regression parameterisation was flagged as **unverified and
+  contested** — the coding the tool uses is what Xiao, Augusto & Wagenaar (IJE
+  2021;50(3):1011) prescribe, while snippets describing Wagner's own variable say
+  it counts from 1, the convention that note calls a common error. Every primary
+  source is egress-blocked. **Do not rewrite that citation from this sandbox** —
+  both reviewers said so independently, and it is exactly the error the citation
+  rule exists to prevent. It needs someone with library access.
+- **The decimal-comma item the fifth run left open is stale** — `readWorkbook`
+  now classifies a comma per COLUMN (`COMMA_GROUPED`/`COMMA_DECIMAL`/`LEAD0`) and
+  refuses a column proving both conventions. Do not re-derive it.
+
+<!-- CLAIM 2026-08-23 (thirty-first run, RELEASED): finished. The best next
+     targets in this file are the end-of-follow-up counterfactual sentence and
+     its chart caption, then the coefficient table's model-based p-values —
+     both are named above with the input that shows them, and both are
+     verifiable from this sandbox. The Protocol Generator hub is still the
+     tool nobody has opened since the fifteenth run. -->
