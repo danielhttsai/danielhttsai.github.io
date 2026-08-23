@@ -175,7 +175,7 @@ const designs = [
     short: "TIT",
     title: "Trend-in-Trend",
     plain: "A drug's use climbed over the years — did the outcome climb faster in the groups where it caught on faster?",
-    when: "Use when there is no single intervention date, but the drug's prevalence of use rises or falls markedly over calendar time. Strata are defined by their cumulative percentage exposed (CPE); if the outcome tracks the exposure trend more steeply where uptake was faster, that supports a causal effect — and the estimate is robust to time-invariant unmeasured confounding.",
+    when: "Use when there is no single intervention date, but the drug's prevalence of use rises or falls markedly over calendar time. Strata are defined by each person's cumulative probability of exposure (CPE) — the probability of being exposed at some point in the study period, predicted from a stage-1 model of covariates that affect exposure, not an observed percentage exposed; if the outcome tracks the exposure trend more steeply where uptake was faster, that supports a causal effect — and the estimate is robust to time-invariant unmeasured confounding.",
     assumes: "Exposure prevalence genuinely trends over calendar time; the unmeasured confounding is time-invariant; and the outcome trend is otherwise stable across CPE strata.",
     fails: "The prevalence trend is flat or weak, so the design has no power; or a differential secular trend or co-intervention tracks faster uptake, which biases it — pre-specify a negative-control outcome or a pseudo-period to check.",
     example: "Statins and incident diabetes, using the rise in statin prevalence 2005–2018",
