@@ -959,7 +959,12 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         // exported protocol, where it reads as a refusal their own draft provoked.
         // The sender cannot go the other way and suppress a real warning: noteStale
         // runs on the keys the seed actually carries, independently of this list.
-        const fromLink = (() => { try { return new URLSearchParams(location.search).has("seed"); } catch (e) { return false; } })();
+        // `get`, not `has`: a truncated "?seed=" carries nothing, restore falls
+        // back to this browser's own draft, and treating that as a link would
+        // throw away a warning the user really is owed. A non-empty value —
+        // including the literal "paste", which is a colleague's protocol
+        // arriving by another route — is a link.
+        const fromLink = (() => { try { return !!new URLSearchParams(location.search).get("seed"); } catch (e) { return false; } })();
         const carried = (!fromLink && Array.isArray(state[STALE_KEY])) ? state[STALE_KEY] : [];
         for (const c of carried) {
           if (!c || !c.name || staleSelects.some((x) => x.name === c.name)) continue;
