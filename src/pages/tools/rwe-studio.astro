@@ -453,16 +453,57 @@ const DESIGNS = [
     // decimal comma or unreadable, and both are refused rather than guessed at.
     const COMMA_GROUPED = (s) => /^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s) || /^[+-]?\d{1,2}(,\d{2})+(,\d{3})(\.\d+)?$/.test(s);
     const COMMA_DECIMAL = (s) => /^[+-]?\d+,\d+$/.test(s) || /^[+-]?\d{1,3}(\.\d{3})+,\d+$/.test(s);
+    // A comma in a number means one of two incompatible things, and a single cell often
+    // cannot say which: "1,234" is 1234 in Chicago and 1.234 in Berlin. The COLUMN can
+    // say. Deciding per cell — which is what this did — is why "0,125" and "10,125" were
+    // both read as grouped whole numbers and skipped entirely, a factor of a thousand,
+    // in the one shape a European rate column always takes.
+    //
+    // So: gather the cells that can only be read one way, let them decide the column,
+    // and classify the ambiguous cells against that decision.
+    //
+    // Only a decimal point: a comma group that is not exactly three digits ("60,5",
+    // "1,2345"), a first group with a leading zero ("0,125" — no thousands grouping ever
+    // starts with one), or the dot-grouped European form ("1.234,56").
+    const DEC_ONLY = (s) => /^[+-]?\d+,\d{1,2}$/.test(s) || /^[+-]?\d+,\d{4,}$/.test(s) ||
+                            /^[+-]?0\d*,\d+$/.test(s) || /^[+-]?\d{1,3}(\.\d{3})+,\d+$/.test(s);
+    // Only a grouping separator: more than one comma group ("12,345,678", "1,23,456"), or
+    // a comma group followed by a decimal POINT ("1,234.56") — one number cannot carry
+    // both conventions at once.
+    const GRP_ONLY = (s) => /^[+-]?\d{1,3}(,\d{3}){2,}(\.\d+)?$/.test(s) ||
+                            /^[+-]?\d{1,2}(,\d{2})+(,\d{3})(\.\d+)?$/.test(s) ||
+                            /^[+-]?\d{1,3}(,\d{3})+\.\d+$/.test(s);
     function commaExamples(cols, rows) {
       const out = {};
       cols.forEach((c) => {
+        // Pass 1: what does this column prove about itself?
+        let anyDec = false, anyGrp = false;
+        for (let i = 0; i < rows.length; i++) {
+          const v = rows[i][c]; if (v == null) continue;
+          const s = String(v).trim(); if (s.indexOf(",") < 0) continue;
+          if (DEC_ONLY(s)) anyDec = true; else if (GRP_ONLY(s)) anyGrp = true;
+          if (anyDec && anyGrp) break;
+        }
+        // A column that proves BOTH conventions is not a column this tool can read at
+        // all, and guessing either way changes some of its values by a factor of a
+        // thousand. That is the "odd" bucket, which refuses rather than guessing.
+        const contradictory = anyDec && anyGrp;
+        // With no unambiguous cell either way, every comma here is a genuine coin flip.
+        // Keep reading it as grouping, which is what this tool has always done and what
+        // its message text promises — changing that would refuse ordinary US data.
         const dec = [], odd = [];
         for (let i = 0; i < rows.length && dec.length < 4 && odd.length < 4; i++) {
           const v = rows[i][c]; if (v == null) continue;
           const s = String(v).trim();
-          if (s.indexOf(",") < 0 || COMMA_GROUPED(s)) continue;
-          const b = COMMA_DECIMAL(s) ? dec : odd;
-          if (b.indexOf(s) < 0 && b.length < 4) b.push(s);
+          if (s.indexOf(",") < 0) continue;
+          let b = null;
+          if (!COMMA_GROUPED(s) && !COMMA_DECIMAL(s)) b = odd;          // neither convention
+          else if (contradictory) b = odd;
+          else if (DEC_ONLY(s)) b = dec;
+          else if (GRP_ONLY(s)) b = null;                                // grouped, read as before
+          else if (anyDec) b = dec;                                      // ambiguous, in a decimal column
+          else b = null;                                                 // ambiguous, read as grouping
+          if (b && b.indexOf(s) < 0 && b.length < 4) b.push(s);
         }
         if (dec.length || odd.length) out[c] = { dec: dec, odd: odd };
       });
@@ -2525,7 +2566,8 @@ const DESIGNS = [
       // event-count advice ("map the count here") attached to the sentence about
       // their person-time column, and the person-time remedy never appeared at all.
       else if (nt.length) {
-        m.innerHTML = nt.map((b) => "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but " + esc(b.why) +
+        m.innerHTML = nt.map((b) => "<strong>" + esc(b.col) + "</strong> " +
+          (b.cov ? "is ticked as a baseline covariate, but " : "is mapped to “" + esc(b.label) + "”, but ") + esc(b.why) +
           " (for example: " + esc(b.eg.join(", ")) + "). " + esc(b.fix)).join(" ");
         m.className = "mt-3 text-xs text-rose-700";
       }
@@ -2590,9 +2632,34 @@ const DESIGNS = [
     // at all — so person-time holding zeros or negatives was numeric, finite, and
     // accepted. R re-checks these conditions and stops, but a stop lands in the
     // black debug pre at the end of a run; a guard the user can see beats that.
+    // A rule may need the row, not just the cell: whether a zero is a defect depends on
+    // what else that row says. `pair` names another role whose value is passed as the
+    // second argument (NaN when that role is unmapped, in which case a rule must fall
+    // back to what it can decide alone).
+    //
+    // INTERVAL used to be `!(n > 0)`, which refused every zero-length interval. The R
+    // this guard exists to pre-empt does not: `badrow` treats a negative interval, and an
+    // event inside a zero-length one, as defects — but a zero-length interval carrying NO
+    // events is counted into `ndrop0`, dropped, and reported as "they carry no
+    // information either way". So one such row in eighty-one blocked a file R would have
+    // analysed, which is the false-refusal half of this tool's own doctrine.
     const NUM_RULES = {
-      INTERVAL: { why: "holds value(s) that are not a positive length of time", fix: "Person-time has to be greater than zero: a zero-length interval contributes nothing to the likelihood and a negative one makes the weights negative. Fix the column, or drop those rows deliberately.", bad: (n) => !(n > 0) },
+      INTERVAL: { pair: "EVENTS",
+        why: "holds value(s) that are not a usable length of time",
+        // Kept explicit about the harmless case, or the next reader sees the predicate
+        // permit n === 0 and "fixes" the false refusal straight back in.
+        fix: "Person-time cannot be negative, and no event can fall in an interval of zero length. Each interval enters the conditional likelihood as the person-time its events could have arisen in, so a negative length has no meaning there and an event in zero time is arithmetically impossible; a start and stop date subtracted the wrong way round, or identical, is the usual cause. Fix the column, or drop those rows deliberately. A zero-length interval with no events is fine — it carries no information either way and is dropped for you.",
+        bad: (n, p) => n < 0 || (n <= 0 && p > 0) },
       EVENTS: { why: "holds value(s) that are not a whole number of events", fix: "This role wants a COUNT of events in the interval. If you have a rate, map the count here and the person-time to the interval role.", bad: (n) => !(n >= 0) || Math.abs(n - Math.round(n)) > 1e-8 },
+      // ACNU's follow-up time is the same quantity as SCCS's interval and had no guard on
+      // either side: `chknum` refuses only a column with NO numeric value at all, so a
+      // negative follow-up reached Surv() unexamined. It does not error there — it simply
+      // places those subjects at the front of every risk set, re-ordering the comparison.
+      TIME: { pair: "EVENT",
+        why: "holds value(s) that are not a usable follow-up time",
+        fix: "Follow-up time cannot be negative, and an outcome cannot occur in zero days of follow-up. A negative value is usually two dates subtracted the wrong way round. If these are genuinely same-day events, code the follow-up as a fraction of a day (0.5) rather than 0, so the row carries the person-time it actually contributed. Rows with zero follow-up and no event are harmless here, and are left alone.",
+        bad: (n, p) => n < 0 || (n <= 0 && p > 0) },
+      DISC: { why: "holds value(s) that are not a usable time to discontinuation", fix: "This role is a time measured from the same start as the follow-up time, so it cannot be negative. It is used as pmin(follow-up, this) to censor the per-protocol analysis; a negative value censors everyone at once.", bad: (n) => n < 0 },
     };
     function numTrouble() {
       const spec = SPEC[getDesign()]; if (!spec || !DATA.rows.length) return [];
@@ -2603,28 +2670,55 @@ const DESIGNS = [
       // user gets a green tick and then a hard stop at the end of the run.
       const keepBlanks = !$("c_dropmiss") || !$("c_dropmiss").checked;
       const out = [];
+      const src = MASTER || DATA.rows;
+      // Per-ROLE range rules. Only some roles have one, and that is deliberate: YCOUNT is
+      // "Event count, rate, or level", and a negative or fractional value there selects
+      // the linear branch rather than being an error, so a range rule would refuse the
+      // design's own documented input. DENOM has none either — R drops a non-positive
+      // denominator per PERIOD, after aggregation, so a rule on raw rows would refuse a
+      // file whose zero-denominator patient rows aggregate to a positive period total.
       spec.roles.filter((r) => NUM_RULES[r.k] && MAP[r.k]).forEach((r) => {
         const col = MAP[r.k], rule = NUM_RULES[r.k], eg = [];
-        const src = MASTER || DATA.rows;
+        const pcol = rule.pair && MAP[rule.pair] ? MAP[rule.pair] : "";
         for (let i = 0; i < src.length && eg.length < 4; i++) {
           const v = src[i][col];
           if (isBlank(v)) { if (keepBlanks && eg.indexOf("(blank)") < 0) eg.push("(blank)"); continue; }
           const n = typeof v === "number" ? v : Number(String(v).trim().replace(/,/g, ""));
-          if (!isFinite(n) || rule.bad(n)) { const s = String(v).trim(); if (eg.indexOf(s) < 0) eg.push(s); }
+          // The paired value goes through toBin as well as Number, because the roles that
+          // pair here are the 0/1 ones and "Y" is a perfectly ordinary way to write 1.
+          let p = NaN;
+          if (pcol) { const pv = src[i][pcol]; if (!isBlank(pv)) { const b = toBin(pv); p = b == null ? Number(String(pv).trim().replace(/,/g, "")) : b; } }
+          if (!isFinite(n) || rule.bad(n, p)) { const s = String(v).trim(); if (eg.indexOf(s) < 0) eg.push(s); }
         }
-        // The comma, read from the text captured at ingest. It CANNOT be read from
-        // DATA.rows: SheetJS resolves "14,0" to the number 140 while parsing, so by the
-        // time any code here runs the cell is a number and the comma is gone. A first
-        // attempt at this guard tested DATA.rows and was therefore a no-op on every CSV
-        // — the only format it was written for. Grouping separators are still read
-        // exactly as before; only a decimal comma, or a comma no convention explains,
-        // reaches the reader.
-        const ct = RAWTXT[col];
         if (eg.length) out.push({ label: r.label, col: col, why: rule.why, fix: rule.fix, eg: eg });
-        if (ct && ct.dec.length) out.push({ label: r.label, col: col, eg: ct.dec,
+      });
+      // The comma is NOT a per-role rule. It is a property of the column, and it applies
+      // to every value this tool will hand to Number(): all six numeric roles and every
+      // ticked covariate, which go through the identical strip in buildMaster and in
+      // classifyCov. Running it inside the NUM_RULES loop above meant it fired only for
+      // the two roles that happened to have a range rule — both SCCS — so a German ITS or
+      // ACNU export was coerced silently while the evidence to refuse it was already
+      // sitting in RAWTXT, computed for every column at ingest.
+      //
+      // Read from the text captured at ingest, never from DATA.rows. Which container
+      // loses the comma is not the point (a CSV is coerced to 305 while a text-celled
+      // XLSX keeps "30,5"); the point is that RAWTXT covers both, and stays empty for a
+      // well-formed numeric XLSX with a de-DE display format, so a correct file is not
+      // falsely refused.
+      const commaCols = {};
+      const noteCol = (col, label) => { if (!col) return; (commaCols[col] = commaCols[col] || []).push(label); };
+      spec.roles.forEach((r) => { if (NUM_ROLES.indexOf(r.k) >= 0) noteCol(MAP[r.k], r.label); });
+      // Marked so the message can say "is ticked as a baseline covariate" rather than
+      // "is mapped to a baseline covariate": a covariate is not a role and reads wrong.
+      if (spec.covariates) COVS.forEach((c) => { if (!commaCols[c]) commaCols[c] = { cov: true }; });
+      Object.keys(commaCols).forEach((col) => {
+        const ct = RAWTXT[col]; if (!ct) return;
+        const isCov = !Array.isArray(commaCols[col]);
+        const label = isCov ? "" : commaCols[col].join(" / ");
+        if (ct.dec.length) out.push({ label: label, col: col, eg: ct.dec, cov: isCov,
           why: "holds value(s) that use a comma as a decimal point",
-          fix: "The comma is removed rather than read, so 60,5 becomes 605 and 1.234,56 becomes 1.23456 — the first ten times too large, the second a thousand times too small, and both still numbers, so nothing further down refuses them. Scaling every event count by ten leaves the rate ratio exactly where it was and shrinks its confidence interval about threefold, which is worse than a wrong answer: it is the right answer carrying far more confidence than the data support. Scaling the person-time by different amounts on different rows, which is what an unequal number of decimal places does, changes the estimate itself. Re-export the file with a decimal point." });
-        if (ct && ct.odd.length) out.push({ label: r.label, col: col, eg: ct.odd,
+          fix: "The comma is removed rather than read, so 60,5 becomes 605 and 1.234,56 becomes 1.23456 — the first ten times too large, the second a thousand times too small, and both still numbers, so nothing further down refuses them. Where every value is scaled by the same amount some estimates survive it and some do not; where the number of decimal places varies from row to row, which is the ordinary case, the scaling varies with it and moves the estimate itself. Re-export the file with a decimal point." });
+        if (ct.odd.length) out.push({ label: label, col: col, eg: ct.odd, cov: isCov,
           why: "holds value(s) containing a comma that is neither a decimal point nor a thousands separator this tool recognises",
           fix: "This tool reads 1,234 and 12,345,678 and 1,23,456 as grouped whole numbers and 60,5 as a decimal comma. A value outside both conventions is not guessed at, because every guess available here changes the number by a factor of ten or more. Re-export the column as plain digits with a decimal point and no grouping." });
       });
