@@ -509,6 +509,13 @@
         write(obj);
         var b = document.getElementById("pc-paste");
         if (b) b.remove();
+        // The note raised on arrival says the form was reset "ready for the
+        // pasted protocol". Once it HAS been pasted that sentence is stale, and
+        // banner() below is a no-op while the note is on screen, so it would
+        // have stayed stale. Restate it; the recovery button is untouched.
+        var note = document.getElementById("pc-seed-note");
+        var noteP = note && note.querySelector("p");
+        if (noteP) noteP.textContent = "This form has been filled in from the pasted protocol. Your previous draft was set aside — use the button below to put it back. 此表單已由貼上的內容填入,你原本的草稿已另存備份。";
         banner();
         form.dispatchEvent(new Event("input", { bubbles: true }));
         return true;
@@ -538,8 +545,14 @@
         box.innerHTML =
           '<div style="font-weight:600;margin-bottom:.35rem">從 Hot Topic 帶入研究設計</div>' +
           '<div style="font-size:.85rem;color:#3D5560;margin-bottom:.6rem">' +
+          // This used to end "你目前的草稿在套用前不會被改動" — your current
+          // draft will not be modified before you apply. It was false on every
+          // page that reaches here: opening this link resets the form and the
+          // caller's first autosave writes those defaults over the draft. The
+          // draft is now set aside instead, and this says so and points at the
+          // button that brings it back.
           '內容已複製到剪貼簿。按下面的按鈕貼上 — 瀏覽器會問一次是否允許讀取剪貼簿,' +
-          '允許之後以後就會自動填入。你目前的草稿在套用前不會被改動。</div>' +
+          '允許之後以後就會自動填入。你原本的草稿已另存備份,可用上方按鈕取回。</div>' +
           '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">' +
           '<button type="button" id="pc-paste-read" style="font:inherit;cursor:pointer;' +
           'background:#3F8C6E;color:#fff;border:0;border-radius:6px;padding:.4rem 1rem">' +
@@ -593,6 +606,30 @@
         syncAmendments(form);
       };
       if (new URLSearchParams(location.search).get("seed") === "paste") {
+        /* This returned without setting the draft aside, and that lost it.
+           The paste path deliberately does NOT load the saved draft — the
+           pasted proposal is meant to land on the page's own defaults, the
+           same as ?seed= — but the caller's first render() then autosaves that
+           default form straight over the draft key, within milliseconds and
+           before the user has pasted anything or pressed a thing. Measured on
+           the four builders that have no second restore loop of their own
+           (ACNU, SCCS, case-crossover, descriptive-analysis): type a title,
+           let it save, open ?seed=paste, paste nothing — the title is gone
+           from the form and from storage, with no backup key anywhere.
+
+           The panel this path mounts said, on screen, at that moment:
+           "你目前的草稿在套用前不會被改動" — your current draft will not be
+           modified before you apply. It had already been destroyed. Same
+           backup the ?seed= branch below takes, taken here too, and the user
+           is told now rather than after they paste. */
+        var pasteBackup = null;
+        try { pasteBackup = localStorage.getItem(storageKey); } catch (e) { console.warn("[PC] could not read the saved draft", e); }
+        if (pasteBackup) {
+          try { localStorage.setItem(storageKey + ".before-seed", pasteBackup); }
+          catch (e) { console.warn("[PC] could not set the draft aside", e); pasteBackup = null; }
+          banner(storageKey,
+            "You opened a hand-off link, so this form has been reset to its defaults ready for the pasted protocol — your previous draft has been set aside and is NOT recoverable by reloading. Use the button below to put it back. 你開啟了交接連結,表單已重設為預設值,原本的草稿已另存備份 — 請用下方按鈕取回。");
+        }
         pastePanel(form, write);
         return "paste";
       }
@@ -634,7 +671,7 @@
        happened and offers a button that puts the draft back and reloads
        without the seed. `storageKey` is null when there was no draft to
        displace, in which case there is nothing to offer. */
-    function banner(storageKey) {
+    function banner(storageKey, lead) {
       if (document.getElementById("pc-seed-note")) return;
       var d = document.createElement("div");
       d.id = "pc-seed-note";
@@ -645,9 +682,12 @@
 
       var p = document.createElement("p");
       p.style.cssText = "margin:0";
-      p.textContent = storageKey
+      // The paste path needs its own lead: nothing has been pre-filled there
+      // yet — the form is showing the page's defaults and the user has not
+      // pasted anything — so the sentence below would be false on it.
+      p.textContent = lead || (storageKey
         ? "This form was pre-filled from a link. Your previous draft has been set aside — it is NOT recoverable by reloading, because the link's values are saved over it. 此表單由連結預先填入,你原本的草稿已另存備份。"
-        : "This form was pre-filled from a link. 此表單由連結預先填入。";
+        : "This form was pre-filled from a link. 此表單由連結預先填入。");
       d.appendChild(p);
 
       if (storageKey) {
