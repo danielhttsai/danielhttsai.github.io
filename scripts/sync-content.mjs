@@ -168,9 +168,13 @@ async function syncPublications() {
   const existing = all.filter((e) => !isSSRN(e.doi));
   if (existing.length !== all.length) console.log(`Publications: dropped ${all.length - existing.length} SSRN preprint(s).`);
   const exclude = new Set(JSON.parse(readFileSync(p("src/data/publications-exclude.json"), "utf8")).map((d) => d.toLowerCase()));
-  // The CV decides WHICH papers appear; ORCID is only used to discover them.
-  // Regenerate this list with `node scripts/cv-publications.mjs` after updating
-  // the CV. Empty/missing = fall back to accepting anything ORCID reports.
+  // The CV decides WHICH papers appear, and it is authoritative in BOTH
+  // directions: every DOI it lists is added, whether or not ORCID knows about it.
+  // ORCID lags — a paper can be published, be in the CV, and not reach ORCID for
+  // weeks. Under the old "in ORCID AND on the CV" rule such a paper could never
+  // appear, because the gate it passed was one it never reached. Regenerate this
+  // list with `node scripts/cv-publications.mjs` after updating the CV.
+  // Empty/missing = fall back to accepting whatever ORCID reports.
   let cvDois = new Set();
   try {
     cvDois = new Set((JSON.parse(readFileSync(p("src/data/publications-cv.json"), "utf8")).dois || []).map((d) => d.toLowerCase()));
@@ -194,32 +198,42 @@ async function syncPublications() {
     await sleep(150);
   }
 
-  // Append new papers: in ORCID, on the CV, not already listed, not excluded, not
-  // a dataset, and never an SSRN preprint (working papers, filtered by DOI prefix
-  // so future ones stay out without further edits).
-  let added = 0, notOnCv = [];
-  for (const doi of orcidDois) {
-    if (byDoi.has(doi) || exclude.has(doi) || isSSRN(doi) || /figshare|\/m9\./.test(doi)) continue;
-    // The CV is the source of truth — anything ORCID knows about but the CV does
-    // not is reported, never silently published.
-    if (cvDois.size && !cvDois.has(doi)) { notOnCv.push(doi); continue; }
+  // Build and append one paper from its DOI. Shared by both sources below so a
+  // CV-only paper is assembled exactly like an ORCID-discovered one.
+  const skip = (doi) => byDoi.has(doi) || exclude.has(doi) || isSSRN(doi) || /figshare|\/m9\./.test(doi);
+  let added = 0;
+  const addByDoi = async (doi, why) => {
+    if (skip(doi)) return false;
     try {
       const m = await crossrefMessage(doi);
       const { citation, year } = formatCitation(m);
-      if (!citation || !year) { console.warn(`  skip new ${doi}: no citation/year`); continue; }
+      if (!citation || !year) { console.warn(`  skip new ${doi}: no citation/year`); return false; }
       const oa = await unpaywall(doi);
       const pmid = await pubmedId(doi);
       const entry = { year, doi, citation, isOA: oa.isOA, oaUrl: oa.oaUrl, pmid, pmcid: "", ris: buildRis(m, doi, pmid), date: issuedSortKey(m, year) };
       existing.push(entry);
       byDoi.set(doi, entry);
       added++;
-      console.log(`  + new publication ${year}: ${doi}`);
+      console.log(`  + new publication ${year} (${why}): ${doi}`);
       await sleep(200);
-    } catch (e) { console.warn(`  skip new ${doi}: ${e.message}`); }
-  }
-  if (notOnCv.length) {
-    console.log(`  ${notOnCv.length} ORCID work(s) held back — not in the CV: ${notOnCv.join(", ")}`);
-    console.log("    If one belongs on the site, add it to the CV and re-run: node scripts/cv-publications.mjs");
+      return true;
+    } catch (e) { console.warn(`  skip new ${doi}: ${e.message}`); return false; }
+  };
+
+  if (cvDois.size) {
+    // The CV is the list. Add everything on it that is missing, regardless of
+    // ORCID — this is the case ORCID's lag used to make unreachable.
+    for (const doi of cvDois) await addByDoi(doi, "listed in the CV");
+    // ORCID is now only a prompt: it may know about something the CV has not
+    // caught up with. Report it; never publish it unasked.
+    const notOnCv = orcidDois.filter((d) => !cvDois.has(d) && !skip(d));
+    if (notOnCv.length) {
+      console.log(`  ${notOnCv.length} ORCID work(s) not in the CV, so not added: ${notOnCv.join(", ")}`);
+      console.log("    If one belongs on the site, add it to the CV and re-run: node scripts/cv-publications.mjs");
+    }
+  } else {
+    // No CV list available — fall back to ORCID as the source.
+    for (const doi of orcidDois) await addByDoi(doi, "from ORCID");
   }
 
   // Refresh full-text availability (PMCID) for everything in one batched call,
