@@ -226,7 +226,7 @@ const fwList = Object.values(FRAMEWORKS);
             <h2 class="text-lg font-bold text-slate-900">Planned outputs &amp; figures</h2>
             <p class="mt-1 text-xs text-slate-500">Does the protocol pre-specify the shell tables and figures a rigorous RWE study mocks up in advance — Table 1, a Love plot, a participant flow diagram, results shells, and so on?</p>
             <div id="delivtally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
-            <p class="mt-3 text-xs text-slate-500 leading-relaxed"><strong class="text-slate-600">“Absent” is not automatically a fault.</strong> Some of these outputs do not apply to every design — a Love plot means nothing without propensity-score adjustment, and a Kaplan–Meier curve means nothing without time-to-event follow-up. Read the evidence line before treating a red chip as a gap.</p>
+            <p id="delivnote" class="mt-3 text-xs text-slate-500 leading-relaxed"><strong class="text-slate-600">What the four verdicts mean.</strong> <em>Present / Partial / Absent</em> are claims about your document: whether it pre-specifies this output — or the equivalent your design owes, since these seven names are written for a person-level, propensity-score-adjusted, time-to-event cohort. A case-selection flow counts as the flow diagram; a case-series or period-composition description counts as the Table 1; an incidence-rate-ratio profile by risk window counts as the survival curve. <em>N/A</em> is a claim about your design: its estimator cannot produce this output or any equivalent — there is no between-person balance to diagnose in a within-person design, and no survival curve where nobody is followed from a shared time origin. Two rows are never N/A, because every design has a primary estimate and identifying assumptions to probe. <em>Not assessed</em> is a claim about this run: the AI returned nothing usable. All four are the AI’s verdicts, not this tool’s — read the evidence line before acting on any of them.</p>
             <ol id="delivlist" class="mt-4 space-y-3"></ol>
           </div>
 
@@ -276,6 +276,13 @@ const fwList = Object.values(FRAMEWORKS);
         const el = $(id);
         return el ? el.textContent.replace(/\s+/g, " ").trim() : "";
       }).filter(Boolean);
+      // Same job as frameText, for the planned-outputs panel: the definition of
+      // the four verdicts is authored once, in the markup, and both exports
+      // quote it from there rather than keeping a paraphrase of their own.
+      const delivNoteText = () => {
+        const el = $("delivnote");
+        return el ? el.textContent.replace(/\s+/g, " ").trim() : "";
+      };
       const runErrEl = $("runerror"), runErrMsg = $("runerrormsg");
       const schemeEl = $("scheme"), designGrid = $("designgrid"), timelineEl = $("timeline"), timelineNote = $("timelinenote"), legendEl = $("legend"), criteriaEl = $("criteria");
       const delivEl = $("deliverables"), delivTallyEl = $("delivtally"), delivListEl = $("delivlist");
@@ -975,9 +982,39 @@ const fwList = Object.values(FRAMEWORKS);
         present: { label: "Present", dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200", border: "border-emerald-300" },
         partial: { label: "Partial", dot: "bg-amber-500",   chip: "bg-amber-50 text-amber-700 border-amber-200",       border: "border-amber-300" },
         absent:  { label: "Absent",  dot: "bg-red-500",     chip: "bg-red-50 text-red-700 border-red-200",             border: "border-red-300" },
+        // The same three-way distinction STATUS_META spends two paragraphs
+        // defending on the checklist side, which this panel did not have.
+        // "Absent" is a claim about the protocol; "N/A" is a claim about the
+        // DESIGN (its estimator cannot produce the output at all); "Not
+        // assessed" is a claim about this RUN. Folding the middle one into
+        // either neighbour is what the worker used to force: it instructed the
+        // model to answer "absent" for an inapplicable output, so the row went
+        // red AND — because the suggestion line fires on every non-present
+        // verdict — the Word file told an SCCS author to add a
+        // propensity-score balance plot to a within-person design.
+        na:      { label: "N/A",     dot: "bg-slate-400",   chip: "bg-slate-50 text-slate-600 border-slate-200",       border: "border-slate-200" },
         unassessed: { label: "Not assessed", dot: "bg-slate-300", chip: "bg-white text-slate-500 border-slate-300 border-dashed", border: "border-slate-300" },
       };
-      const DELIV_ALIASES = { present: "present", yes: "present", planned: "present", "pre-specified": "present", prespecified: "present", partial: "partial", partially: "partial", implied: "partial", absent: "absent", missing: "absent", no: "absent", none: "absent" };
+      // Prototype-less: as a plain literal, `DELIV_ALIASES["constructor"]` is
+      // truthy, so a status of "constructor" or "__proto__" set `st` to a
+      // function, skipped the unrecognised-verdict branch, and was counted
+      // under a key the tally never prints — seven rows above a tally of five,
+      // with no caveat. Unreachable while the worker's enum holds, which is
+      // exactly the kind of guarantee that stops holding.
+      const DELIV_ALIASES = Object.assign(Object.create(null), {
+        present: "present", yes: "present", planned: "present", "pre-specified": "present", prespecified: "present",
+        partial: "partial", partially: "partial", implied: "partial",
+        absent: "absent", missing: "absent", no: "absent", none: "absent",
+        // Mirrors STATUS_ALIASES above. The worker's enum only emits "na", but
+        // the model reaches for these spellings whenever it answers in prose.
+        na: "na", "n/a": "na", "not applicable": "na", notapplicable: "na", inapplicable: "na",
+      });
+      // One rule, three surfaces. It was written out three times (screen,
+      // Markdown, Word) and had to be extended three times for "na" — the
+      // copy-pasted-lookup species this codebase keeps finding. A suggestion on
+      // an N/A row would tell the reader to add the output that same row says
+      // their design cannot produce.
+      const delivShowSuggestion = (r) => !!r.suggestion && r.status !== "present" && r.status !== "unassessed" && r.status !== "na";
 
       // Names come back re-typeset: "Kaplan–Meier" with an en dash where the
       // worker asked for "Kaplan-Meier", stray spacing, different case. Matching
@@ -1012,33 +1049,62 @@ const fwList = Object.values(FRAMEWORKS);
         }
         if (dupes.length && caveats) caveats.push("The AI returned more than one verdict for planned output(s) " +
           [...new Set(dupes)].join(", ") + "; only the first was used.");
-        const rows = DELIVERABLE_NAMES.map((name) => {
+        // A verdict with no evidence is a bare accusation, and this panel's own
+        // note tells the reader to read the evidence line before acting on a
+        // chip. Say that it is missing rather than rendering nothing, so a red
+        // row without a stated basis is visibly a red row without a stated
+        // basis.
+        const ev = (s) => (String(s == null ? "" : s).trim() ||
+          "The AI returned this verdict with no evidence, so nothing on this row is supported beyond the label itself.");
+        const readStatus = (d) => DELIV_ALIASES[String(d.status == null ? "" : d.status).trim().toLowerCase()];
+        const canonRows = DELIVERABLE_NAMES.map((name) => {
           const d = byName.get(name);
-          const st = d ? DELIV_ALIASES[String(d.status || "").trim().toLowerCase()] : null;
           if (!d) return { name, status: "unassessed", evidence: "The AI returned no verdict for this planned output, so nothing is claimed about it." };
-          if (!st) return { name, status: "unassessed", evidence: "The AI returned an unrecognised verdict (“" + String(d.status) + "”) for this planned output, so nothing is claimed about it." };
-          return { name, status: st, evidence: d.evidence, suggestion: d.suggestion };
-        }).concat(extras.map((d) => ({ name: d.name, status: DELIV_ALIASES[String(d.status || "").trim().toLowerCase()] || "unassessed", evidence: d.evidence, suggestion: d.suggestion })));
+          const st = readStatus(d);
+          // Keep what the model said. Discarding it told the researcher the
+          // check had failed when it had in fact answered — and `reconcile`
+          // twenty lines down already keeps the evidence in the identical
+          // case ("The AI could not tell (“…”): …").
+          if (!st) return { name, status: "unassessed",
+            evidence: "The AI returned an unrecognised verdict (" +
+              (d.status == null ? "no status field at all" : "“" + String(d.status) + "”") +
+              ") for this planned output, so nothing is claimed about it." +
+              (String(d.evidence == null ? "" : d.evidence).trim() ? " It said: " + d.evidence : "") };
+          return { name, status: st, evidence: ev(d.evidence), suggestion: d.suggestion };
+        });
+        // Tagged, so every surface can say what they are. Untagged, they were
+        // counted in a tally that claims to summarise the seven standard rows
+        // and were merged flat into both exports, where a volunteered row reads
+        // as part of the checklist this tool says it applies.
+        const extraRows = extras.map((d) => ({ name: d.name, extra: true,
+          status: readStatus(d) || "unassessed", evidence: ev(d.evidence), suggestion: d.suggestion }));
+        const rows = canonRows.concat(extraRows);
 
         if (!rows.length) { delivEl.classList.add("hidden"); return; }
-        const nUn = rows.filter((r) => r.status === "unassessed").length;
+        // Over the seven, NOT over `rows`: with extras included this counted
+        // volunteered rows against a denominator of seven and printed "2 of the
+        // 7 planned-output checks came back without a usable verdict" on a run
+        // where all seven had answered — and "8 of the 7" when the model
+        // volunteered enough of them.
+        const nUn = canonRows.filter((r) => r.status === "unassessed").length;
         if (nUn && caveats) caveats.push(nUn + " of the " + DELIVERABLE_NAMES.length + " planned-output checks came back without a usable verdict and are marked “Not assessed”.");
-        if (extras.length && caveats) caveats.push("The AI volunteered " + extras.length + " planned output(s) that were not on the list it was asked about (" + extras.map((e) => e.name).join(", ") + "). They are shown last and are not part of the standard set.");
+        if (extras.length && caveats) caveats.push("The AI volunteered " + extras.length + " planned output(s) that were not on the list it was asked about (" + extras.map((e) => e.name).join(", ") + "). They are shown last, labelled, and left out of the tally — they are not part of the standard set.");
 
         const counts = {};
         delivListEl.innerHTML = rows.map((d) => {
           const m = DELIV_META[d.status] || DELIV_META.unassessed;
-          counts[d.status] = (counts[d.status] || 0) + 1;
+          if (!d.extra) counts[d.status] = (counts[d.status] || 0) + 1;
           return '<li class="border-l-2 pl-4 ' + m.border + '">' +
             '<div class="flex items-start justify-between gap-3">' +
-              '<p class="text-sm font-semibold text-slate-900">' + escapeHtml(d.name) + '</p>' +
+              '<p class="text-sm font-semibold text-slate-900">' + escapeHtml(d.name) +
+                (d.extra ? ' <span class="font-normal text-slate-400">(volunteered by the AI — not one of the ' + DELIVERABLE_NAMES.length + ' standard outputs)</span>' : '') + '</p>' +
               '<span class="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ' + m.chip + '"><span class="inline-block w-1.5 h-1.5 rounded-full ' + m.dot + '"></span>' + m.label + '</span>' +
             '</div>' +
             (d.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(d.evidence) + '</p>' : '') +
-            (d.suggestion && d.status !== "present" && d.status !== "unassessed" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(d.suggestion) + '</p>' : '') +
+            (delivShowSuggestion(d) ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(d.suggestion) + '</p>' : '') +
           '</li>';
         }).join("");
-        delivTallyEl.innerHTML = ["present", "partial", "absent", "unassessed"].map((k) => {
+        delivTallyEl.innerHTML = ["present", "partial", "absent", "na", "unassessed"].map((k) => {
           const m = DELIV_META[k];
           return counts[k] ? '<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ' + m.chip + '"><span class="inline-block w-2 h-2 rounded-full ' + m.dot + '"></span>' + counts[k] + ' ' + m.label + '</span>' : "";
         }).join("");
@@ -1393,11 +1459,16 @@ const fwList = Object.values(FRAMEWORKS);
         }
         if (Array.isArray(delivRows) && delivRows.length) {
           md += "## Planned outputs & figures (shell tables, Love plot, …)\n\n";
-          md += "_“Absent” means the protocol does not pre-specify the output; some are genuinely not applicable to a given design._\n\n";
+          // Read off the page, the way frameText() does for the score's framing
+          // paragraphs: the export used to carry its own shorter sentence
+          // ("“Absent” means the protocol does not pre-specify the output…"),
+          // which defined the word one way while the screen defined it another.
+          md += "_" + delivNoteText() + "_\n\n";
           for (const x of delivRows) {
-            md += "- **" + x.name + "** — _" + ((DELIV_META[x.status] || DELIV_META.unassessed).label) + "_\n";
+            md += "- **" + x.name + (x.extra ? " (volunteered by the AI — not one of the standard outputs)" : "") +
+              "** — _" + ((DELIV_META[x.status] || DELIV_META.unassessed).label) + "_\n";
             if (x.evidence) md += "  - Evidence: " + x.evidence + "\n";
-            if (x.suggestion && x.status !== "present" && x.status !== "unassessed") md += "  - Suggestion: " + x.suggestion + "\n";
+            if (delivShowSuggestion(x)) md += "  - Suggestion: " + x.suggestion + "\n";
           }
           md += "\n";
         }
@@ -1528,12 +1599,14 @@ const fwList = Object.values(FRAMEWORKS);
 
           if (Array.isArray(delivRows) && delivRows.length) {
             children.push(h1("Planned outputs & figures"));
-            children.push(para([text("“Absent” means the protocol does not pre-specify the output; some are genuinely not applicable to a given design.", { italics: true, size: 16, color: "777777" })]));
+            children.push(para([text(delivNoteText(), { italics: true, size: 16, color: "777777" })]));
             for (const x of delivRows) {
               const lab = (DELIV_META[x.status] || DELIV_META.unassessed).label;
-              children.push(para([text(x.name + " — ", { bold: true }), text(lab, { color: STCOL[x.status] || STCOL.unassessed, bold: true })]));
+              children.push(para([
+                text(x.name + (x.extra ? " (volunteered by the AI — not one of the standard outputs)" : "") + " — ", { bold: true }),
+                text(lab, { color: STCOL[x.status] || STCOL.unassessed, bold: true })]));
               if (x.evidence) children.push(para([text("Evidence: " + x.evidence, { size: 18, color: "555555" })]));
-              if (x.suggestion && x.status !== "present" && x.status !== "unassessed") children.push(para([text("Suggestion: " + x.suggestion, { size: 18, color: "555555" })]));
+              if (delivShowSuggestion(x)) children.push(para([text("Suggestion: " + x.suggestion, { size: 18, color: "555555" })]));
             }
           }
 

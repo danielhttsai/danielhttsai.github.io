@@ -127,7 +127,9 @@ const SHARED_EXTRACTION = `ALSO extract the study design so it can be drawn as a
 - For inclusion, exclusion, and covariates: only return an empty array if the document genuinely contains NO such information at all. If eligibility or adjustment is described anywhere, these arrays MUST be populated.
 - timeline: the key analysis windows on a DAY axis where day 0 = the index date. Use NEGATIVE days for time before index and POSITIVE for time after. For each window give label, kind (one of: washout, covariate, exposure, followup, grace, outcome), startDay, endDay, and an optional short note. Infer durations from the text — e.g. "365-day washout" → start -365, end 0; "180-day covariate look-back" → -180 to 0; "5-year follow-up" → 0 to 1825; "30-day grace period" → 0 to 30. If a duration is not stated, choose a reasonable default and set note to "assumed". Always include an eligibility/washout window before index and a follow-up window after index where the design has them. Order windows chronologically by startDay.
 
-SEPARATELY, assess whether the protocol PRE-SPECIFIES the planned analytical outputs that a rigorous RWE study mocks up in advance (shell tables and figure plans), in the "deliverables" array. For each item below return status: "present" (explicitly planned or described — a shell table, a named figure, or a clear statement it will be produced), "partial" (implied or partially described but not clearly pre-specified), or "absent" (no trace). Prefer "absent" over "partial" when there is no mention at all. Give short evidence and a concrete suggestion for partial/absent items. If an item is genuinely not applicable to the design (e.g. a Kaplan-Meier curve for a cross-sectional descriptive study), mark it "absent" and say so in the evidence. Return one entry per item, using the exact name.
+SEPARATELY, assess whether the protocol PRE-SPECIFIES the planned analytical outputs that a rigorous RWE study mocks up in advance (shell tables and figure plans), in the "deliverables" array. The seven names below are written in the vocabulary of a person-level, propensity-score-adjusted, time-to-event cohort. JUDGE EACH ITEM AS THIS DESIGN OWES IT: where a design produces a modified version of an item — a case-selection flow rather than a cohort attrition flow, a case-series or period-composition description rather than a baseline table by treatment group, an incidence-rate-ratio-by-risk-window profile rather than a survival curve — judge that modified version, and say in the evidence which version you judged. For each item below return status: "present" (explicitly planned or described — a shell table, a named figure, or a clear statement it will be produced), "partial" (implied or partially described but not clearly pre-specified), "absent" (this design can produce this output or an equivalent, and the document does not plan it), or "na" (this design's ESTIMATOR structurally cannot produce this output or any equivalent). Prefer "absent" over "partial" when there is no mention at all. Give short evidence for every item, and a concrete suggestion for "partial" and "absent" items; for "na" no suggestion is wanted, so return "—".
+"na" carries a burden of proof. Its evidence must name the design and the structural feature of its estimator that rules the output out — e.g. covariate balance in a within-person design, where conditioning on the person already removes all time-invariant confounding, so there is no between-person balance to diagnose; or a survival curve where no persons are followed from a shared time origin. The document's silence is never grounds for "na": "not needed here", "not usual for this design" and "the authors did not plan one" all mean "absent". NEVER mark "Primary results table (shell)" or "Sensitivity-analysis outputs" as "na" — every design has a primary estimate and identifying assumptions to probe, whatever the measure and whatever the assumption. When torn between "na" and "absent", choose "absent".
+Return one entry per item, using the exact name.
 The deliverables (name | what it is):
 ${DELIVERABLES.map(([n, d]) => `${n} | ${d}`).join("\n")}
 
@@ -206,7 +208,13 @@ const RESPONSE_SCHEMA = {
         type: "object",
         properties: {
           name: { type: "string" },
-          status: { type: "string", enum: ["present", "partial", "absent"] },
+          // "na" is enforced here, not merely requested: this schema is sent to
+          // Gemini as a responseSchema, so a status outside the enum cannot be
+          // generated. Without it the model had no way to say "this design
+          // cannot produce this output" and the prompt told it to say "absent"
+          // — which the page renders red and attaches a suggestion to. Keep in
+          // lock-step with DELIV_ALIASES and DELIV_META in protocol-checker.astro.
+          status: { type: "string", enum: ["present", "partial", "absent", "na"] },
           evidence: { type: "string" },
           suggestion: { type: "string" },
         },
