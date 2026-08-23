@@ -2242,7 +2242,18 @@ const DESIGNS = [
           { k: "YCOUNT", label: "Event count, rate, or level", types: ["number", "binary"], req: true },
           { k: "DENOM", label: "Population denominator / offset", types: ["number"], req: false },
           { k: "SEAS", label: "Season / cycle position (e.g. calendar month)", types: ["number", "categorical", "binary"], req: false },
-          { k: "SERIES", label: "Control-series indicator (1=intervention, 0=control)", types: ["binary", "number"], req: false },
+          // noSuggest: this is the only optional role on the page that changes the
+          // ESTIMAND. Auto-filling it opts the analyst into a controlled
+          // difference-in-differences design they never asked for, and the keyword
+          // evidence for "this is my comparator hospital" is thin — `region`,
+          // `site`, `area`, `arm` and `group` are ordinary hospital-extract column
+          // names. Measured: on a file with a `ward_group` column the page filled
+          // this slot by itself, scored 5 against a threshold of 4, and reported a
+          // real 30% fall as "Difference in level change | 1.000", because the
+          // "control" was the other half of the same intervened hospital. The
+          // denominator, which does not change the estimand, was left empty in the
+          // same run. A suggestion is defensible here; a default is not.
+          { k: "SERIES", label: "Control-series indicator (1=intervention, 0=control)", types: ["binary", "number"], req: false, noSuggest: true },
         ],
         // Segmented regression, written to run on base R only (stats::glm / lm).
         // Newey–West HAC standard errors and the Durbin–Watson statistic are
@@ -2256,7 +2267,7 @@ const DESIGNS = [
           L.push(R_CHK01.trim());
           L.push(R_CHKNUM.trim());
           L.push(R_SQ.trim());
-          L.push("CUT<-" + q(o.cut) + "; UNIT<-" + q(o.unit || "month") + "; COMBF<-" + q(o.comb || "sum") + "; MODEL<-" + q(o.model || "auto") + "; SEASON<-" + q(o.season || "none") + "; CYC<-" + (o.cycle || 12) + "; AC<-" + q(o.ac || "auto") + "; ORDER<-" + q(o.order || "auto") + "; DCOMB<-" + q(o.denomcomb || "auto"));
+          L.push("CUT<-" + q(o.cut) + "; UNIT<-" + q(o.unit || "month") + "; COMBF<-" + q(o.comb || "sum") + "; MODEL<-" + q(o.model || "auto") + "; SEASON<-" + q(o.season || "none") + "; CYC<-" + (o.cycle || 12) + "; AC<-" + q(o.ac || "auto") + "; ORDER<-" + q(o.order || "auto") + "; DCOMB<-" + q(o.denomcomb || "auto") + "; SCODING<-" + q(o.seriescoding || ""));
           L.push("");
           L.push("# --- parse the time column (ISO dates, slashes, datetimes, YYYY-MM) ---");
           // Period labels arrive in more shapes than ISO. Every shape this fails to
@@ -2442,6 +2453,11 @@ const DESIGNS = [
           // estimand the control column was mapped for, and the fact that it is
           // gone was previously stated nowhere at all — the rows simply stopped
           // appearing, while the remaining ones kept the words "control series".
+          // Emitted before the estimates so it is the first note the panel prints,
+          // and on the notes channel so it reaches the Markdown and Word reports —
+          // the recode happened in the browser, so R would otherwise have no way to
+          // know it occurred, and the exports no way to record it.
+          L.push("if(HASG && nchar(SCODING)>0) cat(sprintf('RESULT_NOTE|The control-series indicator was not coded 0/1 in the file and was recoded before the analysis. %s\\n', SCODING))");
           L.push("if(HASG && !ctrl) cat(sprintf('RESULT_NOTE|NO CONTROLLED ANALYSIS WAS FITTED. A control-series indicator was mapped, but only one series has any periods left in the data that was fitted%s, so the difference-in-differences terms - the whole reason for mapping a control series - cannot be estimated and are not in the model. Everything below is an ordinary uncontrolled interrupted time series of %s, and its counterfactual is projected from its own pre-intervention trend rather than from a comparator. Nothing below is wrong; it is a weaker question than the one you set up, and it is the only one this data can answer.\\n', if(ngrp0>1) ' after the periods named above were dropped' else ' - the column mapped to the control-series indicator holds the same value in every row', if(gname!='') paste0('the ',gname,' series alone') else 'that single series'))");
           L.push("");
           L.push("# --- seasonality ---");
@@ -2742,10 +2758,19 @@ const DESIGNS = [
       DENOM: (p) => (/pop|risk|denom|母數|人口|人數/i.test(p.name) ? 1 : 0),
       SERIES: (p) => (p.type === "binary" ? 1 : 0),
     };
-    function suggestCol(role) {
+    // `claimed` holds the columns earlier roles have already taken. Without it the
+    // page can suggest one column for two roles and then refuse its own mapping:
+    // a time column named `adm_month` that profiles as categorical is offered to
+    // TIDX and to SEAS, and the duplicate-role guard then blocks the run with
+    // "adm_month is mapped to more than one role", about a mapping the user never
+    // made, with the remedy unstated and a justification (a variable compared
+    // against itself in a propensity score) that has nothing to do with either
+    // role. The guard is right; suggesting both sides of it is not.
+    function suggestCol(role, claimed) {
       const kw = KW[role.k];
       let best = "", score = 0;
       for (const p of DATA.profile) {
+        if (claimed && claimed.has(p.name)) continue;
         // A name match is not enough on its own. "clinic_site" matches the
         // control-series keywords, but a 26-level text column cannot be a 0/1
         // indicator, and offering it only sends the user to an error message.
@@ -2765,8 +2790,10 @@ const DESIGNS = [
       $("designname").textContent = spec.label;
       $("maphint").textContent = spec.hint;
       const opts = (sel) => '<option value="">— choose —</option>' + DATA.columns.map((c) => '<option value="' + esc(c) + '"' + (sel === c ? " selected" : "") + ">" + esc(c) + "</option>").join("");
+      const claimed = new Set(spec.roles.map((r) => MAP[r.k]).filter(Boolean));
       $("maproles").innerHTML = spec.roles.map((r) => {
-        if (!(r.k in MAP)) MAP[r.k] = suggestCol(r);
+        if (!(r.k in MAP)) MAP[r.k] = r.noSuggest ? "" : suggestCol(r, claimed);
+        if (MAP[r.k]) claimed.add(MAP[r.k]);
         return '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">' + esc(r.label) + (r.req ? " *" : " (optional)") + '</span><select data-role="' + r.k + '" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">' + opts(MAP[r.k]) + "</select></label>";
       }).join("");
       $("maproles").querySelectorAll("select[data-role]").forEach((sel) => sel.addEventListener("change", () => { MAP[sel.getAttribute("data-role")] = sel.value; invalidateMaster(); renderCovs(spec); validateMap(); }));
@@ -3471,8 +3498,35 @@ const DESIGNS = [
       if (n < 2) return { ok: false, raw: raw, n: 12, why: "must be at least 2 — a cycle of " + n + " is not a cycle" };
       return { ok: true, raw: raw, n: n };
     }
+    // Which value of the mapped control-series column was taken to mean "the
+    // intervention series"? When the column is literally 0/1 there is nothing to
+    // say. When it is not — two hospitals coded 1 and 2 is the ordinary case — the
+    // `c_std` tick sends it through toBin, which consults the dataset vocabulary,
+    // and that vocabulary guesses "1 means yes" at LOW confidence for a 1/2 pair.
+    // If the intervention happened at site 2, the arms are silently swapped and
+    // the reported difference is the reciprocal of the truth: measured, a real 30%
+    // fall reported as 1.429 (95% CI 1.166-1.750), significant, on the wrong side
+    // of the null. The guess is shown on the page, but under a heading reading
+    // "Coded flags — which value means yes / event present?", which is about
+    // outcomes, in the least alarming colour on the page, and nothing said it
+    // decides which hospital is the intervention arm. So the recode travels with
+    // the run and is stated in the results, where the estimate it inverted is.
+    function seriesCoding() {
+      if (getDesign() !== "its" || !MAP.SERIES || !$("c_std").checked) return "";
+      const col = MAP.SERIES;
+      const raw = [];
+      for (const r of DATA.rows) { const v = r[col]; if (isBlank(v)) continue; const s = String(v).trim(); if (raw.indexOf(s) < 0) raw.push(s); if (raw.length > 6) break; }
+      if (raw.length && raw.every((s) => s === "0" || s === "1")) return "";
+      const yes = raw.filter((s) => toBin(s) === 1), no = raw.filter((s) => toBin(s) === 0);
+      if (!yes.length || !no.length) return "";
+      const q = (a) => a.map((s) => '"' + s + '"').join(" and ");
+      return col + ": " + q(yes) + " was read as the INTERVENTION series and " + q(no) + " as the control. "
+        + "That reading came from this file's own coded-flag vocabulary, not from the column itself, and for a pair like 1 and 2 it is a guess. "
+        + "If it is the wrong way round, every difference below is the reciprocal of the truth and on the wrong side of the null. "
+        + "Set it under \"Coded flags\" in the structure panel, or recode the column to 0 and 1.";
+    }
     function itsOpts() {
-      return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: itsCycle().n, ac: $("its_ac").value, order: $("its_order").value, denomcomb: $("its_denomcomb").value };
+      return { cut: $("its_cut").value.trim(), unit: $("its_unit").value, comb: $("its_comb").value, model: $("its_model").value, season: $("its_season").value, cycle: itsCycle().n, ac: $("its_ac").value, order: $("its_order").value, denomcomb: $("its_denomcomb").value, seriescoding: seriesCoding() };
     }
     function buildScript() {
       const spec = SPEC[getDesign()]; const { covNames, covInfo, covDropped } = analysisCSV();
