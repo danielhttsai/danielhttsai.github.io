@@ -2407,6 +2407,47 @@ const DESIGNS = [
           L.push("if(ORDER=='file'){ ord<-seq_along(ukey); ordmode<-'the order the periods first appear in the file (which you told the tool is chronological)' } else if(ORDER=='alpha'){ ord<-order(ukey); ordmode<-'alphabetical order of the labels (which you told the tool is chronological)' } else if(all(!is.na(kd))){ ord<-order(kd); ordmode<-'dates parsed from the period labels' } else if(all(!is.na(kn))){ ord<-order(kn); ordmode<-'the numeric value of each label' } else { stub<-gsub('[0-9]+','#',ukey); ngrp<-vapply(gregexpr('[0-9]+',ukey), function(m) if(m[1]==-1) 0L else length(m), 0L); num<-suppressWarnings(as.numeric(gsub('[^0-9]','',ukey))); if(length(unique(stub))==1 && all(ngrp==1) && !any(is.na(num)) && !any(duplicated(num))){ ord<-order(num); ordmode<-'the single number inside each label' } }");
           L.push("if(ordmode==''){ stop(paste0('Cannot work out the chronological order of the period labels: they do not parse as dates, they are not numbers, and they do not share a single numbered pattern. Sorting them as text would give ', paste(head(sort(ukey),5),collapse=' -> '), ' ... which is very unlikely to be chronological, and analysing periods in the wrong order can reverse the direction of the estimate. Set \"Period order\" to \"the order they appear in the file\" if the file is already sorted, or map a numeric period index instead.')) }");
           L.push("ukey<-ukey[ord]; a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey)");
+          // --- calendar periods that contain no rows at all --------------------
+          // `a$t` was a RANK over the periods present, not a position on a calendar.
+          // The design's own hint invites a per-patient extract, and such a file has
+          // no row at all for a month in which the outcome never occurred: that month
+          // did not become a zero, it ceased to exist, and the next month became t+1.
+          // So the x-axis was a rank wearing calendar clothes — March drawn adjacent
+          // to January under real date labels — and "per period" was per surviving
+          // period, which for a gappy series is not per month.
+          //
+          // Indexing on the calendar costs nothing and assumes nothing: a period with
+          // no rows is then simply an unobserved point, which is what a regression
+          // handles natively. What it does NOT do is fix the attenuation, and it must
+          // not be sold as if it did — measured on the same file, the level change
+          // moves 0.1697 to 0.1704 while the answer with the zeros written out is
+          // 0.1033. The missing OBSERVATIONS cause the bias, not the mis-scaled index.
+          //
+          // And they cannot be filled in here. Writing Y=0 needs a denominator for a
+          // period that has no rows to carry one, and the estimate is badly sensitive
+          // to whatever is invented (N=25000/50000/100000 gives 0.1286/0.1033/0.0743
+          // on that file); with a person-time denominator the invented row has N=0,
+          // log(0) is -Inf, and the drop rule above deletes it again. Above all,
+          // nothing in a CSV distinguishes "no events occurred" from "nothing was
+          // recorded", and those are opposite facts. So the gap is NAMED, never
+          // filled: filling it would silently settle that ambiguity in the direction
+          // that moves the answer most.
+          L.push("gapn<-0; gapmiss<-character(0)");
+          L.push("if(all(!is.na(kd)) && UNIT!='none'){ kk2<-kd[ord]");
+          L.push("  if(!is.unsorted(kk2) && is.finite(as.numeric(max(kk2)-min(kk2)))){ full<-try(seq(min(kk2), max(kk2), by=UNIT), silent=TRUE)");
+          // A span that needs tens of thousands of periods to cover is evidence that
+          // the period unit does not match the data, not that periods are missing.
+          // Leave the index alone there and let the aggregation note carry it.
+          L.push("    if(!inherits(full,'try-error') && length(full)<=20000){ fullk<-format(full,'%Y-%m-%d'); gapmiss<-setdiff(fullk,ukey)");
+          L.push("      if(length(gapmiss)>0 && length(setdiff(ukey,fullk))==0){ gapn<-length(gapmiss); ukey<-fullk; kd<-pdate(ukey); ord<-seq_along(ukey); a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey) } } } }");
+          // The attenuation figures are this run's own: 400 replicates per cell of a
+          // segmented Poisson series, 24 pre and 12 post periods, baseline mean 8 per
+          // period, fitted twice on identical data — once with the empty periods
+          // written out as zeros and once with them absent. The bias is nil until the
+          // post-intervention counts are low enough to produce empty periods, and
+          // then it grows with the effect, which is the wrong way round for a tool
+          // whose job is to measure the effect.
+          L.push("if(gapn>0) cat(sprintf('RESULT_NOTE|%d of the %d %s(s) between %s and %s contain no rows at all. They are kept in the time index, so the periods below are calendar-spaced and a \"per period\" slope is genuinely per %s - but they are NOT analysed as zero, because this tool cannot tell \"no events occurred\" from \"nothing was recorded\", and those are opposite facts: one is an observation, the other is missing data. If they really are zeros, leaving them out pulls the estimate toward the null, and the pull grows as the intervention works: simulated on this model at 400 replicates a cell, a true ratio of 0.50 was recovered unchanged, a true 0.15 came out at 0.22 and a true 0.08 at 0.16. Write those periods into the file with a zero outcome, and their denominator, if that is what they are. Missing: %s%s.\\n', gapn, np, UNIT, ukey[1], ukey[np], UNIT, paste(head(gapmiss,10),collapse=', '), if(gapn>10) sprintf(' and %d more', gapn-10) else ''))");
           // Period labels are data, and they end up inside pipe-delimited estimate
           // labels, ITSMETA and every FITTED row. A month written "2019|03" would
           // shift the fitted series one column and break the chart. Cleaned only
