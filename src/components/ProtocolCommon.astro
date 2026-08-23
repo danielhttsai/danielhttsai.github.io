@@ -526,10 +526,10 @@
        moment anyone selects it, and a missing amendment is not obviously safer
        than a mis-columned one. The stub asserts nothing about any column: the
        four cells after the notice are genuinely empty, not em dashes. */
-    var amStubCells = function (e) {
-      return ["Entry " + e.no + " could not be read as five columns; it is reproduced in full beneath this table",
-        "", "", "", ""];
+    var amStubNotice = function (e) {
+      return "Entry " + e.no + " could not be read as five columns; it is reproduced in full beneath this table";
     };
+    var amStubCells = function (e) { return [amStubNotice(e), "", "", "", ""]; };
 
     /* A refused line is reproduced VERBATIM, so it cannot go in a code span:
        one backtick in the sender's text would end the span and the rest would
@@ -588,7 +588,33 @@
         ["outputs", "Planned analytical outputs (shell tables and figures)", defaultOutputs(s), "bullets"],
         ["limitations", "Limitations", [limitationsText(s)]],
         ["ethics", "Human subjects, data governance, and dissemination", [ethicsText(s) + " Findings are disseminated via a peer-reviewed manuscript and conference presentation; data-sharing and code-availability follow each source's governance agreements."]],
-        ["registration", "Registration and amendments", ["The protocol is registered before analysis (e.g. the EU PAS Register / ClinicalTrials.gov) where applicable" + (s.registration ? ": " + s.registration : "") + ". Amendments are version-controlled and logged with date and rationale."]],
+        /* The second sentence used to read "Amendments are version-controlled
+           and logged with date and rationale." It is eight headings below a
+           table this document prints, and it certified two properties of that
+           table that the table itself can refute. `amLog` admits a row on ONE
+           non-empty cell and both emitters print an empty cell as an em dash,
+           so filling in only "Amendment or update" — which is what someone
+           recording a change in a hurry does — exported
+
+             | 1 | — | — | — | Washout window widened to 90 days | — |
+
+           under a sentence asserting that the date and the rationale were
+           logged. Reproduced in a real .md and a real word/document.xml. In the
+           all-refused case it is worse: the front matter says what this
+           protocol's amendments were cannot be established from the entries as
+           they stand, and this sentence, in the same file, says they were
+           logged with their dates and reasons.
+
+           It now points at the table instead of certifying it, which is true in
+           every state the log can be in and is also the more useful sentence: a
+           reader looking for the amendment history is told where it is. What
+           each row does or does not carry is the table's business, and the
+           front matter above it no longer promises that every row is full
+           either. No legend for the em dash — the twenty-eighth run's argument
+           against one still holds, because an author who types "—" meaning
+           "not applicable" is indistinguishable, on the page, from a cell left
+           blank. */
+        ["registration", "Registration and amendments", ["The protocol is registered before analysis (e.g. the EU PAS Register / ClinicalTrials.gov) where applicable" + (s.registration ? ": " + s.registration : "") + ". Amendments are version-controlled and recorded in the amendment table in this protocol's front matter."]],
         ["ae", "Adverse-event reporting", ["As a secondary-data analysis of a pre-specified outcome, individual adverse-event reporting does not apply; safety is addressed through the pre-specified outcome analyses."]],
         ["funding", "Funding and conflicts of interest", ["Funding source(s) and each author's conflicts of interest are declared in the final report."]],
       ].filter((x) => !skip.includes(x[0]));
@@ -1020,8 +1046,20 @@
       // file and the Markdown cannot disagree about which entry is which.
       if (log.some((e) => e.ok)) {
         const header = new D.TableRow({ tableHeader: true, children: ["No."].concat(AM_COLS).map((c, i) => k.headCell(c, W[i])) });
+        /* The refusal notice spans the five data columns rather than sitting in
+           the first of them. Confirmed in a real word/document.xml: it was
+           written into the cell under "Version date", 1180 DXA ≈ 0.82 inch
+           wide, with the other four empty — an 88-character sentence wrapping
+           down a date column, which is exactly the shape a reader skims past as
+           a mangled date. A merged cell also matches what the stub is for: it
+           asserts nothing about any one column, because the tool does not know
+           which value belongs in which. The Markdown table keeps five cells,
+           since GFM has no way to merge them; both carry the same sentence. */
+        const stubW = W.slice(1).reduce((a, b) => a + b, 0);
         const body = log.map((e) => new D.TableRow({
-          children: [String(e.no)].concat(e.ok ? e.cells.map((c) => c || "—") : amStubCells(e)).map((c, j) => k.cell(c, W[j])),
+          children: e.ok
+            ? [String(e.no)].concat(e.cells.map((c) => c || "—")).map((c, j) => k.cell(c, W[j]))
+            : [k.cell(String(e.no), W[0]), k.cell(amStubNotice(e), stubW, { columnSpan: AM_COLS.length })],
         }));
         out.push(new D.Table({ width: { size: 9026, type: D.WidthType.DXA }, columnWidths: W, rows: [header].concat(body) }));
       }
