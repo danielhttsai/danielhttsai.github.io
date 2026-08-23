@@ -783,7 +783,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
                       class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">
                 📚 Pick outcome from validated library
               </button>
-              <span class="ml-2 text-[11px] text-slate-500">Fills definition + codes; the validation citation is added to the References section automatically on export.</span>
+              <span class="ml-2 text-[11px] text-slate-500">Fills definition + codes; the validation citation is added to the References section on export, and withdrawn again if the definition here stops being the one that was picked.</span>
             </div>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Operational definition</span>
@@ -881,7 +881,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
                       class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">
                 📚 Pick confounding method from library
               </button>
-              <span class="ml-2 text-[11px] text-slate-500">Auto-fills the method, its operational details, and adds the method citation to References on export.</span>
+              <span class="ml-2 text-[11px] text-slate-500">Auto-fills the method, its operational details, and adds the method citation to References on export — the citation is withdrawn again if you change the method afterwards.</span>
             </div>
             <div class="grid sm:grid-cols-2 gap-3">
               <label class="flex flex-col gap-1">
@@ -1343,7 +1343,7 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
       <div class="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-3xl my-8">
         <header class="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
           <div>
-            <p class="text-xs uppercase tracking-widest text-brand-700 font-bold">Validated phenotype library</p>
+            <p data-library-eyebrow class="text-xs uppercase tracking-widest text-brand-700 font-bold">Validated phenotype library</p>
             <h3 class="text-lg font-bold text-slate-900 mt-0.5" data-library-title>Pick a phenotype</h3>
           </div>
           <button type="button" data-library-close class="text-slate-400 hover:text-slate-700 text-2xl leading-none">×</button>
@@ -1353,7 +1353,7 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
                  class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
         </div>
         <div data-library-list class="px-2 py-2 max-h-[60vh] overflow-y-auto"></div>
-        <footer class="px-5 py-3 border-t border-slate-100 text-[11px] text-slate-500 leading-relaxed">
+        <footer data-library-footer class="px-5 py-3 border-t border-slate-100 text-[11px] text-slate-500 leading-relaxed">
           Code sets are starting points based on published literature; always confirm against your site's coding system version and indication-specific guidance before locking the protocol.
         </footer>
       </div>
@@ -4552,6 +4552,8 @@ _Drafted with the AsPEN protocol builder (${today})._
       const modalTitle = document.querySelector("[data-library-title]");
       const modalList  = document.querySelector("[data-library-list]");
       const modalSearch= document.querySelector("[data-library-search]");
+      const modalEyebrow = document.querySelector("[data-library-eyebrow]");
+      const modalFooter  = document.querySelector("[data-library-footer]");
       let currentCategory = "indications";
       let currentTargets  = {}; // { name?, codes?, def?, validation? }
 
@@ -4577,9 +4579,17 @@ _Drafted with the AsPEN protocol builder (${today})._
           modalList.innerHTML = '<p class="px-3 py-6 text-sm text-slate-500 italic text-center">No matches.</p>';
           return;
         }
-        // NOTE: validation citation is NOT shown in the modal; it accumulates
-        // silently on pick and lands in the Word/MD References section at the
-        // end of export. Modal stays focused on operational definitions.
+        // The citation used to be invisible here: it accumulated on pick and
+        // appeared only in the reference list at the end of an exported
+        // document. So a modal headed "Validated phenotype library" gave no
+        // way to tell the one indication that carries a validation study from
+        // the twelve that do not, and the panel's own promise — "the validation
+        // citation is added to the References section automatically" — was
+        // true of eighteen outcomes, one indication and no exposure at all.
+        // Whether a definition has ever been measured against a chart review
+        // is the single most important thing about it, and it is now on the
+        // row, at the moment of picking, in both directions.
+        const isMethod = currentCategory === "confounding";
         modalList.innerHTML = filtered.map((it, idx) => `
           <button type="button" data-phenotype-idx="${idx}"
                   class="block w-full text-left px-4 py-3 rounded-lg border border-transparent hover:border-brand-300 hover:bg-brand-50/40 transition">
@@ -4587,6 +4597,9 @@ _Drafted with the AsPEN protocol builder (${today})._
             ${it.codes ? `<p class="mt-1 text-xs text-slate-700 font-mono leading-relaxed">${esc(it.codes)}</p>` : ""}
             ${it.definition ? `<p class="mt-1 text-xs text-slate-600 leading-relaxed">${esc(it.definition)}</p>` : ""}
             ${it.notes ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed">${esc(it.notes)}</p>` : ""}
+            ${it.validation
+              ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">${isMethod ? "Method reference" : "Validation study"}</span> · ${esc(it.validation)} <span class="text-slate-500">Added to this protocol's reference list while ${isMethod ? "this method is the one selected" : "this definition is the one in the form"}.</span></p>`
+              : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring how accurately this definition identifies the condition in routinely collected data. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`}
           </button>
         `).join("");
         // Click handler; fill targets + close
@@ -4663,13 +4676,13 @@ _Drafted with the AsPEN protocol builder (${today})._
             // asking; only text this page did not write raises the question.
             const written = new Set();
             for (const rec of Object.values(libraryPicks)) {
-              if (rec && rec.fields) for (const [f, v] of Object.entries(rec.fields)) written.add(f + " " + String(v).trim());
+              if (rec && rec.fields) for (const [f, v] of Object.entries(rec.fields)) written.add(f + "\u0000" + String(v).trim());
             }
             const clobbered = plan.filter((x) => {
               const now = String(x.el.value == null ? "" : x.el.value).trim();
               if (!now || now === x.value.trim()) return false;
               if (x.el.tagName === "SELECT") return false;   // a select always holds a value; it has no "typed by hand" state
-              return !written.has(x.field + " " + now);
+              return !written.has(x.field + "\u0000" + now);
             });
             if (clobbered.length && !confirm(
               "This will replace text you wrote in " +
@@ -4708,6 +4721,17 @@ _Drafted with the AsPEN protocol builder (${today})._
           outcomes:    "Pick an outcome; fills definition + codes",
           confounding: "Pick a confounding-control method; fills the method + operational details",
         })[category] || "Pick from library";
+        // Thirteen statistical methods are not phenotypes, and nothing in that
+        // list was ever validated against a chart review; the footer's advice
+        // about coding-system versions is addressed to a code set, which a
+        // method does not have. The chrome now says which of the two lists is
+        // open rather than calling all four "the validated phenotype library".
+        if (modalEyebrow) modalEyebrow.textContent = category === "confounding"
+          ? "Confounding-control method library"
+          : "Phenotype library";
+        if (modalFooter) modalFooter.textContent = category === "confounding"
+          ? "Each entry's operational details are a starting point written for this builder, not a site-specific analysis plan; they are yours to edit once they are in the form."
+          : "Code sets are starting points based on published literature; always confirm against your site's coding system version and indication-specific guidance before locking the protocol.";
         modalSearch.value = "";
         renderLibrary("");
         modal.classList.remove("hidden");
