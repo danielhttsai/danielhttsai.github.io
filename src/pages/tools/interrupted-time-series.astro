@@ -280,9 +280,20 @@ const SENSITIVITY = [
         // then substitutes just as silently — but with nothing recorded, so no
         // blocker fired at all. An empty string is not a value this page offers,
         // which is the only test that matters here.
-        if (v == null) return;
-        if (sel.options.indexOf(String(v)) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
-          staleSelects.push({ name: sel.name, label: String(sel.label).trim(), saved: String(v), used: sel.fallback });
+        // `undefined` means the key was not in the object at all — the sender
+        // did not mention this field, which is not a substitution and must not
+        // be reported as one. `null` is different: JSON has no `undefined`, so
+        // a `null` here is an upstream system saying "no value", and it used to
+        // walk straight past this test. Measured: a seed of {"unit": null} left
+        // the box EMPTY on screen while the protocol asserted a definite
+        // choice, with nothing in the panel and nothing in the document — the
+        // one hostile value of the nine tried that was not caught. It is
+        // recorded as a blank, because that is what it is; the sentence for a
+        // blank is already written and is true of it.
+        if (v === undefined) return;
+        const saved = v === null ? "" : String(v);
+        if (sel.options.indexOf(saved) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
+          staleSelects.push({ name: sel.name, label: String(sel.label).trim(), saved: saved, used: sel.fallback });
         }
       });
     };
@@ -911,8 +922,26 @@ ${REFS.map((r) => "- " + r).join("\n")}
           noteStale(saved);
           // A record carried over from an earlier load of this same draft, kept
           // unless the user has since answered it.
-          if (Array.isArray(saved[STALE_KEY])) saved[STALE_KEY].forEach((x) => {
-            if (x && x.name && !staleSelects.some((y) => y.name === x.name)) staleSelects.push(x);
+          // Validated against the live markup, not trusted. Unchecked, an entry
+          // naming a text field ran into the filter below, where a <textarea>
+          // has no selectedIndex, fell through to `el.value = x.used`, and the
+          // autosave a second later destroyed the user's own text — the exact
+          // damage this mechanism exists to prevent, generalised to every
+          // field. trend-in-trend has validated since it was found there; its
+          // two siblings copied the loop without the check. The 64 is only
+          // against a pathologically long array; the real cap is the name
+          // check plus the de-duplication, which cannot admit more entries
+          // than there are selects.
+          if (Array.isArray(saved[STALE_KEY])) saved[STALE_KEY].slice(0, 64).forEach((x) => {
+            if (!x || typeof x !== "object" || !x.name) return;
+            const sel = SELECTS.find((y) => y.name === x.name);
+            if (!sel || staleSelects.some((y) => y.name === x.name)) return;
+            staleSelects.push({
+              name: sel.name,
+              label: String(x.label == null ? sel.label : x.label),
+              saved: String(x.saved == null ? "" : x.saved),
+              used: sel.options.indexOf(String(x.used)) >= 0 ? String(x.used) : sel.fallback,
+            });
           });
           for (const k in saved) {
             if (k === STALE_KEY) continue;

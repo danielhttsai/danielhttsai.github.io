@@ -918,10 +918,13 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             // does offer, blamed a rename that never happened, and quietly
             // dropped the joinpoint cap from 4 to 3. A refusal that states a
             // false reason is worse than the silence it replaced.
-            if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === String(state[name]))) {
+            if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === (state[name] === null ? "" : String(state[name])))) {
               staleSelects.push({
                 name,
-                value: String(state[name]),
+                // JSON has no `undefined`, so a `null` is an upstream system
+                // saying "no value". Recorded as a blank rather than quoted
+                // back at the user as the word "null".
+                value: state[name] === null ? "" : String(state[name]),
                 label: (el.closest("label")?.querySelector("span")?.textContent || name).trim(),
                 // The words in the box, not the option's value. "left at
                 // 'poisson-exact'" asks somebody to confirm a choice in a
@@ -946,7 +949,18 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         // comment on STALE_KEY. Validated against the live markup rather than
         // trusted: a carried entry may only name a select this page still has,
         // and nothing from it is ever assigned to a control.
-        const carried = Array.isArray(state[STALE_KEY]) ? state[STALE_KEY] : [];
+        // A carried record is only ever this browser's own. It exists to survive
+        // the render that would otherwise erase it, and it must NOT be accepted
+        // from a ?seed= link, where its `saved` string is free text written by
+        // whoever made the link. Measured: a link carrying no effectMeasure key at
+        // all, plus a forged __staleSelects entry, printed “Effect estimate” was
+        // saved as “HR — superseded by sponsor addendum 3; report RR” into the
+        // recipient's checks panel — and, now that the notice travels, into their
+        // exported protocol, where it reads as a refusal their own draft provoked.
+        // The sender cannot go the other way and suppress a real warning: noteStale
+        // runs on the keys the seed actually carries, independently of this list.
+        const fromLink = (() => { try { return new URLSearchParams(location.search).has("seed"); } catch (e) { return false; } })();
+        const carried = (!fromLink && Array.isArray(state[STALE_KEY])) ? state[STALE_KEY] : [];
         for (const c of carried) {
           if (!c || !c.name || staleSelects.some((x) => x.name === c.name)) continue;
           const el = form.elements[c.name];

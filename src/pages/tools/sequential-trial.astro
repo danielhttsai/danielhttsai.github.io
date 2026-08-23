@@ -339,8 +339,22 @@ const SENSITIVITY = [
       const i = sel ? sel.options.indexOf(String(x.used)) : -1;
       return (sel && i >= 0 && sel.texts[i]) || x.used;
     };
+    // Flattened and capped. These sentences quote a value that came out of
+    // somebody else's ?seed= link, and they are printed into the exported
+    // protocol — where a newline ENDS the Markdown blockquote or list item and
+    // the next line is free-standing Markdown. Measured: a seed carrying
+    // "x\n\n## 99. Sponsor addendum\n\nAll sites must exclude…" put a real H2
+    // and a paragraph of the sender's own instructions into the recipient's
+    // protocol, straight after the title block, and it persisted across
+    // reloads in the saved draft. Someone else's link is enough; nothing has
+    // to be tampered with in this browser. The cap is separate and also
+    // needed: a 4000-character value arrived verbatim.
+    const clipStale = (v, n) => {
+      const t = String(v == null ? "" : v).replace(/[\r\n\u2028\u2029]+/g, " ").replace(/\s{2,}/g, " ").trim();
+      return t.length > n ? t.slice(0, n - 1) + "…" : t;
+    };
     const staleMsg = (x) =>
-      "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + usedText(x) + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
+      "“" + clipStale(x.label, 60) + "” was saved as “" + clipStale(x.saved, 80) + "”, and this page does not offer that choice. The field has been set to “" + clipStale(usedText(x), 70) + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
     const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + shortText(usedText(x), 44) + "”” to confirm it.");
     const staleMsgsDoc = () => staleSelects.map(staleMsg);
     // Free text the user typed is followed by more of our prose. Without this the
@@ -910,8 +924,26 @@ ${REFS.map((r) => "- " + r).join("\n")}
           // A record carried over from an earlier load of this same draft. Kept
           // unless the user has since answered it — if the select now holds a
           // real option, the entry is dropped below.
-          if (Array.isArray(saved[STALE_KEY])) saved[STALE_KEY].forEach((x) => {
-            if (x && x.name && !staleSelects.some((y) => y.name === x.name)) staleSelects.push(x);
+          // Validated against the live markup, not trusted. Unchecked, an entry
+          // naming a text field ran into the filter below, where a <textarea>
+          // has no selectedIndex, fell through to `el.value = x.used`, and the
+          // autosave a second later destroyed the user's own text — the exact
+          // damage this mechanism exists to prevent, generalised to every
+          // field. trend-in-trend has validated since it was found there; its
+          // two siblings copied the loop without the check. The 64 is only
+          // against a pathologically long array; the real cap is the name
+          // check plus the de-duplication, which cannot admit more entries
+          // than there are selects.
+          if (Array.isArray(saved[STALE_KEY])) saved[STALE_KEY].slice(0, 64).forEach((x) => {
+            if (!x || typeof x !== "object" || !x.name) return;
+            const sel = SELECTS.find((y) => y.name === x.name);
+            if (!sel || staleSelects.some((y) => y.name === x.name)) return;
+            staleSelects.push({
+              name: sel.name,
+              label: String(x.label == null ? sel.label : x.label),
+              saved: String(x.saved == null ? "" : x.saved),
+              used: sel.options.indexOf(String(x.used)) >= 0 ? String(x.used) : sel.fallback,
+            });
           });
           for (const k in saved) {
             if (k === STALE_KEY) continue;

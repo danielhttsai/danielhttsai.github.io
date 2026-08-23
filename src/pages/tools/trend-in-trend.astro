@@ -313,9 +313,20 @@ const SENSITIVITY = [
       if (!obj || typeof obj !== "object") return;
       SELECTS.forEach((sel) => {
         const v = obj[sel.name];
-        if (v == null) return;
-        if (sel.options.indexOf(String(v)) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
-          staleSelects.push({ name: sel.name, label: String(sel.label).trim(), saved: String(v), used: sel.fallback });
+        // `undefined` means the key was not in the object at all — the sender
+        // did not mention this field, which is not a substitution and must not
+        // be reported as one. `null` is different: JSON has no `undefined`, so
+        // a `null` here is an upstream system saying "no value", and it used to
+        // walk straight past this test. Measured: a seed of {"unit": null} left
+        // the box EMPTY on screen while the protocol asserted a definite
+        // choice, with nothing in the panel and nothing in the document — the
+        // one hostile value of the nine tried that was not caught. It is
+        // recorded as a blank, because that is what it is; the sentence for a
+        // blank is already written and is true of it.
+        if (v === undefined) return;
+        const saved = v === null ? "" : String(v);
+        if (sel.options.indexOf(saved) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
+          staleSelects.push({ name: sel.name, label: String(sel.label).trim(), saved: saved, used: sel.fallback });
         }
       });
     };

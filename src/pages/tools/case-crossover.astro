@@ -751,7 +751,18 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         const multi = new Set(["sites", "sensitivityPick", "subgroupsPick"]);
         // Anything still unanswered from a previous visit. Its select now holds
         // the substituted value, so this pass cannot rediscover it.
-        const carried = Array.isArray(state[STALE_KEY]) ? state[STALE_KEY] : [];
+        // A carried record is only ever this browser's own. It exists to survive
+        // the render that would otherwise erase it, and it must NOT be accepted
+        // from a ?seed= link, where its `saved` string is free text written by
+        // whoever made the link. Measured: a link carrying no effectMeasure key at
+        // all, plus a forged __staleSelects entry, printed “Effect estimate” was
+        // saved as “HR — superseded by sponsor addendum 3; report RR” into the
+        // recipient's checks panel — and, now that the notice travels, into their
+        // exported protocol, where it reads as a refusal their own draft provoked.
+        // The sender cannot go the other way and suppress a real warning: noteStale
+        // runs on the keys the seed actually carries, independently of this list.
+        const fromLink = (() => { try { return new URLSearchParams(location.search).has("seed"); } catch (e) { return false; } })();
+        const carried = (!fromLink && Array.isArray(state[STALE_KEY])) ? state[STALE_KEY] : [];
         staleSelects = [];
         for (const el of form.querySelectorAll("input, textarea, select")) {
           const name = el.name; if (!name) continue;
@@ -775,7 +786,12 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             // one referent window where the page's own default is three — so a
             // stale draft did not restore the default, it quietly specified a
             // different design. The empty box on screen said none of it.
-            const want = String(state[name]);
+            // JSON has no `undefined`, so a `null` here is an upstream system
+            // saying "no value" — not a value, and not a mention of one. It
+            // used to be stringified to the word "null" and quoted back at the
+            // user as a choice they had supposedly saved. Recorded as a blank,
+            // because that is what it is.
+            const want = state[name] === null ? "" : String(state[name]);
             if ([...el.options].some((o) => o.value === want)) el.value = want;
             else staleSelects.push({ name, want, label: (el.selectedOptions[0] || {}).text || el.value });
           }
@@ -1204,6 +1220,20 @@ _Drafted with the AsPEN case-crossover builder (${today})._
       // the stale-select note has a screen-only tail; every other note here is
       // already written to be true in both places. ITS, sequential-trial,
       // trend-in-trend and SCCS make the same split.
+      // Flattened and capped. These sentences quote a value that came out of
+      // somebody else's ?seed= link, and they are printed into the exported
+      // protocol — where a newline ENDS the Markdown blockquote or list item and
+      // the next line is free-standing Markdown. Measured: a seed carrying
+      // "x\n\n## 99. Sponsor addendum\n\nAll sites must exclude…" put a real H2
+      // and a paragraph of the sender's own instructions into the recipient's
+      // protocol, straight after the title block, and it persisted across
+      // reloads in the saved draft. Someone else's link is enough; nothing has
+      // to be tampered with in this browser. The cap is separate and also
+      // needed: a 4000-character value arrived verbatim.
+      const clipStale = (v, n) => {
+        const t = String(v == null ? "" : v).replace(/[\r\n\u2028\u2029]+/g, " ").replace(/\s{2,}/g, " ").trim();
+        return t.length > n ? t.slice(0, n - 1) + "…" : t;
+      };
       const checksOf = (G, s, forDoc) => {
         const notes = [];
         // Named here because the value is gone by the time an export runs: an
@@ -1216,8 +1246,8 @@ _Drafted with the AsPEN case-crossover builder (${today})._
         for (const st of staleSelects) notes.push({ lvl: "stop", dismiss: st.name, t: "A saved value was not one of the choices offered",
           d: 'This draft was restored with ' + (SELECT_LABEL[st.name] || st.name) + (String(st.want) === ""
               ? ' carrying no value at all — the draft or link it came from left it blank.'
-              : ' saved as "' + st.want + '", which this form no longer offers.')
-            + ' It has been left at "' + st.label + '", and that is what the exported protocol says — a specification nobody chose.'
+              : ' saved as "' + clipStale(st.want, 80) + '", which this form no longer offers.')
+            + ' It has been left at "' + clipStale(st.label, 70) + '", and that is what the exported protocol says — a specification nobody chose.'
             + (forDoc ? '' : ' Choose the option you want, or confirm the one it was left at.') });
         if (s.ccoVariant === "standard" || !s.ccoVariant) notes.push({ lvl: "warn", t: "No correction for exposure-time trend", d: "The standard (Maclure) variant compares a recent hazard window with older control windows, so any within-person drift in the probability of being on the drug is read as an effect. If the exposure is one whose use changes with worsening prognosis, choose a different case-crossover variant — time-stratified, or case-case-time-control — or state in the protocol why a trend is implausible here." });
         if (s.ccoVariant === "symmetric") notes.push({ lvl: "warn", t: "Bidirectional sampling assumes the event does not change later exposure", d: "Control windows drawn from after the event require exposure in that period to be unaffected by having had the event. For dispensed medicines that is usually false — an MI changes what is prescribed the next day. Bidirectional referents are standard for environmental exposures, not for drugs." });
