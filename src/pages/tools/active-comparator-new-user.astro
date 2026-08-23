@@ -4594,29 +4594,92 @@ _Drafted with the AsPEN protocol builder (${today})._
           btn.addEventListener("click", () => {
             const it = filtered[parseInt(btn.dataset.phenotypeIdx, 10)];
             if (!it) return;
-            // What this pick actually wrote, field by field. The record below
-            // is built from this rather than from what the entry *contains*,
-            // so a target this trigger does not have can never leave the
-            // record claiming a value the form does not hold.
-            const wrote = {};
-            const fill = (key, val) => {
+            // Everything this pick would write is worked out BEFORE anything is
+            // written, so that a pick which cannot go through — or which the
+            // user declines — leaves the form exactly as it was rather than
+            // half-filled from two different library entries.
+            //
+            // The record below is built from what was actually written rather
+            // than from what the entry contains, so a target this trigger does
+            // not have can never leave the record claiming a value the form
+            // does not hold.
+            const plan = [];
+            const planFill = (key, val) => {
               const fieldName = currentTargets[key];
-              if (!fieldName || val === undefined) return;
+              if (!fieldName) return;
               const el = form.querySelector(`[name="${fieldName}"]`);
-              if (el) { el.value = val; wrote[fieldName] = String(val); }
+              // Empty, not skipped: a trigger that HAS a field for this piece
+              // and an entry that has no value for it must clear the field, or
+              // the previous pick's value stays under the new pick's name —
+              // one endpoint's code set labelled as another. No shipped entry
+              // is missing a targeted piece today; this is what keeps that from
+              // becoming a silent mislabel the day one is added.
+              if (el) plan.push({ field: fieldName, el: el, value: val === undefined || val === null ? "" : String(val) });
             };
-            fill("name",  it.name);
-            fill("codes", it.codes);
-            fill("def",   it.definition);
+            // The indications trigger has no code-set field of its own, so the
+            // curated code set — the thing the library exists to deliver, and
+            // the thing a validation study validates — was shown in the modal
+            // and then dropped on the floor: the form kept the bare label.
+            // Picking "Type 2 diabetes (T2DM)" gave a cohort-entry criterion
+            // with no criterion in it, and picking Lennox-Gastaut cited a paper
+            // for a two-stage algorithm the document no longer contained.
+            // Where there is nowhere else for the code set to go, it goes into
+            // the one field there is, which is what that field's own
+            // placeholder ("T2DM (ICD-10 E11.x) ever before index") asks for.
+            const nameText = (!currentTargets.codes && it.codes)
+              ? it.name + " — " + it.codes
+              : it.name;
+            planFill("name",  nameText);
+            planFill("codes", it.codes);
+            planFill("def",   it.definition);
             // For confounding picks: drop the value into the <select> (psMethod)
             if (currentTargets.value && it.value !== undefined) {
               const el = form.querySelector(`[name="${currentTargets.value}"]`);
-              if (el) { el.value = it.value; wrote[currentTargets.value] = String(it.value); }
+              // A <select> assigned a value it does not offer keeps
+              // selectedIndex = -1, contributes nothing to FormData, and the
+              // export falls through to generic prose — a document naming an
+              // analysis nobody chose. It cannot happen while the options and
+              // this list are both built from PS_METHODS, which they are; it
+              // becomes possible the moment they are not, and a refusal the
+              // user can read is cheaper than finding out from the document.
+              if (el && !Array.from(el.options).some((o) => o.value === String(it.value))) {
+                setMsg("“" + it.name + "” could not be applied: this page's method dropdown does not offer it. Nothing was changed. Choose the method by hand.", true);
+                closeLibrary();
+                return;
+              }
+              if (el) plan.push({ field: currentTargets.value, el: el, value: String(it.value) });
             }
-            if (currentTargets.alsoFill) {
+            if (currentTargets.alsoFill && it.name) {
               const el = form.querySelector(`[name="${currentTargets.alsoFill}"]`);
-              if (el && it.name) { el.value = it.name; wrote[currentTargets.alsoFill] = String(it.name); }
+              if (el) plan.push({ field: currentTargets.alsoFill, el: el, value: String(it.name) });
             }
+            // Text the user typed is not the library's to overwrite in silence.
+            // The modal is the only place to READ a code set, so reopening it
+            // to check something and clicking a row is an ordinary gesture —
+            // and it used to destroy, with no dialog and no undo, a definition
+            // narrowed by hand or a site note appended to the operational
+            // details this page itself invites you to edit freely. A value a
+            // previous pick wrote is the library's own and is replaced without
+            // asking; only text this page did not write raises the question.
+            const written = new Set();
+            for (const rec of Object.values(libraryPicks)) {
+              if (rec && rec.fields) for (const [f, v] of Object.entries(rec.fields)) written.add(f + " " + String(v).trim());
+            }
+            const clobbered = plan.filter((x) => {
+              const now = String(x.el.value == null ? "" : x.el.value).trim();
+              if (!now || now === x.value.trim()) return false;
+              if (x.el.tagName === "SELECT") return false;   // a select always holds a value; it has no "typed by hand" state
+              return !written.has(x.field + " " + now);
+            });
+            if (clobbered.length && !confirm(
+              "This will replace text you wrote in " +
+              clobbered.map((x) => "“" + fieldLabel(x.field) + "”").join(", ") +
+              " with the library's wording. Replace it?")) {
+              closeLibrary();
+              return;
+            }
+            const wrote = {};
+            for (const x of plan) { x.el.value = x.value; wrote[x.field] = x.value; }
             // Record the pick against the field that identifies it. Stored
             // whether or not the entry carries a validation study, so that
             // picking an unvalidated phenotype after a validated one evicts
