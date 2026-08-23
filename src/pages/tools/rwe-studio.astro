@@ -1605,6 +1605,13 @@ const DESIGNS = [
           // hazard ratio is events rather than patients.
           r += "essOf<-function(w) if(!length(w)) 0 else sum(w)^2/sum(w^2)\n";
           r += "ev<-!is.na(d$EVENT) & d$EVENT==1\n";
+          // Per ESTIMAND, not once: the per-protocol analysis censors at
+          // discontinuation and has its own, smaller, event vector. Built from the
+          // ITT events alone this gate let a per-protocol row through with THREE
+          // events in an arm - 2.19 (95% CI 0.22-22.12) - on a cohort whose ITT
+          // counts were 190 and 139, while an ITT row with 3 events is refused
+          // everywhere. Any refusal that did fire quoted the ITT counts.
+          r += "thinOf<-function(w,e){ ee<-!is.na(e) & e==1; c(sum(tr&ee), sum(!tr&ee), essOf(w[tr&ee]), essOf(w[!tr&ee])) }\n";
           r += "armdiag<-function(w) c(essOf(w[tr]), essOf(w[!tr]), essOf(w[tr&ev]), essOf(w[!tr&ev]))\n";
           // On the untruncated, unstabilised weights, like the rest of the release
           // rule: per-arm figures are identical under either weight scale, and
@@ -1623,7 +1630,7 @@ const DESIGNS = [
           r += "thinarm<-function(a) min(a[3],a[4]) < MINEV\n";
           r += "nevT<-sum(tr&ev); nevC<-sum(!tr&ev)\n";
           r += "thinI<-thinarm(aI); thinSMR<-thinarm(aSMR); thinOVL<-thinarm(aOVL)\n";
-          r += "thinmsg<-function() sprintf('withheld - %d event(s) in the exposure arm and %d in the comparator arm', nevT, nevC)\n";
+          r += "thinmsg<-function(t) sprintf('withheld - effectively %.1f and %.1f event(s) in the two arms (%d and %d before weighting)', t[3], t[4], t[1], t[2])\n";
           // ── The refusal has to survive the export ──
           // PSDIAG / PSW / PSBAL are stripped before the R output becomes part of the
           // report, and the panel that explains a refusal is rendered only in the
@@ -1633,12 +1640,14 @@ const DESIGNS = [
           // not even which weight setting produced the verdict. A RESULT_NOTE is the
           // one channel that already reaches both exports, so the refusal goes out as
           // one, with the numbers it was made on.
+          r += "unstable<-unstable || thinI; smrbad<-smrbad || thinSMR\n";
           r += "wsetting<-paste0(if(wtmode=='stab') 'stabilised' else 'unstabilised', if(ntrunc>0) paste0(', truncated at the ',trunclab) else '', if(ntrim>0) paste0(', ',trimlab) else '')\n";
           r += "refnote<-function(lab, why) cat('RESULT_NOTE|',lab,' was not reported. ',why,' Settings for this run: ',wsetting,'. The release rule is read on the untruncated, unstabilised weights and on each arm of them, so neither of the first two settings can change this verdict.\\n',sep='')\n";
-          if (M.indexOf("iptw") >= 0) r += "if(thinI || unstableW) refnote('The IPTW (ATE) estimate', if(thinI) sprintf('The exposure arm holds %d outcome event(s) and the comparator arm %d - effectively %.1f and %.1f once weighted - and it is events that carry a hazard ratio. Below 5 effective events in an arm this tool does not report a weighted estimate; that threshold is its own rule of thumb.', nevT, nevC, aI[3], aI[4]) else sprintf('Effective sample %.0f%% of the cohort, heaviest 1%% holding %.0f%% of the weight; exposure arm %.1f of %d, comparator arm %.1f of %d.', dU[2], dU[4], aI[1], sum(tr), aI[2], sum(!tr))) else if(balfail) refnote('The IPTW (ATE) estimate', sprintf('Untruncated these weights pass the stability rule, but truncation at the %s left the largest standardised difference at %.3f, above the 0.10 bar - the weighting has not removed the imbalance it exists to remove.', trunclab, mxI))\n\n";
-          if (M.indexOf("smrw") >= 0) r += "if(smrbad) refnote('The SMR weighting (ATT) estimate', if(thinSMR) sprintf('The exposure arm holds %d outcome event(s) and the comparator arm %d.', nevT, nevC) else sprintf('These weights are 1 for every exposed patient by construction, so they are judged on the comparator arm: effective sample %.1f of %d (%.0f%%), heaviest 1%% holding %.0f%% of that arm\\'s weight.', zSMR[1], sum(!tr), zSMR[2], zSMR[4]))\n";
-          if (M.indexOf("overlap") >= 0) r += "if(thinOVL) refnote('The overlap weighting (ATO) estimate', sprintf('The exposure arm holds %d outcome event(s) and the comparator arm %d. Overlap weights cannot collapse, so this is the one thing that withholds them: it is missing data, not unstable weights.', nevT, nevC))\n";
-          r += "unstable<-unstable || thinI; smrbad<-smrbad || thinSMR\n";
+          r += "armtxt<-function(){ p<-c(); if(aU_T[2]<10 || aU_T[4]>25) p<-c(p, sprintf('the exposure arm is worth %.1f of its %d patients (%.0f%%), its heaviest 1%% holding %.0f%% of the arm\\'s weight', aU_T[1], sum(tr), aU_T[2], aU_T[4])); if(aU_C[2]<10 || aU_C[4]>25) p<-c(p, sprintf('the comparator arm is worth %.1f of its %d patients (%.0f%%), its heaviest 1%% holding %.0f%% of the arm\\'s weight', aU_C[1], sum(!tr), aU_C[2], aU_C[4])); paste0('Judged on the weights the propensity scores imply, ', paste(p, collapse=' and '), '.') }\n";
+          r += "thintxt<-function(a) sprintf('The exposure arm holds %d outcome event(s) and the comparator arm %d - effectively %.1f and %.1f once weighted - and it is events that carry a hazard ratio. Below %d effective events in an arm this tool does not report a weighted estimate; that threshold is its own rule of thumb, not one taken from a paper.', nevT, nevC, a[3], a[4], MINEV)\n";
+          if (M.indexOf("iptw") >= 0) r += "if(unstableW) refnote('The IPTW (ATE) estimate', armtxt()) else if(thinI) refnote('The IPTW (ATE) estimate', thintxt(aI)) else if(balfail) refnote('The IPTW (ATE) estimate', sprintf('Untruncated these weights pass the stability rule, but truncation at the %s left the largest standardised difference at %.3f, above the 0.10 bar - the weighting has not removed the imbalance it exists to remove.', trunclab, mxI))\n";
+          if (M.indexOf("smrw") >= 0) r += "if(wgate(zSMR)) refnote('The SMR weighting (ATT) estimate', sprintf('These weights are 1 for every exposed patient by construction, so they are judged on the comparator arm: effective sample %.1f of %d (%.0f%%), heaviest 1%% holding %.0f%% of that arm\\'s weight.', zSMR[1], sum(!tr), zSMR[2], zSMR[4])) else if(thinSMR) refnote('The SMR weighting (ATT) estimate', thintxt(aSMR))\n";
+          if (M.indexOf("overlap") >= 0) r += "if(thinOVL) refnote('The overlap weighting (ATO) estimate', thintxt(aOVL))\n";
           // Non-overlap has to reach the estimates table too. Someone reading only
           // the hazard ratios must not be able to miss that a large share of the
           // cohort has no counterpart — the weights can look perfect regardless.
@@ -1664,9 +1673,9 @@ const DESIGNS = [
           // Overlap weighting is normally reported and never used to withhold. An arm
           // with almost no events is the one exception, so its gated flag is no longer
           // a constant: it is 1 exactly when that is what failed.
-          if (M.indexOf("iptw") >= 0) r += "cat('PSW|IPTW (ATE)|',fmw(dF),'|',if(unstable) 1 else 0,'|1|',fmw(aI),'\\n',sep='')\n";
-          if (M.indexOf("smrw") >= 0) r += "cat('PSW|SMR weighting (ATT)|',fmw(zSMR),'|',if(smrbad) 1 else 0,'|1|',fmw(aSMR),'|',sum(!tr),'|comparator arm\\n',sep='')\n";
-          if (M.indexOf("overlap") >= 0) r += "cat('PSW|Overlap weighting (ATO)|',fmw(zOVL),'|',if(wgate(zOVL) || thinOVL) 1 else 0,'|',if(thinOVL) 1 else 0,'|',fmw(aOVL),'\\n',sep='')\n";
+          if (M.indexOf("iptw") >= 0) r += "cat('PSW|IPTW (ATE)|',fmw(dF),'|',if(unstable) 1 else 0,'|1|',fmw(aI),'|',n,'|','|',if(unstableW) 1 else 0,'\\n',sep='')\n";
+          if (M.indexOf("smrw") >= 0) r += "cat('PSW|SMR weighting (ATT)|',fmw(zSMR),'|',if(smrbad) 1 else 0,'|1|',fmw(aSMR),'|',sum(!tr),'|comparator arm|',if(wgate(zSMR)) 1 else 0,'\\n',sep='')\n";
+          if (M.indexOf("overlap") >= 0) r += "cat('PSW|Overlap weighting (ATO)|',fmw(zOVL),'|',if(wgate(zOVL) || thinOVL) 1 else 0,'|',if(thinOVL) 1 else 0,'|',fmw(aOVL),'|',n,'|','|',if(wgate(zOVL)) 1 else 0,'\\n',sep='')\n";
           r += "cat(sprintf('N = %d; exposure = %d; comparator = %d; events = %d\\n\\n', n, sum(tr), sum(!tr), sum(d$EVENT==1,na.rm=TRUE)))\n";
           r += "cat('RESULT_NOTE|Propensity model: ',sum(covkind=='numeric'),' continuous, ',sum(covkind=='binary'),' binary 0/1, ',sum(covkind=='factor'),' categorical entered as dummy-coded factors',if(any(covkind=='factor')) paste0(' (',paste(covsrc[covkind=='factor'],collapse=', '),')') else '','.\\n',sep='')\n";
           if (dropped.length) r += "cat(" + qraw("RESULT_NOTE|" + dropped.length + " ticked covariate(s) were left out of the model: " + dropped.map((x) => PIPE_SAFE(x.src) + " — " + x.why).join("; ") + ".") + ",'\\n',sep='')\n";
@@ -1774,8 +1783,13 @@ const DESIGNS = [
           // here came back 8.3e-07 (1.2e-07 to 5.9e-06) — strictly positive, finite,
           // and printed by this tool's own two-decimal format as "0.00 (95% CI
           // 0.00-0.00)". So the last test is the display's own: a row whose printed
-          // figures are not the figures is not a row.
-          r += "ciok<-function(s){ if(is.null(s$conf.int) || nrow(s$conf.int)<1) return(FALSE); v<-s$conf.int[1,c('exp(coef)','lower .95','upper .95')]; if(!all(is.finite(v)) || any(v<=0)) return(FALSE); if(any(round(v,2)<=0)) return(FALSE); v[3]/v[2] <= 1e6 }\n";
+          // figures are not the figures is not a row. Of the POINT ESTIMATE only —
+          // testing all three bounds discarded ordinary informative results, because a
+          // small hazard ratio has a smaller lower bound: HR 0.0129 (95% CI
+          // 0.0018-0.0941), from 1 exposed event against 45, is finite, significant and
+          // entirely estimable, and it emptied the whole table including the crude row
+          // the refusal boxes tell readers to fall back on.
+          r += "ciok<-function(s){ if(is.null(s$conf.int) || nrow(s$conf.int)<1) return(FALSE); v<-s$conf.int[1,c('exp(coef)','lower .95','upper .95')]; if(!all(is.finite(v)) || any(v<=0)) return(FALSE); if(round(v[1],2)<=0) return(FALSE); v[3]/v[2] <= 1e6 }\n";
           r += "fitw<-function(t,e,w,idx,label,quiet=FALSE){ dd<-data.frame(t=t[idx],e=e[idx],TREAT=d$TREAT[idx],w=w[idx]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd,weights=w,robust=TRUE),error=function(x)NULL); if(is.null(fit)){ if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label)); return(NA_real_)}; s<-summary(fit); if(!ciok(s)){ if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label)); return(NA_real_)}; if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', label, s$conf.int[1,'exp(coef)'], s$conf.int[1,'lower .95'], s$conf.int[1,'upper .95'])); invisible(as.numeric(s$conf.int[1,'exp(coef)'])) }\n";
           // Say WHY nothing is estimable, once, rather than leaving six identical
           // refusals to be interpreted.
@@ -1786,7 +1800,16 @@ const DESIGNS = [
           // An IPTW estimate built on collapsed weights is not a weak estimate, it
           // is an arbitrary one: a handful of subjects carry the answer. Refuse it
           // and say which diagnostic failed, rather than print a confident number.
-          if (M.indexOf("iptw") >= 0) r += "  if(unstable){ cat(sprintf('RESULT_ESTIMATE|IPTW%s - %s HR|%s\\n',eb(' (ATE)'),est,if(thinI) sprintf('withheld - %d event(s) in the exposure arm and %d in the comparator arm', nevT, nevC) else if(unstableW) 'withheld - weights unstable' else sprintf('withheld - truncation unbalanced the arms (largest |SMD| %.3f)',mxI))) } else { hrT<-fitw(t,e,wI,all, paste0('IPTW',eb(' (ATE)'),if(wtmode=='stab') ', stabilised' else ', unstabilised', if(ntrunc>0) paste0(', truncated at the ',trunclab) else '',' - ',est,' HR'))\n" +
+          // Per estimand, and instability first. Both matter: the per-protocol event
+          // vector is smaller than the ITT one (three events released 2.19 (0.22-22.12)
+          // while an ITT arm with three is refused everywhere), and when the weights
+          // have collapsed the effective event count collapses with them — so a thin
+          // arm reported as the reason printed "withheld - 226 event(s) in the exposure
+          // arm and 156 in the comparator arm" about a cohort with 382 events. Whichever
+          // rule is the operative one has to be the one quoted.
+          r += "  tI<-thinOf(wU,e); tS<-thinOf(wSMR,e); tO<-thinOf(wOVL,e)\n";
+          r += "  thinIe<-min(tI[3],tI[4])<MINEV; thinSe<-min(tS[3],tS[4])<MINEV; thinOe<-min(tO[3],tO[4])<MINEV\n";
+          if (M.indexOf("iptw") >= 0) r += "  if(unstableW || thinIe || balfail){ cat(sprintf('RESULT_ESTIMATE|IPTW%s - %s HR|%s\\n',eb(' (ATE)'),est,if(unstableW) 'withheld - weights unstable' else if(thinIe) thinmsg(tI) else sprintf('withheld - truncation unbalanced the arms (largest |SMD| %.3f)',mxI))) } else { hrT<-fitw(t,e,wI,all, paste0('IPTW',eb(' (ATE)'),if(wtmode=='stab') ', stabilised' else ', unstabilised', if(ntrunc>0) paste0(', truncated at the ',trunclab) else '',' - ',est,' HR'))\n" +
             // "Truncation buys precision by accepting a little bias" was a claim about
             // a magnitude the tool had just computed and could see was false: on the
             // no-overlap demo the sentence printed above a move from 0.807 to 1.473,
@@ -1798,8 +1821,8 @@ const DESIGNS = [
           // SMR weights are 1 for the treated and the treatment odds for everyone
           // else: unbounded above, and just as capable of collapsing onto a handful
           // of comparators as the IPTW weights. Same rule, same refusal.
-          if (M.indexOf("smrw") >= 0) r += "  if(smrbad){ cat(sprintf('RESULT_ESTIMATE|SMR weighting%s - %s HR|%s\\n',eb(' (ATT)'),est,if(thinSMR) thinmsg() else 'withheld - weights unstable')) } else fitw(t,e,wSMR,all, paste0('SMR weighting',eb(' (ATT)'),' - ',est,' HR'))\n";
-          if (M.indexOf("overlap") >= 0) r += "  if(thinOVL){ cat(sprintf('RESULT_ESTIMATE|Overlap weighting%s - %s HR|%s\\n',eb(' (ATO)'),est,thinmsg())) } else fitw(t,e,wOVL,all, paste0('Overlap weighting',eb(' (ATO)'),' - ',est,' HR'))\n";
+          if (M.indexOf("smrw") >= 0) r += "  if(wgate(zSMR) || thinSe){ cat(sprintf('RESULT_ESTIMATE|SMR weighting%s - %s HR|%s\\n',eb(' (ATT)'),est,if(wgate(zSMR)) 'withheld - weights unstable' else thinmsg(tS))) } else fitw(t,e,wSMR,all, paste0('SMR weighting',eb(' (ATT)'),' - ',est,' HR'))\n";
+          if (M.indexOf("overlap") >= 0) r += "  if(thinOe){ cat(sprintf('RESULT_ESTIMATE|Overlap weighting%s - %s HR|%s\\n',eb(' (ATO)'),est,thinmsg(tO))) } else fitw(t,e,wOVL,all, paste0('Overlap weighting',eb(' (ATO)'),' - ',est,' HR'))\n";
           // A stratum containing only one arm contributes nothing to a stratified
           // Cox model, so its patients are dropped. That was happening in silence:
           // on the tool's own no-overlap demo, 20% of the cohort at 10 strata and
@@ -3464,8 +3487,7 @@ const DESIGNS = [
       // three green dots and the word "Comfortable" directly under a heading reading
       // "estimate withheld". They are shown — they are still true of the weights that
       // were used — but they are amber and they name what they are.
-      const balMasked = dg.balfail === "1";
-      const thinArm = dg.thin === "1";
+      const balMasked = dg.balfail === "1" && dg.armbad !== "1" && dg.thin !== "1";
       const minev = num("minev") || 5;
       const d0 = (dg.wtmode === "unstab" ? dU : dS);
       const preTrunc = d0.length === 4 && isFinite(d0[1])
@@ -3474,7 +3496,17 @@ const DESIGNS = [
       // One block per scheme, each judged on its own numbers.
       schemes.forEach((s) => {
         const ess = s.z[0], essPct = s.z[1], maxw = s.z[2], top1 = s.z[3];
-        const soft = !s.gated;                                  // overlap: reported, never used to withhold
+        // `soft` is "this scheme cannot explode", which is a property of overlap
+        // weights, not of whether they were withheld. Keying it on s.gated meant that
+        // the moment an arm-event refusal made overlap's gated flag non-constant, its
+        // block lost the sentences that exist to explain it — including "overlap
+        // weights cannot exceed 1 by construction", removed exactly when the panel is
+        // claiming the problem is not weight instability.
+        const soft = /^overlap/i.test(s.label);
+        // Per scheme, from its own arm figures. This was IPTW's flag applied to every
+        // block, so an overlap row that was reported and fine got a red dot and
+        // "Pooled across both arms, which is not what this analysis is worth".
+        const thinArm = !!(s.arm && s.arm.length === 4 && Math.min(s.arm[2], s.arm[3]) < minev);
         const masked = balMasked && /^IPTW/.test(s.label);
         if (masked) {
           rows.push('<tr class="border-t-2 border-slate-200"><td colspan="3" class="pt-2 pb-1 text-[11px] uppercase tracking-widest font-semibold text-rose-700">' +
@@ -3485,6 +3517,9 @@ const DESIGNS = [
             "Also a property of the cap rather than of the cohort — no weight can exceed the percentile it was capped at, so no small group can hold a large share of them."));
           rows.push(row(null, "Largest single weight", maxw.toFixed(1) + "×",
             "This is the cap itself. Untruncated, the largest weight was " + (isFinite(d0[2]) ? d0[2].toFixed(1) + "×" : "larger") + "."));
+          // Not a return: the paragraph above this table ends "Read the per-arm row
+          // below it", and this branch was the one that deleted that row.
+          armRow(s);
           return;
         }
         rows.push('<tr class="border-t-2 border-slate-200"><td colspan="3" class="pt-2 pb-1 text-[11px] uppercase tracking-widest font-semibold ' +
@@ -3517,20 +3552,25 @@ const DESIGNS = [
         // leaves each arm's own effective size EXACTLY unchanged while moving the
         // pooled figure the gate reads. Both arms, and the events that actually
         // carry a hazard ratio, are therefore reported on their own line.
-        if (s.arm && s.arm.length === 4 && s.arm.every(isFinite)) {
-          const [eT, eC, vT, vC] = s.arm;
-          const thin = Math.min(vT, vC) < minev;
-          rows.push(row(thin ? false : (Math.min(vT, vC) < 10 ? null : true), "Effective size per arm",
-            "exposure " + eT.toFixed(0) + " of " + nT + " · comparator " + eC.toFixed(0) + " of " + nC,
-            "A weighted comparison is worth what its smaller arm is worth, and what carries a hazard ratio is events rather than patients: <strong>" +
-            vT.toFixed(1) + " effective event(s) in the exposure arm and " + vC.toFixed(1) + " in the comparator arm</strong>. " +
-            (thin ? "<strong>Below " + minev + " in an arm this tool does not report a weighted hazard ratio</strong> — the confidence interval would be the asymptotic interval of a model fitted to almost nothing. That threshold is this tool's own rule of thumb, not one taken from a paper."
-              : "Stabilising or unstabilising the weights leaves both of these figures unchanged — it rescales each arm by a constant, and this statistic is scale-free — so a change in the pooled row above is arithmetic and this row is not.")));
-        }
+        armRow(s);
         rows.push(row(maxw <= 20 ? true : (soft ? true : null), "Largest single weight", maxw.toFixed(1) + "×",
           soft ? "Overlap weights cannot exceed 1 by construction, which is why this scheme has no weight-explosion failure mode."
             : "One patient counted this many times. A weight above ~20 usually means a propensity score near 0 or 1 — someone who, by the model, should never have received the treatment they got."));
       });
+      // Also called from the truncation-masked branch above, which returns early:
+      // the paragraph over this table ends "Read the per-arm row below it", and that
+      // branch was the one deleting the row it points at.
+      function armRow(s) {
+        if (!(s.arm && s.arm.length === 4 && s.arm.every(isFinite))) return;
+        const [eT, eC, vT, vC] = s.arm;
+        const thin = Math.min(vT, vC) < minev;
+        rows.push(row(thin ? false : (Math.min(vT, vC) < 10 ? null : true), "Effective size per arm",
+          "exposure " + eT.toFixed(0) + " of " + nT + " \u00b7 comparator " + eC.toFixed(0) + " of " + nC,
+          "A weighted comparison is worth what its smaller arm is worth, and what carries a hazard ratio is events rather than patients: <strong>" +
+          vT.toFixed(1) + " effective event(s) in the exposure arm and " + vC.toFixed(1) + " in the comparator arm</strong>. " +
+          (thin ? "<strong>Below " + minev + " in an arm this tool does not report a weighted hazard ratio</strong> \u2014 the confidence interval would be the asymptotic interval of a model fitted to almost nothing. That threshold is this tool's own rule of thumb, not one taken from a paper."
+            : "Stabilising or unstabilising the weights leaves both of these figures unchanged \u2014 it rescales each arm by a constant, and this statistic is scale-free \u2014 so a change in the pooled row above is arithmetic and this row is not.")));
+      }
       // The balance column belongs to whichever weights actually produced it. When
       // no weighted estimator was fitted there is no "after" column to judge, and
       // saying "weighting did its job" about nothing is worse than saying nothing.
@@ -3628,16 +3668,25 @@ const DESIGNS = [
         // An arm with almost no events is not a weight problem, so none of the
         // weight-problem remedies below apply to it: they would tell a reader whose
         // exposure arm holds one event to restrict to common support.
-        const thinHere = s.arm && s.arm.length === 4 && Math.min(s.arm[2], s.arm[3]) < minev;
+        // Tested AFTER instability, not before it. An effective event count is a
+        // weighted quantity, so it collapses when the weights collapse — this box was
+        // therefore reached on runs whose weights independently failed the stability
+        // rule, and every sentence in it written for the missing-data case then
+        // asserted the opposite of the figures four rows below ("the weight
+        // diagnostics below are healthy" above an effective sample of 5% and a
+        // largest weight of 163.8x).
+        const thinHere = !s.bad0 && s.arm && s.arm.length === 4 && Math.min(s.arm[2], s.arm[3]) < minev;
         if (thinHere) {
+          const [, , vT, vC] = s.arm;
           h += '<div class="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900"><strong>The ' + esc(s.label) + ' estimate was not reported.</strong> ' +
             "The exposure arm has " + num("nevT") + " outcome event(s) and the comparator arm " + num("nevC") + " — effectively " +
-            s.arm[2].toFixed(1) + " and " + s.arm[3].toFixed(1) + " once weighted. " +
+            vT.toFixed(1) + " and " + vC.toFixed(1) + " once weighted. " +
             "<strong>A hazard ratio is a comparison of event rates, so it is the events that carry it, not the patients.</strong> " +
-            "The weight diagnostics below are healthy and they are measuring the wrong thing: they are computed across both arms pooled, and with " +
-            (nT < nC ? nT + " exposed" : nC + " comparator") + " patient(s) of " + (nT + nC) + " the pooled figure is almost entirely the other arm. " +
-            "<span class='block mt-1'>The crude row in the table above is still shown, and its width is the honest one for a comparison this size. " +
-            "Below " + minev + " effective events in an arm this tool does not print a weighted hazard ratio — that threshold is its own rule of thumb, not one taken from a paper, and it is applied to every weighting scheme including overlap weighting, because the cause is missing data rather than unstable weights.</span></div>";
+            "These weights pass every stability test above, and those tests are not the ones that matter here: " +
+            (s.denlab ? "they describe the " + esc(s.denlab) + ", " : "they describe the cohort, ") +
+            "and a cohort can be large while the arm carrying the comparison is not. " +
+            "<span class='block mt-1'>Below " + minev + " effective events in an arm this tool does not print a weighted hazard ratio. That threshold is its own rule of thumb, not one taken from a paper. " +
+            "The same rule is applied to each weighting scheme on its own weights — including overlap weighting, which is otherwise never withheld, because the cause here is missing data rather than unstable weights.</span></div>";
           return;
         }
         // The rule is read on the untruncated, unstabilised weights and on each arm
@@ -3646,12 +3695,15 @@ const DESIGNS = [
         const armWhy = (z, who, nArm) => (z.length === 4 && isFinite(z[1]))
           ? (z[1] < 10 || z[3] > 25
             ? "Within the " + who + " arm alone, " + z[0].toFixed(1) + " of its " + nArm + " patients' worth of information survives the weighting (" + z[1].toFixed(0) + "%)" +
-              (z[3] > 25 ? ", and its heaviest patient holds " + z[3].toFixed(0) + "% of the arm's weight" : "") + ". "
+              (z[3] > 25 ? ", and its heaviest " + (Math.max(1, Math.ceil(0.01 * nArm)) === 1 ? "patient holds " : Math.max(1, Math.ceil(0.01 * nArm)) + " patients hold ") + z[3].toFixed(0) + "% of the arm's weight" : "") + ". "
             : "")
           : "";
         // Built from the arms, because the arms are what the rule reads. The pooled
         // figure is reported in the table above and decides nothing.
-        const gateWhy = armWhy(aUT, "exposure", nT) + armWhy(aUC, "comparator", nC);
+        // Never empty: output from an older run carries no aUT/aUC, and a refusal box
+        // with no reason in it at all is worse than a general one.
+        const gateWhy = (armWhy(aUT, "exposure", nT) + armWhy(aUC, "comparator", nC)) ||
+          "One arm's weights are concentrated in a few patients. ";
         const balMask = isIptw && dg.balfail === "1" && dg.armbad !== "1";
         if (balMask) {
           h += '<div class="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900"><strong>The ' + esc(s.label) + ' estimate was not reported.</strong> ' +
@@ -3660,7 +3712,10 @@ const DESIGNS = [
             "What it cannot do is balance the arms — and here it has not: the largest standardised difference under the truncated weights is <strong>" + esc(dg.mxI) + "</strong>, against " +
             (bal && isFinite(parseFloat(bal.mx1)) ? parseFloat(bal.mx1).toFixed(3) + " with no weighting at all" : "the unweighted figure in Table 1") +
             ", and 0.10 is the usual bar for calling two arms comparable. Weighting that leaves the confounder imbalanced has not removed the confounding, so the hazard ratio it produces would be a confounded one with a healthy weight profile beside it. " +
-            "<span class='block mt-1'>Set truncation back to <em>no restriction</em> and this estimate is released — untruncated, these weights both pass the stability rule and balance the arms. Truncation is the only thing standing between this cohort and a reportable estimate, and it is not doing what it looks like it is doing.</span>" +
+            "<span class='block mt-1'>" +
+            (isFinite(parseFloat(dg.mx0)) && parseFloat(dg.mx0) > 0.1
+              ? "Setting truncation back to <em>no restriction</em> releases this estimate, but do not read that as a clean bill of health: untruncated, the largest standardised difference is still <strong>" + parseFloat(dg.mx0).toFixed(3) + "</strong>, above the same 0.10 bar. Truncation made a bad balance worse; it was not good to begin with."
+              : "Set truncation back to <em>no restriction</em> and this estimate is released — untruncated, these weights both pass the stability rule and balance the arms. Truncation is the only thing standing between this cohort and a reportable estimate, and it is not doing what it looks like it is doing.") + "</span>" +
             (others.length ? " " + esc(others.join(" and ")) + " passed the same test and " + (others.length > 1 ? "are" : "is") + " still shown." : "") + "</div>";
           return;
         }
@@ -3853,7 +3908,7 @@ const DESIGNS = [
           //    |<n the figures are relative to>|<what that n is>  (optional; SMR
           //    weights are 1 for every treated patient, so its figures are the
           //    comparator arm's own and must not be printed "of" the whole cohort)
-          else if (l.indexOf("PSW|") === 0) { const p = l.split("|"); psw.push({ label: p[1], z: (p[2] || "").split(",").map(Number), bad: p[3] === "1", gated: p[4] === "1", arm: p[5] ? p[5].split(",").map(Number) : null, den: p[6] ? Number(p[6]) : null, denlab: p[7] || "" }); }
+          else if (l.indexOf("PSW|") === 0) { const p = l.split("|"); psw.push({ label: p[1], z: (p[2] || "").split(",").map(Number), bad: p[3] === "1", gated: p[4] === "1", arm: p[5] ? p[5].split(",").map(Number) : null, den: p[6] ? Number(p[6]) : null, denlab: p[7] || "", bad0: p[8] === "1" }); }
         });
         const display = out.replace(/^(RESULT_ESTIMATE|RESULT_NOTE|TABLE1|FITTED|ITSMETA|PSC|PSCSKIP|PSDIAG|PSBAL|PSHIST|PSW)\|.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
         if (ests.length || notes.length) {
