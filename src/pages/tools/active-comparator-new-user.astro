@@ -1636,6 +1636,17 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
       // early events discarded) from the one the user chose, while the
       // consistency panel on screen correctly discussed a landmark design.
       // Anything unrecognised now refuses out loud instead of naming a design.
+      // Section 9's body, in one place. It was two string literals — one in the
+      // Markdown template, one in buildDocx — that happened to agree. This file
+      // is where a <select> with four options was already found resolving
+      // through three copy-pasted maps that had drifted, so two hand-copied
+      // paragraphs of the study-size section are the same shape waiting to
+      // happen: nothing errors when they diverge, and the Word protocol and the
+      // Markdown protocol simply state different sample-size plans for one
+      // study. ACNU is the one builder whose design the shared tail default
+      // actually fits, which is why pcOf skips "studySize" and this section is
+      // hand-rolled; that is right, and it should still be one string.
+      const SAMPLE_SIZE_TEXT = "To be calculated per site using observed event rates among comparator users in pilot extractions; aim for ≥80% power to detect the smallest clinically meaningful effect for the primary outcome at α = 0.05, two-sided, after pooling. Pilot estimates are circulated before final analytic execution.";
       const PRIMARY_ANALYSIS = {
         OT: "On-treatment (per-protocol)",
         ITT: "Intention-to-treat (ITT)",
@@ -2832,7 +2843,7 @@ ${bullets(sensitivity)}
 
 ## 9. Sample size and power
 
-To be calculated per site using observed event rates among comparator users in pilot extractions; aim for ≥80% power to detect the smallest clinically meaningful effect for the primary outcome at α = 0.05, two-sided, after pooling. Pilot estimates are circulated before final analytic execution.
+${SAMPLE_SIZE_TEXT}
 
 ## 10. Execution and timeline
 
@@ -3914,7 +3925,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         sensitivity.length ? sensitivity.forEach((l) => children.push(bullet(l))) : children.push(para("(none specified)"));
 
         children.push(h1("9. Sample size and power"));
-        children.push(para("To be calculated per site using observed event rates among comparator users in pilot extractions; aim for ≥80% power to detect the smallest clinically meaningful effect for the primary outcome at α = 0.05, two-sided, after pooling. Pilot estimates are circulated before final analytic execution."));
+        children.push(para(SAMPLE_SIZE_TEXT));
 
         children.push(h1("10. Execution and timeline"));
         children.push(labelTable([
