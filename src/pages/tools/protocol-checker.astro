@@ -226,7 +226,7 @@ const fwList = Object.values(FRAMEWORKS);
             <h2 class="text-lg font-bold text-slate-900">Planned outputs &amp; figures</h2>
             <p class="mt-1 text-xs text-slate-500">Does the protocol pre-specify the shell tables and figures a rigorous RWE study mocks up in advance — Table 1, a Love plot, a participant flow diagram, results shells, and so on?</p>
             <div id="delivtally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
-            <p id="delivnote" class="mt-3 text-xs text-slate-500 leading-relaxed"><strong class="text-slate-600">What the four verdicts mean.</strong> <em>Present / Partial / Absent</em> are claims about your document: whether it pre-specifies this output — or the equivalent your design owes, since these seven names are written for a person-level, propensity-score-adjusted, time-to-event cohort. A case-selection flow counts as the flow diagram; a case-series or period-composition description counts as the Table 1; an incidence-rate-ratio profile by risk window counts as the survival curve. <em>N/A</em> is a claim about your design: its estimator cannot produce this output or any equivalent — there is no between-person balance to diagnose in a within-person design, and no survival curve where nobody is followed from a shared time origin. Two rows are never N/A, because every design has a primary estimate and identifying assumptions to probe. <em>Not assessed</em> is a claim about this run: the AI returned nothing usable. All four are the AI’s verdicts, not this tool’s — read the evidence line before acting on any of them.</p>
+            <p id="delivnote" class="mt-3 text-xs text-slate-500 leading-relaxed"><strong class="text-slate-600">What the five labels mean.</strong> <em>Present / Partial / Absent</em> are claims about your document: whether it pre-specifies this output — or the equivalent your design owes, since these seven names are written for a person-level, propensity-score-adjusted, time-to-event cohort. A case-selection flow counts as the flow diagram; a case-series or period-composition description counts as the Table 1; an incidence-rate-ratio profile by risk window counts as the survival curve. <em>N/A</em> is a claim about your design: its estimator cannot produce this output or any equivalent — there is no between-person balance to diagnose in a within-person design, and no survival curve where nobody is followed from a shared time origin. Two rows can never be N/A and are recorded as Absent if the AI says otherwise — the primary results shell and the sensitivity-analysis outputs, because every design has a primary estimate and identifying assumptions to probe. <em>Not assessed</em> is the only label that is not the AI’s verdict: it is this tool recording that the AI gave none, or gave one it does not recognise. Read the evidence line before acting on any of them.</p>
             <ol id="delivlist" class="mt-4 space-y-3"></ol>
           </div>
 
@@ -761,12 +761,18 @@ const fwList = Object.values(FRAMEWORKS);
 
       // The model is asked for a fixed vocabulary but is not bound to it. Anything
       // outside the vocabulary must NOT be silently coerced into a verdict.
-      const STATUS_ALIASES = {
+      // Prototype-less, for the reason DELIV_ALIASES is: as a plain literal,
+      // `STATUS_ALIASES["constructor"]` is the inherited `Object`, which is
+      // truthy, so `normStatus` returned it, the `!st` guard below never fired,
+      // `STATUS_META[v.status]` was undefined and reading `.edge` off it threw
+      // — refusing the ENTIRE report, score and all, for one unexpected word in
+      // one item. The deliverables twin of this bug only mislabelled a row.
+      const STATUS_ALIASES = Object.assign(Object.create(null), {
         met: "met", yes: "met", present: "met", complete: "met", satisfied: "met", addressed: "met",
         partial: "partial", partially: "partial", "partially met": "partial", incomplete: "partial",
         missing: "missing", absent: "missing", no: "missing", "not met": "missing", "not addressed": "missing", "not reported": "missing",
         na: "na", "n/a": "na", "not applicable": "na", notapplicable: "na", inapplicable: "na",
-      };
+      });
       // "Unclear" is not a verdict on the protocol — it is the model saying it
       // could not tell. It used to be aliased to "partial", which on this page
       // means something specific and accusatory: "the topic is raised but a key
@@ -1009,12 +1015,40 @@ const fwList = Object.values(FRAMEWORKS);
         // the model reaches for these spellings whenever it answers in prose.
         na: "na", "n/a": "na", "not applicable": "na", notapplicable: "na", inapplicable: "na",
       });
+      // The two rows the worker's rubric bars from "na", enforced here as well
+      // as asked for there. A prompt-only rule fails SILENTLY and in the
+      // dangerous direction: an unenforced "na" on these rows turns a red chip
+      // plus a concrete suggestion into a grey chip with the suggestion
+      // deleted, so a protocol with no results shell and no sensitivity
+      // analyses exports a planned-outputs section containing no findings and
+      // no advice. Over-flagging is visible and costs a reader a minute;
+      // under-flagging is invisible and costs them the analysis. Every design
+      // has a primary estimate and identifying assumptions to probe, so "na"
+      // here is always wrong and is demoted to the verdict the model would
+      // otherwise have had to give. Matched on the canonical name, which
+      // `canonBy` has already resolved. Keep in lock-step with the same two
+      // names in the rubric in workers/target-checker/worker.js.
+      const DELIV_NEVER_NA = ["Primary results table (shell)", "Sensitivity-analysis outputs"];
       // One rule, three surfaces. It was written out three times (screen,
       // Markdown, Word) and had to be extended three times for "na" — the
       // copy-pasted-lookup species this codebase keeps finding. A suggestion on
       // an N/A row would tell the reader to add the output that same row says
-      // their design cannot produce.
-      const delivShowSuggestion = (r) => !!r.suggestion && r.status !== "present" && r.status !== "unassessed" && r.status !== "na";
+      // their design cannot produce. The trim matters: the rubric tells the
+      // model to return "—" when no suggestion is wanted, and a row reading
+      // "Suggestion: —" is a content-free advice line exactly where a red row's
+      // advice belongs. `ev()` below already holds blank evidence to this
+      // standard; the two adjacent fields should not have two standards.
+      const delivSuggestion = (r) => {
+        const s = String(r && r.suggestion == null ? "" : r.suggestion).trim();
+        return (!s || s === "—" || s === "–" || s === "-") ? "" : s;
+      };
+      const delivShowSuggestion = (r) => !!delivSuggestion(r) && r.status !== "present" && r.status !== "unassessed" && r.status !== "na";
+      // Written out three times in the first version of this change — screen,
+      // Markdown, Word — and the three had already drifted by the time it was
+      // reviewed: the screen said "not one of the 7 standard outputs" and both
+      // exports said "not one of the standard outputs", for the same row in the
+      // same run. Exactly the drift this change was fixing elsewhere.
+      const delivExtraLabel = " (volunteered by the AI — not one of the " + DELIVERABLE_NAMES.length + " standard outputs)";
 
       // Names come back re-typeset: "Kaplan–Meier" with an en dash where the
       // worker asked for "Kaplan-Meier", stray spacing, different case. Matching
@@ -1057,27 +1091,45 @@ const fwList = Object.values(FRAMEWORKS);
         const ev = (s) => (String(s == null ? "" : s).trim() ||
           "The AI returned this verdict with no evidence, so nothing on this row is supported beyond the label itself.");
         const readStatus = (d) => DELIV_ALIASES[String(d.status == null ? "" : d.status).trim().toLowerCase()];
+        // One sentence for a status the aliases do not recognise, used by the
+        // canonical rows AND by the volunteered ones. Fixing only the canonical
+        // side left an extra reading "Not assessed" — defined eight lines above
+        // as "the AI returned nothing usable" — directly above a full evidence
+        // sentence the AI had in fact returned.
+        const unrec = (d) => "The AI returned an unrecognised verdict (" +
+          (d.status == null ? "no status field at all" : "“" + String(d.status) + "”") +
+          ") for this planned output, so nothing is claimed about it." +
+          (String(d.evidence == null ? "" : d.evidence).trim() ? " It said: " + d.evidence : "");
+        const naBarred = [], unrecExtras = [];
         const canonRows = DELIVERABLE_NAMES.map((name) => {
           const d = byName.get(name);
           if (!d) return { name, status: "unassessed", evidence: "The AI returned no verdict for this planned output, so nothing is claimed about it." };
-          const st = readStatus(d);
+          let st = readStatus(d);
           // Keep what the model said. Discarding it told the researcher the
           // check had failed when it had in fact answered — and `reconcile`
           // twenty lines down already keeps the evidence in the identical
           // case ("The AI could not tell (“…”): …").
-          if (!st) return { name, status: "unassessed",
-            evidence: "The AI returned an unrecognised verdict (" +
-              (d.status == null ? "no status field at all" : "“" + String(d.status) + "”") +
-              ") for this planned output, so nothing is claimed about it." +
-              (String(d.evidence == null ? "" : d.evidence).trim() ? " It said: " + d.evidence : "") };
-          return { name, status: st, evidence: ev(d.evidence), suggestion: d.suggestion };
+          if (!st) return { name, status: "unassessed", evidence: unrec(d) };
+          let evidence = ev(d.evidence);
+          if (st === "na" && DELIV_NEVER_NA.indexOf(name) !== -1) {
+            naBarred.push(name);
+            st = "absent";
+            evidence = "The AI called this not applicable, which it cannot be: every design has a " +
+              "primary estimate and identifying assumptions to probe. Recorded as absent instead, and " +
+              "the AI's own words are kept here so you can judge them — it said: " + evidence;
+          }
+          return { name, status: st, evidence, suggestion: d.suggestion };
         });
         // Tagged, so every surface can say what they are. Untagged, they were
         // counted in a tally that claims to summarise the seven standard rows
         // and were merged flat into both exports, where a volunteered row reads
         // as part of the checklist this tool says it applies.
-        const extraRows = extras.map((d) => ({ name: d.name, extra: true,
-          status: readStatus(d) || "unassessed", evidence: ev(d.evidence), suggestion: d.suggestion }));
+        const extraRows = extras.map((d) => {
+          const st = readStatus(d);
+          if (!st) unrecExtras.push(d.name);
+          return { name: d.name, extra: true, status: st || "unassessed",
+            evidence: st ? ev(d.evidence) : unrec(d), suggestion: d.suggestion };
+        });
         const rows = canonRows.concat(extraRows);
 
         if (!rows.length) { delivEl.classList.add("hidden"); return; }
@@ -1088,6 +1140,18 @@ const fwList = Object.values(FRAMEWORKS);
         // volunteered enough of them.
         const nUn = canonRows.filter((r) => r.status === "unassessed").length;
         if (nUn && caveats) caveats.push(nUn + " of the " + DELIVERABLE_NAMES.length + " planned-output checks came back without a usable verdict and are marked “Not assessed”.");
+        if (naBarred.length && caveats) caveats.push("The AI marked " + naBarred.join(" and ") +
+          " “not applicable”, which no design can be. " + (naBarred.length === 1 ? "It is" : "They are") +
+          " shown as Absent instead. Treat that as a sign the other N/A verdicts in this run are worth checking too.");
+        // Named, not merely coloured. "na" is the one verdict on this panel that
+        // cannot be checked against the document — it is a claim about the
+        // reader's design — so the rows carrying it are listed where the reader
+        // is already looking for things to distrust.
+        const naRows = canonRows.filter((r) => r.status === "na").map((r) => r.name);
+        if (naRows.length && caveats) caveats.push("The AI judged " + naRows.length + " planned output(s) not applicable to this design (" +
+          naRows.join(", ") + "). That is a claim about your design rather than about your document, and nothing in this tool can check it — read the evidence for each and confirm the estimator really has no equivalent to produce.");
+        if (unrecExtras.length && caveats) caveats.push("The AI volunteered planned output(s) with a verdict this tool does not recognise (" +
+          unrecExtras.join(", ") + "); they are marked “Not assessed” and its own words are kept beneath each.");
         if (extras.length && caveats) caveats.push("The AI volunteered " + extras.length + " planned output(s) that were not on the list it was asked about (" + extras.map((e) => e.name).join(", ") + "). They are shown last, labelled, and left out of the tally — they are not part of the standard set.");
 
         const counts = {};
@@ -1097,14 +1161,18 @@ const fwList = Object.values(FRAMEWORKS);
           return '<li class="border-l-2 pl-4 ' + m.border + '">' +
             '<div class="flex items-start justify-between gap-3">' +
               '<p class="text-sm font-semibold text-slate-900">' + escapeHtml(d.name) +
-                (d.extra ? ' <span class="font-normal text-slate-400">(volunteered by the AI — not one of the ' + DELIVERABLE_NAMES.length + ' standard outputs)</span>' : '') + '</p>' +
+                (d.extra ? ' <span class="font-normal text-slate-400">' + escapeHtml(delivExtraLabel.trim()) + '</span>' : '') + '</p>' +
               '<span class="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ' + m.chip + '"><span class="inline-block w-1.5 h-1.5 rounded-full ' + m.dot + '"></span>' + m.label + '</span>' +
             '</div>' +
             (d.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(d.evidence) + '</p>' : '') +
-            (delivShowSuggestion(d) ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(d.suggestion) + '</p>' : '') +
+            (delivShowSuggestion(d) ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(delivSuggestion(d)) + '</p>' : '') +
           '</li>';
         }).join("");
-        delivTallyEl.innerHTML = ["present", "partial", "absent", "na", "unassessed"].map((k) => {
+        // Derived from DELIV_META rather than hand-listed, the way ALL_STATUSES
+        // is on the framework side: the hand-written copy had to be edited to
+        // add "na" and a chip missing from it is a chip that silently never
+        // prints, leaving a tally that disagrees with the rows above it.
+        delivTallyEl.innerHTML = Object.keys(DELIV_META).map((k) => {
           const m = DELIV_META[k];
           return counts[k] ? '<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ' + m.chip + '"><span class="inline-block w-2 h-2 rounded-full ' + m.dot + '"></span>' + counts[k] + ' ' + m.label + '</span>' : "";
         }).join("");
@@ -1463,12 +1531,15 @@ const fwList = Object.values(FRAMEWORKS);
           // paragraphs: the export used to carry its own shorter sentence
           // ("“Absent” means the protocol does not pre-specify the output…"),
           // which defined the word one way while the screen defined it another.
-          md += "_" + delivNoteText() + "_\n\n";
+          // Guarded the way frameText's `.filter(Boolean)` guards its own: if
+          // the paragraph is ever renamed or removed, emit nothing rather than
+          // a bare "__", which CommonMark renders as literal underscores.
+          if (delivNoteText()) md += "_" + delivNoteText() + "_\n\n";
           for (const x of delivRows) {
-            md += "- **" + x.name + (x.extra ? " (volunteered by the AI — not one of the standard outputs)" : "") +
+            md += "- **" + x.name + (x.extra ? delivExtraLabel : "") +
               "** — _" + ((DELIV_META[x.status] || DELIV_META.unassessed).label) + "_\n";
             if (x.evidence) md += "  - Evidence: " + x.evidence + "\n";
-            if (delivShowSuggestion(x)) md += "  - Suggestion: " + x.suggestion + "\n";
+            if (delivShowSuggestion(x)) md += "  - Suggestion: " + delivSuggestion(x) + "\n";
           }
           md += "\n";
         }
@@ -1599,14 +1670,14 @@ const fwList = Object.values(FRAMEWORKS);
 
           if (Array.isArray(delivRows) && delivRows.length) {
             children.push(h1("Planned outputs & figures"));
-            children.push(para([text(delivNoteText(), { italics: true, size: 16, color: "777777" })]));
+            if (delivNoteText()) children.push(para([text(delivNoteText(), { italics: true, size: 16, color: "777777" })]));
             for (const x of delivRows) {
               const lab = (DELIV_META[x.status] || DELIV_META.unassessed).label;
               children.push(para([
-                text(x.name + (x.extra ? " (volunteered by the AI — not one of the standard outputs)" : "") + " — ", { bold: true }),
+                text(x.name + (x.extra ? delivExtraLabel : "") + " — ", { bold: true }),
                 text(lab, { color: STCOL[x.status] || STCOL.unassessed, bold: true })]));
               if (x.evidence) children.push(para([text("Evidence: " + x.evidence, { size: 18, color: "555555" })]));
-              if (delivShowSuggestion(x)) children.push(para([text("Suggestion: " + x.suggestion, { size: 18, color: "555555" })]));
+              if (delivShowSuggestion(x)) children.push(para([text("Suggestion: " + delivSuggestion(x), { size: 18, color: "555555" })]));
             }
           }
 
