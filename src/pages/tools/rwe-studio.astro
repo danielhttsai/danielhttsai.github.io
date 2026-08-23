@@ -2345,8 +2345,38 @@ const DESIGNS = [
           // so log(rows per period) leaks into the offset and bends both the step and
           // the trend. Default to "first" when it is constant within a period.
           L.push("dmode<-DCOMB");
-          L.push("if(HASN){ dconst<-all(vapply(seq_len(nrow(a)), function(i){ z<-N[gid==i]; z<-z[!is.na(z)]; length(z)<2 || all(abs(z-z[1])<1e-9) }, TRUE))");
-          L.push("  if(dmode=='auto') dmode<-if(dconst) 'first' else 'sum'");
+          // The test used to be one global all(): a single differing cell anywhere
+          // in the file flipped the whole series from "first" to "sum". Measured on
+          // a 4,203-row per-admission extract with one population cell reading
+          // 50001 instead of 50000 — a census refresh, a boundary change, a typo —
+          // the offset became log(50000 x row count), absorbed the entire outcome,
+          // and a true 30% reduction (0.700, p = 9e-8) was reported as EXACTLY
+          // 1.000 (0.877-1.140). Table 1's mean denominator read 6.35 million for a
+          // catchment of 50,000, and the degenerate fit triggered the note about
+          // the model fitting the series so closely that the sandwich collapses,
+          // which reads as a compliment.
+          //
+          // The obvious repair — decide the rule per period — was implemented and
+          // MEASURED, and it is worse than the bug. An offset has to be on one
+          // scale across the series: the single mixed period gets an offset 123x
+          // the others', becomes a colossal pre-intervention outlier, drags the
+          // intercept and the baseline trend with it, and the same file reports
+          // 0.320 with an end-of-follow-up ratio of 0.053. A conspicuous 1.000 that
+          // a careful reader might interrogate is traded for a spectacular success
+          // that nobody would. Do not implement it.
+          //
+          // What the two readings actually are: a denominator repeated on every row
+          // of a period is a population figure FOR that period and must not be
+          // added up; one that varies row to row is a per-row quantity like
+          // person-time and must be. A single column cannot legitimately be both,
+          // so a period that disagrees with the majority is evidence of a data
+          // defect, not of a different combination rule. Decide on the majority,
+          // name the exceptions, and refuse outright in the band where neither
+          // reading has the weight of the file behind it — the dropdown beside this
+          // is the remedy, and it is one click.
+          L.push("if(HASN){ dvar<-vapply(seq_len(nrow(a)), function(i){ z<-N[gid==i]; z<-z[!is.na(z)]; length(z)>=2 && !all(abs(z-z[1])<1e-9) }, TRUE)");
+          L.push("  nvar<-sum(dvar); pvar<-nvar/max(1,nrow(a))");
+          L.push("  if(dmode=='auto'){ if(pvar<=0.1) dmode<-'first' else if(pvar>=0.9) dmode<-'sum' else stop(sprintf('The rows within each period do not agree about what the denominator is. In %d of %d period(s) it repeats on every row, which means it is a population figure for the whole period and the rows must NOT be added up; in %d of %d it varies from row to row, which means it is a per-row quantity such as person-time and the rows must be added up. Those two readings differ by a factor of the number of rows in a period, so guessing wrong multiplies or divides every rate by that factor, and neither reading has enough of this file behind it to be the safe guess. Choose \"first\" or \"sum\" under \"Combine denominator within a period\" instead of leaving it on automatic.', nrow(a)-nvar, nrow(a), nvar, nrow(a))) }");
           L.push("  dfun<-if(dmode=='first') function(z){ z<-z[!is.na(z)]; if(length(z)) z[1] else NA_real_ } else if(dmode=='mean') function(z) mean(z,na.rm=TRUE) else function(z) sum(z,na.rm=TRUE)");
           L.push("  a$N<-vapply(seq_len(nrow(a)),function(i) as.numeric(dfun(N[gid==i])),0) }");
           L.push("if(HASS) a$seas<-vapply(seq_len(nrow(a)),function(i){ z<-SS[gid==i]; as.character(z[1]) },'')");
@@ -2667,7 +2697,30 @@ const DESIGNS = [
           L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s) fitted: %d before and %d from %s onward%s. Inference uses %s, with %s for the 95%% intervals. Durbin-Watson %s (descriptive only - on GLM Pearson residuals it has no standard null distribution).\\n', famlab, nfit, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, critlab, dwt))");
           L.push("cat(sprintf('RESULT_NOTE|Periods were ordered by %s. Level change is the immediate step at %s; slope change accrues from the period after it (Wagner 2002 convention, time-since-intervention = 0 at the first affected period).\\n', ordmode, ukey[t0]))");
           L.push("if(cutmoved!='') cat(sprintf('RESULT_NOTE|The interruption you gave (%s) falls inside period %s rather than at its start, so that whole period is treated as the first affected one. If the intervention only applied to part of it, that period is partly pre-intervention and the step will be diluted; consider dropping it or using a finer period unit.\\n', cutmoved, ukey[t0]))");
-          L.push("if(HASN) cat(sprintf('RESULT_NOTE|The denominator was combined within each period by taking the %s of the rows in that period%s.\\n', dmode, if(DCOMB=='auto' && dmode=='first') ' (chosen automatically because it is constant within every period)' else ''))");
+          // The parenthetical used to be appended only on the `first` branch, so on
+          // the branch that destroys the analysis the sentence was textually
+          // identical to the user having chosen Sum from the dropdown. An automatic
+          // choice has to announce itself on both sides, and the exceptions to the
+          // majority have to be named — they are the data defect this rule now
+          // steps over rather than being flipped by.
+          L.push("if(HASN){ dauto<-if(DCOMB!='auto') '' else if(dmode=='first') sprintf(' (chosen automatically: the denominator repeats on every row in %d of the %d period(s), so it is a population figure for the period rather than a per-row quantity, and adding the rows up would multiply it by the number of rows)', nrow(a)-nvar, nrow(a)) else sprintf(' (chosen automatically: the denominator varies from row to row in %d of the %d period(s), so it is treated as a per-row quantity such as person-time)', nvar, nrow(a))");
+          L.push("  dexc<-if(dmode=='first' && nvar>0) sprintf(' In %d period(s) the denominator was NOT the same on every row, and the first row of each was used. A population figure that changes within a single period is usually a data defect rather than real variation, so those periods are worth checking.', nvar) else ''");
+          L.push("  cat(sprintf('RESULT_NOTE|The denominator was combined within each period by taking the %s of the rows in that period%s.%s\\n', dmode, dauto, dexc)) }");
+          // A reviewer proposed flagging any run whose combined denominator is much
+          // larger than the raw cells, on the strength of Table 1 reading 6.35
+          // million for a catchment of 50,000 in the failing case. That was tried
+          // and measured, and it fires on legitimate person-time too: summing
+          // twenty rows of ~320 gives ~6,400, so the ratio it detects is just the
+          // number of rows per period, which is the same in both readings. It
+          // cannot discriminate, and the majority rule above has already fixed the
+          // case it was aimed at.
+          //
+          // What DOES discriminate is an explicit choice that contradicts the
+          // evidence: the user overrode the automatic rule in the one direction
+          // that multiplies a population by the row count. That, and only that,
+          // is worth a note.
+          L.push("if(HASN && DCOMB=='sum' && pvar<=0.1){ rawmed<-median(N[!is.na(N)]); permed<-median(a$N[is.finite(a$N)])");
+          L.push("  cat(sprintf('RESULT_NOTE|You chose to add the denominator rows up within each period, but the denominator repeats on every row in %d of the %d period(s) - which is what a population figure for the whole period looks like, not a per-row quantity. Summing it multiplies that population by the number of rows in the period and puts the log of that row count into the offset, which bends both the step and the trend: the median period denominator here is %.6g against a median raw cell of %.6g. Your choice has been honoured. If that column is a population rather than person-time, choose \"first\" instead.\\n', nrow(a)-nvar, nrow(a), permed, rawmed)) }");
           // A count model with no offset silently assumes a constant population.
           L.push("if(hacdeg) cat('RESULT_NOTE|The Newey-West correction was skipped: the model fits the series so closely that the sandwich estimator degenerates to zero variance, which would print impossibly narrow intervals. Model-based standard errors are reported instead.\\n')");
           // The sandwich failing outright used to be completely silent: useh was
