@@ -273,7 +273,13 @@ const SENSITIVITY = [
       if (!obj || typeof obj !== "object") return;
       SELECTS.forEach((sel) => {
         const v = obj[sel.name];
-        if (v == null || v === "") return;
+        // The empty string was exempted here, and it is the one value that
+        // most needs catching: a draft or ?seed= link carrying "" blanks the
+        // select exactly as an unoffered value does, and readForm's `|| "monthly"`
+        // then substitutes just as silently — but with nothing recorded, so no
+        // blocker fired at all. An empty string is not a value this page offers,
+        // which is the only test that matters here.
+        if (v == null) return;
         if (sel.options.indexOf(String(v)) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
           staleSelects.push({ name: sel.name, label: String(sel.label).trim(), saved: String(v), used: sel.fallback });
         }
@@ -282,8 +288,9 @@ const SENSITIVITY = [
     // Two renderings, because this goes to two audiences. On screen it must say
     // what to press; in the exported protocol there is no button to press, and
     // an instruction to press one reads as a defect in the document.
-    const staleMsg = (x) =>
-      "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + x.used + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
+    const staleMsg = (x) => x.saved === ""
+      ? "“" + x.label + "” was restored with no value at all — the draft or link it came from left it blank. The field has been set to “" + x.used + "” and this protocol describes THAT, which is a choice nobody made."
+      : "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + x.used + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
     const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + x.used + "”” to confirm it.");
     const staleMsgsDoc = () => staleSelects.map(staleMsg);
 
