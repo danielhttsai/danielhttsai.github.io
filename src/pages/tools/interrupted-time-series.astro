@@ -705,8 +705,11 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // Only judge the length of a series whose length could be read. "Only 1
       // pre-intervention points" for a box reading 1e3 is a third answer to a
       // question the protocol and the diagram were already answering differently.
-      if (pp.state === "ok" && pp.n > 0 && pp.n < 8) checks.push({ level: "warn", msg: "Only " + pp.n + " pre-intervention points — segmented regression needs a well-estimated baseline trend; aim for ≥ 8 (ideally ≥ 12) points before the interruption." });
-      if (qp.state === "ok" && qp.n > 0 && qp.n < 8) checks.push({ level: "warn", msg: "Only " + qp.n + " post-intervention points — the slope change is hard to detect with few post points; aim for ≥ 8 (ideally ≥ 12)." });
+      // The 8 and the 12 are conventional, not derived from any source this page
+      // cites — the hub card says so and this page did not, so the same rule of
+      // thumb read as unattributed here and as attributed there.
+      if (pp.state === "ok" && pp.n > 0 && pp.n < 8) checks.push({ level: "warn", msg: "Only " + pp.n + " pre-intervention points — segmented regression needs a well-estimated baseline trend; aim for ≥ 8 (ideally ≥ 12) points before the interruption. Both figures are conventional minima, not thresholds taken from any source cited below." });
+      if (qp.state === "ok" && qp.n > 0 && qp.n < 8) checks.push({ level: "warn", msg: "Only " + qp.n + " post-intervention points — the slope change is hard to detect with few post points; aim for ≥ 8 (ideally ≥ 12). Both figures are conventional minima, not thresholds taken from any source cited below." });
       // Written as "which units CAN resolve a within-year cycle", rather than
       // as a list of three of the five options in the select. The previous
       // whitelist named monthly, quarterly and weekly, so "every 6 months"
