@@ -1093,7 +1093,12 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         + " It has been left at “" + clipTxt(x.kept, 70) +
         "”, and that is what this protocol says — a specification nobody chose.";
       const staleMsgsDoc = () => staleSelects.map(staleCore);
-      const STALE_DOC_HEAD = "A value this page no longer offers was replaced before this document was written.";
+      // True of BOTH branches beneath it. "A value this page no longer offers was
+      // replaced" is false of a blank — nothing was offered and nothing was
+      // replaced — and a blank draft or link is the likeliest way this fires at
+      // all. Three commits in this run fixed exactly that wording in the body
+      // sentences and left it standing in the heading above them.
+      const STALE_DOC_HEAD = "A saved choice could not be applied, and this document describes the substitute.";
       const staleMd = () => {
         const m = staleMsgsDoc();
         return m.length ? "> **" + STALE_DOC_HEAD + "**\n" + m.map((x) => ">\n> - " + x).join("\n") + "\n\n" : "";
@@ -1655,8 +1660,14 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         // the protocol below it already asserts a method the user did not pick,
         // and the same sentence now travels into the Word file, where "warn"
         // has no rendering at all.
+        // Naming the button matters: it is mounted at the foot of this panel
+        // and a stop nobody can answer is what teaches people to ignore the
+        // panel — which was the reason for adding it.
         staleSelects.forEach((x) => c.push({ level: "error", msg: staleCore(x) +
-          " Pick the option you want — the page cannot tell whether the option was renamed since the draft was saved or was removed on purpose." }));
+          " Pick the option you want" + (staleSelects.length > 1
+            ? ", here. The button at the foot of this panel confirms ALL of the substitutions listed, not only this one."
+            : ", or press the button at the foot of this panel to confirm the one it was left at.") +
+          " The page cannot tell whether the option was renamed since the draft was saved or was removed on purpose." }));
 
         const miss = missing(s);
         if (miss.length) c.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft is printed with placeholders so you can see its shape — it is not a finished protocol." });

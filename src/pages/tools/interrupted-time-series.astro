@@ -318,7 +318,16 @@ const SENSITIVITY = [
     const staleMsg = (x) => x.saved === ""
       ? "“" + clip(x.label, 60) + "” was restored with no value at all — the draft or link it came from left it blank. The field has been set to “" + clip(usedText(x), 60) + "” and this protocol describes THAT, which is a choice nobody made."
       : "“" + clip(x.label, 60) + "” was saved as “" + clip(x.saved, 80) + "”, and this page does not offer that choice. The field has been set to “" + clip(usedText(x), 60) + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
-    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + shortText(usedText(x), 44) + "”” to confirm it.");
+    // One button at the foot of the panel confirms every outstanding
+    // substitution at once, so with more than one stale select every line used
+    // to name a "Keep “…”" button that does not exist — the page renders
+    // "Keep all N substituted choices" instead — and told a reader answering
+    // the first line that they were confirming one thing when they were
+    // confirming N. ACNU has said the right thing since the eighteenth run;
+    // these three were rewritten on the adjacent line and not given it.
+    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + (staleSelects.length > 1
+      ? " Pick the option you want here. The button at the foot of this panel confirms ALL of the substitutions listed, not only this one."
+      : " Pick the option you want, or press “Keep “" + shortText(usedText(x), 44) + "”” to confirm it."));
     const staleMsgsDoc = () => staleSelects.map(staleMsg);
 
     const readForm = () => ({

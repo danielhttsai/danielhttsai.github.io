@@ -1582,9 +1582,24 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           // in the document rather than as help. The substance is identical.
           out.push({ lvl: "stop", t: "A saved choice could not be applied", d:
             staleSelects.map(staleOne).join(" ") +
+            // "The dead value is not recoverable from the saved draft once the
+            // page has loaded" used to close both halves. It was true when it
+            // was written and this run made it false: the record now rides in
+            // the draft, which is the only reason the sentence prints at all,
+            // and the dead value is quoted three words earlier. A refusal that
+            // tells you nothing can be recovered, in the sentence that recovers
+            // it, is the same species of untruth as the ones this whole path
+            // exists to delete.
+            //
+            // Singular, likewise. This note lists every substitution at once
+            // and the button beneath it says "Keep all N", so telling a reader
+            // to confirm "the one it was left at" invites them to answer the
+            // first line and silently confirm the rest.
             (forDoc
-              ? " A value the form cannot show is a value the protocol cannot honour, and the dead value is not recoverable from the saved draft once the page has loaded — so nothing can tell you what was meant."
-              : " Pick the option you want, or press the button below to confirm the one it was left at. The dead value is not recoverable from the saved draft once the page has loaded.") });
+              ? " A value this form cannot show is a value the protocol cannot honour, so it describes the substitute rather than guessing what was meant. The choice the draft named is quoted above."
+              : (staleSelects.length > 1
+                  ? " Pick the option you want for each. The button at the foot of this panel confirms ALL of the substitutions listed, not only one of them."
+                  : " Pick the option you want, or press the button below to confirm the one it was left at.")) });
         }
         const lapsed = citeState(s).lapsed;
         if (lapsed.length) {

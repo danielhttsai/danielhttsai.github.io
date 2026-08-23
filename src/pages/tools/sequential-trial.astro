@@ -313,7 +313,16 @@ const SENSITIVITY = [
       if (!obj || typeof obj !== "object") return;
       SELECTS.forEach((sel) => {
         const v = obj[sel.name];
-        if (v == null || v === "") return;
+        // `undefined` is "the sender did not mention this field" and is
+        // correctly ignored. The empty string is exempted deliberately here —
+        // all three of this page's selects have their own blank-blocker, and a
+        // second message about the same blank would say a false thing ("saved
+        // as ''") beside a true one — but `null` was falling in with
+        // `undefined`, which is only harmless while that coverage holds. A
+        // fourth <select> added to this page would inherit silence, which is
+        // the failure this whole path exists to close.
+        if (v === undefined) return;
+        if (v === null || v === "") return;
         if (sel.options.indexOf(String(v)) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
           staleSelects.push({ name: sel.name, label: String(sel.label).trim(), saved: String(v), used: sel.fallback });
         }
@@ -355,7 +364,16 @@ const SENSITIVITY = [
     };
     const staleMsg = (x) =>
       "“" + clipStale(x.label, 60) + "” was saved as “" + clipStale(x.saved, 80) + "”, and this page does not offer that choice. The field has been set to “" + clipStale(usedText(x), 70) + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
-    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + shortText(usedText(x), 44) + "”” to confirm it.");
+    // One button at the foot of the panel confirms every outstanding
+    // substitution at once, so with more than one stale select every line used
+    // to name a "Keep “…”" button that does not exist — the page renders
+    // "Keep all N substituted choices" instead — and told a reader answering
+    // the first line that they were confirming one thing when they were
+    // confirming N. ACNU has said the right thing since the eighteenth run;
+    // these three were rewritten on the adjacent line and not given it.
+    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + (staleSelects.length > 1
+      ? " Pick the option you want here. The button at the foot of this panel confirms ALL of the substitutions listed, not only this one."
+      : " Pick the option you want, or press “Keep “" + shortText(usedText(x), 44) + "”” to confirm it."));
     const staleMsgsDoc = () => staleSelects.map(staleMsg);
     // Free text the user typed is followed by more of our prose. Without this the
     // exported Word ran the two together ("…or 5 years Maximum follow-up per trial…");
@@ -493,7 +511,7 @@ const SENSITIVITY = [
       for (let k = 0; k < 3; k++) { const dx = dxA + (dxB - dxA) * (k / 2); svg += '<circle cx="' + dx + '" cy="' + dy + '" r="2.6" fill="#94a3b8"/>'; }
       svg += '<text x="' + ((dxA + dxB) / 2) + '" y="' + (dy - 8) + '" text-anchor="middle" font-size="9.5" fill="#94a3b8">…a new trial at each origin…</text>';
       svg += '<line x1="' + plotL + '" y1="' + (H - 22) + '" x2="' + plotR + '" y2="' + (H - 22) + '" stroke="#cbd5e1"/>';
-      svg += '<text x="' + plotR + '" y="' + (H - 8) + '" text-anchor="end" font-size="10" fill="#94a3b8">calendar time → ' + esc(interval ? "(a new trial each " + interval + ")" : "(trial interval not set)") + '</text>';
+      svg += '<text x="' + plotR + '" y="' + (H - 8) + '" text-anchor="end" font-size="10" fill="#94a3b8">calendar time → ' + esc(interval ? "(a new trial each " + interval + ")" : "(trial interval not specified)") + '</text>';
       const d2 = document.getElementById("diagram2"); if (d2) d2.innerHTML = svg + "</svg>";
     }
 
@@ -822,7 +840,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // a value the page does not offer — an empty string is not a value.
       if (!s.estimand) checks.push({ level: "error", msg: "No estimand is selected, so sections 9 and 10 of the protocol say so rather than naming one. Choose intention-to-treat, per-protocol, or both — the choice decides whether patients are censored at deviation, which is the analysis, not a presentational detail." });
       if (!s.effect) checks.push({ level: "error", msg: "No effect measure is selected, so the protocol says so rather than naming one. Choose one before exporting." });
-      if (!s.interval) checks.push({ level: "error", msg: "No trial interval is selected. The dropdown is empty — a saved draft or a ?seed= link can leave it that way, and an empty box reads as merely unremarkable rather than unset. The protocol says the interval is not specified rather than naming one, in the abstract, the figure caption, the legend, the axis label and the Word file alike. The interval decides how many nested trials there are, how often a patient re-enters one, and how often covariates are re-measured, so monthly and yearly origins are different studies." });
+      if (!s.interval) checks.push({ level: "error", msg: "No trial interval is selected. The dropdown is empty — a saved draft or a ?seed= link can leave it that way, and an empty box reads as merely unremarkable rather than unset. The protocol says the interval is not specified rather than naming one, in the study-design section, the figure caption, the legend, the axis label and the Word file alike. The interval decides how many nested trials there are, how often a patient re-enters one, and how often covariates are re-measured, so monthly and yearly origins are different studies." });
       const est = s.estimand;
       if (est === "ITT" || est === "both") checks.push({ level: "info", msg: "ITT (assignment at each origin): the strategy is fixed at the origin — later switching or add-on is ignored (no deviation censoring). Switching attenuates this estimate toward the null by an amount the ITT estimate itself cannot tell you, so report how much switching occurred." });
       if (est === "PP" || est === "both") checks.push({ level: "info", msg: "Per-protocol: within each trial, censor at deviation and apply IPCW — fit the weights separately per arm, and list the predictors of deviation. Without the weights, censoring at deviation is itself a source of selection bias. Note that the arms here are different people, so the treatment weights and the censoring weights multiply; a cloned design needs only the censoring weights, because its two arms are the same person." });

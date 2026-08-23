@@ -1589,7 +1589,12 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
       // been chosen — and the person who receives the .docx is not the person
       // who saw the panel. Verified in a real .docx before and after.
       const staleMsgsDoc = () => staleSelects.map(staleCore);
-      const STALE_DOC_HEAD = "A value this page no longer offers was replaced before this document was written.";
+      // True of BOTH branches beneath it. "A value this page no longer offers was
+      // replaced" is false of a blank — nothing was offered and nothing was
+      // replaced — and a blank draft or link is the likeliest way this fires at
+      // all. Three commits in this run fixed exactly that wording in the body
+      // sentences and left it standing in the heading above them.
+      const STALE_DOC_HEAD = "A saved choice could not be applied, and this document describes the substitute.";
       const staleMdBanner = () => {
         const m = staleMsgsDoc();
         return m.length
