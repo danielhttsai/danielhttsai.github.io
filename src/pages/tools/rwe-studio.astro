@@ -1247,7 +1247,7 @@ const DESIGNS = [
       // alternative there; this one says what is missing instead of guessing.
       else if (ck("s_acute")) { v = "acnu"; why = "an acute outcome does suit a self-controlled design, but both of them — case-crossover and SCCS — need a transient exposure, because each case has to have on-drug and off-drug time of their own to compare. You have not said the exposure is transient, so this falls back to an active-comparator new-user cohort. If the drug is started and stopped, tick “Exposure is transient” for a sharper suggestion."; }
       else { v = "acnu"; why = "defaulting to an active-comparator new-user cohort — tick more boxes for a sharper suggestion."; }
-      const r = document.querySelector('[name="design"][value="' + v + '"]'); if (r) { r.checked = true; saveQ(); }
+      const r = document.querySelector('[name="design"][value="' + v + '"]'); if (r) { r.checked = true; r.dispatchEvent(new Event("change", { bubbles: true })); saveQ(); }
       $("suggestmsg").textContent = "Recommended: " + DESIGN_LABEL[v] + " — " + why;
     });
 
@@ -1532,33 +1532,45 @@ const DESIGNS = [
           // label, never a quantity.
           "d<-read.csv('/data.csv', colClasses=c(ID='character'), stringsAsFactors=FALSE)\n" + R_CHK01 + R_CHKNUM +
           "d$EXPOSED<-chk01(d$EXPOSED,'Exposed indicator'); d$EVENTS<-chknum(d$EVENTS,'Event count'); d$INTERVAL<-chknum(d$INTERVAL,'Interval length')\n" +
-          // chknum only refuses a column with NO numeric values, so person-time
-          // that is numeric but impossible went through. The stratum skip inside
-          // the fit tests each case's TOTAL weight, so a few negative rows
-          // outweighed by positive ones never trigger it: five negative intervals
-          // in 907 rows returned 2.831 (2.39-3.35) against a truth of 3.0 —
-          // fully formed, plausible, and flagged by nothing.
-          "ib<-!is.finite(d$INTERVAL) | d$INTERVAL<=0\n" +
-          "if(any(ib)) stop(sprintf('%d of %d row(s) have an interval length that is missing, zero or negative. Person-time must be a positive number: a zero-length interval contributes no time to the likelihood, and a negative one (usually a start and end date subtracted the wrong way round) makes the weights negative. Fix the interval column, or drop those rows deliberately, before running.', sum(ib), nrow(d)))\n" +
-          "eb<-!is.finite(d$EVENTS) | d$EVENTS<0 | abs(d$EVENTS-round(d$EVENTS))>1e-8\n" +
-          "if(any(eb)) stop(sprintf('%d of %d row(s) have an event count that is missing, negative, or not a whole number. This role wants a COUNT of events in the interval - if you mapped a rate (events divided by person-time), map the count instead and put the person-time in the interval role.', sum(eb), nrow(d)))\n" +
-          "# Everything below refuses BEFORE it prints. A self-controlled series that carries no\n" +
-          "# within-person contrast has no estimate at all, and the Newton-Raphson start value\n" +
-          "# (b=0, so IRR exactly 1.00) is not one - printing it read as \"no association\".\n" +
-          "stopq<-character(0)\n" +
+          // chknum only refuses a column with NO numeric values, so person-time that is
+          // numeric but impossible went through. The stratum skip inside the fit tests
+          // each case's TOTAL weight, so a few negative rows outweighed by positive ones
+          // never trigger it: five negative intervals in 907 rows returned 2.831
+          // (2.39-3.35) against a truth of 3.0 - fully formed, plausible, flagged by
+          // nothing. Those rows are caught below. They set their CASES aside rather than
+          // stopping: WebrEngine has no catch, so a stop() here would discard the whole
+          // run including the Table 1 counts that are the evidence for the refusal, and
+          // one impossible row in 908 should not cost the other 907.
+          "# Counts print as integers when they are integers. %.4g turns 12345 into 1.234e+04 and\n" +
+          "# makes 99999 and 100000 the same number, which is no way to report a count.\n" +
+          "fmn<-function(z) if(!is.finite(z)) 'NA' else if(abs(z-round(z))<1e-9) sprintf('%.0f',z) else sprintf('%.2f',z)\n" +
+          "# Nothing is printed until the fit has been checked. But a defect in a handful of rows\n" +
+          "# sets those CASES aside and says so - it does not refuse the other nine hundred. Only\n" +
+          "# a condition that destroys the estimand for everybody refuses outright.\n" +
+          "stopq<-character(0); warnq<-character(0)\n" +
           "nneg_t<-sum(d$INTERVAL<0, na.rm=TRUE); nneg_y<-sum(d$EVENTS<0, na.rm=TRUE)\n" +
           "nfrac<-sum(abs(d$EVENTS-round(d$EVENTS))>1e-8, na.rm=TRUE)\n" +
           "nevt0<-sum(d$EVENTS>0 & d$INTERVAL<=0, na.rm=TRUE)\n" +
-          "if(nneg_t>0) stopq<-c(stopq, sprintf('%d row(s) have a negative interval length (smallest %.4g). Person-time cannot be negative - check the direction of the date subtraction that produced it.', nneg_t, min(d$INTERVAL,na.rm=TRUE)))\n" +
-          "if(nneg_y>0) stopq<-c(stopq, sprintf('%d row(s) have a negative event count (smallest %.4g).', nneg_y, min(d$EVENTS,na.rm=TRUE)))\n" +
-          "if(nfrac>0) stopq<-c(stopq, sprintf('%d row(s) have a fractional event count. A self-controlled series conditions on each person s total number of events, so the counts must be whole numbers; a fractional count makes the likelihood a quasi-likelihood whose standard error has no interpretation.', nfrac))\n" +
-          "if(nevt0>0) stopq<-c(stopq, sprintf('%d row(s) record at least one event in an interval of zero or negative person-time. That is arithmetically impossible, and such a row pushes the estimate away from the null while contributing no information to the interval - it inflates the incidence-rate ratio and leaves the confidence interval unchanged. Equal start and stop dates are the usual cause.', nevt0))\n" +
-          "# Rows that carry no information but are not errors: no events in no person-time.\n" +
-          "okrow<-!is.na(d$EXPOSED) & !is.na(d$EVENTS) & !is.na(d$INTERVAL) & d$INTERVAL>0\n" +
+          "badrow<-(!is.na(d$INTERVAL) & !is.finite(d$INTERVAL)) | (!is.na(d$EVENTS) & !is.finite(d$EVENTS)) |\n" +
+        "        (!is.na(d$INTERVAL) & d$INTERVAL<0) | (!is.na(d$EVENTS) & d$EVENTS<0) |\n" +
+          "        (!is.na(d$EVENTS) & !is.na(d$INTERVAL) & d$EVENTS>0 & d$INTERVAL<=0) |\n" +
+          "        (!is.na(d$EVENTS) & abs(d$EVENTS-round(d$EVENTS))>1e-8)\n" +
+          "badids<-unique(d$ID[badrow]); nall<-length(unique(d$ID))\n" +
+          "why<-character(0)\n" +
+          "if(nneg_t>0) why<-c(why, sprintf('%d row(s) have a negative interval length (smallest %s) - person-time cannot be negative, so check the direction of the date subtraction that produced it', nneg_t, fmn(min(d$INTERVAL,na.rm=TRUE))))\n" +
+          "if(nneg_y>0) why<-c(why, sprintf('%d row(s) have a negative event count (smallest %s)', nneg_y, fmn(min(d$EVENTS,na.rm=TRUE))))\n" +
+          "if(nfrac>0) why<-c(why, sprintf('%d row(s) have a fractional event count - a self-controlled series conditions on each person s total number of events, so the counts must be whole numbers - if you mapped a rate (events divided by person-time), map the count instead and put the person-time in the interval role', nfrac))\n" +
+          "if(nevt0>0) why<-c(why, sprintf('%d row(s) record an event in an interval of zero or negative person-time, which is arithmetically impossible (equal start and stop dates are the usual cause)', nevt0))\n" +
+          "if(length(badids)>0){\n" +
+          "  msg<-sprintf('%d of %d case(s) were set aside before fitting and contribute nothing below: %s. The whole case is excluded rather than the single row, because removing one interval would change that person s total event count, which is what the conditional likelihood conditions on.', length(badids), nall, paste(why, collapse='; '))\n" +
+          "  if(length(badids)>=nall) stopq<-c(stopq, msg) else warnq<-c(warnq, msg)\n" +
+          "}\n" +
           "ndropna<-sum(is.na(d$EXPOSED) | is.na(d$EVENTS) | is.na(d$INTERVAL))\n" +
           "ndrop0<-sum(!is.na(d$INTERVAL) & d$INTERVAL<=0 & !is.na(d$EVENTS) & d$EVENTS==0)\n" +
+          "okrow<-!badrow & !(d$ID %in% badids) & !is.na(d$EXPOSED) & !is.na(d$EVENTS) & !is.na(d$INTERVAL) & d$INTERVAL>0\n" +
           "a<-d[okrow,,drop=FALSE]\n" +
-          "if(nrow(a)==0) stopq<-c(stopq,'No row has a usable exposure indicator, event count and positive interval length.')\n" +
+          "if(nrow(a)==0 && length(stopq)==0) stopq<-c(stopq,'No row has a usable exposure indicator, event count and positive interval length.')\n" +
+          "ninf<-0; ncase<-0\n" +
           "# The predicate the conditional likelihood actually uses, computed once and used for\n" +
           "# every count reported below. A case contributes only if it has an event AND both\n" +
           "# exposed and unexposed PERSON-TIME - not merely both labels.\n" +
@@ -1567,12 +1579,12 @@ const DESIGNS = [
           "  texp<-tapply(a$INTERVAL*(a$EXPOSED==1), a$ID, sum)\n" +
           "  tune<-tapply(a$INTERVAL*(a$EXPOSED==0), a$ID, sum)\n" +
           "  infm<-ev>0 & texp>0 & tune>0\n" +
-          "  ninf<-sum(infm, na.rm=TRUE)\n" +
+          "  ninf<-sum(infm, na.rm=TRUE); epc<-as.numeric(ev); ncase<-sum(epc>0)\n" +
           "  if(ninf==0) stopq<-c(stopq,'No case contributes both exposed and unexposed person-time with at least one event. A self-controlled case series estimates the rate ratio by comparing each person with themselves, so with no within-person contrast there is nothing to estimate - the number of cases does not help.')\n" +
           "  # The MLE exists only if the sufficient statistic is strictly inside its range.\n" +
-          "  # sum(y*x) = 0 means no event ever fell in exposed time (b -> -Inf); = sum(n) means\n" +
-          "  # every event did (b -> +Inf). Either way the likelihood is monotone and there is no\n" +
-          "  # finite estimate - which is what used to print as 4.8e14 or 0.00.\n" +
+          "  # sum(y*x) = 0 means no event ever fell in exposed time; = sum(n) means every event\n" +
+          "  # did. Either way the likelihood is monotone and there is no finite estimate - which\n" +
+          "  # is what used to print as 4.8e14.\n" +
           "  if(ninf>0){\n" +
           "    ii<-a$ID %in% names(infm)[which(infm)]\n" +
           "    Sobs<-sum(a$EVENTS[ii]*a$EXPOSED[ii]); Stot<-sum(a$EVENTS[ii])\n" +
@@ -1585,8 +1597,8 @@ const DESIGNS = [
           "  cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n', EST))\n" +
           "  for(s in stopq) cat('RESULT_NOTE|Not estimable: ',s,'\\n',sep='')\n" +
           "} else {\n" +
-          "# The exact SCCS conditional likelihood: condition on each case's total event count,\n" +
-          "# so the events fall across that case's intervals with probability proportional to\n" +
+          "# The exact SCCS conditional likelihood: condition on each case's total event count, so\n" +
+          "# the events fall across that case's intervals with probability proportional to\n" +
           "# tau*exp(b*x). Newton-Raphson on the single parameter, so no per-case nuisance\n" +
           "# parameter is ever estimated. It reports whether it converged; the caller refuses\n" +
           "# rather than printing a start value or a non-converged iterate.\n" +
@@ -1616,34 +1628,35 @@ const DESIGNS = [
           "p0<-tryCatch(glm(EVENTS ~ EXPOSED, family=poisson, offset=log(INTERVAL), data=a), error=function(e) NULL)\n" +
           "if(!is.null(p0)){ bp<-coef(p0)['EXPOSED']; sp<-sqrt(diag(vcov(p0)))['EXPOSED']\n" +
           "  if(is.finite(bp) && is.finite(sp)) cat(sprintf('RESULT_ESTIMATE|Pooled across people, NOT self-controlled (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bp), exp(bp-1.96*sp), exp(bp+1.96*sp))) }\n" +
+          "if(ncase>0) cat(sprintf('RESULT_NOTE|%d of %d case(s) have an event and both exposed and unexposed person-time, and so carry the estimate; the rest contribute nothing to it. This is the same test the likelihood applies, so it is the number of cases the result actually rests on.\\n', ninf, ncase))\n" +
+          "if(ncase>0 && median(epc[epc>0])<2) cat('RESULT_NOTE|Half the cases contribute a single event. The conditional likelihood handles that correctly - it is the design working as intended, not a defect - but the estimate rests on how each case s one event fell relative to their own exposed window, so precision comes from the number of cases rather than the number of events.\\n')\n" +
           "cat('RESULT_NOTE|The pooled row ignores which person each interval belongs to. It is shown only as a contrast: it is confounded by anything that differs between people, which is exactly what the self-controlled design removes. Report the self-controlled row.\\n')\n" +
           "}}\n" +
-          "# Table 1 and the data-quality notes are printed whether or not an estimate was made -\n" +
-          "# when the tool refuses, these counts are the evidence the reader needs to see why.\n" +
+          "# Table 1 and the data-quality notes print whether or not an estimate was made - when\n" +
+          "# the tool refuses, these counts are the evidence the reader needs to see why.\n" +
           "if(nrow(a)>0){\n" +
-          "epc<-as.numeric(ev); ncase<-sum(epc>0); nzero<-sum(epc==0)\n" +
           "cat('TABLE1|Characteristic|Value\\n')\n" +
-          "cat(sprintf('TABLE1|People in the file|%d\\n', length(epc)))\n" +
+          "cat(sprintf('TABLE1|People analysed|%d\\n', length(epc)))\n" +
+          "if(length(badids)>0) cat(sprintf('TABLE1|People set aside for impossible values|%d\\n', length(badids)))\n" +
           "cat(sprintf('TABLE1|Cases (people with >=1 event)|%d\\n', ncase))\n" +
-          "if(nzero>0) cat(sprintf('TABLE1|People with no event (contribute nothing)|%d\\n', nzero))\n" +
+          "if(sum(epc==0)>0) cat(sprintf('TABLE1|People with no event (contribute nothing)|%d\\n', sum(epc==0)))\n" +
           "cat(sprintf('TABLE1|Person-interval rows|%d\\n', nrow(a)))\n" +
           "cat(sprintf('TABLE1|Events, total|%d\\n', sum(a$EVENTS)))\n" +
-          "if(ncase>0) cat(sprintf('TABLE1|Events per case, median (range)|%.4g (%.4g-%.4g)\\n', median(epc[epc>0]), min(epc[epc>0]), max(epc[epc>0])))\n" +
-          "cat(sprintf('TABLE1|Cases with an event and both exposed and unexposed person-time|%d (%.1f%% of cases)\\n', ninf, if(ncase>0) 100*ninf/ncase else 0))\n" +
-          "cat(sprintf('TABLE1|Person-time exposed|%.6g (%.1f%%)\\n', sum(a$INTERVAL[a$EXPOSED==1]), 100*sum(a$INTERVAL[a$EXPOSED==1])/sum(a$INTERVAL)))\n" +
+          "if(ncase>0) cat(sprintf('TABLE1|Events per case, median (range)|%s (%s-%s)\\n', fmn(median(epc[epc>0])), fmn(min(epc[epc>0])), fmn(max(epc[epc>0]))))\n" +
+          "cat(sprintf('TABLE1|Cases with an event and both exposed and unexposed person-time|%d (%s%% of cases)\\n', ninf, if(ncase>0) sprintf('%.1f',100*ninf/ncase) else '0.0'))\n" +
+          "cat(sprintf('TABLE1|Person-time exposed|%s (%.1f%%)\\n', fmn(sum(a$INTERVAL[a$EXPOSED==1])), 100*sum(a$INTERVAL[a$EXPOSED==1])/sum(a$INTERVAL)))\n" +
           "cat(sprintf('TABLE1|Events during exposed time|%d (%.1f%%)\\n', sum(a$EVENTS[a$EXPOSED==1]), if(sum(a$EVENTS)>0) 100*sum(a$EVENTS[a$EXPOSED==1])/sum(a$EVENTS) else 0))\n" +
-          "if(nzero>0) cat(sprintf('RESULT_NOTE|%d of the %d people in this file had no event at all. A case series contains only cases: these people contribute nothing to the estimate, and every count above that describes the analysis is taken over the %d who did have one. If you meant to upload a case series, this file is a cohort extract.\\n', nzero, length(epc), ncase))\n" +
+          "if(sum(epc==0)>0) cat(sprintf('RESULT_NOTE|%d of the %d people analysed had no event at all. A case series contains only cases: these people contribute nothing to the estimate, and every count above that describes the analysis is taken over the %d who did have one. If you meant to upload a case series, this file is a cohort extract.\\n', sum(epc==0), length(epc), ncase))\n" +
           "if(ndropna>0) cat(sprintf('RESULT_NOTE|%d row(s) were dropped because the exposure indicator, event count or interval length was missing. Dropping an interval removes that person-time from its case while leaving the case in the analysis, so check that the missingness is not concentrated in one exposure state.\\n', ndropna))\n" +
           "if(ndrop0>0) cat(sprintf('RESULT_NOTE|%d row(s) with zero person-time and no event were dropped; they carry no information either way.\\n', ndrop0))\n" +
-          "if(length(stopq)==0 && ncase>0 && median(epc[epc>0])<2) cat('RESULT_NOTE|Half the cases contribute a single event. The conditional likelihood handles that correctly - it is the design working as intended, not a defect - but the estimate rests on how each case s one event fell relative to their own exposed window, so precision comes from the number of cases rather than the number of events.\\n')\n" +
-          "if(ncase>0) cat(sprintf('RESULT_NOTE|%d of %d case(s) have an event and both exposed and unexposed person-time, and so carry the estimate; the rest contribute nothing to it. This is the same test the likelihood applies, so it is the number of cases the result actually rests on.\\n', ninf, ncase))\n" +
           "# An event inside an interval far shorter than the rest implies an enormous rate and\n" +
           "# dominates the fit. It is not refused - person-time in years makes 0.001 legitimate -\n" +
-          "# but it is never left silent, because the fixed-effect cross-check above cannot see\n" +
-          "# it: that model is handed the same offset and agrees with the corrupted answer.\n" +
-          "tiny<-a$INTERVAL[a$EVENTS>0]\n" +
-          "if(length(tiny)>0 && min(tiny)*1e4 < max(a$INTERVAL)) cat(sprintf('RESULT_NOTE|%d interval(s) carrying an event are shorter than %.6g, less than a ten-thousandth of the longest interval in this file (%.6g). A rate is events divided by person-time, so a row like that implies a very large rate and will dominate the estimate while adding almost nothing to the confidence interval. Check the units of the interval column, and that its start and stop dates are not the same day.\\n', sum(tiny*1e4 < max(a$INTERVAL)), min(tiny), max(a$INTERVAL)))\n" +
+          "# but it is never left silent, because the fixed-effect cross-check cannot see it: that\n" +
+          "# model is handed the same offset and agrees with the corrupted answer.\n" +
+          "tiny<-a$INTERVAL[a$EVENTS>0]; thr<-max(a$INTERVAL)/1e4\n" +
+          "if(length(tiny)>0 && min(tiny)<thr) cat(sprintf('RESULT_NOTE|%d interval(s) carrying an event are shorter than %s, a ten-thousandth of the longest interval in this file (%s). A rate is events divided by person-time, so a row like that implies a very large rate and will dominate the estimate while adding almost nothing to the confidence interval. Check the units of the interval column, and that its start and stop dates are not the same day.\\n', sum(tiny<thr), fmn(thr), fmn(max(a$INTERVAL))))\n" +
           "}\n" +
+          "for(s in warnq) cat('RESULT_NOTE|',s,'\\n',sep='')\n" +
           "cat('RESULT_NOTE|What this tool does not fit: no age or calendar-time term, and it offers no way to add one. A self-controlled series assumes each person s underlying rate is constant across their observation period apart from the exposure, so where the baseline rate moves with age - as it does for most paediatric and most elderly outcomes - that movement is not adjusted for here and is absorbed into the estimate. The design also assumes the event does not change the chance of later exposure and does not end observation; neither is checkable from the four columns this tool reads.\\n')",
       },
       cco: {
@@ -1661,31 +1674,38 @@ const DESIGNS = [
           // is precisely what a matched design exists to prevent.
           "d<-read.csv('/data.csv', colClasses=c(ID='character'), stringsAsFactors=FALSE); library(survival)\n" + R_CHK01 +
           "d$CASE<-chk01(d$CASE,'Case indicator'); d$EXPOSED<-chk01(d$EXPOSED,'Exposed indicator')\n" +
-          "# Refuse before printing. A matched design whose strata are not matched sets produces a\n" +
-          "# perfectly ordinary conditional-logistic number for a question nobody asked.\n" +
-          "stopq<-character(0)\n" +
+          "fmn<-function(z) if(!is.finite(z)) 'NA' else if(abs(z-round(z))<1e-9) sprintf('%.0f',z) else sprintf('%.2f',z)\n" +
+          "# A case whose rows are not a matched set is set aside and counted; the remaining cases\n" +
+          "# are still proper 1:M matched sets and still estimate the case-crossover odds ratio.\n" +
+          "# Only a condition that leaves nothing to compare refuses outright.\n" +
+          "stopq<-character(0); warnq<-character(0)\n" +
           "ndropna<-sum(is.na(d$CASE) | is.na(d$EXPOSED))\n" +
-          "a<-d[!is.na(d$CASE) & !is.na(d$EXPOSED),,drop=FALSE]\n" +
-          "if(nrow(a)==0) stopq<-c(stopq,'No row has both a usable case indicator and a usable exposure indicator.')\n" +
-          "if(nrow(a)>0){\n" +
-          "  hpc<-tapply(a$CASE, a$ID, sum); nwin<-tapply(rep(1,nrow(a)), a$ID, sum)\n" +
-          "  ncase<-length(hpc); nh0<-sum(hpc==0); nh2<-sum(hpc>1)\n" +
-          "  # The design IS one hazard window per case. Anything else is a different estimand.\n" +
-          "  if(nh0>0) stopq<-c(stopq, sprintf('%d of %d case(s) have no hazard window at all - every one of their rows is a control window. Those cases cannot contribute to a matched analysis, and a case-crossover is defined by contrasting each case s hazard window with their own control windows. Check the column mapped to the case indicator, and that the hazard row survived the join.', nh0, ncase))\n" +
-          "  if(nh2>0) stopq<-c(stopq, sprintf('%d of %d case(s) have more than one hazard window (up to %d). A case-crossover compares one hazard window per case with that case s control windows; with several the fit is still a conditional logistic regression but it is no longer the case-crossover odds ratio, and duplicated event rows from a join are the usual cause.', nh2, ncase, max(hpc)))\n" +
-          "  if(all(nwin<2)) stopq<-c(stopq,'Every case has a single window, so there is nothing to compare it with. This tool needs long format - one row per window, so one hazard row plus a control row for each control window. A file with one row per case and a separate column for each window is wide format and has to be reshaped first.')\n" +
+          "a0<-d[!is.na(d$CASE) & !is.na(d$EXPOSED),,drop=FALSE]\n" +
+          "ncase<-0; ninf<-0; ndisc<-0\n" +
+          "if(nrow(a0)==0) stopq<-c(stopq,'No row has both a usable case indicator and a usable exposure indicator.')\n" +
+          "if(nrow(a0)>0){\n" +
+          "  hpc0<-tapply(a0$CASE, a0$ID, sum); nwin0<-tapply(rep(1,nrow(a0)), a0$ID, sum)\n" +
+          "  ncase<-length(hpc0); nh0<-sum(hpc0==0); nh2<-sum(hpc0>1)\n" +
+          "  # The design IS one hazard window per case. A case with none contributes nothing to a\n" +
+          "  # conditional likelihood anyway; a case with several is a different estimand. Both are\n" +
+          "  # excluded by name rather than allowed to stand in the result.\n" +
+          "  if(nh0>0) warnq<-c(warnq, sprintf('%d of %d case(s) have no hazard window at all - every one of their rows is a control window - and were excluded. A matched analysis conditions on the case, so they contribute nothing in any event; the odds ratio below is estimated from the rest. Check the column mapped to the case indicator, and that the hazard row survived the join.', nh0, ncase))\n" +
+          "  if(nh2>0) warnq<-c(warnq, sprintf('%d of %d case(s) have more than one hazard window (up to %s) and were excluded. A case-crossover compares one hazard window per case with that case s own control windows; with several the fit is still a conditional logistic regression but it is no longer the case-crossover odds ratio. Duplicated event rows from a join are the usual cause, and this tool no longer removes them for you.', nh2, ncase, fmn(max(hpc0))))\n" +
+          "  if(all(nwin0<2)) stopq<-c(stopq,'Every case has a single window, so there is nothing to compare it with. This tool needs long format - one row per window, so one hazard row plus a control row for each control window. A file with one row per case and a separate column for each window is wide format and has to be reshaped first.')\n" +
+          "  keep<-names(hpc0)[hpc0==1 & nwin0>=2]\n" +
+          "  a<-a0[a0$ID %in% keep,,drop=FALSE]\n" +
           "  # A stratum enters the conditional likelihood only if the exposure varies within it.\n" +
-          "  vary<-tapply(a$EXPOSED, a$ID, function(z) length(unique(z))>1)\n" +
-          "  okstr<-vary & hpc==1 & nwin>=2\n" +
-          "  ninf<-sum(okstr, na.rm=TRUE)\n" +
-          "  if(ninf==0 && length(stopq)==0) stopq<-c(stopq, sprintf('None of the %d case(s) is discordant on exposure: each was either exposed in every one of their windows or in none of them. A matched analysis conditions on the case, so concordant cases contribute nothing and there is nothing left to estimate from.', ncase))\n" +
+          "  vary<-if(nrow(a)>0) tapply(a$EXPOSED, a$ID, function(z) length(unique(z))>1) else logical(0)\n" +
+          "  ninf<-sum(vary, na.rm=TRUE)\n" +
+          "  ndisc<-sum(tapply(a0$EXPOSED, a0$ID, function(z) length(unique(z))>1), na.rm=TRUE)\n" +
+          "  if(ninf==0 && length(stopq)==0) stopq<-c(stopq, sprintf('No case is both a proper matched set - exactly one hazard window and at least one control window - and discordant on exposure. %d of %d case(s) are discordant on exposure, but a matched analysis conditions on the case, so a concordant case contributes nothing and a case that is not a matched set cannot contribute at all.', ndisc, ncase))\n" +
           "  if(ninf>0){\n" +
-          "    hz1<-sapply(names(okstr)[which(okstr)], function(k) a$EXPOSED[a$ID==k & a$CASE==1][1])\n" +
+          "    hz1<-vapply(names(vary)[which(vary)], function(k) a$EXPOSED[a$ID==k & a$CASE==1][1], numeric(1))\n" +
           "    S<-sum(hz1==1, na.rm=TRUE)\n" +
           "    if(S<=0) stopq<-c(stopq, sprintf('In every one of the %d discordant case(s) the hazard window was unexposed and only control windows were exposed. The conditional likelihood is monotone and has no maximum: the odds ratio is below anything you could quote, not an estimate near zero.', ninf))\n" +
           "    else if(S>=ninf) stopq<-c(stopq, sprintf('In every one of the %d discordant case(s) the hazard window was the exposed one. The conditional likelihood is monotone and has no maximum: the odds ratio is above anything you could quote, not the very large number a solver will stop at.', ninf))\n" +
           "  }\n" +
-          "}\n" +
+          "} else a<-a0\n" +
           "EST<-'Matched odds ratio (each case vs its own control windows)'\n" +
           "if(length(stopq)>0){\n" +
           "  cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n', EST))\n" +
@@ -1706,21 +1726,23 @@ const DESIGNS = [
           "u<-tryCatch(glm(CASE ~ EXPOSED, family=binomial, data=a), error=function(e) NULL)\n" +
           "if(!is.null(u)){ bu<-coef(u)['EXPOSED']; su<-sqrt(diag(vcov(u)))['EXPOSED']\n" +
           "  if(is.finite(bu) && is.finite(su) && su<10) cat(sprintf('RESULT_ESTIMATE|Unmatched, pairing discarded (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bu), exp(bu-1.96*su), exp(bu+1.96*su))) }\n" +
+          "cat(sprintf('RESULT_NOTE|%d of %d case(s) are a proper matched set and discordant on exposure, and so carry the estimate; the rest contribute nothing to a matched analysis. This is the same test the conditional likelihood applies, so it is the number of cases the result actually rests on.\\n', ninf, ncase))\n" +
           "cat('RESULT_NOTE|The unmatched row throws the pairing away and is shown only as a contrast. It differs from the matched row both because an odds ratio is not collapsible and because it reintroduces between-person differences. Report the matched row.\\n')\n" +
           "}}\n" +
-          "if(nrow(a)>0){\n" +
-          "hz<-a$EXPOSED[a$CASE==1]; ct<-a$EXPOSED[a$CASE==0]\n" +
+          "if(nrow(a0)>0){\n" +
+          "hz<-a0$EXPOSED[a0$CASE==1]; ct<-a0$EXPOSED[a0$CASE==0]\n" +
           "cat('TABLE1|Characteristic|Value\\n')\n" +
-          "cat(sprintf('TABLE1|Cases|%d\\n', ncase))\n" +
-          "cat(sprintf('TABLE1|Windows, total|%d\\n', nrow(a)))\n" +
-          "cat(sprintf('TABLE1|Windows per case, median (range)|%.4g (%.4g-%.4g)\\n', median(nwin), min(nwin), max(nwin)))\n" +
-          "cat(sprintf('TABLE1|Hazard windows per case, median (range)|%.4g (%.4g-%.4g)\\n', median(hpc), min(hpc), max(hpc)))\n" +
+          "cat(sprintf('TABLE1|Cases in the file|%d\\n', ncase))\n" +
+          "cat(sprintf('TABLE1|Windows, total|%d\\n', nrow(a0)))\n" +
+          "cat(sprintf('TABLE1|Windows per case, median (range)|%s (%s-%s)\\n', fmn(median(nwin0)), fmn(min(nwin0)), fmn(max(nwin0))))\n" +
+          "cat(sprintf('TABLE1|Hazard windows per case, median (range)|%s (%s-%s)\\n', fmn(median(hpc0)), fmn(min(hpc0)), fmn(max(hpc0))))\n" +
           "if(length(hz)>0) cat(sprintf('TABLE1|Exposed in the hazard window|%d of %d (%.1f%%)\\n', sum(hz==1), length(hz), 100*mean(hz==1))) else cat('TABLE1|Exposed in the hazard window|no hazard window in the file\\n')\n" +
           "if(length(ct)>0) cat(sprintf('TABLE1|Exposed in control windows|%d of %d (%.1f%%)\\n', sum(ct==1), length(ct), 100*mean(ct==1))) else cat('TABLE1|Exposed in control windows|no control window in the file\\n')\n" +
-          "cat(sprintf('TABLE1|Cases discordant on exposure with one hazard window (carry the estimate)|%d (%.1f%%)\\n', ninf, 100*ninf/ncase))\n" +
+          "cat(sprintf('TABLE1|Cases discordant on exposure|%d\\n', ndisc))\n" +
+          "cat(sprintf('TABLE1|Cases carrying the estimate (matched set and discordant)|%d\\n', ninf))\n" +
           "if(ndropna>0) cat(sprintf('RESULT_NOTE|%d row(s) were dropped because the case indicator or the exposure indicator was missing. Dropping a window changes the matched set it belonged to, so check the missingness is not concentrated in the hazard windows.\\n', ndropna))\n" +
-          "cat(sprintf('RESULT_NOTE|%d of %d case(s) are discordant on exposure and have exactly one hazard window, and so carry the estimate; the rest contribute nothing to a matched analysis. This is the same test the conditional likelihood applies, so it is the number of cases the result actually rests on.\\n', ninf, ncase))\n" +
           "}\n" +
+          "for(s in warnq) cat('RESULT_NOTE|',s,'\\n',sep='')\n" +
           "cat('RESULT_NOTE|What this tool cannot check: it reads only the case, the hazard flag and the exposure - never the window dates - so it cannot tell whether the chance of being exposed was drifting over calendar time. That is the assumption this design stands or falls on. Control windows are drawn from a case s own past, so if use of the drug was rising through the study period the control windows understate exposure and the matched odds ratio is biased away from the null; a case-time-control or case-case-time-control design is what addresses that. The design also assumes exposure is transient with a short-lived effect, and that nothing carries over from the hazard window into the control windows.\\n')",
       },
       its: {
@@ -2147,15 +2169,28 @@ const DESIGNS = [
     // The same rule the duplicate-ID resolver below already follows, applied to the
     // exact-duplicate-ROW dropper: only a one-row-per-person cohort can have one.
     const dedupeAllowed = () => { const s = SPEC[getDesign()]; return !!(s && s.onePerPerson) && $("c_dedupe").checked; };
+    // What a row actually IS in each design — the reason an identical one is data. A
+    // case-crossover row is a window and an ITS row is a record inside a period; only
+    // the self-controlled series measures person-time.
+    const ROW_UNIT = { sccs: "repeated person-time", cco: "another window", its: "another record inside the same period" };
+    const rowUnit = () => ROW_UNIT[getDesign()] || "a separate observation";
+    // What the user last chose while the control actually applied. Unticking the box to
+    // show it is off must not throw that choice away: switching to a long-format design
+    // and back would otherwise leave the cohort silently un-deduplicated.
+    let dedupePref = true;
     function renderDedupeUI() {
       const spec = SPEC[getDesign()], onePer = !!(spec && spec.onePerPerson);
       const box = $("c_dedupe"), lab = $("c_dedupe_l"), note = $("dedupenote");
       if (!box || !lab || !note) return;
+      if (!box.disabled) dedupePref = box.checked;
+      // A ticked box beside a note saying it is switched off is a contradiction the
+      // reader has to resolve, so untick it — and put it back when it applies again.
       box.disabled = !onePer;
+      box.checked = onePer ? dedupePref : false;
       lab.classList.toggle("opacity-45", !onePer);
       note.classList.toggle("hidden", onePer || !spec);
       if (!onePer && spec) note.textContent = "“Drop exact duplicate rows” is switched off for " + (spec.label || "this design") +
-        ": here a row is a unit of person-time or a window, so two identical rows are two real records that add up, not a duplicate. Removing one would silently halve a denominator and move the estimate.";
+        ": here an identical row is " + rowUnit() + ", not a duplicate, so removing one would quietly drop real data and move the estimate.";
     }
     function renderDupUI() {
       const spec = SPEC[getDesign()];
@@ -2497,7 +2532,6 @@ const DESIGNS = [
       // destructive control beside it, which is checked by default.
       let keptDup = 0;
       if (dedupeAllowed()) { const seen = new Set(); rows = rows.filter((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) return false; seen.add(k); return true; }); }
-      else { const seen = new Set(); rows.forEach((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) keptDup++; else seen.add(k); }); }
       // Duplicate patients/cases — ACNU (one-row-per-person cohort) only.
       const dupId = $("dup_id").value, dupStrat = $("dup_strategy").value;
       if (spec.onePerPerson && dupId && dupStrat !== "all") {
@@ -2518,9 +2552,12 @@ const DESIGNS = [
         rows = rows.filter((r, i) => !drop.has(i));
       }
       if ($("c_dropmiss").checked) { const req = spec.roles.filter((r) => r.req).map((r) => roleCol[r.k]).filter(Boolean).concat(spec.covariates ? COVS : []); rows = rows.filter((r) => req.every((c) => r[c] != null && String(r[c]).trim() !== "")); }
+      // Counted only once every filter has run, so this describes the master file that
+      // was actually built rather than an intermediate one that no longer exists.
+      if (!dedupeAllowed()) { const seen = new Set(); rows.forEach((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) keptDup++; else seen.add(k); }); }
       MASTER = rows;
       $("cleaninfo").textContent = "Master file: " + rows.length + " rows (from " + before + "; " + (before - rows.length) + " removed)." +
-        (keptDup ? " " + keptDup + " row(s) are identical to an earlier row and were KEPT — in this design that is repeated person-time, not a duplicate." : "");
+        (keptDup ? " " + keptDup + " row(s) are identical to an earlier row and were KEPT — here that is " + rowUnit() + ", not a duplicate." : "");
       // Restore the neutral class: invalidateMaster may have turned this amber.
       $("cleaninfo").className = "text-xs text-slate-600";
       $("anacard").classList.remove("hidden"); $("expcard").classList.remove("hidden");
