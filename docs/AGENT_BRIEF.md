@@ -3922,3 +3922,312 @@ today, verified. Cheap to add if a future run touches this.
 "aim for ≥ 8 (ideally ≥ 12)" unattributed on both its warnings, while Penfold &
 Zhang sits in its own bibliography.** One-line fix, not done here because the
 ITS builder was the thirteenth run's scope and this run's was the hub.
+
+### Found 2026-08-23 by a sixteenth run — the Protocol Checker, second pass
+
+Fifteen runs had worked the nine builders, RWE Studio twice, the hub once, and
+the **Protocol Checker exactly once** (the sixth run). It was the rotation gap,
+so this run took it — specifically the question the sixth run left at the top of
+its open list: **nothing on this page tied the report on screen to the input
+that produced it.**
+
+Two reviewers ran concurrently on disjoint briefs (checklists + scoring
+arithmetic + citations; the client-side state machine), then were sent at each
+other's lists, then a third was sent at this run's own diff.
+
+#### Environment: one new trap
+
+- **This repo is a SHALLOW CLONE (50 commits).** `git rev-parse
+  --is-shallow-repository` → true. `git log --follow --
+  src/pages/tools/protocol-checker.astro` returns **one** commit, although the
+  sixth run made ~14 fixes to that file and every one is in the working tree.
+  The scheduled prompt tells each run to "choose by looking at `git log` to see
+  what recent runs covered" — **do not.** A run that trusts `git log -- <path>`
+  will conclude a heavily-worked file has never been opened and will duplicate
+  an earlier run wholesale. **This brief is the authority on coverage.**
+- The sixth run's canned-fixture recipe still works exactly as written and is
+  still the right way to test this page (worker routed via `page.route`, both
+  downloads captured by monkey-patching `URL.createObjectURL` +
+  `HTMLAnchorElement.prototype.click`). **A real `.docx` was generated and its
+  `word/document.xml` read again**, by routing the blocked unpkg CDN to
+  `npm pack docx@8.5.0`. Still nobody has opened one in Microsoft Word.
+- Pasted fixture text **must exceed 200 characters** or `runCheck` refuses and
+  the harness times out waiting for a panel that will never appear. Two of this
+  run's test sections failed on exactly that before the code was even wrong.
+- To exercise TARGET you must tick its radio first; otherwise the
+  framework-mismatch guard fires (correctly) and hides the results.
+- Ports used: reviewers 8311, orchestrator 8401-8412, round two 8501.
+- Crossref/PubMed/doi.org blocked, `WebSearch` only, live site unreachable:
+  all still true. `git diff package.json` was empty at commit time.
+
+#### Fixed this run
+
+All executed in Chromium against a local build, 50 assertions, before and after.
+
+- ~~**A finished report survived any change to the input that produced it.**~~
+  Executed at HEAD: run protocol ALPHA, replace the whole textarea with protocol
+  BRAVO, and the report still read "23 of 23 assessable items met" with ALPHA's
+  evidence, both download buttons live, nothing on screen to say so — and the
+  downloaded Markdown was dated today, described ALPHA, and **named no source
+  document at all**. Two protocols checked the same day produced two files
+  called `HARPER-report-2026-08-23.md` whose contents were also
+  indistinguishable. `runCheck` now stamps what the check was run ON — the exact
+  text posted, the filename, the framework, the extractor's notes, the run date
+  — **before** the round trip, and `staleReasons()` compares the live input
+  against it. An amber bar sits at the top of the results card (193px above the
+  Word button at 1280, 350px at 390), and **the report is not hidden**: it is a
+  real report of a real run, and hiding it reads as data loss.
+- ~~**The framework picker and the report could disagree silently.**~~ Moving
+  the radio to TARGET after a HARPER run left `#confhead` reading "HARPER
+  conformance" and the download named `HARPER-report-…` while the picker said
+  TARGET. Same channel now reports it.
+- ~~**Every export left the browser with no idea what it was about.**~~ Both now
+  open with `Checked: text extracted from <file> — N characters`, carry the
+  staleness warning when stale, use the **run** date rather than the download
+  date, and slug the source into the filename.
+- ~~**The stale warning first described the screen.**~~ Caught in this run's own
+  draft. A `.docx` is read somewhere else, months later, by someone who never
+  saw the page: it has no "above" to point at and no "now" to be true in. Each
+  reason now carries two registers, `screen` and `file`, from one computation.
+- ~~**`loadedNotes` was read at render time, 10-20s after the text was frozen.~~
+  Uploading a file while the model was thinking pushed **that** file's caveats
+  ("2 embedded images were found and could NOT be read") into a report on pasted
+  text that had none; clicking Remove during the wait **deleted** the caveats of
+  the document actually being scored, so a report on a .docx with three
+  unreadable figures exported with no "What this check could not do" section at
+  all. Caveats come from the run record now. Both directions executed.
+- ~~**"Check protocol" was live during a file read, and sent the PREVIOUS
+  file.**~~ `loadedText` is only assigned on success, so while BRAVO.docx was
+  being read the chip named BRAVO and `getInputText()` still returned ALPHA. The
+  button is held for the duration of any read (`readsPending`), and the previous
+  file is dropped at the TOP of `handleFile`, not on success.
+- ~~**TARGET item 7 was scored alongside its own sub-elements 7a-7h.**~~ Item 7
+  is *"Describe how each target-trial component is emulated (elements a-h
+  below)"* — by construction the conjunction of its children. Scoring it as a
+  peer counted the same content nine times (9 of 31 rows for one published
+  item) and could render **"7 … Missing" directly above eight consecutive "Met"
+  chips**. The model usually omits item 7, which by luck produced the right
+  denominator; when it answered, the score silently inflated. `reconcile` now
+  derives heading rows from the ids themselves and excludes a heading whose
+  sub-rows were actually judged. **The derivation is `c.indexOf(p) === 0 &&
+  /^[a-z.]/i.test(c.slice(p.length))` — the letter-or-dot test is load-bearing,
+  because a bare prefix test makes HARPER item 1 the parent of item 10.**
+  Executed both ways.
+- ~~**The demoted heading was first bucketed as "Not assessed".**~~ Caught by
+  reading the rendered page, not the diff. `#howtoread` defines that as "the AI
+  returned no usable verdict" — but the AI *did* answer; the tool excluded it.
+  That is the same conflation the sixth run fixed when `unclear` was aliased to
+  `partial`. It has its own status now, **"Not scored"**, with its own legend
+  line, its own tally chip and its own clause in the summary sentence.
+- ~~**"Of this checklist's 31 TARGET items".**~~ TARGET is published as a
+  **21-item** checklist in 6 sections (confirmed by search snippet from three
+  independent sources, and `target.ts:1` already said 21). The page asserted a
+  false fact about a JAMA reporting guideline and carried it verbatim into both
+  exports. The summary says "the 31 rows this tool scores for TARGET" now, and a
+  new `rowsNote` field on each framework states the relationship on screen and
+  travels into both exports through `frameText()`.
+- ~~**`#onesample` hardcoded "19, 20, 21 and 22 of 23" and was shown on TARGET
+  runs**~~, citing a 23-item denominator four lines under a summary reading "of
+  31" — and contradicting the live HARPER denominator too whenever any item was
+  `na`. It names the testing as HARPER's now.
+- ~~**`#howtoread` said the denominator "is smaller than the checklist"**~~
+  unconditionally; on any run with no N/A and no Not-assessed it equals it.
+- ~~**`HARPER_CITATION` printed a title that appears in no record.**~~ It read
+  "…Enhance Reproducibility **(HARPER)**: a good practices report…", inserting an
+  acronym the published title does not contain and dropping the clause that says
+  what the template is for. **The file's own header comment had it right.** This
+  is the user-facing string — it renders into `#cite` and the last line of both
+  exports. No volume/pages/DOI were added: still snippet-only.
+- Smaller, same species: the `Checked:` line this run added would have implied a
+  143,220-character protocol was assessed in full when the worker cuts at 60,000
+  — it names the cut now, and says "text extracted from X" rather than "X",
+  because a PDF's figures were never read. `#dlerr` (a failed Word download)
+  outlived its report and survived Clear. `refreshInputNote` warned only when
+  BOTH a file and pasted text were present, so after a failed upload the page
+  showed an empty drop zone, a red error, and silently queued 40 pages of an
+  older protocol hidden in a collapsed `<details>` — it names the single source
+  now, with its character count.
+- **Closed the fifteenth run's clearest hand-off**: `interrupted-time-series.astro`
+  stated "aim for ≥ 8 (ideally ≥ 12)" unattributed on both warnings while the hub
+  had already been corrected to call it a convention. Both messages now say so.
+  **No citation was asserted** — Penfold & Zhang remains a lead, not a finding.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The applied analyst's whole top finding was a defect the methodologist's
+  brief could not see, and vice versa. The disjoint split paid off a second
+  time and should be kept.** The methodologist's #1 was a false claim about a
+  published guideline; the analyst's #1 was that no report identifies the
+  document it scored. Neither could have found the other's.
+- **The analyst won the argument about how to fix staleness — by agreeing with
+  the sixth run's brief against its own first proposal.** It had proposed hiding
+  or overlaying `#results` on input change. The methodologist rejected that,
+  and its reason is the one to keep: **hiding solves the problem only for the
+  person sitting in front of the tab, and the failure that actually hurts is a
+  `.docx` forwarded to a co-author.** Annotate and let the annotation survive
+  the download.
+- **The methodologist argued for merely DISCLOSING the item-7 double count
+  (because the worker cannot be redeployed from here); the analyst argued it
+  was fixable client-side and executed the evidence.** The analyst won. It
+  showed that in the branch the code documents as routine — the model omitting
+  item 7 — `reconcile` already excludes the parent and names it in a caveat, so
+  the fix only had to make the lucky branch deterministic. **Disclose the
+  structure; fix the arithmetic.** Both were done.
+- **The analyst overturned one of the methodologist's findings outright.** The
+  methodologist called "1 of 1 assessable items met" a "100% headline built on
+  one verdict" and wanted a refusal floor. The analyst executed it: **no
+  percentage is printed anywhere**, the shrinkage is named in the same sentence,
+  the chips read "1 Met · 30 N/A" and the bar is 97% grey. Dropped — refusing
+  would have been *less* informative than 30 inspectable N/A verdicts.
+- **The methodologist read the working tree while the orchestrator was editing
+  it** and reported that the analyst's F1 was "a review of superseded code". It
+  was not: the analyst reviewed HEAD, as instructed. **When you send reviewers at
+  each other's lists mid-edit, tell them which tree each list was written
+  against** — otherwise you get a confident, wrong critique of a correct finding.
+- **The sharpest single moment: the methodologist found a falsehood in the
+  orchestrator's own in-progress fix.** The new `Checked: … — N characters`
+  provenance line ignored the 60,000-character truncation, so the most
+  authoritative-looking line in the report would have overstated what was
+  assessed. **Two runs running, the best methodological finding has been against
+  the run's own new code.**
+
+#### Round two: the reviewer was pointed at this run's own commits
+
+**Eight for eight.** Twelve findings, of which the top three were executed
+damage, and every one reproduced against the build that had already shipped
+(nine assertions failing on the old build and passing on the new). **This is a
+required step and it has never once come back empty.**
+
+**Its sharpest finding was a REGRESSION this run introduced, not an omission**
+— the fourth run running where the diff's own new machinery was the defect.
+The `readsPending` counter added to hold "Check protocol" during a file read
+wrote `checkBtn.disabled` **unconditionally**, with no knowledge that
+`runCheck` had disabled the same button for its own reasons. Choosing a file
+while a check was in flight released the run's grip: two requests spent against
+the free daily quota, and **the screen settled on the older run's verdicts**.
+`handleFile`'s `setStatus("")` also wiped the "Checking against HARPER…" line,
+so the page showed an idle status over an outstanding request. **When two
+different things can disable one control, neither may write the property
+directly — make them both vote.**
+
+Two more executed, both created by this diff:
+
+- **A third `dropParts` clause met a two-part join**, so the headline sentence
+  beside the score read "1 was judged not applicable **and** 3 were not
+  assessed **and** 1 is a heading…". Two clauses read fine, which is why it
+  survived; three did not exist before this run. It goes verbatim into both
+  exports. **Adding an item to a list means re-reading the joiner.**
+- **The screen and the exports disagreed about staleness for the whole duration
+  of a file read.** The clear happens at the top of `handleFile`, the refresh
+  only in the `finally`, and both exporters recompute staleness at click time —
+  so a download taken mid-read said the input "had been removed from the tool"
+  about a file that was being *loaded*, was named on screen at that moment, and
+  went on to read fine. **The two registers are only one computation if they
+  are computed over the same state.**
+
+Also fixed from its list: the heading demotion fired when **one** sub-item had
+been judged, throwing away the model's only verdict covering the other seven
+and claiming "the sub-items carry the verdict" of rows that carried nothing (it
+requires all of them now); **the `rowsNote` arithmetic did not work** — "items 1
+and 7 are expanded into their sub-elements" gives 30 or 32, not 31, because
+item 1 is *replaced* by 1a-1c while item 7 is *kept* beside 7a-7h, and that
+retained row is exactly the one the demotion neutralises, so a note written to
+correct a false claim about a guideline carried a second one; the stale bar was
+headed "no longer matches the **input** above" when only the framework radio
+had moved, contradicting its own bullet; the file register said an input "had
+been **edited** in the tool" in the branch that fires when a different document
+is uploaded under the same name, which this tool has no editor to do; HARPER's
+`rowsNote` called it "not a numbered checklist" then said the rows follow the
+template's own item numbering; and **the new "Not scored" verdict was drawn in
+exactly the grey of the "Not assessed" one it had just been split from**, on
+the bar and in the `.docx` — the diff separated the two categories everywhere
+except where colour does the work.
+
+**One finding rejected.** The restored HARPER title mixes Title Case with a
+lower-case clause and the reviewer read that as an inconsistency. It matches
+the published title and the file's own header comment. **Matching the record
+beats internal tidiness.**
+
+**Process lesson, and it cost this run real reviewer effort: the working tree
+moved under the round-two reviewer four times while it worked**, and it was
+pointed at a snapshot diff that went stale. Three defects it found had already
+been self-fixed before it could report them. Worse, the *first* pair of
+reviewers were sent at each other's lists mid-edit, and the methodologist
+concluded the analyst had reviewed "superseded code" — it had not; it reviewed
+HEAD, as instructed. **Freeze the tree, or tell every reviewer exactly which
+revision its target was written against.**
+
+Separately, the orchestrator attacked its own diff by
+**dumping every string it had written as RENDERED text and reading it cold** —
+and that alone found three defects invisible in the diff:
+
+- `"The " + s.label` rendered as **"The the pasted text this report was
+  generated from…"** — a doubled article.
+- The demoted heading landing in **"Not assessed"**, whose on-screen definition
+  it contradicted (this became the "Not scored" status above — the run's second
+  most substantive change, found by reading the page rather than the code).
+- A generated `.docx` showed the export **Tally** line omitting the new bucket,
+  so it no longer summed to the checklist size.
+
+**The lesson is now three runs old and should be treated as standing procedure:
+render the strings and read them; do not read the diff.**
+
+#### Open in the Protocol Checker, examined this run, deliberately left
+
+- **The worker still cannot be reached or redeployed from this sandbox**, so
+  everything in `workers/target-checker/worker.js` remains unverifiable here.
+  Three findings sit behind that wall and are worth doing when it is reachable:
+  - **`Prefer "missing" over "na"` (worker prompt) swings the same conformant
+    protocol from 74.2% to 100%.** TARGET items 8-15 cannot be reported before a
+    study runs; whether the model marks them `missing` or `na` moves the score
+    25.8 points — and the *lower* number is the one that prints with **no
+    explanatory sentence at all**, because `dropParts` is empty. The prompt's own
+    canonical `na` example is the case it then instructs against. Arithmetic
+    executed; model compliance reasoned.
+  - **Deliverables have no `na` verdict.** The enum is
+    `present|partial|absent` while the item checklist has `na`, and the prompt
+    tells the model to record genuinely-inapplicable outputs as "absent". An SCCS
+    or ITS protocol — which this site's own generator produces — draws red
+    "Absent" chips for non-defects. Client aliases alone are inert.
+  - **`RESPONSE_SCHEMA` lacks `propertyOrdering`** while the worker's other two
+    modes carry it with a comment recording that `required` alone made Gemini
+    omit the field on every item.
+- **TARGET's target-trial SPECIFICATION items (6a-6h) still appear to be
+  missing**, and **HARPER's Table 1-13 mapping and its top-level section number
+  are still unverified.** Unchanged from the sixth run: these need a source this
+  sandbox cannot reach. **Do not act on them from memory or a search snippet.**
+- **`target.ts:6` claims CC BY-ND 4.0 while the repo ships two different
+  paraphrases of the checklist wording** (`target.ts:56` and `worker.js:37`
+  differ from each other, so at least one is an adaptation), plus newly authored
+  `hint` text, redistributed through both exporters. ND would not permit that.
+  The licence itself is snippet-only and was not verified; the internal
+  inconsistency is executed. Worth settling, because it is the one open item
+  with a legal rather than a statistical answer.
+- **`HARPER_CITATION`/`TARGET_CITATION` still omit volume, issue, pages and
+  DOI**, and HARPER was co-published in *Value in Health* with only one journal
+  cited. Two runs have now recorded the same snippet values (HARPER PDS
+  2023;32(1):44-55, doi 10.1002/pds.5507; TARGET JAMA 2025;334(12):1084-1093,
+  doi 10.1001/jama.2025.13350) — **still snippet-only, still not asserted.**
+- **`target.ts:19-21` says the `hint` field steers "both the reader and the AI
+  checker".** The client posts only `{text, framework}` and the worker has no
+  hint column, so hints reach the reader and never the model. Half of a doc
+  comment is stale. One-line fix, left because it is a comment and this run's
+  budget went to the score.
+- **Staleness is binary on `now !== s.text`**, so a one-character typo raises
+  the same bar as swapping the whole document. That is the right default (fail
+  loud), but it means users may learn to ignore the bar. Not worth changing
+  without evidence.
+- **`src/pages/tools/target-checker.astro`'s comment claims it redirects "with
+  ?framework=target intent noted in copy".** `protocol-checker.astro` has no
+  `?framework=` handling at all, and the redirect is instant so the body copy is
+  never read. Harmless — HARPER is the right default for a protocol — but the
+  comment describes behaviour that does not exist.
+- **The exports assemble from several clocks.** `#howtoread`/`#notascore`/
+  `#onesample`/`#rowsnote` are read out of the live DOM by `frameText()`,
+  `summaryEl.textContent` at click time, the rest from `lastReport`. This run
+  moved the date onto the run record; the DOM reads are deliberate (so an export
+  cannot word things differently from the screen) and no reachable divergence
+  was found. Recorded because it is the one remaining place export content is
+  not derived from the run record.
+- **`PC.mountAmendments` is still never called in seven of nine builders.**
+  Unchanged since the third run.
