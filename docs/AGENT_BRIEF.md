@@ -8803,9 +8803,11 @@ Three commits, all in `protocol-checker.astro` except the second.
   snippets only and are recorded as leads for a worker edit, not asserted in
   shipped code.
 
-<!-- CLAIM 2026-08-23 (thirty-first run, unclaimed): nothing is claimed. The
-     best-argued next targets are (a) the worker.js deliverables rubric,
-     itemised above — needs the worker to be reachable; (b) the Protocol
-     Checker's `"present"`-satisfied-by-a-promise item, also worker-side;
-     (c) the RWE Studio ITS inference path, last worked by the fifth run and
-     the oldest untouched surface in the tree. -->
+<!-- CLAIM 2026-08-23 (thirty-first run, CLAIMED): took option (c), the RWE
+     Studio ITS path, narrowed to what the tool silently DISCARDS or TRANSFORMS
+     between the uploaded CSV and the fitted model, and what it tells the user
+     about it — the control-series wipeout, the denominator combine rule, the
+     decimal comma in `buildMaster`, and the five bare `cat()` warnings the
+     fifth run listed as "a cheap, high-value sweep". A concurrent run should
+     take (a) or (b), both worker-side, or the Protocol Generator hub, which
+     no run has opened since the fifteenth. -->
