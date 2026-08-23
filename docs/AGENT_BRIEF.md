@@ -4972,3 +4972,9 @@ done**, and twice it was the same error class the run had set out to delete:
   text** — the analyst argued that is normal for a bibliography and it was left.
 - **Nothing was verified against the live site**, which is unreachable from
   here, and nobody has still ever opened one of these `.docx` files in Word.
+
+<!-- CLAIM 2026-08-23 (seed/restore run): taking the `<select>` membership gap in
+     `PC.applySeed` / `PC.restore` in src/components/ProtocolCommon.astro and the
+     builders that rely on it (case-control, clone-censor-weight, and the four
+     with their own writeForm). NOT rwe-studio — a concurrent run holds that.
+     If you are a concurrent run reading this, take something else. -->
