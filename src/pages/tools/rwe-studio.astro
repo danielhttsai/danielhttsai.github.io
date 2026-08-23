@@ -649,9 +649,15 @@ const DESIGNS = [
       }
 
       let range = "";
-      if (type === "number" || type === "binary") {
-        const nums = numeric.map((v) => Number(String(v).replace(/,/g, "")));
-        range = "min " + Math.min(...nums) + " · max " + Math.max(...nums);
+      // A two-level TEXT column is typed "binary" just above — Y/N, M/F, 有/無 are binary
+      // variables whatever the tokens are — and then has no numeric values at all.
+      // Math.min() of an empty list is Infinity and Math.max() is -Infinity, so this
+      // printed "min Infinity · max -Infinity" beside a green "✓ clean", and #dldict
+      // wrote that string into the data dictionary the user shares. Show a text-coded
+      // binary what it actually has: its levels.
+      const rnums = (type === "number" || type === "binary") ? numeric.map((v) => Number(String(v).replace(/,/g, ""))) : [];
+      if (rnums.length) {
+        range = "min " + Math.min(...rnums) + " · max " + Math.max(...rnums);
       } else if (type === "date") {
         const ds = nonNull.map((v) => (v instanceof Date ? v : new Date(v))).map((d) => d.getTime()).filter((t) => !isNaN(t));
         if (ds.length) range = new Date(Math.min(...ds)).toISOString().slice(0, 10) + " → " + new Date(Math.max(...ds)).toISOString().slice(0, 10);
