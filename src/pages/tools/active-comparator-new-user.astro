@@ -1431,13 +1431,37 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
       // directions at once — rewording an outcome deleted its reference
       // silently, and naming a phenotype in an inclusion criterion revived an
       // unrelated validation study.
+      // EVERY field the pick wrote has to still hold what it wrote, not just
+      // the one the record is keyed by. The first version of this checked only
+      // the key field, and for an outcome that key is `picoO` — the one-line
+      // "Primary outcome" box — because the outcomes trigger has no
+      // `data-target-name`. So a user could pick Myocardial infarction, replace
+      // the operational definition with "any inpatient or outpatient claim for
+      // chest pain" and the code set with a site-specific unvalidated one,
+      // leave the PICO line alone, and export a chart-review MI validation
+      // study attached to a chest-pain definition they wrote themselves —
+      // worse than the stale-citation bug it replaced, because the definition
+      // was no longer even something the library had offered. Reproduced by a
+      // reviewer against this run's own committed diff.
+      //
+      // The strictness is deliberate. A validation study measures how
+      // accurately a SPECIFIC operational definition identifies the condition;
+      // edit any part of that definition and the study no longer speaks to what
+      // the protocol says. Withholding is not the same as losing it: the
+      // panel names the field that changed and prints the citation in full.
       const liveCitations = (s) => {
         const live = [], lapsed = [];
         for (const [field, v] of Object.entries(libraryPicks)) {
           if (!v || typeof v !== "object" || !v.cite || !String(v.cite).trim()) continue;
-          const now = String(s[field] == null ? "" : s[field]).trim();
-          const was = String(v.wrote == null ? "" : v.wrote).trim();
-          if (was && was !== now) lapsed.push({ field, wrote: was, now: now, cite: String(v.cite).trim(), cat: String(v.cat || "") });
+          const fields = (v.check && typeof v.check === "object") ? v.check
+                       : (v.fields && typeof v.fields === "object") ? v.fields : { [field]: v.wrote };
+          let changed = null;
+          for (const [f, wroteVal] of Object.entries(fields)) {
+            const was = String(wroteVal == null ? "" : wroteVal).trim();
+            const now = String(s[f] == null ? "" : s[f]).trim();
+            if (was !== now) { changed = { f: f, was: was, now: now }; break; }
+          }
+          if (changed) lapsed.push({ field: changed.f, wrote: changed.was, now: changed.now, cite: String(v.cite).trim(), cat: String(v.cat || "") });
           else live.push(String(v.cite).trim());
         }
         return { live, lapsed };
@@ -3294,8 +3318,9 @@ _Drafted with the AsPEN protocol builder (${today})._
           checks.push({ level: "warn", msg:
             "“" + fieldLabel(x.field) + "” was filled from the library with “" + clipTxt(asShown(x.field, x.wrote), 60) + "”, and now " +
             (x.now ? "reads “" + clipTxt(asShown(x.field, x.now), 60) + "”" : "is empty") +
-            ". The " + (method ? "method reference" : "validation study") + " that pick carried is being withheld from the reference list, because it belongs to the " +
-            (method ? "method" : "definition") + " that was replaced, not the one in the form. If it still belongs in this protocol, paste it into the References box: " + x.cite });
+            ". The " + (method ? "method reference" : "validation study") + " that pick carried is being withheld from the reference list: it is evidence about the " +
+            (method ? "method that was replaced" : "library entry that was picked, and this field is no longer what that entry put there") +
+            ". If it still belongs in this protocol, paste it into the References box: " + x.cite });
         });
         const washR = readDays(s.washout), lbR = readDays(s.lookback), graceR = readDays(s.grace);
         const wash = washR.days || 0, lb = lbR.days || 0, grace = graceR.days || 0;
@@ -4702,8 +4727,21 @@ _Drafted with the AsPEN protocol builder (${today})._
             // operational-details check has a record to read even for an entry
             // with no citation.
             const citeKey = citeKeyOf(currentTargets);
+            // `check` is the subset of the written fields that a later edit
+            // must not have touched for the citation to still hold. It is
+            // everything the pick wrote, MINUS a field the page tells the user
+            // to edit: the method operational details say "Edit freely", and a
+            // method reference is a reference for the method, not for the
+            // wording of a paragraph describing it. A phenotype's definition
+            // and code set are the opposite case — a validation study measures
+            // how accurately that exact definition finds the condition — so
+            // they stay in.
+            const editable = new Set();
+            if (currentCategory === "confounding" && currentTargets.def) editable.add(currentTargets.def);
+            const check = {};
+            for (const [f, v] of Object.entries(wrote)) if (!editable.has(f)) check[f] = v;
             if (citeKey && Object.prototype.hasOwnProperty.call(wrote, citeKey)) {
-              libraryPicks[citeKey] = { wrote: wrote[citeKey], cite: it.validation || "", fields: wrote, cat: currentCategory };
+              libraryPicks[citeKey] = { wrote: wrote[citeKey], cite: it.validation || "", fields: wrote, check: check, note: it.notes || "", cat: currentCategory };
             } else if (citeKey) {
               delete libraryPicks[citeKey];
             }
