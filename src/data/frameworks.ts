@@ -33,8 +33,10 @@ export const FRAMEWORKS: Record<string, Framework> = {
     citation: HARPER_CITATION,
     url: HARPER_URL,
     rowsNote:
-      "HARPER is a protocol template rather than a numbered checklist. The 23 rows scored here " +
-      "follow the template's own item numbering.",
+      "HARPER is a protocol template rather than a scored checklist, so the 23 rows below are this " +
+      "tool's own enumeration of it: one row per numbered element of the template, taken at the level " +
+      "the template defines an element (7.3.1, 7.4.2, and so on) with no heading rows counted on top " +
+      "of them. The count is this tool's, not a figure the guideline publishes.",
   },
   target: {
     key: "target",
@@ -44,10 +46,17 @@ export const FRAMEWORKS: Record<string, Framework> = {
     checklist: TARGET_CHECKLIST,
     citation: TARGET_CITATION,
     url: TARGET_URL,
+    // The arithmetic here has to be exact, because this note exists to replace a
+    // sentence that got it wrong. 21 published items; item 1 is REPLACED by its
+    // three sub-elements (there is no bare "1" row) and item 7 is KEPT beside
+    // its eight, which is 21 - 1 + 3 + 8 = 31. That retained item 7 is the only
+    // asymmetry, and it is exactly the row the checker marks "Not scored".
     rowsNote:
-      "TARGET is published as a 21-item checklist. This page lists 31 rows because items 1 and 7 " +
-      "are expanded into their sub-elements (1a-1c and 7a-7h) and each is judged separately, so the " +
-      "count below is this tool's sub-division and not a fraction of the published statement.",
+      "TARGET is published as a 21-item checklist. This page lists 31 rows: item 1 is replaced by its " +
+      "three sub-elements (1a-1c), and item 7 is kept alongside its eight (7a-7h). Because item 7 is the " +
+      "heading for 7a-7h, it is marked “Not scored” and left out of the score whenever all eight were " +
+      "judged, so the same content is not counted twice. The count below is this tool's sub-division, " +
+      "not a fraction of the published statement.",
   },
 };
 

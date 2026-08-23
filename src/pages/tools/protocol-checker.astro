@@ -132,7 +132,7 @@ const fwList = Object.values(FRAMEWORKS);
                what changed. The report is NOT hidden: it is a real report of a
                real run, and hiding it reads as data loss. -->
           <div id="stalebar" class="hidden rounded-2xl border border-amber-400 bg-amber-50 p-5">
-            <h2 class="text-base font-bold text-amber-900">⚠ This report no longer matches the input above</h2>
+            <h2 class="text-base font-bold text-amber-900">⚠ This report is out of date</h2>
             <ul id="stalereasons" class="mt-2 space-y-1 text-sm text-amber-900 leading-relaxed"></ul>
             <p class="mt-2 text-xs text-amber-800 leading-relaxed">
               Nothing below has been re-checked, and both download buttons still export <strong>this</strong> report — the file will say so.
@@ -170,7 +170,7 @@ const fwList = Object.values(FRAMEWORKS);
                  It is unchecked free text and routinely states a total of its
                  own, which is not the total this page computed. -->
             <p id="aisummary" class="hidden mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 leading-relaxed"></p>
-            <!-- These three paragraphs are the frame around the number. They are
+            <!-- These paragraphs are the frame around the number. They are
                  read out of the DOM by both exporters (`frameText()`), so the
                  report cannot carry the score without carrying them. -->
             <p id="howtoread" class="mt-3 text-xs text-slate-500 leading-relaxed">
@@ -269,7 +269,7 @@ const fwList = Object.values(FRAMEWORKS);
       const drop = $("drop"), fileEl = $("file"), fileChip = $("filechip"), fileNameEl = $("filename"), fileMetaEl = $("filemeta"), fileNotesEl = $("filenotes"), removeFile = $("removefile"), fileErr = $("fileerr");
       const textEl = $("text"), checkBtn = $("check"), clearBtn = $("clear"), statusEl = $("status"), inputNoteEl = $("inputnote"), fwNoteEl = $("fwnote");
       const resultsEl = $("results"), confHead = $("confhead"), summaryEl = $("summary"), aiSummaryEl = $("aisummary"), tallyEl = $("tally"), barEl = $("bar"), itemsEl = $("items"), caveatsEl = $("caveats"), citeEl = $("cite");
-      // The three paragraphs that frame what the score is and is not. Read out of
+      // The paragraphs that frame what the score is and is not. Read out of
       // the page itself so an export can never carry a different wording than the
       // one on screen — or, as it did, carry none of it.
       const frameText = () => ["howtoread", "rowsnote", "notascore", "onesample"].map((id) => {
@@ -295,12 +295,21 @@ const fwList = Object.values(FRAMEWORKS);
       // the old one: the page said "Checking against HARPER…" for a document it
       // was not sending, and settled into a chip naming one protocol above a
       // report on another. The button is held for the duration of any read.
-      let readsPending = 0;
-      function setReadPending(delta) {
-        readsPending = Math.max(0, readsPending + delta);
-        checkBtn.disabled = readsPending > 0;
-        checkBtn.title = readsPending > 0 ? "Waiting for the uploaded file to finish being read" : "";
+      // Two different things hold this button, and the first version of this
+      // let the second one release the first's grip: `setReadPending` wrote
+      // `disabled` unconditionally, so a file chosen DURING a check re-enabled
+      // "Check protocol" while the request was still outstanding. Clicking it
+      // spent a second request against the free daily quota and the screen
+      // settled on whichever answer arrived last — the OLDER run's verdicts.
+      // Both owners now vote, and the button is disabled if either says so.
+      let readsPending = 0, runInFlight = false;
+      function syncCheckBtn() {
+        const busy = readsPending > 0 || runInFlight;
+        checkBtn.disabled = busy;
+        checkBtn.title = runInFlight ? "A check is already running"
+          : readsPending > 0 ? "Waiting for the uploaded file to finish being read" : "";
       }
+      function setReadPending(delta) { readsPending = Math.max(0, readsPending + delta); syncCheckBtn(); }
 
       const setStatus = (msg, isErr) => { statusEl.textContent = msg || ""; statusEl.className = "text-sm " + (isErr ? "text-red-600" : "text-slate-500"); };
       const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -494,13 +503,20 @@ const fwList = Object.values(FRAMEWORKS);
         setReadPending(1);
         // Drop the previous file HERE, not on success. While this read is in
         // flight the tool holds no file: it must not be able to fall back on
-        // the one the user has just replaced.
+        // the one the user has just replaced. Say so immediately: both
+        // exporters recompute staleness at click time, so a screen that still
+        // believed in the old file would disagree with a download taken during
+        // the read, and the input note would go on naming a file already dropped.
         loadedText = ""; loadedName = ""; loadedNotes = [];
+        refreshInputNote();
         // Say which STEP is running, not just "Reading…". A stalled CDN fetch
         // for a reader this page has not needed before is indistinguishable
         // from a slow file otherwise, and the user is left watching a word.
         const step = (msg) => { if (!stale()) fileMetaEl.textContent = msg + " (" + f.name + ")"; };
-        fileErr.classList.add("hidden"); setStatus("");
+        fileErr.classList.add("hidden");
+        // Not while a check is running: this used to erase "Checking against
+        // HARPER…" and leave an idle-looking page over an outstanding request.
+        if (!runInFlight) setStatus("");
         const name = f.name.toLowerCase();
         drop.classList.add("opacity-50", "pointer-events-none");
         fileMetaEl.textContent = "Reading " + f.name + "…";
@@ -666,11 +682,23 @@ const fwList = Object.values(FRAMEWORKS);
         const out = [];
         const now = getInputText();
         if (now !== s.text) {
-          if (!now) out.push({
+          if (!now) out.push(readsPending > 0 ? {
+            // Mid-read the tool holds no file on purpose. Saying the input was
+            // "removed" would be false — one is being loaded, not taken away.
+            screen: "This report was generated from " + s.label + ". A file is being read into the tool now.",
+            file: "The input this report was generated from (" + s.label + ") was being replaced when this file was downloaded.",
+          } : {
             screen: "This report was generated from " + s.label + "; there is now nothing in the input to check.",
             file: "The input this report was generated from (" + s.label + ") had been removed from the tool before this file was downloaded.",
           });
-          else if (sourceLabel() === s.label) out.push({
+          // Same label, different text. For pasted text that means it was
+          // edited; for a file it means a DIFFERENT document was uploaded under
+          // the same name — this tool has no editor for an uploaded file, so
+          // saying it had been "edited" describes something that cannot happen.
+          else if (sourceLabel() === s.label) out.push(loadedName ? {
+            screen: "This report was generated from " + s.label + ", and a different document has since been loaded under that same file name.",
+            file: "A different document was loaded under the same file name (" + s.label + ") before this file was downloaded, so the verdicts below are not about the file currently in the tool.",
+          } : {
             screen: "This report was generated from " + s.label + ", which has been changed since it ran.",
             file: "The input this report was generated from (" + s.label + ") had been edited in the tool before this file was downloaded.",
           });
@@ -716,7 +744,7 @@ const fwList = Object.values(FRAMEWORKS);
         // Putting it under "Not assessed" would make the legend's definition of
         // that word false, which is the same conflation that once aliased
         // "unclear" to "partial".
-        notscored: { label: "Not scored", dot: "bg-slate-300", chip: "bg-slate-50 text-slate-500 border-slate-300 border-dotted", bar: "bg-slate-200", edge: "border-slate-300" },
+        notscored: { label: "Not scored", dot: "bg-slate-400", chip: "bg-slate-50 text-slate-500 border-slate-300 border-dotted", bar: "bg-slate-400", edge: "border-slate-300" },
       };
       const SCORED = ["met", "partial", "missing", "na"];
       // Every bucket, in the order the tally and the bar show them. `total` must
@@ -1069,11 +1097,18 @@ const fwList = Object.values(FRAMEWORKS);
           const p = byId.get(pid);
           if (!p || p.status === "unassessed") continue;
           const judged = kids.filter((k) => byId.has(k) && byId.get(k).status !== "unassessed");
-          if (!judged.length) continue;
+          // ALL of them, not merely one. With a partial set the heading is the
+          // only verdict covering the sub-items the model skipped, so dropping
+          // it would discard information rather than deduplicate it — and the
+          // sentence below ("the sub-items carry the verdict") would be false
+          // of the seven rows that carry nothing.
+          if (judged.length !== kids.length) continue;
           doubled.push(pid);
+          const span = kids.length === 1 ? kids[0] : kids[0] + "–" + kids[kids.length - 1];
           byId.set(pid, { status: "notscored", suggestion: "",
-            evidence: "This item is the heading for " + (kids.length === 1 ? kids[0] : kids[0] + "–" + kids[kids.length - 1]) +
-              ", " + judged.length + " of which " + (judged.length === 1 ? "was" : "were") + " judged separately below. Scoring it as well would count the same content twice, so it is left out of the score and the sub-items carry the verdict. The AI's own answer for it was “" + String(p.status) + "”." });
+            evidence: "This item is the heading for " + span + ", and all " + kids.length +
+              " of them were judged separately below. Scoring it as well would count the same content twice, so it is left out of the score and " + span +
+              " carry the verdict. The AI's own answer for it was “" + String(p.status) + "”." });
         }
 
         const omitted = [];
@@ -1146,6 +1181,9 @@ const fwList = Object.values(FRAMEWORKS);
         // protocol another run scored 12 of 23. Name the checklist's own size
         // whenever the denominator is smaller than it, so the shrinkage is on
         // screen next to the ratio it produced.
+        // "A and B and C" — a two-part join left over from when only two of
+        // these clauses could exist. There are three now.
+        const listJoin = (xs) => (xs.length < 3 ? xs.join(" and ") : xs.slice(0, -1).join(", ") + " and " + xs[xs.length - 1]);
         const dropParts = [];
         if (counts.na) dropParts.push(counts.na + (counts.na === 1 ? " was" : " were") + " judged not applicable");
         if (counts.unassessed) dropParts.push(counts.unassessed + (counts.unassessed === 1 ? " was" : " were") + " not assessed");
@@ -1153,7 +1191,7 @@ const fwList = Object.values(FRAMEWORKS);
         // "Of this checklist's 31 TARGET items" asserted that a 21-item published
         // guideline has 31 items. The rows are this tool's, so say so.
         summaryEl.textContent = counts.met + " of " + assessable + " assessable items met." +
-          (dropParts.length ? " Of the " + total + " rows this tool scores for " + fw.name + ", " + dropParts.join(" and ") +
+          (dropParts.length ? " Of the " + total + " rows this tool scores for " + fw.name + ", " + listJoin(dropParts) +
             " — excluded from that count, so it is out of " + assessable + " and not out of " + total + "." : "");
         $("rowsnote").textContent = fw.rowsNote || "";
         // The model's own words, quoted and attributed, never merged into the
@@ -1176,7 +1214,7 @@ const fwList = Object.values(FRAMEWORKS);
         if (badStatus.length) caveats.push("The AI returned an unrecognised verdict for " + badStatus.length + " item(s) (" + badStatus.join("; ") + "). They are marked “Not assessed”.");
         if (doubled.length) caveats.push("The AI returned a verdict for " +
           (doubled.length === 1 ? "item " + doubled[0] + ", which is a heading for sub-items" : "items " + doubled.join(", ") + ", which are headings for sub-items") +
-          " judged separately below. Counting a heading alongside its own sub-items would score the same content twice, so " +
+          " that were all judged separately below. Counting a heading alongside its own sub-items would score the same content twice, so " +
           (doubled.length === 1 ? "it was" : "they were") + " marked “Not scored” and left out of the score; the sub-items carry the verdict.");
         if (undecided.length) caveats.push("The AI answered that it could not tell for " + undecided.length + " item(s) (" + undecided.join(", ") + "). That is a statement about this check, not a finding about your protocol, so those items are marked “Not assessed” and excluded from the score — read the item and judge it yourself.");
         if (unmatched.length) caveats.push("The AI returned " + unmatched.length + " verdict(s) for item id(s) that are not in the " + fw.name + " checklist (" + unmatched.slice(0, 8).join(", ") + (unmatched.length > 8 ? ", …" : "") + "). They were ignored.");
@@ -1251,7 +1289,8 @@ const fwList = Object.values(FRAMEWORKS);
         runErrEl.classList.add("hidden");
         // Captured now, from the text this request is built from.
         const stamp = stampSource(framework, text);
-        checkBtn.disabled = true; setStatus("Checking against " + fwOf(framework).name + " — this can take 10–20 seconds…");
+        runInFlight = true; syncCheckBtn();
+        setStatus("Checking against " + fwOf(framework).name + " — this can take 10–20 seconds…");
         try { const data = await postCheck(text, framework); setStatus(""); render(data, framework, stamp); }
         catch (e) {
           setStatus("", false);
@@ -1259,7 +1298,7 @@ const fwList = Object.values(FRAMEWORKS);
             " (Checked against " + fwOf(framework).name + ".)");
         }
         // A file read that started during the request still owns the button.
-        finally { checkBtn.disabled = readsPending > 0; }
+        finally { runInFlight = false; syncCheckBtn(); }
       }
 
       // Both reports used to name no document at all: two protocols checked on
@@ -1409,7 +1448,7 @@ const fwList = Object.values(FRAMEWORKS);
           const para = (runs, o = {}) => new D.Paragraph({ children: Array.isArray(runs) ? runs : [runs], spacing: { before: 40, after: 40, ...(o.spacing || {}) }, ...o });
           const h1 = (t) => new D.Paragraph({ heading: D.HeadingLevel.HEADING_1, spacing: { before: 220, after: 80 }, children: [text(t, { bold: true, size: 26, color: "21443E" })] });
           const h2 = (t) => new D.Paragraph({ spacing: { before: 140, after: 40 }, children: [text(t, { bold: true, size: 21 })] });
-          const STCOL = { met: "16A34A", partial: "D97706", missing: "DC2626", na: "64748B", unassessed: "94A3B8", notscored: "94A3B8", present: "16A34A", absent: "DC2626" };
+          const STCOL = { met: "16A34A", partial: "D97706", missing: "DC2626", na: "64748B", unassessed: "94A3B8", notscored: "64748B", present: "16A34A", absent: "DC2626" };
 
           const children = [];
           if (logo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: logo, transformation: { width: 210, height: 51 } })] }));
