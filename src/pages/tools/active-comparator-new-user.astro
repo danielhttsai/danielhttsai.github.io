@@ -1483,8 +1483,78 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         return out;
       };
 
+      // ── A saved value this page no longer offers ──────
+      // `el.value = x` on a <select> where x matches no <option> is a silent
+      // no-op: it leaves selectedIndex = -1, so the box renders empty, the
+      // control contributes NOTHING to FormData, s.<name> comes back undefined,
+      // and each export's `|| "…"` fallback then supplies a definite choice.
+      // Reproduced in Chromium against a draft carrying effectMeasure "OR",
+      // indexDateChoice "first-dispensing", metaMethod "random" and sex "F":
+      // eight of the thirteen selects went blank, the panel said nothing, and
+      // the protocol asserted "Index date: First dispensing of exposure or
+      // comparator after the washout period", "Sex: both sexes", "Maximum
+      // follow-up: 5 years per patient" and "Random-effects meta-analysis" —
+      // none of them chosen by anyone.
+      //
+      // Worse, it erases itself. render() runs immediately after restore and
+      // saves readForm() — which omits every blank select — back over the
+      // draft, so on the NEXT load those keys are simply absent, writeForm
+      // skips them, the selects show their authored defaults and the export
+      // reads "Effect estimate: Hazard ratio (95% CI) from Cox
+      // proportional-hazards models" where the draft had said "OR". One
+      // reload and there is no trace left: not a blank box, not a refusal,
+      // nothing. Both loads were executed, not reasoned about.
+      //
+      // So: keep the option the markup declares, and carry the report of what
+      // was dropped in the draft under a reserved key, since readForm cannot
+      // see it and therefore cannot leak it into an export as a field.
+      const STALE_KEY = "__staleSelects";
+      const SELECTS = [...form.querySelectorAll("select")].map((el) => ({
+        name: el.name,
+        label: ((el.closest("label") ? (el.closest("label").querySelector("span") || {}).textContent : "") || el.name).trim(),
+        options: [...el.options].map((o) => o.value),
+        fallback: (([...el.options].find((o) => o.defaultSelected) || el.options[0] || {}).value) || "",
+      }));
+      let staleSelects = [];
+      // The empty string is included deliberately: it is not one of any of
+      // these selects' options, and it is the likeliest way a draft ends up
+      // naming a value the page cannot honour.
+      const noteStale = (obj) => {
+        if (!obj || typeof obj !== "object") return;
+        for (const sel of SELECTS) {
+          const v = obj[sel.name];
+          if (v == null) continue;
+          if (sel.options.indexOf(String(v)) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
+            staleSelects.push({ name: sel.name, label: sel.label, saved: String(v), used: sel.fallback });
+          }
+        }
+      };
+      const clipTxt = (v, n) => (String(v).length > n ? String(v).slice(0, n - 1) + "…" : String(v));
+      // What the box is showing RIGHT NOW, in the words the user can read.
+      // Naming the raw option value instead — "re", "federated", "after-washout"
+      // — asks someone to confirm a choice in a vocabulary the page never shows
+      // them, which is a weaker refusal than it looks. Read live rather than
+      // from the snapshot, so a value written by the phenotype library after
+      // restore is still described accurately.
+      const shownText = (name) => {
+        const el = form.elements[name];
+        if (!el || !el.options) return "";
+        const o = el.options[el.selectedIndex];
+        return o ? String(o.text).trim() : "";
+      };
+      const staleMsg = (x) => (x.saved === ""
+        ? "“" + clipTxt(x.label, 60) + "” was restored with no value at all — the draft or link it came from left it blank."
+        : "“" + clipTxt(x.label, 60) + "” was saved as “" + clipTxt(x.saved, 80) + "”, which this page does not offer.")
+        + " It has been set to “" + clipTxt(shownText(x.name) || x.used, 70) + "”, and that is what this protocol and the exported documents say — a specification nobody chose."
+        + " Pick the option you want, or press the button below to confirm the one it was left at.";
+
       const writeForm = (state) => {
         const multi = new Set(["sites", "censoringPick", "covariatesPick", "subgroupsPick", "sensitivityPick", "inclusionPick", "exclusionPick", "secondaryOutcomesPick"]);
+        // Anything still unanswered from an earlier visit. Its select now holds
+        // the substituted value, so this pass cannot rediscover it.
+        const carried = Array.isArray(state[STALE_KEY]) ? state[STALE_KEY] : [];
+        staleSelects = [];
+        noteStale(state);
         for (const el of form.querySelectorAll("input, textarea, select")) {
           const name = el.name;
           if (!name) continue;
@@ -1495,9 +1565,23 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
             // entirely when unchecked, so an absent key means unchecked —
             // assigning to .value here would silently do nothing.
             el.checked = state[name] === el.value;
+          } else if (el.tagName === "SELECT") {
+            // noteStale has already recorded anything unofferable; assigning it
+            // here is what blanked the control, so don't.
+            if (state[name] !== undefined && el.options.length
+                && Array.prototype.some.call(el.options, (o) => o.value === String(state[name]))) {
+              el.value = state[name];
+            }
           } else if (state[name] !== undefined) {
             el.value = state[name];
           }
+        }
+        // Validated against the live markup, not trusted: a carried entry names
+        // a select, and its `used` value is only ever printed, never assigned.
+        for (const c of carried) {
+          if (!c || !c.name || staleSelects.some((x) => x.name === c.name)) continue;
+          const sel = SELECTS.find((s) => s.name === c.name);
+          if (sel) staleSelects.push({ name: sel.name, label: sel.label, saved: String(c.saved == null ? "" : c.saved), used: sel.fallback });
         }
       };
 
@@ -2896,6 +2980,10 @@ _Drafted with the AsPEN protocol builder (${today})._
 
       const computeChecks = (s) => {
         const checks = [];
+        // First, above everything: a value the page could not honour is the one
+        // finding that invalidates every other line in this panel, because the
+        // panel is reading a form that no longer says what the draft said.
+        staleSelects.forEach((x) => checks.push({ level: "error", msg: staleMsg(x) }));
         const washR = readDays(s.washout), lbR = readDays(s.lookback), graceR = readDays(s.grace);
         const wash = washR.days || 0, lb = lbR.days || 0, grace = graceR.days || 0;
         // Name the window the protocol is declining to state, and why. A
@@ -2970,15 +3058,39 @@ _Drafted with the AsPEN protocol builder (${today})._
         return checks;
       };
 
+      // Re-picking the option a <select> is already showing fires no `change`
+      // event, so a user who is content with the value it was left at has no
+      // way to answer a blocker that names it. Give them one.
+      const mountKeepButton = () => {
+        const host = document.getElementById("checks");
+        if (!host || !staleSelects.length) return;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "mt-2 rounded-lg border border-brand-700 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50";
+        b.textContent = staleSelects.length === 1
+          ? "Keep “" + clipTxt(shownText(staleSelects[0].name) || staleSelects[0].used, 40) + "”"
+          : "Keep all " + staleSelects.length + " substituted choices";
+        b.addEventListener("click", () => { staleSelects = []; render(); });
+        host.appendChild(b);
+      };
+
       const render = () => {
         const state = readForm();
         preview.textContent = buildMarkdown(state);
         renderFeasibility(state);
         try { renderScheme(state); } catch (e) { console.error(e); }
-        try { window.renderChecks(document.getElementById("checks"), computeChecks(state)); } catch (e) { console.error(e); }
+        try { window.renderChecks(document.getElementById("checks"), computeChecks(state)); mountKeepButton(); } catch (e) { console.error(e); }
         renderPscVars(state);
         renderPscCard(state);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+        // The report of what was dropped rides in the draft under a reserved
+        // key. Without this the warning is destroyed by the render that raised
+        // it: readForm() omits the dead value, this line writes the substituted
+        // state back, and one reload later nothing on the page or in the draft
+        // remembers that a choice was ever overridden.
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(
+            staleSelects.length ? Object.assign({}, state, { [STALE_KEY]: staleSelects }) : state));
+        } catch {}
       };
 
       // ── Restore saved state, then render ────────────
@@ -2989,6 +3101,12 @@ _Drafted with the AsPEN protocol builder (${today})._
       render();
 
       form.addEventListener("input", render);
+      // Answering the question retires it. Handled before render() so the panel
+      // this render draws is already without the line.
+      form.addEventListener("change", (e) => {
+        const n = e.target && e.target.name;
+        if (n && staleSelects.some((x) => x.name === n)) staleSelects = staleSelects.filter((x) => x.name !== n);
+      });
       form.addEventListener("change", render);
 
       // Timeline preset buttons + numeric chip presets
@@ -3395,6 +3513,10 @@ _Drafted with the AsPEN protocol builder (${today})._
         localStorage.removeItem(PSC_IMPORT_KEY);
         pickedCitations = {};
         pscClass = {}; pscAi = {}; pscVarsSig = ""; pscImport = null;
+        // The draft that carried the dead value is gone, so the question about
+        // it is answered; leaving it would strand a red blocker on a form the
+        // user has just emptied.
+        staleSelects = [];
         // True blank slate; form.reset() only restores HTML defaults, which
         // leaves all the pre-checked checkboxes ticked. Walk every form
         // control and zero it out so "Clear" actually means clear.
