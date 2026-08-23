@@ -3,6 +3,11 @@ dist/
 # throwaway builds: the ship loop tells agents to use `--outDir dist-$$`
 # rather than the shared dist/, and those directories are disposable.
 dist-*/
+# agent working directory: harness scripts, generated data.csv/analysis.R, real R
+# output and screenshots. Every run makes one and none has ever belonged in the
+# repo — they run to tens of megabytes of regenerable artefacts. The harnesses
+# worth keeping are described in docs/AGENT_BRIEF.md so the next run rebuilds them.
+scratch/
 # generated types
 .astro/
 # dependencies
