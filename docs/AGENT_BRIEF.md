@@ -5490,6 +5490,13 @@ Every earlier trap still holds. Two changes:
   that meant nothing. Corrected against a grep of all nine files. **The lesson
   generalises past this one fact: a trap note in this file is a claim like any
   other, and this one had been repeated across runs without being re-checked.**
+- **The ship loop's `git push -q origin main` fails in this sandbox.** The
+  session starts on a **detached HEAD**, with a stale local `main` pointing
+  somewhere else entirely, so `git push origin main` pushes that stale branch
+  and is rejected as non-fast-forward — five times, with a hint about pulling
+  that is not the problem. `git fetch && git rebase --autostash origin/main`
+  then **`git push origin HEAD:main`** works. Check `git status -sb` for
+  `## HEAD (no branch)` before believing any push error.
 - **The blocked-CDN `.docx` route works and is cheap — use it.** `npm pack
   docx@8.5.0`, untar, then in Playwright
   `page.route('**/unpkg.com/**', r => r.fulfill({ path: '…/package/build/index.umd.js' }))`,
