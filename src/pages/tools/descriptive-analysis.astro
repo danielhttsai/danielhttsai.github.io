@@ -912,18 +912,77 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             // FormData omitted it, and the exports supplied a definite choice
             // of their own. Keep the option the markup declares, and say what
             // was dropped rather than absorbing it silently.
-            if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === state[name])) {
+            // String(), because option.value is always a string and a seed is JSON.
+            // `{"trendMaxJp": 4}` — a number, and 4 IS one of the options —
+            // failed a strict === against "4", so the page refused a choice it
+            // does offer, blamed a rename that never happened, and quietly
+            // dropped the joinpoint cap from 4 to 3. A refusal that states a
+            // false reason is worse than the silence it replaced.
+            if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === String(state[name]))) {
               staleSelects.push({
                 name,
                 value: String(state[name]),
                 label: (el.closest("label")?.querySelector("span")?.textContent || name).trim(),
-                kept: el.value,
+                // The words in the box, not the option's value. "left at
+                // 'poisson-exact'" asks somebody to confirm a choice in a
+                // vocabulary this page never shows them. The SAVED half stays
+                // raw below, because there is no label for an option the page
+                // no longer has.
+                kept: (el.options[el.selectedIndex] || {}).text || el.value,
+                // The raw value it was left at, so a substitution can be
+                // retired by comparing what the box holds now — not by
+                // listening for `change`, which never fires for the library
+                // picker, a preset button, or a user re-picking the option the
+                // box is already showing.
+                keptValue: el.value,
               });
               continue;
             }
             el.value = state[name];
           }
         }
+        // Anything still unanswered from an earlier visit. Its select now holds
+        // the substituted value, so this pass cannot rediscover it — see the
+        // comment on STALE_KEY. Validated against the live markup rather than
+        // trusted: a carried entry may only name a select this page still has,
+        // and nothing from it is ever assigned to a control.
+        const carried = Array.isArray(state[STALE_KEY]) ? state[STALE_KEY] : [];
+        for (const c of carried) {
+          if (!c || !c.name || staleSelects.some((x) => x.name === c.name)) continue;
+          const el = form.elements[c.name];
+          if (!el || !el.options) continue;
+          staleSelects.push({
+            name: c.name,
+            value: String(c.value == null ? "" : c.value),
+            label: (el.closest("label")?.querySelector("span")?.textContent || c.name).trim(),
+            kept: (el.options[el.selectedIndex] || {}).text || el.value,
+            keptValue: el.value,
+          });
+        }
+      };
+      // Anything that moves the select off the value it was left at is an
+      // answer, however it moved.
+      const retireAnswered = () => {
+        if (!staleSelects.length) return;
+        staleSelects = staleSelects.filter((x) => {
+          const el = form.elements[x.name];
+          return !el || !el.options || el.value === x.keptValue;
+        });
+      };
+      // Re-picking the option a <select> already shows fires no `change`, so a
+      // user content with the value it was left at would otherwise have no way
+      // to answer a blocker that names it — and it now prints in every export.
+      const mountKeepButton = () => {
+        const host = document.getElementById("checks");
+        if (!host || !staleSelects.length) return;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "mt-2 rounded-lg border border-brand-700 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50";
+        b.textContent = staleSelects.length === 1
+          ? "Keep “" + clipTxt(staleSelects[0].kept, 40) + "”"
+          : "Keep all " + staleSelects.length + " substituted choices";
+        b.addEventListener("click", () => { staleSelects = []; render(); });
+        host.appendChild(b);
       };
       const mergeList = (picks, customText) => {
         const lines = (customText || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -964,6 +1023,50 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // FormData omits it entirely — so the dead value is not recoverable from
       // the state object and has to be captured at the moment of restore.
       let staleSelects = [];
+      // …and then carried in the saved draft, or the render that raises the
+      // warning destroys it. render() autosaves readForm() over the draft, and
+      // readForm is FormData-derived, so it cannot see this and would write the
+      // substituted state back with no record: the warning appeared on ONE load
+      // and was gone on the next, while the protocol went on describing the
+      // substituted choice for ever. Measured across three consecutive loads
+      // before and after. The key is reserved and outside the form's namespace
+      // precisely so readForm cannot leak it into an export as a field.
+      const STALE_KEY = "__staleSelects";
+      // Flattened, not just quoted: these strings carry a value from somebody
+      // else's ?seed= link into a Markdown blockquote, and a newline ends the
+      // quote. Same trap the ITS and ACNU builders record.
+      const clipTxt = (v, n) => {
+        const t = String(v == null ? "" : v).replace(/[\r\n\u2028\u2029]+/g, " ").replace(/\s{2,}/g, " ").trim();
+        return t.length > n ? t.slice(0, n - 1) + "…" : t;
+      };
+      // One sentence per substitution, true wherever it is read. The panel adds
+      // what to do about it; the exported documents cannot, because there is no
+      // panel in a Word file — and until this existed the documents said
+      // nothing at all, so a protocol specifying direct standardisation and
+      // exact Poisson intervals circulated with no trace that neither had been
+      // chosen. computeChecks() is consumed at exactly one site (the panel);
+      // the documents read blockers(), which never mentioned this.
+      // SELECT_WHAT, not the label beside the box: that label is the word
+      // “Method” for ageStdMethod, which names nothing on its own in a
+      // sentence a co-investigator reads in a Word file. The empty string gets
+      // its own branch — no form ever offered "", so saying the page "no longer
+      // offers" it is not true, and this path is the likeliest way a draft ends
+      // up naming a value the page cannot honour.
+      const staleWhat = (x) => {
+        const w = SELECT_WHAT[x.name] || clipTxt(x.label, 60);
+        return w.charAt(0).toUpperCase() + w.slice(1);
+      };
+      const staleCore = (x) => staleWhat(x) + (x.value === ""
+        ? " was restored with no value at all — the draft or link it came from left it blank."
+        : " was saved as “" + clipTxt(x.value, 80) + "”, which this page does not offer.")
+        + " It has been left at “" + clipTxt(x.kept, 70) +
+        "”, and that is what this protocol says — a specification nobody chose.";
+      const staleMsgsDoc = () => staleSelects.map(staleCore);
+      const STALE_DOC_HEAD = "A value this page no longer offers was replaced before this document was written.";
+      const staleMd = () => {
+        const m = staleMsgsDoc();
+        return m.length ? "> **" + STALE_DOC_HEAD + "**\n" + m.map((x) => ">\n> - " + x).join("\n") + "\n\n" : "";
+      };
       // ONE map per <select>, consumed by the preview, the Markdown, the Word
       // protocol and the STROBE checklist. They were four pairs of copy-pasted
       // lookups with drifting wording, which is the defect this repo keeps
@@ -1411,7 +1514,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
 
 ---
 
-${missing(s).length ? "> **This draft is incomplete.** Still to be specified: " + missing(s).join("; ") + ".\n\n" : ""}${blockerMd(s)}${window.PC.abstractMd(pcOf(s))}
+${staleMd()}${missing(s).length ? "> **This draft is incomplete.** Still to be specified: " + missing(s).join("; ") + ".\n\n" : ""}${blockerMd(s)}${window.PC.abstractMd(pcOf(s))}
 ## 1. Research question
 
 | | |
@@ -1517,10 +1620,12 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         const label = (id) => ((OUTPUT_METRICS.find((m) => m.id === id) || {}).label || id);
         const popBlob = (txt("populationDef") + " " + txt("populationCodes") + " " + txt("inclusionCriteria") + " " + txt("indexDateRule")).toLowerCase();
 
-        if (staleSelects.length) c.push({ level: "warn", msg:
-          "A saved draft or a ?seed= link carried " + staleSelects.length + " value(s) this builder no longer offers, and they were NOT applied: " +
-          staleSelects.map((x) => "“" + x.label + "” asked for “" + x.value + "”, left at “" + x.kept + "”").join("; ") +
-          ". Check each of them before circulating this protocol — the option may have been renamed since the draft was saved." });
+        // An error, not a warning. This is not "check this before circulating";
+        // the protocol below it already asserts a method the user did not pick,
+        // and the same sentence now travels into the Word file, where "warn"
+        // has no rendering at all.
+        staleSelects.forEach((x) => c.push({ level: "error", msg: staleCore(x) +
+          " Pick the option you want — the page cannot tell whether the option was renamed since the draft was saved or was removed on purpose." }));
 
         const miss = missing(s);
         if (miss.length) c.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft is printed with placeholders so you can see its shape — it is not a finished protocol." });
@@ -1638,12 +1743,18 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
 
       const render = () => {
         const state = readForm();
+        retireAnswered();
         preview.textContent = buildMarkdown(state);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+        // The report of what was dropped rides in the draft under a reserved
+        // key. Without it this very line destroys the warning it just raised.
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(
+            staleSelects.length ? Object.assign({}, state, { [STALE_KEY]: staleSelects }) : state));
+        } catch {}
         renderFeasibility(state);
         // Never swallow a render failure silently: a blank checks panel that
         // looks like "no issues" is exactly the failure mode this page is for.
-        try { window.renderChecks(document.getElementById("checks"), computeChecks(state)); }
+        try { window.renderChecks(document.getElementById("checks"), computeChecks(state)); mountKeepButton(); }
         catch (err) {
           console.error("[DA] consistency checks failed to render", err);
           const el = document.getElementById("checks");
@@ -1825,6 +1936,8 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         // exactly the artefact a reviewer takes at face value.
         const blk = blockers(s);
         if (blk.length) map["1a"] = "THIS DRAFT SPECIFIES A METRIC IT CANNOT COMPUTE: " + blk.join(" ") + "\n\n" + map["1a"];
+        const stl = staleMsgsDoc();
+        if (stl.length) map["1a"] = STALE_DOC_HEAD.toUpperCase() + " " + stl.join(" ") + "\n\n" + map["1a"];
         return map;
       };
 
@@ -1921,6 +2034,13 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
           ["Version", s.version || ("v0.1 draft · " + today)],
           ["Design", "Multi-national descriptive epidemiology"],
         ]));
+        // First of the three notices, because it is the only one that says the
+        // document describes a choice its author never made.
+        const staleDoc = staleMsgsDoc();
+        if (staleDoc.length) {
+          children.push(p([text(STALE_DOC_HEAD, { bold: true, color: "9E3A2C" })], { spacing: { before: 120, after: 40 } }));
+          staleDoc.forEach((m) => children.push(new D.Paragraph({ children: [text(m, { color: "9E3A2C" })], bullet: { level: 0 }, spacing: { before: 0, after: 40 } })));
+        }
         const miss = missing(s);
         if (miss.length) children.push(p([text("This draft is incomplete. Still to be specified: " + miss.join("; ") + ".", { bold: true, color: "9E3A2C" })], { spacing: { before: 120, after: 120 } }));
         // The refusals, at the top, where a reader of the Word file cannot miss
