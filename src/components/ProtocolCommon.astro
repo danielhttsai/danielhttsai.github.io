@@ -26,8 +26,17 @@
 //                      // key, or a non-list, prints a visible defect notice rather
 //                      // than silently doing nothing.
 //   amendments,        // optional; the raw "amendments" field (see below)
-//   version,           // optional; the builder's version/date string
 // }
+//
+// There is deliberately no `version` here. There was, until the twenty-fifth
+// run deleted its only consumer — a parenthetical that printed "This is the
+// original version of the protocol (v2.0 · 2026-08-01); no amendments have been
+// made" — and the key survived the consumer for four runs, documented as part
+// of this contract and copied into two builders' pcOf. Nothing in this file has
+// read it since. Passing it suggested that the component reconciles a builder's
+// version box against the log's Version-number column, and it does not: each
+// builder prints its own version in its own document header, and the log is
+// whatever the user typed.
 //
 // ── HARPER item 3 (amendments and updates) — integrating a builder ──────────
 //
@@ -49,14 +58,21 @@
 //
 //   2. Pass it through pcOf() so the export uses the state the builder read,
 //      not the live DOM:
-//        amendments: s.amendments, version: s.version,
+//        amendments: s.amendments,
 //      (Omitting this still works — PC falls back to reading the field off the
 //      page — but passing it is what keeps export and state in step.)
 //
 //   3. If the builder has a "Clear all"/reset that writes fields directly:
 //        window.PC && PC.syncAmendments(form);
-//      after resetting, so the rows repaint. (The editor also self-heals on the
-//      form's change event, so forgetting this degrades rather than breaks.)
+//      after resetting, so the rows repaint. This step is REQUIRED, not
+//      optional. Every builder's reset assigns `.value` in script, which fires
+//      no change event, and `render()` fires none either — so the editor's
+//      "self-heal on the form's change event" never runs on this path, and the
+//      panel goes on showing rows the reset has already deleted. Without this
+//      call the panel and the document disagree until the user touches the
+//      panel again; the editor no longer writes a stale model back (see
+//      `stale()` in mountAmendments), so what you get for forgetting it is a
+//      panel one interaction out of date, not a resurrected amendment.
 //
 // Storage format: one line per amendment in the single field "amendments",
 // pipe-delimited in HARPER's own column order —
@@ -621,13 +637,30 @@
       box.setAttribute("data-pc-amendments", "");
       box.className = "border border-slate-200 rounded-2xl bg-white shadow-sm";
       box.innerHTML =
+        // The badge is part of the summary, not of the body, because the body
+        // is behind a <details> that ships CLOSED. A refusal the reader has to
+        // expand a collapsed section to discover is not visible on screen, and
+        // the whole case for putting this editor on a page is that a recipient
+        // holding an unreadable entry can repair it — which they will not do if
+        // nothing tells them there is one.
         '<summary class="cursor-pointer select-none px-5 py-4 font-semibold text-slate-900 hover:bg-slate-50 rounded-2xl">' +
-        'Amendments and updates <span class="font-normal text-slate-500 text-sm">· HARPER front matter</span></summary>' +
+        // The space before the badge is load-bearing: without it the summary's
+        // text content reads "…HARPER front matter1 entry could not be read" to
+        // a screen reader, which the margin class hides from a sighted reader.
+        'Amendments and updates <span class="font-normal text-slate-500 text-sm">· HARPER front matter</span> ' +
+        '<span data-pc-am-badge></span></summary>' +
         '<div class="px-5 pb-5 space-y-3">' +
         '<p class="text-xs text-slate-600 leading-relaxed">A protocol that has never been amended is not deficient — but it has to <em>say</em> so, ' +
         'because "no amendments yet" and "no log kept" look identical in a finished document. Leave this empty for version 1 and the protocol states ' +
         'that it is the original version. Add a row each time you change the protocol after circulating it.</p>' +
-        '<div data-pc-am-rows class="space-y-2"></div>' +
+        // A CONTAINER, not a media query. What decides whether five inputs and
+        // a delete button fit on one line is the width of this panel, and the
+        // panel sits in the form column of a two-column layout: at a 1024px
+        // viewport that column is 422px wide, and at 900px — where the layout
+        // collapses to one column — it is 852px. A `sm:` breakpoint reads the
+        // viewport and therefore gets it exactly backwards, turning the wide
+        // layout ON at 640px in a 550px column.
+        '<div data-pc-am-rows class="space-y-2 @container"></div>' +
         // The notes live outside the rows container so they can be rewritten on
         // every keystroke without rebuilding the inputs, which would take the
         // caret with it.
@@ -641,8 +674,9 @@
 
       var rowsEl = box.querySelector("[data-pc-am-rows]");
       var noteEl = box.querySelector("[data-pc-am-note]");
+      var badgeEl = box.querySelector("[data-pc-am-badge]");
       var lastWritten = null;
-      var INPUT = "border border-slate-300 rounded px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
+      var INPUT = "min-w-0 border border-slate-300 rounded px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
 
       /* `model` is the panel's own list of rows and is the thing the editor
          edits. It is NOT re-derived from the field on every interaction, and
@@ -699,6 +733,21 @@
         lastWritten = text;
         form.dispatchEvent(new Event("input", { bubbles: true }));
       };
+      /* The model is a VIEW of the field, and the field is what exports. If the
+         field changed behind the editor's back the model is stale, and writing
+         it back RESURRECTS rows the builder has just deleted. Reproduced in
+         Chromium on all seven builders that did not yet mount this editor:
+         record an amendment, press "Clear all" — which empties the field and
+         leaves the panel untouched, because assigning `.value` in script fires
+         no change event and `render()` fires none either — then click "+ Add an
+         amendment", which touches no existing row. The cleared amendment was
+         back in the field, in the saved draft and in the exported protocol,
+         under a sentence counting it as an amendment the investigator made.
+         The two builders that call PC.syncAmendments after their reset were
+         immune, which is what step 3 of the recipe is for; this guard is what
+         makes forgetting step 3 degrade instead of fabricate. Every path that
+         writes the model checks first. */
+      var stale = function () { return field.value !== lastWritten; };
       /* The notes have to be recomputed on every KEYSTROKE, not only on a
          repaint. The first attempt at this ran once per paint, and because
          typing calls writeRows without repainting, the very first amendment
@@ -709,6 +758,17 @@
       var paintNotes = function (rows) {
         noteEl.innerHTML = "";
         var refused = rows.filter(isRaw);
+        // Repainted on every keystroke with the rest of the notes, so closing
+        // the panel never hides the fact that something in it needs attention.
+        if (refused.length) {
+          badgeEl.className = "ml-2 align-middle text-xs font-semibold text-amber-900 bg-amber-100 border border-amber-300 rounded px-2 py-0.5";
+          badgeEl.textContent = refused.length === 1
+            ? "1 entry could not be read"
+            : refused.length + " entries could not be read";
+        } else {
+          badgeEl.className = "";
+          badgeEl.textContent = "";
+        }
         var editable = rows.filter(function (r) { return !isRaw(r); });
         var willExport = refused.length + editable.filter(function (r) {
           return r.some(function (c) { return String(c == null ? "" : c).trim(); });
@@ -776,13 +836,37 @@
             rm.className = "text-xs text-slate-400 hover:text-rose-600 px-2 py-1.5";
             rm.textContent = "✕";
             rm.setAttribute("aria-label", "Remove the entry that could not be read, " + (i + 1));
-            rm.addEventListener("click", function () { rows.splice(i, 1); writeRows(rows); paint(rows); });
+            // A stale model's indices do not address the rows the field now
+            // holds, so re-read and repaint rather than delete by position.
+            // The click is dropped; the alternative is removing whichever entry
+            // happens to sit at index i in a list the user is not looking at.
+            rm.addEventListener("click", function () {
+              if (stale()) { sync(); return; }
+              rows.splice(i, 1); writeRows(rows); paint(rows);
+            });
             bad.appendChild(rm);
             rowsEl.appendChild(bad);
             return;
           }
           var row = document.createElement("div");
-          row.className = "grid gap-1.5 sm:grid-cols-[8rem_6rem_1fr_1.4fr_1.4fr_auto] items-start";
+          /* Every track is a `minmax(0, …)` and every input carries `min-w-0`,
+             for the reason globals.css already records about `.protocol-form
+             select`: a grid item's default `min-width: auto` is its min-content
+             width, so an <input> holds its track open at ~177px whatever the
+             track is declared to be. Measured before this line changed, on
+             case-crossover and self-controlled-case-series — the two builders
+             that ship this editor today — the row's intrinsic width was a fixed
+             784px at every viewport, so at 1024px, 1280px and 1440px the Reason
+             box and the ✕ were painted PAST the panel's right edge and under
+             the preview column, which comes later in DOM order and covers them.
+             The user could fill four of HARPER's five columns and not reach the
+             fifth, and could not delete a row at all; between 640px and 768px
+             the whole page grew a horizontal scrollbar. Nothing errored, and a
+             page-level scrollWidth assertion at 390px and 1024px — which is
+             what two earlier runs measured — cannot see any of it, because at
+             1024px the overflow lands inside the viewport, on top of the
+             preview, rather than past its edge. */
+          row.className = "grid gap-1.5 @[36rem]:grid-cols-[minmax(0,8rem)_minmax(0,6rem)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_auto] items-start";
           AM_COLS.forEach(function (label, j) {
             var inp = document.createElement("input");
             inp.className = INPUT;
@@ -818,7 +902,14 @@
               inp.type = "text";
               inp.value = raw;
             }
-            inp.addEventListener("input", function () { r[j] = inp.value; writeRows(rows); paintNotes(rows); });
+            inp.addEventListener("input", function () {
+              // One keystroke into a box the builder blanked behind the panel
+              // used to write the whole stale model back. The keystroke is lost
+              // and the boxes repaint from the field, which is the only list
+              // that exports.
+              if (stale()) { sync(); return; }
+              r[j] = inp.value; writeRows(rows); paintNotes(rows);
+            });
             row.appendChild(inp);
           });
           var del = document.createElement("button");
@@ -826,7 +917,10 @@
           del.className = "text-xs text-slate-400 hover:text-rose-600 px-2 py-1.5";
           del.textContent = "✕";
           del.setAttribute("aria-label", "Remove amendment " + (i + 1));
-          del.addEventListener("click", function () { rows.splice(i, 1); writeRows(rows); paint(rows); });
+          del.addEventListener("click", function () {
+            if (stale()) { sync(); return; }
+            rows.splice(i, 1); writeRows(rows); paint(rows);
+          });
           row.appendChild(del);
           rowsEl.appendChild(row);
         });
@@ -836,7 +930,18 @@
       /* The one place the model is rebuilt from the field — a builder that
          resets or restores writes the field directly, and this is how the
          editor catches up with it. */
-      var sync = function () { model = readRows(); lastWritten = field.value; paint(model); };
+      /* This is also the only place that can see a refused entry ARRIVE — from
+         a ?seed= link, a restored draft, a paste, or a builder's own reset — so
+         it is where the panel opens itself. The badge alone would say something
+         is wrong and still leave the line that is wrong, and the ✕ that removes
+         it, behind a click on a collapsed section. Typing never runs sync, so a
+         panel the user closes stays closed. */
+      var sync = function () {
+        model = readRows();
+        lastWritten = field.value;
+        paint(model);
+        if (model.some(isRaw)) box.open = true;
+      };
 
       /* The new row starts EMPTY. It used to be prefilled with today's date,
          which quietly defeated the invariant writeRows states in its own
@@ -848,6 +953,10 @@
          protocol change. Today's date is one field's worth of typing; an
          amendment nobody made is not recoverable once the file is sent. */
       box.querySelector("[data-pc-am-add]").addEventListener("click", function () {
+        // Adding a row is still the right thing to do after the field moved
+        // underneath the panel — it just has to be added to what the field
+        // holds now, not to what the panel was last showing.
+        if (stale()) sync();
         model.push(["", "", "", "", ""]);
         writeRows(model); paint(model);
       });
