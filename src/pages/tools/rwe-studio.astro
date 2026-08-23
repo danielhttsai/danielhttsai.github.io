@@ -793,6 +793,10 @@ const DESIGNS = [
       if (k.indexOf("yes:") === 0) STRUCT.yes[k.slice(4)] = el.value;
       else if (k === "dayFirst") STRUCT.dayFirst = el.checked;
       else STRUCT[k] = el.value;
+      // "which value means yes" and the day-first answer both feed buildMaster
+      // through toBin/toISO, so a master built before this change describes a
+      // different dataset from the one on screen.
+      invalidateMaster();
       if (k === "idCol") { try { renderDupUI(); } catch (e) {} }
       try { renderMap(); } catch (e) {}
       renderStructure();
@@ -1232,7 +1236,16 @@ const DESIGNS = [
       if (ck("s_policy")) { v = "its"; why = "a population-level intervention with a clear start date is evaluated by interrupted time series — the pre-intervention trend, projected forward, is the counterfactual."; }
       else if (ck("s_twodrugs")) { v = "acnu"; why = "you're comparing two active treatments — an active-comparator new-user cohort minimises confounding by indication."; }
       else if (ck("s_transient") && ck("s_acute")) { v = "sccs"; why = "a transient exposure with an acute outcome suits a self-controlled design (each case is its own control); a case-crossover is a good alternative."; }
-      else if (ck("s_acute")) { v = "cco"; why = "for an acute, abrupt-onset event, a case-crossover contrasts exposure just before the event with earlier control windows."; }
+      // A transient exposure is the case-crossover's defining premise, not a
+      // nicety: it contrasts a hazard window against that person's OWN earlier
+      // control windows, so a case on the drug throughout is concordant and
+      // contributes nothing. Routing on the outcome alone recommended a
+      // case-crossover to a user who had just declined to tick "exposure is
+      // transient", and the sentence named only the outcome — so the condition
+      // that made the recommendation false was the box left unticked. The branch
+      // above already covers transient+acute and names the case-crossover as the
+      // alternative there; this one says what is missing instead of guessing.
+      else if (ck("s_acute")) { v = "acnu"; why = "an acute outcome does suit a self-controlled design, but both of them — case-crossover and SCCS — need a transient exposure, because each case has to have on-drug and off-drug time of their own to compare. You have not said the exposure is transient, so this falls back to an active-comparator new-user cohort. If the drug is started and stopped, tick “Exposure is transient” for a sharper suggestion."; }
       else { v = "acnu"; why = "defaulting to an active-comparator new-user cohort — tick more boxes for a sharper suggestion."; }
       const r = document.querySelector('[name="design"][value="' + v + '"]'); if (r) { r.checked = true; saveQ(); }
       $("suggestmsg").textContent = "Recommended: " + DESIGN_LABEL[v] + " — " + why;
@@ -1509,8 +1522,26 @@ const DESIGNS = [
           { k: "INTERVAL", label: "Interval length (person-time)", types: ["number"], req: true },
         ],
         rscript: () =>
-          "d<-read.csv('/data.csv', stringsAsFactors=FALSE)\n" + R_CHK01 + R_CHKNUM +
+          // colClasses on ID: read.csv type-guesses an all-numeric case ID to
+          // numeric, which drops leading zeros and, past 2^53, low-order digits.
+          // Distinct people then merge into one stratum, and the self-controlled
+          // estimate slides monotonically towards the confounded pooled estimate
+          // printed on the line below it — measured at 363 strata 2.991, 182:
+          // 3.300, 91: 3.355, 1: 3.461, against a pooled row of 3.46. At full
+          // collapse the design's own contrast row IS the headline. An ID is a
+          // label, never a quantity.
+          "d<-read.csv('/data.csv', colClasses=c(ID='character'), stringsAsFactors=FALSE)\n" + R_CHK01 + R_CHKNUM +
           "d$EXPOSED<-chk01(d$EXPOSED,'Exposed indicator'); d$EVENTS<-chknum(d$EVENTS,'Event count'); d$INTERVAL<-chknum(d$INTERVAL,'Interval length')\n" +
+          // chknum only refuses a column with NO numeric values, so person-time
+          // that is numeric but impossible went through. The stratum skip inside
+          // the fit tests each case's TOTAL weight, so a few negative rows
+          // outweighed by positive ones never trigger it: five negative intervals
+          // in 907 rows returned 2.831 (2.39-3.35) against a truth of 3.0 —
+          // fully formed, plausible, and flagged by nothing.
+          "ib<-!is.finite(d$INTERVAL) | d$INTERVAL<=0\n" +
+          "if(any(ib)) stop(sprintf('%d of %d row(s) have an interval length that is missing, zero or negative. Person-time must be a positive number: a zero-length interval contributes no time to the likelihood, and a negative one (usually a start and end date subtracted the wrong way round) makes the weights negative. Fix the interval column, or drop those rows deliberately, before running.', sum(ib), nrow(d)))\n" +
+          "eb<-!is.finite(d$EVENTS) | d$EVENTS<0 | abs(d$EVENTS-round(d$EVENTS))>1e-8\n" +
+          "if(any(eb)) stop(sprintf('%d of %d row(s) have an event count that is missing, negative, or not a whole number. This role wants a COUNT of events in the interval - if you mapped a rate (events divided by person-time), map the count instead and put the person-time in the interval role.', sum(eb), nrow(d)))\n" +
           "# Everything below refuses BEFORE it prints. A self-controlled series that carries no\n" +
           "# within-person contrast has no estimate at all, and the Newton-Raphson start value\n" +
           "# (b=0, so IRR exactly 1.00) is not one - printing it read as \"no association\".\n" +
@@ -1625,7 +1656,10 @@ const DESIGNS = [
           { k: "EXPOSED", label: "Exposed (0/1)", types: ["binary", "number"], req: true },
         ],
         rscript: () =>
-          "d<-read.csv('/data.csv', stringsAsFactors=FALSE); library(survival)\n" + R_CHK01 +
+          // colClasses on ID for the same reason as the SCCS path: a numeric read
+          // of an all-digit case ID merges distinct people into one stratum, which
+          // is precisely what a matched design exists to prevent.
+          "d<-read.csv('/data.csv', colClasses=c(ID='character'), stringsAsFactors=FALSE); library(survival)\n" + R_CHK01 +
           "d$CASE<-chk01(d$CASE,'Case indicator'); d$EXPOSED<-chk01(d$EXPOSED,'Exposed indicator')\n" +
           "# Refuse before printing. A matched design whose strata are not matched sets produces a\n" +
           "# perfectly ordinary conditional-logistic number for a question nobody asked.\n" +
@@ -2094,7 +2128,7 @@ const DESIGNS = [
         if (!(r.k in MAP)) MAP[r.k] = suggestCol(r);
         return '<label class="block text-xs"><span class="uppercase tracking-widest text-brand-700 font-semibold">' + esc(r.label) + (r.req ? " *" : " (optional)") + '</span><select data-role="' + r.k + '" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm">' + opts(MAP[r.k]) + "</select></label>";
       }).join("");
-      $("maproles").querySelectorAll("select[data-role]").forEach((sel) => sel.addEventListener("change", () => { MAP[sel.getAttribute("data-role")] = sel.value; renderCovs(spec); validateMap(); }));
+      $("maproles").querySelectorAll("select[data-role]").forEach((sel) => sel.addEventListener("change", () => { MAP[sel.getAttribute("data-role")] = sel.value; invalidateMaster(); renderCovs(spec); validateMap(); }));
       $("itsopts").classList.toggle("hidden", getDesign() !== "its");
       renderCovs(spec);
       try { renderDupUI(); } catch (e) {}
@@ -2152,7 +2186,13 @@ const DESIGNS = [
       $("dupcount").textContent = dup.length ? (dup.length + " ID(s) repeat · " + extra + " extra row(s)") : "no repeated IDs ✓";
       $("dupcount").className = "text-[11px] font-semibold " + (dup.length ? "text-amber-700" : "text-emerald-600");
     }
-    $("dup_id").addEventListener("change", updateDupCount);
+    $("dup_id").addEventListener("change", () => { invalidateMaster(); updateDupCount(); });
+    // Every cleaning tick is an input to buildMaster and none of them invalidated
+    // it: un-ticking "Drop rows missing a required mapped variable" after building
+    // changed nothing at all about the run that followed.
+    ["c_trim", "c_std", "c_dates", "c_dedupe", "c_dropmiss", "dup_date"].forEach((id) => {
+      const e = $(id); if (e) e.addEventListener("change", invalidateMaster);
+    });
     $("dup_strategy").addEventListener("change", () => { $("dup_strategy").dataset.touched = "1"; });
     function renderCovs(spec) {
       if (!spec.covariates) { $("covwrap").classList.add("hidden"); return; }
@@ -2163,7 +2203,7 @@ const DESIGNS = [
         const badge = rc ? ' <span class="rounded px-1 py-0.5 text-[9px] font-semibold ' + ROLE_CLS(rc.role) + '">' + esc(rc.role) + "</span>" : "";
         return '<label class="flex items-start gap-1.5" title="' + (rc ? esc(rc.reason) : "") + '"><input type="checkbox" data-cov="' + esc(c) + '"' + (COVS.includes(c) ? " checked" : "") + ' class="mt-0.5"/> <span>' + esc(c) + badge + "</span></label>";
       }).join("");
-      $("covlist").querySelectorAll("input[data-cov]").forEach((cb) => cb.addEventListener("change", () => { const c = cb.getAttribute("data-cov"); if (cb.checked) { if (!COVS.includes(c)) COVS.push(c); } else COVS = COVS.filter((x) => x !== c); renderCovNote(); validateMap(); }));
+      $("covlist").querySelectorAll("input[data-cov]").forEach((cb) => cb.addEventListener("change", () => { const c = cb.getAttribute("data-cov"); if (cb.checked) { if (!COVS.includes(c)) COVS.push(c); } else COVS = COVS.filter((x) => x !== c); invalidateMaster(); renderCovNote(); validateMap(); }));
       $("acnuopts").classList.toggle("hidden", getDesign() !== "acnu");
       renderCovNote();
       try { renderPscSplit(); } catch (e) { console.error(e); }
@@ -2301,9 +2341,34 @@ const DESIGNS = [
       // character in a box the analysis never reads would stop the run.
       const badCyc = getDesign() === "its" && $("its_season").value !== "none" && !itsCycle().ok ? itsCycle() : null;
       const bt = missing.length ? [] : binTrouble();
-      const ok = missing.length === 0 && !needCov && !needCut && !badCyc && !noUsable && !bt.length;
+      const nt = missing.length ? [] : numTrouble();
+      // Two roles resolving to one column is a mis-map the page used to answer
+      // with a green tick: mapping the exposure column to the case indicator too
+      // made every hazard window exposed and every control window not, and the
+      // case-crossover printed an odds ratio of 2,615,842,843.
+      const dupRole = [];
+      if (!missing.length) {
+        const byCol = {};
+        spec.roles.forEach((r) => { if (MAP[r.k]) { (byCol[MAP[r.k]] = byCol[MAP[r.k]] || []).push(r.label); } });
+        Object.keys(byCol).forEach((c) => { if (byCol[c].length > 1) dupRole.push({ col: c, roles: byCol[c] }); });
+      }
+      const ok = missing.length === 0 && !needCov && !needCut && !badCyc && !noUsable && !bt.length && !nt.length && !dupRole.length;
       const m = $("mapmsg");
-      if (bt.length) {
+      if (dupRole.length) {
+        m.innerHTML = dupRole.map((d) => "<strong>" + esc(d.col) + "</strong> is mapped to more than one role (" + esc(d.roles.join(", ")) + ").").join(" ") +
+          " Each role has to be a different column: a variable compared against itself carries no information, and the model fitted on it will either refuse or return an enormous number that means nothing.";
+        m.className = "mt-3 text-xs text-rose-700";
+      }
+      // Each column carries its OWN remedy. A first draft appended only nt[0].fix
+      // to the end of the whole list, so with two bad columns the reader saw the
+      // event-count advice ("map the count here") attached to the sentence about
+      // their person-time column, and the person-time remedy never appeared at all.
+      else if (nt.length) {
+        m.innerHTML = nt.map((b) => "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but " + esc(b.why) +
+          " (for example: " + esc(b.eg.join(", ")) + "). " + esc(b.fix)).join(" ");
+        m.className = "mt-3 text-xs text-rose-700";
+      }
+      else if (bt.length) {
         m.innerHTML = bt.map((b) => "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but holds " +
           esc(b.bad.join(", ")) + " — value(s) this tool cannot read as yes or no.").join(" ") +
           " A 0/1 role must be unambiguous: if the column has exactly two levels, say which one means yes under <strong>Coded flags</strong> in the structure panel above; if it has three or more (1 = yes, 2 = no, 9 = unknown, say), recode it before uploading. It is not treated as “yes” just because it is not zero.";
@@ -2354,6 +2419,39 @@ const DESIGNS = [
           if (toBin(v) == null) { const s = String(v).trim(); if (bad.indexOf(s) < 0) bad.push(s); }
         }
         if (bad.length) out.push({ label: r.label, col: col, bad: bad });
+      });
+      return out;
+    }
+
+    // The 0/1 roles have had a pre-run guard since the fourth run (binTrouble).
+    // The numeric roles had none: person-time and event counts reached R
+    // unchecked, and R's own chknum only refuses a column with NO numeric values
+    // at all — so person-time holding zeros or negatives was numeric, finite, and
+    // accepted. R re-checks these conditions and stops, but a stop lands in the
+    // black debug pre at the end of a run; a guard the user can see beats that.
+    const NUM_RULES = {
+      INTERVAL: { why: "holds value(s) that are not a positive length of time", fix: "Person-time has to be greater than zero: a zero-length interval contributes nothing to the likelihood and a negative one makes the weights negative. Fix the column, or drop those rows deliberately.", bad: (n) => !(n > 0) },
+      EVENTS: { why: "holds value(s) that are not a whole number of events", fix: "This role wants a COUNT of events in the interval. If you have a rate, map the count here and the person-time to the interval role.", bad: (n) => !(n >= 0) || Math.abs(n - Math.round(n)) > 1e-8 },
+    };
+    function numTrouble() {
+      const spec = SPEC[getDesign()]; if (!spec || !DATA.rows.length) return [];
+      // A blank is only trouble if it will still be there at run time. With "Drop
+      // rows missing a required mapped variable" ticked it will not be, and
+      // flagging it would block a file the tool is about to clean for itself;
+      // unticked, R refuses it — so the screen has to refuse it first, or the
+      // user gets a green tick and then a hard stop at the end of the run.
+      const keepBlanks = !$("c_dropmiss") || !$("c_dropmiss").checked;
+      const out = [];
+      spec.roles.filter((r) => NUM_RULES[r.k] && MAP[r.k]).forEach((r) => {
+        const col = MAP[r.k], rule = NUM_RULES[r.k], eg = [];
+        const src = MASTER || DATA.rows;
+        for (let i = 0; i < src.length && eg.length < 4; i++) {
+          const v = src[i][col];
+          if (isBlank(v)) { if (keepBlanks && eg.indexOf("(blank)") < 0) eg.push("(blank)"); continue; }
+          const n = typeof v === "number" ? v : Number(String(v).trim().replace(/,/g, ""));
+          if (!isFinite(n) || rule.bad(n)) { const s = String(v).trim(); if (eg.indexOf(s) < 0) eg.push(s); }
+        }
+        if (eg.length) out.push({ label: r.label, col: col, why: rule.why, fix: rule.fix, eg: eg });
       });
       return out;
     }
@@ -2423,7 +2521,33 @@ const DESIGNS = [
       MASTER = rows;
       $("cleaninfo").textContent = "Master file: " + rows.length + " rows (from " + before + "; " + (before - rows.length) + " removed)." +
         (keptDup ? " " + keptDup + " row(s) are identical to an earlier row and were KEPT — in this design that is repeated person-time, not a duplicate." : "");
+      // Restore the neutral class: invalidateMaster may have turned this amber.
+      $("cleaninfo").className = "text-xs text-slate-600";
       $("anacard").classList.remove("hidden"); $("expcard").classList.remove("hidden");
+    }
+
+    // The master file is a SNAPSHOT: buildMaster bakes the mapping, the cleaning
+    // ticks and — through toBin — the "which value means yes" vocabulary into
+    // MASTER, and runanalysis rebuilds only when MASTER is null. Nothing used to
+    // invalidate it, and the coding vocabulary lives in a different card from the
+    // Build button, so the most consequential switch on the page could be changed
+    // with no effect at all: flipping which value of drug_taken means yes, after
+    // building, kept shipping the OLD encoding and the case-crossover reported
+    // 2.55 where the answer the user had just asked for was 0.39 — a protective
+    // drug reported as harmful, across the null, with nothing on screen different
+    // between the two states. Anything that can change what buildMaster would
+    // produce must come through here.
+    function invalidateMaster() {
+      if (MASTER === null && LAST === null) return;
+      MASTER = null; LAST = null;
+      const ci = $("cleaninfo");
+      if (ci) { ci.textContent = "Out of date — a setting changed since this was built. Press “Build master file” again (Run analysis rebuilds it too), so the analysis uses what is on screen now."; ci.className = "text-xs text-amber-700 font-semibold"; }
+      // The results on screen were computed from the master file just discarded.
+      // The exports go with them: every download button falls back to rebuilding
+      // from a null MASTER, which would have shipped an R script describing rows
+      // that are no longer being dropped alongside an empty data file.
+      ["anaresults", "table1", "routput", "itschart", "dlfitted", "pscresults", "psdiag", "expcard"].forEach((id) => { const e = $(id); if (e) e.classList.add("hidden"); });
+      const st = $("anastatus"); if (st) st.textContent = "";
     }
 
     // What kind of variable is this, really? A covariate that is text must not be
@@ -2914,7 +3038,10 @@ const DESIGNS = [
         }
         $("routput").classList.remove("hidden"); $("routput").textContent = display || "(no output)";
         LAST = { out: display, script: script, ests: ests, t1: t1, notes: notes, fitted: fitted, meta: meta };
-      } catch (e) { setS("Error"); $("routput").classList.remove("hidden"); $("routput").textContent = "Error: " + (e && e.message ? e.message : e); }
+      // LAST was assigned only on success and never cleared on failure, so after a
+      // run that errored the screen correctly hid its results while the download
+      // buttons stayed live and still emitted the PREVIOUS run's estimates.
+      } catch (e) { LAST = null; setS("Error"); $("routput").classList.remove("hidden"); $("routput").textContent = "Error: " + (e && e.message ? e.message : e); }
       finally { $("runanalysis").disabled = false; }
     });
 
