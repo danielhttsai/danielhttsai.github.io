@@ -5876,7 +5876,9 @@ own diff, and do it before pushing if you can.
 
 #### Still open after the correction — ranked, all reproducible
 
-- **The checker's deliverables rubric has no `"na"` verdict.**
+- ~~**The checker's deliverables rubric has no `"na"` verdict.**~~ **Done
+  2026-08-23 (twenty-third run) — but its stated motivation was WRONG; read
+  the section at the bottom of this file before trusting the description below.**
   `workers/target-checker/worker.js:95-103,130-132` sends seven fixed
   deliverable names to the model and asks present/partial/absent. ITS now
   correctly commissions no flow diagram, no Table 1 and no results shell, so an
@@ -5929,11 +5931,7 @@ the real `pcOf(s)` off each live page and feeding the identical object to
      wrong about case-crossover, which turned out to be the reference
      implementation on this path; corrected there. -->
 
-<!-- CLAIM 2026-08-23 (twenty-third run): the deliverables rubric's missing "na"
-     verdict — workers/target-checker/worker.js (DELIVERABLES prompt + schema
-     enum) and the planned-outputs panel/exports in protocol-checker.astro.
-     NOT the builders, NOT the stale-select refusal path, NOT `skip` validation.
-     If you are a concurrent run reading this, take something else. -->
+
 
 ### Found 2026-08-23 by a twenty-second run — the stale-select refusal path, end to end
 
@@ -6250,3 +6248,294 @@ number fields unaffected by the `null` change; retire-by-value, Keep and
 new notices relative to the abstract in preview and `.docx`; and no duplication
 of a notice in any document. It also independently found the `?seed=paste`
 regression this run had already found and fixed.
+### Found 2026-08-23 by a twenty-third run — the deliverables rubric's missing "na" verdict
+
+**The item the twenty-first and twenty-second runs both left at the top of the
+open list, called "the sharpest well-scoped work left". It was — but its stated
+motivation was wrong, and a run that had implemented what those notes described
+would have shipped a false statement about every ITS protocol.**
+
+Three reviewers on disjoint briefs against a frozen tree: a methodologist, an
+applied analyst, and — following the twenty-first run's own hardest-won lesson —
+a third sent at this run's uncommitted diff before it was pushed.
+
+#### What the defect actually was
+
+`workers/target-checker/worker.js` sends `RESPONSE_SCHEMA` to Gemini as a
+`responseSchema`, so the deliverables enum `["present","partial","absent"]` is
+**enforced at generation** — the model could not say "not applicable" even if it
+wanted to. And the prompt did not merely leave the gap; it *instructed* the
+model to fill it wrongly:
+
+> If an item is genuinely not applicable to the design (e.g. a Kaplan-Meier
+> curve for a cross-sectional descriptive study), mark it "absent" and say so
+> in the evidence.
+
+Two sentences earlier it asks for "a concrete suggestion for partial/absent
+items". So the **documented happy path** for an inapplicable output was: a red
+chip, a count in the "Absent" tally, and a suggestion line. Observed end to
+end, in a real `.docx` with the PHDc logo on it:
+
+```
+Love plot / covariate balance — [DC2626] Absent
+Evidence: Not applicable — unadjusted descriptive study, no propensity score.
+Suggestion: Add a Love plot of standardized mean differences before and after matching.
+```
+
+That is the tool telling a researcher to add a propensity-score balance plot to
+a design that has no propensity score — in a file they email to a supervisor.
+It is not a mislabelled chip; it is a wrong instruction, and it fires for most
+descriptive, cross-sectional, SCCS and case-crossover protocols.
+
+#### The correction to the previous two runs' framing — read this before trusting the old note
+
+The open item said: ITS now correctly commissions no flow diagram, no Table 1
+and no results shell, so an ITS protocol will read "absent" on three of seven in
+its own checker; fix with an `"na"` verdict.
+
+**The premise is true and the conclusion does not follow.** The methodologist
+checked the builder and the orchestrator confirmed it independently:
+`interrupted-time-series.astro:530` does skip all three, but the four bullets
+that replace them at `:537-546` **contain the analogues** — level-change and
+slope-change estimates with CIs (the results shell), a per-period composition
+table (the Table 1), and a per-period numerator/denominator accounting
+including the periods the phase-in window removed (the flow). Marking those
+three `na` would have been a **false statement about the document**, and less
+accurate than the "absent" the three-value scale already produced.
+
+The real defect the ITS case exposes is that the seven deliverable names are
+written in the vocabulary of one design — the person-level, PS-adjusted,
+time-to-event cohort — and the other eight are judged against it. `na` is not a
+fix for that; it is a bucket for judgements the rubric should not be forcing.
+The rubric now says so explicitly, and that clause, not the new verdict, is what
+addresses ITS.
+
+**`na` still ships**, for a reason the old note missed and the methodologist
+found: `protocol-checker.astro:733-747` spends two paragraphs insisting that
+"missing" (a claim about the protocol), "not assessed" (a claim about the run)
+and "not scored" (a claim about the tool) must never be folded together — while
+`absent`, in the same file, meant both "you failed to plan this" and "your
+design cannot produce this", in red. And unlike the checklist, **the
+deliverables panel has no denominator** (`renderDeliverables` computes chip
+counts only), so the abuse channel that made `na` dangerous on the checklist
+side — where the file already carries a disclosure sentence because "a run where
+the model marked everything 'na' reads '12 of 12 met'" — is closed by
+construction here.
+
+#### What shipped
+
+`workers/target-checker/worker.js`
+
+- `"na"` added to the deliverables status enum, with a comment saying why the
+  enum is the enforcement point and naming its two client-side twins.
+- The rubric paragraph rewritten. Three things in it, in order of importance:
+  1. **"JUDGE EACH ITEM AS THIS DESIGN OWES IT"**, with the three concrete
+     substitutions spelled out (case-selection flow for cohort flow;
+     case-series or period-composition description for a baseline table by
+     group; IRR-by-risk-window profile for a survival curve), and the model
+     told to say in the evidence *which version it judged*.
+  2. **A burden of proof on `na`**: the evidence must name the design and the
+     structural feature of its **estimator** — "estimator", not "design",
+     because "the design" invites the editorial reading ("an ITS isn't that
+     kind of study") and "the estimator" forces a structural one ("there is no
+     risk set"). The document's silence is never grounds: "not needed here",
+     "not usual for this design" and "the authors did not plan one" all mean
+     absent. **When torn, choose absent.**
+  3. **Two rows barred from `na` outright** — "Primary results table (shell)"
+     and "Sensitivity-analysis outputs". Every design has a primary estimate
+     and identifying assumptions to probe. A verdict that is unavailable on
+     some rows is a verdict with a spine, and those two are precisely the rows
+     a weak protocol most benefits from escaping.
+- The worked example was deliberately changed from the old one (a KM curve for a
+  cross-sectional study — the easiest possible instance) to the SCCS
+  within-person balance case. **Models anchor on examples; give a rubric its
+  hardest legitimate case, not its softest, or the verdict over-applies.**
+
+`src/pages/tools/protocol-checker.astro`
+
+- `DELIV_META.na` — "N/A", slate, distinct from both red "Absent" and dashed
+  "Not assessed".
+- `DELIV_ALIASES` gains `na` / `n/a` / `not applicable` / `notapplicable` /
+  `inapplicable`, mirroring `STATUS_ALIASES`, and is now built on
+  `Object.create(null)`: as a plain literal, `DELIV_ALIASES["constructor"]` is
+  truthy, so a status of `constructor` or `__proto__` set the status to a
+  *function*, skipped the unrecognised-verdict branch, and was counted under a
+  key the tally never prints — **seven rows above a tally of five, with no
+  caveat at all**. Unreachable while the enum holds, which is exactly the kind
+  of guarantee that stops holding.
+- **One suggestion rule, `delivShowSuggestion`, replacing three byte-identical
+  copies** (screen, Markdown, Word) that would each have needed extending for
+  `na`. This is the copy-pasted-lookup species this file records four times.
+- **The false caveat.** `nUn` counted volunteered extras against a denominator
+  of seven: all seven standard checks answered plus two unusable extras printed
+  *"2 of the 7 planned-output checks came back without a usable verdict"* — and
+  with eight extras, *"8 of the 7"*. Now computed over the canonical rows only.
+  The absurd version was harmless because it was visibly broken; the "2 of the
+  7" version is the dangerous one because it is plausible.
+- **Extras are tagged and labelled in all three surfaces** and left out of the
+  tally. Previously a volunteered row sat unmarked among the seven in the
+  `.docx` and read as part of the checklist this tool claims to apply.
+  *H3, M5 and M6 were one bug — "extras are treated as part of the standard
+  seven" — and fixing only the caveat would have been half a rule.*
+- **A verdict with no evidence now says so.** A red "Absent" with `evidence: ""`
+  rendered a bare chip and nothing else, directly under a paragraph telling the
+  reader to read the evidence line before treating a red chip as a gap.
+- **An unrecognised verdict keeps the model's words**, the way `reconcile` at
+  `:1077-1081` already does for the identical framework case. Discarding them
+  told the researcher the check had failed when it had answered.
+- **The four verdicts are defined once, in the markup** (`#delivnote`), and both
+  exports quote it via `delivNoteText()` — the same trick `frameText()` already
+  uses. The exports previously carried their own shorter sentence that defined
+  "Absent" one way while the screen defined it another.
+
+#### The method, and what it cost — the part worth copying
+
+Three reviewers, disjoint briefs, frozen tree. The methodologist and the
+applied analyst independently reached the same top finding by opposite routes
+(one from "which of the 63 design × deliverable cells are genuinely
+inapplicable", one from "drive the panel and see what the .docx says"), and
+each found things the other never looked for. **The third reviewer, sent at
+this run's own uncommitted diff, is the one that paid for itself**: it found
+that the fix had inverted the failure mode, plus six more defects in a diff
+that had already been driven through seven scenarios, exported to `.docx`, and
+regression-tested on twelve pages. The twenty-first run's lesson holds and
+should now be treated as standing practice: **send a reviewer at your own diff
+before you push.**
+
+The finding that mattered, in one line, because it generalises far beyond this
+panel: **a rule that lives only in the prompt is not a rule.** The rubric said
+"NEVER mark these two rows na" and nothing on the page enforced it, so the
+model's disobedience produced a *grey chip with the advice deleted* — the
+failure moved from the visible half of the axis to the invisible half. When
+you add a permissive verdict, ask what it looks like when the model overuses
+it, and make that visible on screen. Over-flagging costs a reader a minute;
+under-flagging costs them the analysis.
+
+#### Verified this run, and how
+
+- The Cloudflare Worker **cannot be executed from this sandbox** — no Gemini
+  key, and it deploys separately via `wrangler deploy` (see its README), so
+  `worker.js` changes are inert until Daniel deploys. **Every claim about the
+  new rubric's effect on model behaviour is unverified and unverifiable here.**
+  What was verified is that the file parses (`node --check`) and that the
+  client half handles both the old and the new worker, in either deploy order.
+- Everything client-side was driven in Chromium against a local
+  `astro build` + `http-server`, with the POST to the worker intercepted by
+  `page.route` and fulfilled with crafted JSON. That is the technique to reuse:
+  the page has **no Turnstile** and `WORKER_URL` is hard-coded non-empty, so the
+  real `render()` path runs end to end. `#text` lives inside
+  `<details id="pastewrap">` — open it first. The response needs at least one
+  valid `items` id (from `src/data/harper.ts`) or the page refuses to render at
+  all, which is correct behaviour and will otherwise waste you ten minutes.
+- Real `.docx` files generated through the blocked-CDN route and
+  `word/document.xml` read **with the `w:color` values kept**, which is how the
+  chip colours were checked: N/A `64748B`, Absent `DC2626`, Not assessed
+  `94A3B8`.
+- States driven: `na` and its four prose spellings; both barred rows marked
+  `na` with real suggestions; all seven `na`; a bare `absent` with no evidence
+  and with `evidence: ""`; `"—"`, `"-"`, whitespace, an object and a number as
+  `suggestion`; unrecognised verdicts on canonical rows and on extras; a
+  missing `status` field; `constructor` and `__proto__` as statuses on both a
+  deliverable and a framework item; seven good answers plus two and plus eight
+  volunteered extras. Twelve tool pages re-loaded with zero `pageerror` and
+  `typeof window.PC === "object"` on all nine builders.
+- **The live site was not checked** — still blocked from this sandbox. Nobody
+  has still opened one of these `.docx` files in Microsoft Word.
+- No citations were added or changed in the shipped code. The methodologist
+  corroborated ten methodological sources by WebSearch snippets only (Crossref,
+  PubMed and the publishers remain blocked) and found one error worth
+  recording: **the quantitative-bias-analysis good-practices paper is Lash,
+  Fox, MacLehose, Maldonado, McCandless, Greenland, *IJE* 2014;43(6):1969-85 —
+  McCandless, not Poole.** Nothing in the repo cites it; this is a landmine
+  removed in advance.
+
+#### Still open, ranked — all examined this run, none manufactured
+
+- **The bar for `"present"` is a promise, not a shell.** `worker.js`, the
+  deliverables paragraph: `"present"` is defined as satisfied by *"a clear
+  statement it will be produced"*. So a protocol containing only "Baseline
+  characteristics will be presented by treatment group, and a participant flow
+  diagram will be provided" scores **Present on two rows having mocked up
+  nothing** — in a panel whose entire stated purpose is "does this protocol
+  mock these up in advance". The checklist half of the *same prompt* guards
+  against exactly this ("Mark an item 'partial' if the topic is discussed but
+  the operational definition / code list / table is missing. Weigh these
+  structured artifacts heavily") and the deliverables half has no equivalent.
+  The methodologist called this larger than the `na` question and may be right;
+  it was left because it changes what a verdict *means*, it is unverifiable
+  from this sandbox, and shipping two independent changes to model behaviour in
+  one unexecutable prompt edit is how the twenty-first run shipped an
+  inversion. **Drafted fix, one sentence:** `"present"` = *specified well
+  enough to build empty — for a table its rows, columns and cell statistic; for
+  a figure its axes, strata and what is plotted. A sentence promising the
+  output without those is "partial", not "present."* **This is the best next
+  target in the checker.**
+- **The seven deliverable descriptions are methodologically wrong in five
+  places**, all argued in full by the methodologist and none acted on:
+  (a) `Love plot / covariate balance` conflates matched with weighted SMDs —
+  Austin's 2009 paper is specific to *matched samples*, IPTW needs the
+  **weighted** standardized difference (Austin & Stuart 2015), and the item
+  omits the weight distribution, effective sample size and overlap that this
+  site's own builders already commission; (b) `Cumulative incidence /
+  Kaplan-Meier` conflates 1−KM with Aalen-Johansen under competing risks, which
+  `sequential-trial.astro:634` already gets right; (c) the sensitivity set is
+  confounding-only and wrong for five of nine designs (an E-value on an SCCS
+  bounds a threat the design has already removed) and omits negative-control
+  *exposures* and empirical calibration; (d) `Forest plot` checks a display
+  format rather than a method; (e) the results-shell measure list omits OR,
+  rate, RMST and level-change, and is **weaker than TARGET item 13 in the same
+  prompt**, so one report can score the shell Present and TARGET 13 Partial for
+  the same document. **Trap:** renaming any of them silently desynchronises the
+  client mirror `DELIVERABLE_NAMES`, and a renamed item then renders as a
+  *skipped* one. Change both files or neither.
+- **The deliverable descriptions never reach the screen.** `worker.js` holds
+  names *and* descriptions; the client mirrors names only. A reader sees
+  "Sensitivity-analysis outputs — Absent" and is never told what would have
+  counted. Checklist items have `it.hint` rendered for exactly this reason.
+  This becomes essential if the items are ever re-worded.
+- **`skip` (the per-SECTION list) is still the un-validated twin of
+  `skipOutputs`** — unchanged from the twenty-second run's list. Appending
+  `"output"` for `"outputs"` leaves the section fully present, silently, and
+  `skip` fails open into duplication with different headings. The notice
+  machinery exists; reusing it is a few lines.
+- **The framework suggestion rule is still written out three times**
+  (screen, Markdown, Word) and, unlike the deliverables one this run extracted,
+  **does not exclude `na`** — so a checklist item marked N/A still prints a
+  suggestion telling the author to satisfy it. Same extraction, one panel over.
+- **The Markdown export writes model text raw** — a newline inside `evidence`
+  promotes itself to a sibling bullet, so model text becomes report structure.
+  Site-wide in that export, not specific to this panel. The screen and the
+  `.docx` are both correctly escaped (verified).
+- **A deliverable entry with `name: ""` is dropped with no caveat**, and a
+  whitespace-only name becomes an unnamed "extra" row with a red chip.
+- The HARPER "Table 1 = milestones table" numbering question, unchanged:
+  verify `src/data/harper.ts:42` against the template before acting on it. The
+  template is unreachable from this sandbox.
+
+#### Checked and found NOT to be a problem — do not re-derive these
+
+- **`normName` is genuinely robust.** En dash, em dash, slash spacing, trailing
+  period, trailing space and case were all driven and all matched their
+  canonical row. Only genuinely *different* names ("Table 1", "KM curve") miss,
+  and those surface as labelled extras plus a caveat.
+- **Every degenerate `deliverables` fails safe**: `null`, absent, `[]`, an
+  object, and an array of strings each produce seven honest "Not assessed" rows
+  with an accurate caveat and no console error.
+- **`STCOL` covers every status the deliverables path can produce**, confirmed
+  by reading `w:color` out of a real `.docx`, including the new `na`.
+- **Deliverables never touch the conformance score.** The headline number, the
+  bar and the framework tally are built only from `byId`. A wrong deliverables
+  verdict cannot move the score — which is *why* `na` is safe here and was not
+  safe on the checklist side, where the file already carries a disclosure
+  sentence about a run that marked everything `na`.
+- **`DELIVERABLE_NAMES` is in exact character-for-character lock-step** with
+  the worker's `DELIVERABLES`.
+- **The panel never carries over a previous run's rows.**
+- `if (!rows.length)` in `renderDeliverables` is dead code — `rows` is seeded
+  from `DELIVERABLE_NAMES`, so it is never shorter than seven.
+
+#### Two environment notes
+
+`git push origin HEAD:main` again — the detached-HEAD correction still applies.
+And give scratch files a per-role prefix: three agents wrote into one scratch
+directory this run and nothing collided only because every file was prefixed.
