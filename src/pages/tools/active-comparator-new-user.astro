@@ -1542,11 +1542,18 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         const o = el.options[el.selectedIndex];
         return o ? String(o.text).trim() : "";
       };
-      const staleMsg = (x) => (x.saved === ""
+      // `many` because a single button at the foot of the panel confirms every
+      // outstanding substitution at once. Telling four separate red lines to
+      // "press the button below to confirm the one it was left at" invited a
+      // user answering the first to silently confirm three other
+      // specifications they had not read.
+      const staleMsg = (x, many) => (x.saved === ""
         ? "“" + clipTxt(x.label, 60) + "” was restored with no value at all — the draft or link it came from left it blank."
         : "“" + clipTxt(x.label, 60) + "” was saved as “" + clipTxt(x.saved, 80) + "”, which this page does not offer.")
         + " It has been set to “" + clipTxt(shownText(x.name) || x.used, 70) + "”, and that is what this protocol and the exported documents say — a specification nobody chose."
-        + " Pick the option you want, or press the button below to confirm the one it was left at.";
+        + (many
+          ? " Pick the option you want here. The button at the foot of this panel confirms ALL of the substitutions listed, not only this one."
+          : " Pick the option you want, or press the button below to confirm the one it was left at.");
 
       const writeForm = (state) => {
         const multi = new Set(["sites", "censoringPick", "covariatesPick", "subgroupsPick", "sensitivityPick", "inclusionPick", "exclusionPick", "secondaryOutcomesPick"]);
@@ -2007,8 +2014,12 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         if (!m.em) {
           // Neither branch below can be written honestly without knowing the
           // measure, and guessing one retires a bias source or invents one.
+          // No section NUMBER here. pscValidity feeds three surfaces that
+          // number their sections differently: the Markdown and the Word file
+          // both put the statistical analysis at 8, while the form on screen
+          // calls it 9 and its own 8 is confounding control. Name the field.
           out.push(["4. Whether a residual non-collapsibility gap remains cannot be stated yet",
-            "Section 8 does not name an effect measure, so this item cannot be resolved. Wan identifies non-collapsibility as an independent source of PS-calibration bias, and of the four measures this builder offers it applies to the hazard ratio and not to the risk ratio, the incidence rate ratio or the risk difference. Choose the effect measure in Section 8 and this item will say which of those two situations you are in."]);
+            "No effect measure has been chosen, so this item cannot be resolved. Wan identifies non-collapsibility as an independent source of PS-calibration bias, and of the four measures this builder offers it applies to the hazard ratio and not to the risk ratio, the incidence rate ratio or the risk difference. Set the “Effect estimate” field in the statistical-analysis section and this item will say which of those two situations you are in."]);
         } else if (m.nonCollapsible) {
           out.push(["4. Your effect measure is non-collapsible, so a residual gap remains even when surrogacy holds",
             "This protocol reports a " + m.measure + ". Wan identifies non-collapsibility of the odds and hazard ratio as an independent source of PSC bias: conditioning on a propensity score is not the same as conditioning on the covariates, and for a non-collapsible measure that changes the coefficient being estimated. So the calibrated " + m.measure + " is conditional on the gold-standard propensity score, not on baseline covariates — a subtly different estimand from the one the protocol otherwise describes. The gap shrinks as the outcome becomes rarer. In our simulation with proportional coefficients the calibrated log odds ratio still sat 0.13 below the truth, against a naive bias of +0.84. State the estimand you are reporting."]);
@@ -2024,11 +2035,15 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
       const pscRCode = (s, m) => {
         const rv = (a) => a.length ? a.map((x) => '  "' + String(x).replace(/["\\]/g, "") + '"').join(",\n") : '  # (none listed yet)';
         const link = s.pscScale === "logit" ? "link" : "response";
-        // Driven by the resolved measure, not by s.effectMeasure. It used to
-        // read `=== "HR" || !s.effectMeasure` — an unset measure was declared a
-        // survival analysis outright, so the appendix shipped coxph() while
-        // Section 8 of the same document said "(effect measure not specified)".
-        const surv = m.ratio && m.measure === "HR";
+        // `m.em`, not `m.measure` and not `s.effectMeasure`. The first attempt
+        // at this read `m.ratio && m.measure === "HR"`, which is the same thing
+        // as the `=== "HR" || !s.effectMeasure` it replaced — `measure` is
+        // `em || "HR"`, so an unset measure still resolved to a survival
+        // analysis and the appendix still shipped six coxph() calls under a
+        // document saying "(effect measure not specified)". The generated R was
+        // byte-identical before and after, and the commit that changed it said
+        // otherwise. Compare the OUTPUT, not the expression.
+        const surv = m.em === "HR";
         // One outcome model, used for the surrogacy check, the point estimate
         // and every bootstrap replicate. These used to be written out
         // separately: the point estimate was Poisson with a person-time offset
@@ -2048,11 +2063,17 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         // conservative; here the bootstrap in step 4 supplies the interval, so
         // only the point estimate is taken from this fit.
         const outcomeModel = (df, rhs) => {
+          // Refuse in R, not in a comment. The script is copied out and run, so
+          // a note above it saying the measure is unset does not stop anyone
+          // getting a hazard ratio out of it; stop() does, and names the field.
+          // The old trailing `return glm(…, family = binomial)` was unreachable
+          // — the four branches above it are exhaustive over the four options —
+          // so nothing that used to run is losing a model here.
+          if (!m.em) return 'stop("The protocol does not name an effect measure, so the outcome model is undetermined. Set the \\"Effect estimate\\" field in the builder and generate this script again.")';
           if (surv) return "coxph(Surv(time, event) ~ " + rhs + ", data = " + df + ")";
-          if (s.effectMeasure === "RD") return "glm(event ~ " + rhs + ", data = " + df + ", family = gaussian)";
-          if (s.effectMeasure === "IRR") return "glm(event ~ " + rhs + ", data = " + df + ", family = poisson(link = \"log\"), offset = log(pt))";
-          if (s.effectMeasure === "RR") return "glm(event ~ " + rhs + ", data = " + df + ", family = poisson(link = \"log\"))";
-          return "glm(event ~ " + rhs + ", data = " + df + ", family = binomial)";
+          if (m.em === "RD") return "glm(event ~ " + rhs + ", data = " + df + ", family = gaussian)";
+          if (m.em === "IRR") return "glm(event ~ " + rhs + ", data = " + df + ", family = poisson(link = \"log\"), offset = log(pt))";
+          return "glm(event ~ " + rhs + ", data = " + df + ", family = poisson(link = \"log\"))";
         };
         return [
           "## Propensity-score calibration — Stürmer et al., Am J Epidemiol 2005;162:279-89",
@@ -2104,7 +2125,7 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
           "## Lunt et al., Am J Epidemiol 2012;175:1294-1302, Table 2 footnote (g).",
           "## The three nested models use the SAME outcome model as the study, so",
           "## S is measured on the scale the calibration will actually be applied on."
-            + (s.effectMeasure === "IRR" ? " `val` needs a person-time column `pt`." : ""),
+            + (m.em === "IRR" ? " `val` needs a person-time column `pt`." : ""),
           "m0 <- " + outcomeModel("val", "treat"),
           "m1 <- " + outcomeModel("val", "treat + ps_gs"),
           "m2 <- " + outcomeModel("val", "treat + ps_gs + ps_ep"),
@@ -3034,7 +3055,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         // First, above everything: a value the page could not honour is the one
         // finding that invalidates every other line in this panel, because the
         // panel is reading a form that no longer says what the draft said.
-        staleSelects.forEach((x) => checks.push({ level: "error", msg: staleMsg(x) }));
+        staleSelects.forEach((x) => checks.push({ level: "error", msg: staleMsg(x, staleSelects.length > 1) }));
         const washR = readDays(s.washout), lbR = readDays(s.lookback), graceR = readDays(s.grace);
         const wash = washR.days || 0, lb = lbR.days || 0, grace = graceR.days || 0;
         // Name the window the protocol is declining to state, and why. A
@@ -3095,7 +3116,7 @@ _Drafted with the AsPEN protocol builder (${today})._
           if (m.surroVerdict === "p-ok") checks.push({ level: "info", msg: "The surrogacy p-value does not reject, which is weak evidence. Compute S from the same models and judge on its magnitude." });
           if (m.surroVerdict === "untested") checks.push({ level: "warn", msg: "Surrogacy has not been measured. Your validation data have outcomes, so compute S — of the outcome information carried by both propensity scores, the percentage carried by the gold-standard score alone (Lunt 2012) — and enter it in Section 8b. Wan (2024) shows PS calibration is generally biased unless surrogacy holds." });
           if (m.surroVerdict === "untestable") checks.push({ level: "warn", msg: "Surrogacy cannot be measured because the validation dataset has no outcomes. This is the cross-sectional-validation setting Lunt et al. (2012) address, and their answer is to present PS calibration as a bias analysis over a range for the unmeasured confounder's outcome association rather than as a point correction." });
-          if (!m.em) checks.push({ level: "warn", msg: "PS calibration is enabled but Section 8 names no effect measure, so this panel cannot say whether Wan's non-collapsibility bias applies to you — it applies to the hazard ratio and not to the risk ratio, the incidence rate ratio or the risk difference. The generated R also has to assume an outcome model; choose the measure and both will follow it." });
+          if (!m.em) checks.push({ level: "warn", msg: "PS calibration is enabled but no effect measure has been chosen, so this panel cannot say whether Wan's non-collapsibility bias applies to you — it applies to the hazard ratio and not to the risk ratio, the incidence rate ratio or the risk difference. The generated R also has to assume an outcome model. Set the “Effect estimate” field and both will follow it." });
           else if (m.nonCollapsible) checks.push({ level: "info", msg: "You are reporting a " + m.measure + ", which is non-collapsible. Wan (2024) identifies this as an independent source of PS-calibration bias: the calibrated estimate is conditional on the gold-standard propensity score, not on baseline covariates, so it is a slightly different estimand. The gap narrows as the outcome becomes rarer — state which estimand you report." });
           if (pscImport && pscImport.ageDays !== null && pscImport.ageDays !== undefined && pscImport.ageDays > 30) checks.push({ level: "info", msg: "The imported calibration handoff was generated " + pscImport.ageDays + " days ago. If the covariate list has moved since, α₁ and α₂ no longer belong to it — re-export from RWE Studio and import again." });
           if (pscImport && !pscImport.varsApplied) checks.push({ level: "info", msg: "The calibration coefficients were imported but the covariate split was not taken from the handoff. The method assumes PS_ep uses the same C the coefficients were fitted from — confirm the two agree." });
@@ -3126,7 +3147,24 @@ _Drafted with the AsPEN protocol builder (${today})._
         host.appendChild(b);
       };
 
+      // Retire by VALUE, not by event. Listening for `change` missed every
+      // control this page writes to itself: the "📚 Pick from library" button
+      // beside the confounding-control method does `el.value = …; render()`,
+      // and dragging the follow-up handle on the diagram sets maxFollowupChoice
+      // to "custom" — neither fires `change`. So the red line survived, and
+      // then described the option the user had just picked with the page's own
+      // picker as "a specification nobody chose". Anything that moves the
+      // select off the value it was left at is an answer, however it moved.
+      const retireAnswered = () => {
+        if (!staleSelects.length) return;
+        staleSelects = staleSelects.filter((x) => {
+          const el = form.elements[x.name];
+          return !el || !el.options || el.value === x.used;
+        });
+      };
+
       const render = () => {
+        retireAnswered();
         const state = readForm();
         preview.textContent = buildMarkdown(state);
         renderFeasibility(state);
@@ -3153,12 +3191,6 @@ _Drafted with the AsPEN protocol builder (${today})._
       render();
 
       form.addEventListener("input", render);
-      // Answering the question retires it. Handled before render() so the panel
-      // this render draws is already without the line.
-      form.addEventListener("change", (e) => {
-        const n = e.target && e.target.name;
-        if (n && staleSelects.some((x) => x.name === n)) staleSelects = staleSelects.filter((x) => x.name !== n);
-      });
       form.addEventListener("change", render);
 
       // Timeline preset buttons + numeric chip presets
