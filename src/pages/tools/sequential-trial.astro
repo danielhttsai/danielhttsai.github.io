@@ -587,7 +587,17 @@ const SENSITIVITY = [
       // The flow diagram and the results table are NOT dropped. The enrolment
       // bullet below is a tally, not an attrition diagram, and nothing else
       // says how the source population became the eligible one.
-      plannedOutputs: [{ key: "table1", text: "Baseline characteristics by arm WITHIN trial, for each of a pre-specified set of origins — not pooled across trials, where a patient may enter many and may appear in both columns." }, "Number of trials, and the number of patients and of patient-trial records enrolled in each — with the distribution of how many trials each patient enters.", "Per-trial and pooled effect estimates, the per-trial estimates read as a descriptive check rather than as independent studies.", "Within-trial covariate-balance (SMD) diagnostics, before and after weighting or matching.", "Within-trial positivity diagnostics: the number assigned to each arm at every origin, the propensity-score overlap, and the number and size of extreme weights, with any truncation rule stated in advance.", "Cumulative-incidence or survival curves by arm, stated as cause-specific or as accounting for competing risks."],
+      plannedOutputs: [{ key: "table1", text: "Baseline characteristics by arm WITHIN trial, for each of a pre-specified set of origins — not pooled across trials, where a patient may enter many and may appear in both columns." }, "Number of trials, and the number of patients and of patient-trial records enrolled in each — with the distribution of how many trials each patient enters.", "Per-trial and pooled effect estimates, the per-trial estimates read as a descriptive check rather than as independent studies.", "Within-trial covariate-balance (SMD) diagnostics, before and after weighting or matching.", "Within-trial positivity diagnostics: the number assigned to each arm at every origin, the propensity-score overlap, and the number and size of extreme weights, with any truncation rule stated in advance.", "Cumulative-incidence or survival curves by arm, stated as cause-specific or as accounting for competing risks.",
+        // The shared results bullet commissions "THE effect estimate",
+        // singular. With both estimands chosen, the study-size section three
+        // sections up says the opposite in as many words — "Two figures are
+        // needed, not one: the intention-to-treat and per-protocol analyses do
+        // not have the same precision" — so the two sections named different
+        // numbers of primary results in one document. Positive test against a
+        // value the <select> offers, never a not-equal: a blanked or stale
+        // dropdown falls through to the shared bullet, which is right for the
+        // single-estimand case it was written for.
+        ...(s.estimand === "both" ? [{ key: "results", text: "Primary-results table — the intention-to-treat and the per-protocol estimate side by side, each with its own 95% confidence interval. They do not have the same precision and neither substitutes for the other." }] : [])],
     });
 
     // One list, shared by the Markdown and Word exports so they cannot drift.

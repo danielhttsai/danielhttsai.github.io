@@ -5686,35 +5686,46 @@ after.
 
 #### The mechanism
 
-`skipOutputs: ["flow","table1","results"]` on `pcOf`. Keys, not indices. Two
-guards, both driven and observed firing:
+The three shared bullets are keyed `flow` / `table1` / `results`, and a builder
+says one of **two different things** about one of them. The distinction is the
+whole design and the first version of this got it wrong:
+
+- **"I print this better myself"** → give the bullet the slot it fills:
+  `plannedOutputs: [{ key: "flow", text: "Case-selection flow diagram …" }, …]`.
+  It renders **in that slot's position**, and the bullet's identity is written
+  in exactly one place.
+- **"this design cannot produce this at all"** → `skipOutputs: ["flow", …]`.
+  After the correction below this is **interrupted-time-series alone**.
+
+Guards, all driven through `PC.tailMd` and observed firing:
 
 - An **unrecognised key prints a `⚠ PROTOCOL-GENERATOR DEFECT` bullet into the
-  document** naming itself. `"table-1"` for `"table1"` is one keystroke, and
-  without this it omits nothing and says nothing — the exact species this file
-  has recorded three times (the three-entry map behind a four-option select;
-  the `/negative control/` regex that never matched `Negative-control
-  outcome`). A `console.warn` would not have been enough.
+  document** naming itself — for a bad `skipOutputs` key, a bad slot `key`, and
+  a `skipOutputs` that is not a list. `"table-1"` for `"table1"` is one
+  keystroke, and without this it omits nothing and says nothing — the exact
+  species this file has recorded three times (the three-entry map behind a
+  four-option select; the `/negative control/` regex that never matched
+  `Negative-control outcome`). A `console.warn` would not have been enough.
 - An **empty list refuses in words** rather than leaving `tailMd` printing a
-  bare heading. Not reachable from any builder today; it became reachable the
-  moment all three shared bullets could be dropped.
-- Ordering changed too, and this was a defect this run *introduced and caught
-  by rendering rather than by reading its own diff*: shared-then-own concat
-  reads correctly only while all three shared bullets survive. Drop the middle
-  one and the results table floats above a Table 1 not yet commissioned. Order
-  is now flow, table1, the design's own, results-last.
+  bare heading, and **that sentence is pushed before the defect notice**, since
+  the two co-occur and the notice would otherwise crowd out the one line
+  telling the researcher the section is unfinished.
+- Order is flow, table1, the design's own, **results last whatever is dropped**.
+
+**Read the correction below before trusting any of this: the first three
+commits shipped `skipOutputs` for six builders and it was the wrong shape.**
 
 #### Per design — the table a future run should not have to re-derive
 
-| builder | dropped | why |
+| builder | what it does now | why |
 |---|---|---|
-| case-control | all three | its own three are strictly better; the generic results bullet lost the sampling-scheme naming, which is the one discipline this design cannot do without |
-| SCCS | flow | case-only: nobody is followed, cases are ascertained. Table 1 and results **kept** — nothing duplicates them |
-| case-crossover | flow | same |
-| ITS | all three | the unit is a calendar period; there is no cohort and no day 0. Replaced with a per-period numerator/denominator table and a period-composition figure |
-| sequential-trial | table1 | a patient enters a trial at every origin, so a pooled by-arm table double-counts with person-varying multiplicity **and its two columns share people** |
-| ACNU | its own flow bullet; shared table1 only on the PS branch | the shared flow text says more; under the four non-PS methods its own bullet is a balance table, not a Table 1 |
-| trend-in-trend | its own last bullet | person-level at stage 1, so the shared flow and Table 1 are right; the bare "Effect estimate with 95% CI." was the duplicate |
+| case-control | **fills** all three slots | its own three are strictly better; the generic results bullet lost the sampling-scheme naming, which is the one discipline this design cannot do without |
+| SCCS | **fills** `flow` | case-only: nobody is followed, cases are ascertained. Table 1 and results **kept** — nothing duplicates them |
+| case-crossover | **fills** `flow` | same |
+| ITS | **skips** all three | the unit is a calendar period; there is no cohort and no day 0. Replaced with a per-period numerator/denominator table and a period-composition figure. **The only builder that genuinely skips.** |
+| sequential-trial | **fills** `table1`; **fills** `results` only when `estimand === "both"` | a patient enters a trial at every origin, so a pooled by-arm table double-counts with person-varying multiplicity **and its two columns share people**. With both estimands chosen, the study-size section says "Two figures are needed, not one" while the shared results bullet commissioned "THE effect estimate" |
+| ACNU | **fills** `table1` on the PS branch only; deleted its own weaker flow bullet | the shared flow text says more; under the four non-PS methods its own bullet is a balance table, not a Table 1, so it stays a plain string and the shared Table 1 survives beside it |
+| trend-in-trend | deleted its own last bullet | person-level at stage 1, so the shared flow and Table 1 are right; the bare "Effect estimate with 95% CI." was the duplicate |
 | clone-censor-weight | **nothing** | the one builder the shared default fits |
 | descriptive-analysis | **nothing** | already fixed in a previous run |
 
@@ -5820,3 +5831,90 @@ The ship loop's detached-HEAD correction from the twentieth run is right and
 was needed again: `git push origin HEAD:main`. Also, **a subagent may overwrite
 your scratch files** — one reviewer rewrote a script of the orchestrator's that
 happened to share a name. Give scratch scripts distinct names per role.
+
+#### Correction — the second reviewer arrived late and broke this run's own diff
+
+The applied analyst reported **after** the first three commits had shipped. It
+re-verified against the committed code and found four defects in them. All four
+are fixed in the follow-up commit; they are recorded because the *shape* of
+each is more instructive than the fix.
+
+1. **The fix for an inversion introduced an inversion.** The ordering rule
+   anchored `results` last so it could not float above a dropped Table 1 — and
+   anchored nothing at the front, so dropping `flow` sank the replacement into
+   the trailing block. SCCS and case-crossover tabulated the baseline
+   characteristics of a population one bullet *before* saying how it was
+   ascertained. **Anchoring one end of a list is half a rule.**
+2. **The cause was saying one thing in two places** — `skipOutputs` deleting
+   the slot here, the replacement text appended over there, nothing connecting
+   them. Hence the `{ key, text }` slot form. This also deleted the ACNU
+   comment claiming "one boolean, read twice" that sat above *two copies* of
+   `NO_PS_METHODS.indexOf(...)`: harmless at runtime, but a guarantee the next
+   editor would have believed. **A comment asserting an invariant the code does
+   not enforce is worse than no comment.**
+3. **`skipOutputs: "flow"` without the brackets was silently ignored** — the
+   likeliest authoring slip of all, and the *only* malformed input that landed
+   back in the do-nothing-say-nothing behaviour the mechanism exists to
+   abolish. A guard that catches misspelled keys but not the wrong *type* is
+   not a guard. Now reported like a bad key.
+4. **The defect notice was pushed before the empty-list check**, so a builder
+   that dropped every slot AND misspelled a key produced a section whose only
+   content was the bug report — the refusal telling the researcher the section
+   was unfinished crowded out by the notice. **Order your guards so the one
+   addressed to the user wins.**
+
+**The lesson for future runs is the method, not the four bugs**: three commits
+had been rendered, `.docx`-checked, driven through fourteen select states and
+pushed, and a reviewer sent at *that diff* still found four defects — one of
+them the same species as the bug being fixed. Send the second reviewer at your
+own diff, and do it before pushing if you can.
+
+#### Still open after the correction — ranked, all reproducible
+
+- **The checker's deliverables rubric has no `"na"` verdict.**
+  `workers/target-checker/worker.js:95-103,130-132` sends seven fixed
+  deliverable names to the model and asks present/partial/absent. ITS now
+  correctly commissions no flow diagram, no Table 1 and no results shell, so an
+  ITS protocol *this tool generated* will read absent on three of seven in
+  *this tool's own checker*. `protocol-checker.astro:229` mitigates exactly
+  this but names only the Love plot and the Kaplan–Meier curve. **Small,
+  well-scoped, and the toolchain now visibly disagrees with itself on one
+  design — the best next target.** Fix by extending that sentence to aggregate
+  designs and/or adding an `"na"` verdict; the two files are already documented
+  as needing to stay in lock-step.
+- **`skip` (the per-SECTION list) is the un-validated twin of `skipOutputs`.**
+  `ProtocolCommon.astro` filters `tailSections` on it with no key check.
+  Verified: appending `"output"` (for `"outputs"`) to any builder's `skip`
+  leaves the section fully present, silently. Nothing has drifted yet — every
+  current entry was checked character-for-character — but `skip` **fails open
+  into duplication with different headings**: ACNU prints its own
+  `## 9. Sample size and power`, so one slip yields a protocol with two
+  sample-size sections under two headings. The notice machinery now exists;
+  reusing it is a few lines.
+- **ACNU and descriptive-analysis do not carry their stale-select refusal into
+  the exported document.** Only ITS, sequential-trial and trend-in-trend define
+  `staleMsgsDoc`. Reproduced: a `?seed=` carrying `psMethod: "tmle-super-learner"`
+  silently becomes `iptw`; the checks panel says so, and the Markdown and Word
+  say "Stabilised IPTW with weight truncation" and commission the Love-plot
+  Table 1 — a PS method and a Table 1 nobody chose, in a file a co-investigator
+  receives with no trace of the substitution. ACNU is the busiest builder on the
+  site with thirteen selects. **This is the largest of the three.**
+- **CCW's section now ends on the generic "the effect estimate"** because
+  results-last moved it there, immediately after four bullets that carefully
+  name the RMST / risk-difference contrast — in the one file whose whole design
+  is refusing to name an unnamed measure. Pre-existing text, newly positioned.
+  Cosmetic, but CCW is exactly the builder where it grates.
+- The HARPER "Table 1 = milestones table" numbering question, unchanged from
+  above: verify `src/data/harper.ts:42` against the template first.
+
+#### Verified in the correction pass, and how
+
+Nine states driven through `PC.tailMd` (bare-string `skipOutputs`, misspelled
+skip key, misspelled slot key, all-dropped-plus-typo, all-dropped-clean, slot
+fills rendering in position regardless of array order, blank slot text, plain
+strings only, `null`); all fourteen ACNU `psMethod` states re-checked; all four
+sequential-trial `estimand` states including the select blanked; nine builders
+re-rendered with zero `pageerror`; five `.docx` regenerated and read. The
+analyst separately proved Markdown and Word cannot diverge here by capturing
+the real `pcOf(s)` off each live page and feeding the identical object to
+`tailMd` and `tailDocx` — byte-identical on all nine.
