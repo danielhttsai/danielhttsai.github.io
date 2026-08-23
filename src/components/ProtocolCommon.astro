@@ -297,24 +297,57 @@
       }).filter(Boolean);
     }
 
+    /* Two claims live here and only one of them is the tool's to make.
+
+       The EMPTY case is a statement about this document — a log is kept here
+       and it is empty — and it stays exactly as it was, for the reason at the
+       top of this block: without it, "no log kept" and "no changes yet" are
+       indistinguishable in a finished protocol.
+
+       The NON-EMPTY case used to assert a history: "has been amended 3 times
+       since its original version". The tool cannot count amendments; it can
+       count rows, and the two come apart constantly. Recording the original
+       version as row 1 is ordinary practice and made the prose say "amended
+       1 time" about a table whose only row was the original version. A
+       hand-off payload with a newline inside its Reason cell splits into three
+       rows, so one amendment was reported as three, with the continuation text
+       sitting in the Version date column. The sentence now describes the table
+       standing beneath it, which is the only thing it can actually see — and
+       it names the columns rather than promising every row has filled them,
+       because a row needs only one non-empty cell to be exported.
+
+       The version string used to be appended to BOTH sentences as a
+       parenthetical. On the four builders that have a Version box that printed
+       "This is the original version of the protocol (v2.0 · 2026-08-01); no
+       amendments have been made." — a sentence carrying its own refutation, on
+       a stock page load with no link and no draft involved, and on two of those
+       four (ACNU and descriptive-analysis) there is no amendments editor with
+       which to make it true. It was also pure duplication: every builder with a
+       version field already prints it in the document's own header block. */
     function amendmentIntro(s, rows) {
-      var v = nz(s && s.version, fromForm("version"));
-      var at = v ? " (" + v + ")" : "";
       if (!rows.length) {
-        return "This is the original version of the protocol" + at + "; no amendments have been made. " +
+        return "This is the original version of the protocol; no amendments have been made. " +
           "Any later change is recorded here as a numbered amendment with its date, the version it produced, " +
           "the section of the protocol affected, what changed, and the reason for the change.";
       }
-      return "The protocol" + at + " has been amended " + rows.length + (rows.length === 1 ? " time" : " times") +
-        " since its original version. Each amendment is listed below with its date, the version it produced, " +
-        "the section of the protocol affected, what changed, and the reason for the change.";
+      return "The amendment table below records " + rows.length + (rows.length === 1 ? " entry" : " entries") +
+        ". Its columns are the date of the change, the version it produced, the section of the protocol " +
+        "affected, what changed, and the reason for the change; a cell the author left blank is shown as an em dash.";
     }
 
     function amendmentsMd(s) {
       var rows = amendmentRows(s);
       var out = "## Amendments and updates\n\n" + amendmentIntro(s, rows);
       if (!rows.length) return out + "\n";
-      var esc = function (c) { return String(c || "—").replace(/\|/g, "\\|"); };
+      // Escape the backslash too, not just the pipe. The comment at the top of
+      // this block promises a typed pipe survives end to end, and it did not:
+      // a cell holding the four characters a\|b was emitted as a\\|b, which a
+      // Markdown reader parses as an escaped backslash followed by a LIVE
+      // column delimiter — the row grew a seventh cell, the renderer truncated
+      // to the header's six, and "b" vanished with no trace. The .docx needs no
+      // escaping and printed the cell correctly, so the two exports of one
+      // protocol disagreed about the table's shape.
+      var esc = function (c) { return String(c || "—").replace(/([\\|])/g, "\\$1"); };
       out += "\n\n| No. | " + AM_COLS.join(" | ") + " |\n|---|" + AM_COLS.map(function () { return "---"; }).join("|") + "|\n";
       rows.forEach(function (r, i) { out += "| " + (i + 1) + " | " + r.map(esc).join(" | ") + " |\n"; });
       return out;
@@ -390,6 +423,10 @@
         'because "no amendments yet" and "no log kept" look identical in a finished document. Leave this empty for version 1 and the protocol states ' +
         'that it is the original version. Add a row each time you change the protocol after circulating it.</p>' +
         '<div data-pc-am-rows class="space-y-2"></div>' +
+        // The notes live outside the rows container so they can be rewritten on
+        // every keystroke without rebuilding the inputs, which would take the
+        // caret with it.
+        '<div data-pc-am-note class="space-y-2"></div>' +
         '<button type="button" data-pc-am-add class="text-xs font-semibold text-brand-700 border border-brand-300 hover:bg-brand-50 px-3 py-1.5 rounded transition">+ Add an amendment</button>' +
         "</div>";
 
@@ -398,11 +435,34 @@
       if (anchor && anchor.parentNode === form) form.insertBefore(box, anchor); else form.appendChild(box);
 
       var rowsEl = box.querySelector("[data-pc-am-rows]");
+      var noteEl = box.querySelector("[data-pc-am-note]");
       var lastWritten = null;
       var INPUT = "border border-slate-300 rounded px-2 py-1.5 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
 
+      /* `model` is the panel's own list of rows and is the thing the editor
+         edits. It is NOT re-derived from the field on every interaction, and
+         that distinction is the whole reason this variable exists: the field
+         legitimately drops rows that are still entirely blank, so re-reading it
+         made a half-finished row disappear underneath the user. "+ Add an
+         amendment" pressed twice before typing anything used to leave one row,
+         because the second press re-read a field the first press had written
+         nothing into. The field remains the single source of truth for EXPORT;
+         the model is the single source of truth for what is on SCREEN, and
+         `sync` is the one place the model is rebuilt from the field. */
+      var model = [];
+
       var readRows = function () {
         return String(field.value || "").split(/\r?\n/).filter(function (l) { return l.trim(); }).map(amSplit);
+      };
+
+      // Can an <input type="date"> actually display this string? Anything else
+      // it silently discards, showing an empty box for a value that exports.
+      var dateShowable = function (raw) {
+        if (raw === "") return true;
+        var probe = document.createElement("input");
+        probe.type = "date";
+        probe.value = raw;
+        return probe.value === raw;
       };
       var writeRows = function (rows) {
         // Drop rows the user left entirely blank, so an accidental "+ Add"
@@ -413,6 +473,42 @@
         lastWritten = text;
         form.dispatchEvent(new Event("input", { bubbles: true }));
       };
+      /* The notes have to be recomputed on every KEYSTROKE, not only on a
+         repaint. The first attempt at this ran once per paint, and because
+         typing calls writeRows without repainting, the very first amendment
+         anyone recorded — add a row, type into it — left "This row is still
+         empty…" on screen above a document that already carried the row. That
+         is the same screen-disagrees-with-document defect this panel is
+         supposed to remove, pointed the other way. */
+      var paintNotes = function (rows) {
+        noteEl.innerHTML = "";
+        var willExport = rows.filter(function (r) {
+          return r.some(function (c) { return String(c == null ? "" : c).trim(); });
+        }).length;
+        if (!willExport) {
+          var none = document.createElement("p");
+          none.className = "text-xs text-slate-500 italic";
+          // This branch is only reached when EVERY row on screen is empty, so
+          // the count of rows is the count of empty ones.
+          none.textContent = rows.length === 0
+            ? "No amendments — the protocol will state that this is the original version."
+            : (rows.length === 1 ? "This row is still empty" : "These " + rows.length + " rows are still empty")
+              + ", so the protocol states that this is the original version until you fill something in.";
+          noteEl.appendChild(none);
+        }
+        var unshowable = rows.filter(function (r) {
+          return !dateShowable(String(r[0] == null ? "" : r[0]));
+        }).length;
+        if (unshowable) {
+          var warn = document.createElement("p");
+          warn.className = "text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded px-3 py-2";
+          warn.textContent = unshowable === 1
+            ? "One Version date is not a calendar date, so it is shown in a plain box instead of the date picker. It is exported exactly as written — replace it with a yyyy-mm-dd date if that is not what you want."
+            : unshowable + " Version dates are not calendar dates, so they are shown in plain boxes instead of the date picker. They are exported exactly as written — replace them with yyyy-mm-dd dates if that is not what you want.";
+          noteEl.appendChild(warn);
+        }
+      };
+
       var paint = function (rows) {
         rowsEl.innerHTML = "";
         rows.forEach(function (r, i) {
@@ -420,12 +516,40 @@
           row.className = "grid gap-1.5 sm:grid-cols-[8rem_6rem_1fr_1.4fr_1.4fr_auto] items-start";
           AM_COLS.forEach(function (label, j) {
             var inp = document.createElement("input");
-            inp.type = j === 0 ? "date" : "text";
             inp.className = INPUT;
-            inp.value = r[j] || "";
             inp.placeholder = label;
             inp.setAttribute("aria-label", label + ", amendment " + (i + 1));
-            inp.addEventListener("input", function () { r[j] = inp.value; writeRows(rows); });
+            var raw = r[j] == null ? "" : String(r[j]);
+            if (j === 0) {
+              /* An <input type="date"> runs the HTML value-sanitisation
+                 algorithm: a value that is not a valid yyyy-mm-dd string is
+                 discarded outright and the control reads back "". Nothing here
+                 ever copies the DOM back into `rows` — writeRows serialises the
+                 array, and only the edited cell is copied back by the listener
+                 below — so the original string SURVIVES and is exported. A
+                 saved draft or a ?seed= link carrying "04/03/2026" therefore
+                 showed an EMPTY date box on screen while the Word file printed
+                 04/03/2026, and a row sitting between two dated rows read as
+                 one the sender had forgotten to date. Nothing was lost and
+                 nothing errored; the screen and the document simply disagreed.
+                 So show the value in a control that can hold it and mark it,
+                 rather than leaving the user to infer a date is missing from a
+                 document that has one. Typing a real date here restores the
+                 picker on the next repaint. */
+              if (dateShowable(raw)) {
+                inp.type = "date";
+                inp.value = raw;
+              } else {
+                inp.type = "text";
+                inp.value = raw;
+                inp.className = INPUT + " border-amber-400 bg-amber-50 text-amber-900";
+                inp.title = "Not a calendar date, so the date picker cannot show it. It is exported exactly as written.";
+              }
+            } else {
+              inp.type = "text";
+              inp.value = raw;
+            }
+            inp.addEventListener("input", function () { r[j] = inp.value; writeRows(rows); paintNotes(rows); });
             row.appendChild(inp);
           });
           var del = document.createElement("button");
@@ -437,19 +561,26 @@
           row.appendChild(del);
           rowsEl.appendChild(row);
         });
-        if (!rows.length) {
-          var none = document.createElement("p");
-          none.className = "text-xs text-slate-500 italic";
-          none.textContent = "No amendments — the protocol will state that this is the original version.";
-          rowsEl.appendChild(none);
-        }
+        // Say what the EXPORT will say, not what the screen happens to hold.
+        paintNotes(rows);
       };
-      var sync = function () { var rows = readRows(); lastWritten = field.value; paint(rows); };
+      /* The one place the model is rebuilt from the field — a builder that
+         resets or restores writes the field directly, and this is how the
+         editor catches up with it. */
+      var sync = function () { model = readRows(); lastWritten = field.value; paint(model); };
 
+      /* The new row starts EMPTY. It used to be prefilled with today's date,
+         which quietly defeated the invariant writeRows states in its own
+         comment three lines up: a row carrying a date is not blank, so the
+         filter kept it, and one exploratory click on "+ Add an amendment" —
+         exactly what a first-time visitor does to see what the panel is for —
+         put "The protocol has been amended 1 time" and a row of four em dashes
+         into the exported protocol. A reviewer reads that as an undocumented
+         protocol change. Today's date is one field's worth of typing; an
+         amendment nobody made is not recoverable once the file is sent. */
       box.querySelector("[data-pc-am-add]").addEventListener("click", function () {
-        var rows = readRows();
-        rows.push([new Date().toISOString().slice(0, 10), "", "", "", ""]);
-        writeRows(rows); paint(rows);
+        model.push(["", "", "", "", ""]);
+        writeRows(model); paint(model);
       });
       // A builder that resets or restores the form writes the hidden field
       // directly. Rebuild if that happened behind the editor's back, so the
