@@ -223,27 +223,109 @@ const SENSITIVITY = [
     const MV = (n) => [...form.querySelectorAll('[name="' + n + '"]:checked')].map((c) => c.value);
     const mergeList = (pick, custom) => [...(pick || []), ...String(custom || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean)];
     const or = (s, d) => (s && s.length ? s : d);
+    // A user's own sentence is inserted directly before boilerplate in two
+    // places. The placeholders ("e.g. Proportion of the population dispensed
+    // the exposure in the period") carry no full stop, so nobody types one, and
+    // both exports read "Proportion dispensed A strong time trend in exposure
+    // is a requirement…" — two sentences run together.
+    const sent = (t) => { const v = String(t == null ? "" : t).trim(); return v && !/[.!?:;]$/.test(v) ? v + "." : v; };
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-    // A draft saved before the unsupported estimator was removed still carries
-    // estimator:"logistic". Assigning that to a <select> that no longer offers it
-    // leaves the select showing nothing, and readForm()'s `|| "ml"` fallback then
-    // prints a protocol asserting the maximum-likelihood estimator — a different
-    // analysis from the one the user's draft named, swapped in silently. Capture
-    // the stale value on restore (before the first render overwrites the saved
-    // state) and say so on screen instead.
-    let staleEstimator = "";
-    const KNOWN_ESTIMATORS = [...form.querySelectorAll('[name="estimator"] option')].map((o) => o.value);
-    const noteStale = (obj) => {
-      if (obj && typeof obj === "object" && obj.estimator && KNOWN_ESTIMATORS.indexOf(String(obj.estimator)) < 0) {
-        staleEstimator = String(obj.estimator);
-      }
-    };
+    // Check messages quote what the user typed, and once they travel into the
+    // Markdown as a blockquote a newline ENDS the blockquote — a ?seed= link
+    // carrying "X\n\n## 99. Forged section\n" would put a forged heading between
+    // the banner and §1. The form's own inputs cannot hold a newline; a saved
+    // draft or a shared link can. So flatten before quoting, and cap any single
+    // quoted value.
+    const oneLine = (m) => String(m == null ? "" : m).replace(/[\r\n\u2028\u2029]+/g, " ").replace(/\s{2,}/g, " ").trim();
+    const clip = (t, n) => { const v = oneLine(t); return v.length > n ? v.slice(0, n) + "…" : v; };
 
+    // ONE reader for both counts, because four surfaces consume them — the
+    // protocol prose, the checks panel, the diagram caption and the drawing —
+    // and they used to disagree. `<input type="number">` accepts "1e3" as a
+    // valid value (it is a legal HTML floating-point number), so nothing on
+    // screen objected while the prose said "1e3 periods", the panel said
+    // "Only 1", and the picture drew 3.
+    //
+    // Decimal only. Number() also reads "0x10" as 16 and "0b11" as 3, and
+    // nobody typing those into a box labelled "Number of CPE strata" means
+    // sixteen or three — that is a guess dressed up as a reading. "1e3" IS a
+    // number and reads as 1000, matching how the other builders read their day
+    // counts. A fraction is refused: there is no such thing as 3.7 strata.
+    // A negative number reads perfectly well — it is negative, which is a
+    // different objection, and saying "could not be read" about "-5" would
+    // state a false reason for a true refusal.
+    const readNum = (raw) => {
+      const t = String(raw == null ? "" : raw).trim();
+      if (!t) return { raw: t, n: null, state: "blank" };
+      if (!/^[+-]?(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i.test(t)) return { raw: t, n: null, state: "bad" };
+      const v = Number(t);
+      if (!isFinite(v)) return { raw: t, n: null, state: "bad" };
+      if (!Number.isInteger(v)) return { raw: t, n: null, state: "bad", why: "fraction" };
+      if (v < 0) return { raw: t, n: null, state: "bad", why: "negative" };
+      return { raw: t, n: v, state: "ok" };
+    };
+    const numText = (p, unit) => p.state === "ok" ? String(p.n)
+      : p.state === "blank" ? "(not specified)"
+      : "(not specified — “" + clip(p.raw, 40) + "” " + (p.why === "negative"
+          ? "is a negative " + unit
+          : p.why === "fraction" ? "is not a whole " + unit : "could not be read as a whole " + unit) + ")";
+    const nPer = (s) => readNum(s.nperiods);
+    const nStr = (s) => readNum(s.nstrata);
+    const perText = (s) => numText(nPer(s), "number of calendar periods");
+    const strText = (s) => numText(nStr(s), "number of CPE strata");
+
+    // A saved draft or a ?seed= link can name a value a <select> no longer
+    // offers — or no value at all. Either way the select lands on
+    // selectedIndex = -1, contributes nothing to FormData, and readForm's
+    // `|| "yearly"` / `|| "OR"` substitutes silently; then the first render's
+    // autosave writes the substitution back over the draft, so the user's own
+    // value is gone within a second of page load. This page already had that
+    // machinery for `estimator` alone. Every select needs it, and the empty
+    // string most of all, because it is the likeliest way one ends up blank.
+    const STALE_KEY = "__staleSelects";
+    const SELECTS = [...form.querySelectorAll("select")].map((el) => ({
+      name: el.name,
+      label: (el.closest("label") ? (el.closest("label").querySelector("span") || {}).textContent : "") || el.name,
+      options: [...el.options].map((o) => o.value),
+      fallback: (([...el.options].find((o) => o.defaultSelected) || el.options[0] || {}).value) || "",
+    }));
+    let staleSelects = [];
+    const noteStale = (obj) => {
+      if (!obj || typeof obj !== "object") return;
+      SELECTS.forEach((sel) => {
+        const v = obj[sel.name];
+        if (v == null) return;
+        if (sel.options.indexOf(String(v)) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
+          staleSelects.push({ name: sel.name, label: String(sel.label).trim(), saved: String(v), used: sel.fallback });
+        }
+      });
+    };
+    // The estimator keeps its own message: this page removed a specific
+    // estimator ("logistic-regression approximation") because it appears
+    // neither in Ji et al 2017 nor in the TrendInTrend package, and a user
+    // whose draft named it deserves to be told that rather than a generic note.
+    const staleMsg = (x) => x.name === "estimator"
+      ? "Your saved draft selected the estimator “" + clip(x.saved, 80) + "”, and this page no longer offers it. It described a logistic-regression approximation that appears neither in Ji et al (2017) nor in the TrendInTrend package, so it was removed rather than left asserting a method that cannot be cited. The Estimator field has been set to the trend-in-trend maximum-likelihood estimator and this protocol describes THAT — a different analysis from the one your draft named."
+      : x.saved === ""
+        ? "“" + clip(x.label, 60) + "” was restored with no value at all — the draft or link it came from left it blank. The field has been set to “" + clip(x.used, 60) + "” and this protocol describes THAT, which is a choice nobody made."
+        : "“" + clip(x.label, 60) + "” was saved as “" + clip(x.saved, 80) + "”, and this page does not offer that choice. The field has been set to “" + clip(x.used, 60) + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
+    // Two renderings, for two audiences. On screen it must say what to press;
+    // in the exported protocol there is no button to press, and an instruction
+    // to press one reads as a defect in the document.
+    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + x.used + "”” to confirm it.");
+    const staleMsgsDoc = () => staleSelects.map(staleMsg);
+
+    // Raw, deliberately. These used to arrive as `V("nperiods") || "10"`, so
+    // emptying the box exported a protocol asserting ten periods that the form
+    // was not showing — and disarmed the "too few periods" warning at the same
+    // moment, because 10 is not fewer than 5. The page's own reset handler
+    // carries a comment saying exactly this is unacceptable, and fixed it only
+    // for "Clear all".
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), exposure: V("exposure"), outcome: V("outcome"),
       period: V("period") || "yearly", first: V("first"), last: V("last"),
-      nperiods: V("nperiods") || "10", nstrata: V("nstrata") || "5", prevdef: V("prevdef"), cpedef: V("cpedef"), cpecov: V("cpecov"),
+      nperiods: V("nperiods"), nstrata: V("nstrata"), prevdef: V("prevdef"), cpedef: V("cpedef"), cpecov: V("cpecov"),
       estimator: V("estimator") || "ml", effect: V("effect") || "OR",
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
@@ -270,6 +352,17 @@ const SENSITIVITY = [
       data: s.data,
       analysis: estimatorText() + ", reporting the " + effectText(s.effect) + " with 95% confidence intervals (bootstrap)",
       groupBy: "cumulative-probability-of-exposure (CPE) stratum",
+      // The shared component's default study-size paragraph is written for a
+      // person-level cohort: "power from observed exposure and outcome
+      // frequencies", "available person-time and event counts". None of that
+      // sizes this design. There is no exposed-vs-unexposed contrast to power,
+      // and the written figure description in this very document says the
+      // design "is not anchored to a person-level day 0" — so the exported
+      // protocol contradicted itself across two sections. Worse, the paper that
+      // says how to do it properly was already in this page's bibliography and
+      // was never invoked. `nz(s.studySize, …)` in ProtocolCommon exists so a
+      // builder can supply its own; this is that.
+      studySize: "Power for a trend-in-trend analysis is not a function of exposure and outcome frequency alone: it is driven chiefly by the STRENGTH of the exposure-prevalence trend over calendar time and by how much that trend differs across CPE strata. Ertefaie et al (Epidemiology 2018;29(3):e21-e23) report that where the exposure-prevalence trend is strong, the design retains reasonable power across a range of outcome rates, stage-1 c-statistics and numbers of strata — so the prevalence trend, not the event count, is the quantity to establish first. Power is therefore assessed by Monte-Carlo simulation rather than a closed-form formula, using the `ttpower()` and `ttdetect()` routines of the `TrendInTrend` R package, parameterised by the source population size, the number of calendar periods (" + perText(s) + "), the number of CPE strata (" + strText(s) + "), the c-statistic of the stage-1 exposure model, the assumed exposure-prevalence trend, the baseline outcome rate, and the hypothesised odds ratio. The assumed values and the resulting detectable odds ratio are stated before the analysis is executed, and the observed exposure-prevalence trend is confirmed against the assumed one in a pilot extraction. Feasibility is confirmed as the per-stratum-per-period cell counts that enter the likelihood, not as person-time.",
       limitations: "Trend-in-trend requires a strong time trend in exposure, and is unbiased only if no unmeasured factor affecting the outcome has a prevalence trend over calendar time that is correlated with the exposure trend across CPE strata — so a time-stable confounder cannot bias it, but a co-intervention or secular change arriving alongside uptake can. Stage-1 covariates are treated as time-invariant, so each person keeps one CPE stratum throughout.",
       plannedOutputs: ["Exposure-prevalence trend by calendar period, and by CPE stratum (evidence that the strata really do differ in exposure trend).", "Outcome trend by CPE stratum (the trend-in-trend figure).", "The stratum × period 2 × 2 tables that enter the likelihood.", "Effect estimate with 95% CI."],
     });
@@ -284,50 +377,70 @@ const SENSITIVITY = [
       [!s.data, "the data source"],
       [!s.cpecov, "the stage-1 covariates that define CPE — without them the strata are undefined"],
       [!s.prevdef, "how exposure prevalence is measured in each period"],
+      // The calendar range is the axis the whole design is read along, and it
+      // was the one defining element nothing checked: a protocol could export
+      // "over (first)–(last)" beside a hard, confident "10 periods".
+      [!s.first || !s.last, "the calendar range the trend is read over (first and last period)"],
     ].filter((x) => x[0]).map((x) => x[1]);
-    const missingMd = (s) => {
-      const m = missing(s);
-      return m.length ? "> **This draft is incomplete.** Still to be specified: " + m.join("; ") + ".\n\n" : "";
-    };
+
+    // The warnings that decide whether the estimate means anything used to live
+    // only on screen. A user could see a red ✕ — a saved draft silently
+    // swapping the estimator, a strata count of -5 — and export a Markdown and
+    // Word document containing no trace of it, reading as a finished protocol,
+    // while the Word design-summary table stated "-5 quantiles of the
+    // cumulative probability of exposure" as fact. Blockers and cautions now
+    // open both exports.
+    //
+    // Messages must be written for BOTH audiences: no "the draft below", no
+    // "this panel", no section numbers (the Word file drops this page's §3
+    // prose for a design-summary table, so its numbering is offset from the
+    // Markdown's from that point on, and a hard-coded "§7" would be wrong in
+    // one of them).
+    const docChecks = (s) => computeChecks(s, true);
+    const blockers = (s) => docChecks(s).filter((c) => c.level === "error").map((c) => oneLine(c.msg));
+    const cautions = (s) => docChecks(s).filter((c) => c.level === "warn").map((c) => oneLine(c.msg));
+    const BLK_HEAD = "This draft is not ready to be used as a protocol. The items below must be settled first; until then the sections that depend on them say what is missing rather than supplying a value.";
+    const CAU_HEAD = "Flagged while this protocol was drafted. These are not blocking, but each is a choice a reader will expect to see justified.";
 
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
       const P = or(s.population, "(population)"), E = or(s.exposure, "(exposure)"), O = or(s.outcome, "(outcome)");
+      const quote = (head, list) => list.length ? "> **" + head + "**\n" + list.map((m) => ">\n> - " + m).join("\n") + "\n\n" : "";
       return `# ${or(s.title, "(Untitled trend-in-trend study)")}
 
 _Study protocol · trend-in-trend design · drafted ${today}_
 
-${missingMd(s)}${window.PC.abstractMd(pcOf(s))}
+${quote(BLK_HEAD, blockers(s))}${quote(CAU_HEAD, cautions(s))}${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
 This study uses the **trend-in-trend (TIT)** design (Ji et al, *Epidemiology* 2017) to estimate the effect of **${E}** on **${O}** in **${P}**.
 
 *In plain terms:* the use of ${E} rises steeply in some kinds of patient and barely at all in others. If ${E} really causes ${O}, then ${O} should rise fastest exactly where the use of ${E} rose fastest. The design reads the effect off that co-movement rather than off a comparison of treated with untreated people.
 
-*Precisely:* the population is stratified by the **cumulative probability of exposure (CPE)** — each person's predicted probability of being exposed at some point in the study period, from a model fitted to covariates that affect exposure but are not affected by it. Because exposure trends differ across those strata, the outcome trends across strata identify the effect. The design is **unbiased unless there are unmeasured factors affecting ${O} whose prevalence trends over calendar time in a way correlated with the exposure trend across CPE strata** — so a confounder that is stable over time cannot bias it, which is its advantage over a conventional cohort. The conditions under which trend-in-trend is biased are a subset of those under which a cohort study is biased.
+*Precisely:* the population is stratified by the **cumulative probability of exposure (CPE)** — each person's predicted probability of being exposed at some point in the study period, from a model fitted to covariates that affect exposure but are not affected by it. Because exposure trends differ across those strata, the outcome trends across strata identify the effect. The design is **unbiased unless there are unmeasured factors affecting ${O} whose prevalence trends over calendar time in a way correlated with the exposure trend across CPE strata** — so a confounder that is stable over time cannot bias it, which is its advantage over a conventional cohort. Ji et al report that the conditions under which a trend-in-trend study is biased are a subset of those under which a cohort study is biased.
 
 ## 2. Question
 Among **${P}**, does **${E}** affect the incidence of **${O}**, as identified by the co-movement of exposure trends and outcome trends across CPE strata?
 
 ## 3. Study design
-A **trend-in-trend** analysis using observational data from **${or(s.data, "(data source)")}**, over **${or(s.first, "(first)")}–${or(s.last, "(last)")}** in **${or(s.period, "yearly")}** periods (**${s.nperiods}** periods), with **${s.nstrata}** CPE strata.
+A **trend-in-trend** analysis using observational data from **${or(s.data, "(data source)")}**, over **${or(s.first, "(first)")}–${or(s.last, "(last)")}** in **${or(s.period, "yearly")}** periods (**${perText(s)}** periods), with **${strText(s)}** CPE strata.
 
 ## 4. Exposure-prevalence trend
-${or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure.")} A **strong time trend in exposure is a requirement of the design, not a convenience**: without one there is nothing for the likelihood to identify the effect from. The observed prevalence trend is reported before any effect estimate is interpreted, overall and within each CPE stratum.
+${sent(or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure."))} A **strong time trend in exposure is a requirement of the design, not a convenience**: without one there is nothing for the likelihood to identify the effect from. The observed prevalence trend is reported before any effect estimate is interpreted, overall and within each CPE stratum.
 
 ## 5. CPE strata (stage 1)
-A logistic model of **exposure** is fitted on: ${or(s.cpecov, "_(specify the covariates — variables that affect exposure and are not affected by it; no mediators, no post-exposure variables)_")}. Each person's predicted probability of exposure over the study period is their **cumulative probability of exposure (CPE)**. ${or(s.cpedef, "The population is then divided into " + s.nstrata + " quantiles of CPE.")} Covariates are treated as time-invariant, so each person remains in the same CPE stratum for every calendar period.
+A logistic model of **exposure** is fitted on: ${or(s.cpecov, "_(specify the covariates — variables that affect exposure and are not affected by it; no mediators, no post-exposure variables)_")}. Each person's predicted probability of exposure over the study period is their **cumulative probability of exposure (CPE)**. ${sent(or(s.cpedef, "The population is then divided into " + strText(s) + " quantiles of CPE."))} Covariates are treated as time-invariant, so each person remains in the same CPE stratum for every calendar period.
 
 ## 6. Outcome model and estimator (stage 2)
-For every CPE stratum and calendar period, a 2 × 2 table of exposed / unexposed by case / non-case is tabulated, and the effect is estimated by ${estimatorText()}. The reference implementation is the \`TrendInTrend\` R package (\`OR()\`), which returns the maximum-likelihood β and a bootstrap confidence interval, and flags non-identification.
+For every CPE stratum and calendar period, a 2 × 2 table of exposed / unexposed by case / non-case is tabulated, and the effect is estimated by ${estimatorText()}. The reference implementation is the \`TrendInTrend\` R package (\`OR()\`), which returns the maximum-likelihood β and a bootstrap confidence interval, together with an indicator of whether that estimate is **not identifiable or only weakly identified**. The package's documentation notes that the bootstrap interval may have slightly lower coverage than the nominal 95%, so it is reported as the somewhat optimistic interval it is.
 
 ## 7. Estimand and effect measure
 The estimand is the causal effect of ${E} on ${O}, reported as the **${effectText(s.effect)}** with a 95% bootstrap confidence interval.${s.effect === "RR" ? " The risk-ratio reading is stated as an approximation and the outcome frequency that justifies it is reported alongside it." : ""}
 
 ## 8. Statistical analysis
 1. Compute exposure prevalence per calendar period and report the trend; confirm it is strong enough to identify an effect.
-2. Fit the stage-1 exposure model and assign each person to one of ${s.nstrata} CPE strata by quantiles of the predicted probability.
+2. Fit the stage-1 exposure model and assign each person to one of ${strText(s)} CPE strata by quantiles of the predicted probability.
 3. Report the exposure-prevalence trend **within each CPE stratum**, to demonstrate the strata really do differ in exposure trend.
-4. Tabulate the stratum × period 2 × 2 counts and maximise the trend-in-trend likelihood; report exp(β₁) with a 95% bootstrap CI, and report explicitly if the model is not identified.
+4. Tabulate the stratum × period 2 × 2 counts and maximise the trend-in-trend likelihood; report exp(β₁) with a 95% bootstrap CI, and report explicitly if the fit was flagged as not identifiable or only weakly identified — a weakly-identified fit still prints an odds ratio.
 5. Plot the exposure-prevalence trend and the CPE-stratum-specific outcome trends.
 
 ## 9. Subgroup analyses
@@ -346,27 +459,85 @@ ${window.PC.tailMd(pcOf(s))}
 `;
     };
 
-    const computeChecks = (s) => {
+    // Calendar arithmetic, but ONLY for the case that is unambiguous: both ends
+    // given as bare four-digit years. "2005" then means the whole of 2005 and
+    // "2018" the whole of 2018, so the span is a whole number of months and
+    // every period length this page offers (12, 6, 3, 1) divides it exactly.
+    // A month- or day-precision end, or anything else, is NOT guessed at —
+    // a wrong period count is precisely the thing this check exists to catch,
+    // so inventing one here would be self-defeating.
+    const PERIOD_MONTHS = { "yearly": 12, "quarterly": 3, "every 6 months": 6, "monthly": 1 };
+    const impliedPeriods = (s) => {
+      const a = /^\s*(\d{4})\s*$/.exec(String(s.first || "")), b = /^\s*(\d{4})\s*$/.exec(String(s.last || ""));
+      const pm = PERIOD_MONTHS[s.period];
+      if (!a || !b || !pm) return null;
+      return { y1: +a[1], y2: +b[1], n: ((+b[1]) - (+a[1]) + 1) * 12 / pm };
+    };
+
+    const computeChecks = (s, forDoc) => {
       const checks = [];
-      const np = parseInt(s.nperiods) || 0, ns = parseInt(s.nstrata) || 0;
+      const pn = nPer(s), sn = nStr(s);
       const miss = missing(s);
-      if (staleEstimator) checks.push({ level: "error", msg: "Your saved draft selected the estimator “" + staleEstimator + "”, and this page no longer offers it. It described a logistic-regression approximation that appears neither in Ji et al (2017) nor in the TrendInTrend package, so it was removed rather than left asserting a method that cannot be cited. The Estimator field has been set to the trend-in-trend maximum-likelihood estimator and the protocol below describes THAT — a different analysis from the one your draft named. Check it reads as you intend before exporting." });
-      if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft below is printed with placeholders so you can see its shape — it is not a finished protocol." });
+      (forDoc ? staleMsgsDoc() : staleMsgs()).forEach((m) => checks.push({ level: "error", msg: m }));
+      if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". It is printed with placeholders so its shape can be seen — it is not a finished protocol." });
       if (!s.cpecov || !s.cpecov.trim()) checks.push({ level: "error", msg: "CPE is a predicted probability, not an observed percentage: it comes from a stage-1 logistic model of EXPOSURE on covariates. Until you name those covariates the strata are undefined. Use variables that affect exposure and are not affected by it — no mediators, no post-exposure variables." });
-      if (np < 5) checks.push({ level: "warn", msg: "Only " + np + " calendar periods — the exposure trend is estimated across periods; too few weakens power. Aim for ≥ 5–10." });
-      if (ns < 3) checks.push({ level: "warn", msg: "Only " + ns + " CPE strata — trend-in-trend contrasts outcome trends across CPE strata; use ≥ 3. Ji et al used quintiles (5)." });
-      if (ns > 5) checks.push({ level: "info", msg: ns + " CPE strata spreads the same cases over more stratum × period cells. Sparse cells destabilise the likelihood; report the cell counts, and compare against 5 strata as a sensitivity analysis." });
+
+      // Refuse rather than substitute. Each of these used to fall through to a
+      // confident 10 or 5 that the form was not showing.
+      if (pn.state !== "ok") checks.push({ level: "error", msg: pn.state === "blank"
+        ? "The number of calendar periods is blank. It is not assumed: the periods are the axis the exposure trend is read along, and every surface of this protocol that would have named a count says it is unspecified instead."
+        : "The number of calendar periods was given as “" + clip(pn.raw, 40) + "”, which is not a whole number of periods" + (pn.why === "negative" ? " (it is negative)" : pn.why === "fraction" ? " (it is a fraction, and there is no such thing as part of a calendar period)" : "") + ". No count has been substituted." });
+      else if (pn.n === 0) checks.push({ level: "error", msg: "Zero calendar periods. Trend-in-trend reads the effect off how exposure prevalence moves ACROSS calendar periods; with none there is no trend and nothing to identify an effect from." });
+      else if (pn.n < 5) checks.push({ level: "warn", msg: "Only " + pn.n + " calendar periods — the exposure trend is estimated across periods, and too few weakens it. This tool's own rule of thumb is ≥ 5–10; it is a heuristic, not a threshold taken from Ji et al (2017) or Ertefaie et al (2018), neither of which states one." });
+
+      if (sn.state !== "ok") checks.push({ level: "error", msg: sn.state === "blank"
+        ? "The number of CPE strata is blank. It is not assumed: the strata are what the outcome trends are contrasted across, and every surface of this protocol that would have named a count says it is unspecified instead."
+        : "The number of CPE strata was given as “" + clip(sn.raw, 40) + "”, which is not a whole number of strata" + (sn.why === "negative" ? " (it is negative)" : sn.why === "fraction" ? " (it is a fraction — a quantile cut produces whole strata)" : "") + ". No count has been substituted." });
+      else if (sn.n < 2) checks.push({ level: "error", msg: sn.n + " CPE strata. The design identifies the effect by CONTRASTING outcome trends between strata with different exposure trends, so it needs at least two; with fewer there is no contrast to read." });
+      else if (sn.n < 3) checks.push({ level: "warn", msg: "Only " + sn.n + " CPE strata — trend-in-trend contrasts outcome trends across CPE strata, and two gives the thinnest possible contrast. Ji et al used quintiles (5); ≥ 3 is this tool's own rule of thumb rather than a published threshold." });
+
+      // Sparsity is a property of the stratum × period GRID, not of the strata
+      // alone. The old note fired on strata > 5 and said nothing about periods,
+      // so 5 strata × 168 monthly periods — 840 cells over a fixed number of
+      // cases — passed in silence while 10 × 10 was flagged. What the tool
+      // genuinely cannot do is judge sparsity, because it never learns the case
+      // count; so it now reports the grid it will produce and says that.
+      if (pn.state === "ok" && sn.state === "ok" && pn.n > 0 && sn.n > 0) {
+        const cells = pn.n * sn.n;
+        if (cells > 60) checks.push({ level: "info", msg: sn.n + " CPE strata × " + pn.n + " calendar periods is " + cells + " stratum × period cells, and the same cases are spread over all of them. Whether that is too sparse depends on the number of cases, which this tool does not know and will not guess — report the per-cell counts alongside the estimate, and compare against a coarser grid as a sensitivity analysis." });
+      }
+
+      // Four independent inputs described the same axis and nothing related
+      // them, so "2005–2018 in yearly periods (10 periods)" exported with a
+      // straight face — and the page's own placeholders (e.g. 2005, e.g. 2018)
+      // beside a default of 10 handed the user that contradiction.
+      const imp = impliedPeriods(s);
+      if (imp && imp.y2 < imp.y1) checks.push({ level: "error", msg: "The last period (" + imp.y2 + ") is before the first (" + imp.y1 + ")." });
+      else if (imp && pn.state === "ok" && pn.n > 0 && imp.n !== pn.n) checks.push({ level: "warn", msg: imp.y1 + "–" + imp.y2 + " in " + s.period + " periods is " + imp.n + " periods, but this protocol states " + pn.n + ". One of the two is wrong, or some periods are being excluded — if they are, say which and why, because the count is what fixes the size of the stratum × period grid the likelihood is maximised over." });
       checks.push({ level: "info", msg: "Requirement, not a nicety: exposure prevalence must trend strongly over calendar time. Report the observed prevalence trend — overall and WITHIN each CPE stratum — before interpreting any effect estimate. If the strata do not differ in exposure trend, there is nothing to identify the effect from." });
       checks.push({ level: "info", msg: "The design is unbiased UNLESS an unmeasured factor affecting the outcome has a prevalence trend over calendar time correlated with the exposure trend across CPE strata. A time-stable confounder cannot bias it; a co-intervention or secular change arriving with uptake can. Pre-specify a negative-control outcome to probe this." });
       if (s.effect === "RR") checks.push({ level: "warn", msg: "The trend-in-trend likelihood estimates an ODDS ratio, exp(β₁). Reporting it as a risk ratio is a rare-outcome approximation — state the outcome frequency that justifies it, or report the odds ratio." });
-      checks.push({ level: "info", msg: "The reference implementation (TrendInTrend::OR in R) returns a `not_identified` flag. If it fires, report that the model was not identified rather than the number it printed." });
+      // The indicator TrendInTrend::OR returns covers "not identifiable OR
+      // WEAKLY identified", and this said only the first half. Weak
+      // identification is much the more dangerous of the two, because a number
+      // IS printed — it is just unstable, which is the whole bug class this
+      // page exists to guard against.
+      checks.push({ level: "info", msg: "The reference implementation (TrendInTrend::OR in R) returns an indicator of whether the maximum-likelihood estimate is NOT IDENTIFIABLE or only WEAKLY identified. Both matter, and the second is the more dangerous: a weakly-identified fit still prints an odds ratio, it is simply unstable. If either fires, report that rather than the number beside it." });
+      checks.push({ level: "info", msg: "The package's own documentation notes that its bootstrap confidence interval may have slightly LOWER coverage than the nominal 95% — so treat the interval as somewhat optimistic, and say so when reporting it." });
       return checks;
     };
 
     // ── Custom TIT diagram: exposure-prevalence trend + CPE-stratum outcome trends ──
     function renderScheme(s) {
-      const np = Math.max(3, Math.min(24, parseInt(s.nperiods) || 10));
-      const ns = Math.max(2, Math.min(6, parseInt(s.nstrata) || 5));
+      // Both bounds, both directions. `parseInt(s.nperiods) || 10` drew TEN
+      // periods for an input of "0" — zero is falsy — while the prose said 0
+      // and the panel said "Only 0"; and the caption only ever admitted to
+      // clamping DOWN, so every clamp up to the 3-period minimum was silent.
+      const pn = nPer(s), sn = nStr(s);
+      const npWant = pn.state === "ok" ? pn.n : null;
+      const nsWant = sn.state === "ok" ? sn.n : null;
+      const np = Math.max(3, Math.min(24, npWant == null ? 10 : npWant));
+      const ns = Math.max(2, Math.min(6, nsWant == null ? 5 : nsWant));
       const W = 860, H = 300, plotL = 60, plotR = W - 20, plotT = 30, plotB = H - 44;
       const xF = (i) => plotL + (i / (np - 1)) * (plotR - plotL);
       const yF = (v) => plotB - v * (plotB - plotT);            // v in 0..1
@@ -395,11 +566,24 @@ ${window.PC.tailMd(pcOf(s))}
       document.getElementById("dlegend").innerHTML =
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#6366f1"></span>Exposure prevalence trend</span>' +
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#dc2626"></span>Outcome trend, high-CPE stratum (steep rise in exposure)</span>' +
-        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#94a3b8"></span>Outcome trend, low-CPE stratum (flat exposure)</span>';
+        '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="background:#94a3b8"></span>Outcome trend, low-CPE stratum (flat exposure)</span>' +
+        // Only ONE exposure-prevalence curve is drawn — the pooled one. The
+        // per-stratum exposure trends, whose DIVERGENCE is the single thing the
+        // design turns on and which the analysis plan asks to be reported, are
+        // not on this plot. Saying so is honest; drawing invented ones would
+        // not be.
+        '<span class="basis-full text-[11px] text-slate-500">The single blue curve is the pooled exposure-prevalence trend. The per-stratum exposure trends — whose divergence is what the design actually reads the effect off — are not drawn here; they are the first thing the analysis plan asks you to report.</span>';
+      const clampNote = [
+        npWant == null ? "the number of calendar periods could not be read, so the drawing shows an illustrative 10"
+          : npWant > 24 ? "the drawing shows the first 24 of " + npWant + " periods"
+          : npWant < 3 ? "the drawing shows 3 periods, the fewest it can draw" : "",
+        nsWant == null ? "the number of CPE strata could not be read, so the drawing shows an illustrative 5"
+          : nsWant > 6 ? "only 6 of the " + nsWant + " strata are drawn"
+          : nsWant < 2 ? "the drawing shows 2 strata, the fewest it can draw" : "",
+      ].filter(Boolean);
       document.getElementById("dcap").textContent =
-        "As exposure prevalence rises across " + s.nperiods + " " + s.period + " period(s), the outcome trend is compared across " + s.nstrata + " strata of the cumulative probability of exposure. A steeper outcome trend where exposure rose faster is what identifies a causal effect. Drag the ○ handle to change the number of periods. Schematic only — the shapes are illustrative, not your data" +
-        (parseInt(s.nperiods) > 24 ? ", and the drawing shows the first 24 periods" : "") +
-        (parseInt(s.nstrata) > 6 ? ", and only 6 of the strata are drawn" : "") + ".";
+        "As exposure prevalence rises across " + perText(s) + " " + s.period + " period(s), the outcome trend is compared across " + strText(s) + " strata of the cumulative probability of exposure. A steeper outcome trend where exposure rose faster is what identifies a causal effect. Drag the ○ handle to change the number of periods. Schematic only — the shapes are illustrative, not your data" +
+        (clampNote.length ? ", and " + clampNote.join(", and ") : "") + ".";
 
       // drag (frozen px/period)
       const svgXof = (clientX) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = clientX; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
@@ -438,14 +622,33 @@ ${window.PC.tailMd(pcOf(s))}
       }
       // Never swallow a render failure silently: a blank checks panel that looks
       // like "no issues" is exactly the failure mode this page is meant to avoid.
-      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); }
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); mountKeepButton(); }
       catch (err) {
         console.error("[TIT] consistency checks failed to render", err);
         const el = document.getElementById("checks");
         if (el) el.innerHTML = '<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">The consistency checks could not be rendered, so this panel is showing nothing rather than showing "no issues". Details are in the browser console.</div>';
       }
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (err) { console.warn("[TIT] could not save draft", err); }
+      // The substitution record rides along INSIDE the draft. Without it a
+      // variable-only record survives exactly one page load, and this same
+      // autosave — running a second after load — overwrites the user's saved
+      // period/effect/estimator with whatever was substituted for them. That is
+      // how the original values were destroyed.
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign({}, s, staleSelects.length ? { [STALE_KEY]: staleSelects } : {}))); } catch (err) { console.warn("[TIT] could not save draft", err); }
     };
+
+    // Re-picking the option a <select> is already showing fires no `change`
+    // event, so a user who wants the value it was left at has no way to answer
+    // a blocker that names it. Give them one.
+    function mountKeepButton() {
+      const host = document.getElementById("checks");
+      if (!host || !staleSelects.length) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mt-2 rounded-lg border border-brand-700 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50";
+      b.textContent = staleSelects.length === 1 ? "Keep “" + staleSelects[0].used + "”" : "Keep all " + staleSelects.length + " substituted choices";
+      b.addEventListener("click", () => { staleSelects = []; render(); });
+      host.appendChild(b);
+    }
 
     (() => {
       try {
@@ -456,8 +659,14 @@ ${window.PC.tailMd(pcOf(s))}
           : false;
         const saved = seeded ? null : JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
         if (saved) {
+          // A record carried over from a previous load, so the substitution is
+          // still reported after a reload the user did not make a choice in.
+          if (Array.isArray(saved[STALE_KEY])) saved[STALE_KEY].forEach((x) => {
+            if (x && x.name && !staleSelects.some((y) => y.name === x.name)) staleSelects.push(x);
+          });
           noteStale(saved);
           for (const k in saved) {
+            if (k === STALE_KEY) continue;
             const els = form.elements[k]; if (!els) continue;
             const val = saved[k];
             if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
@@ -465,14 +674,33 @@ ${window.PC.tailMd(pcOf(s))}
             else els.value = val;
           }
         }
-        // Leave the select showing the estimator the protocol will actually
-        // describe, rather than blank, now that the check below explains why.
-        if (staleEstimator && form.elements.estimator) form.elements.estimator.value = KNOWN_ESTIMATORS[0];
+        // Leave each blanked select showing the choice the protocol will
+        // actually describe, rather than showing nothing, now that a blocker
+        // says which choice that is and where it came from. "Has the user
+        // answered this yet?" cannot be asked as "does the select hold a valid
+        // value", because after the first load it holds the value WE
+        // substituted; the record survives while the select still shows exactly
+        // that, and is dropped the moment it shows anything else.
+        staleSelects = staleSelects.filter((x) => {
+          const el = form.elements[x.name];
+          if (!el) return false;
+          if (el.selectedIndex >= 0 && el.value && el.value !== x.used) return false;
+          el.value = x.used;
+          return true;
+        });
       } catch (err) { console.warn("[TIT] could not restore the saved draft", err); }
       render();
     })();
     form.addEventListener("input", render);
-    form.addEventListener("change", render);
+    // Cleared per control, on the control the user actually touched. Clearing
+    // the whole list on any change would dismiss a blocker the user has not
+    // seen; leaving it uncleared makes a blocker nobody can dismiss, which is
+    // what teaches people to ignore the panel.
+    form.addEventListener("change", (e) => {
+      const n = e.target && e.target.name;
+      if (n && staleSelects.some((x) => x.name === n)) staleSelects = staleSelects.filter((x) => x.name !== n);
+      render();
+    });
 
     const slugify = () => (readForm().title || "trend-in-trend-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "trend-in-trend-protocol";
     const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
@@ -492,16 +720,26 @@ ${window.PC.tailMd(pcOf(s))}
     const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
     document.querySelector("[data-action='reset']").addEventListener("click", () => {
       if (!confirm("Clear every field and forget the saved draft?")) return;
-      localStorage.removeItem(STORAGE_KEY);
+      // The substitution record goes with the draft that caused it. Left
+      // behind, it would keep blocking a form that no longer holds any of the
+      // values it describes.
+      staleSelects = [];
       form.querySelectorAll("input, textarea, select").forEach((el) => {
         if (el.type === "checkbox" || el.type === "radio") el.checked = false;
-        else if (el.tagName === "SELECT") el.selectedIndex = 0;
-        // Blanking a numeric field while readForm() silently substitutes a default
-        // makes the protocol assert a number the form is not showing. Put the
-        // markup default back instead.
+        // The option the markup marks selected, not whichever happens to sit
+        // first, so Clear restores the authored default rather than moving the
+        // choice to something nobody picked.
+        else if (el.tagName === "SELECT") { const d = [...el.options].find((o) => o.defaultSelected); el.value = d ? d.value : (el.options[0] ? el.options[0].value : ""); }
+        // Put the markup default back, so the counts the form shows after a
+        // clear are the ones the protocol describes.
         else el.value = el.getAttribute("value") || "";
       });
       render();
+      // AFTER render, not before. render()'s autosave runs on the way out, so
+      // removing the key first simply had it written straight back — the
+      // confirm box promised to "forget the saved draft" and the draft was
+      // still there a moment later.
+      try { localStorage.removeItem(STORAGE_KEY); } catch (err) { console.warn("[TIT] could not clear the saved draft", err); }
       setMsg("Cleared.");
     });
 
@@ -534,14 +772,25 @@ ${window.PC.tailMd(pcOf(s))}
       if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
       children.push(p([text(or(s.title, "(Untitled trend-in-trend study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
       children.push(p([text("Study protocol · trend-in-trend design · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
-      const miss = missing(s);
-      if (miss.length) children.push(p([text("This draft is incomplete. Still to be specified: " + miss.join("; ") + ".", { bold: true, color: "9E3A2C" })], { spacing: { after: 160 } }));
+      // The whole checks panel now opens the document, not just the gap list.
+      // A red ✕ on screen used to reach neither export, so a Word file could
+      // state "-5 quantiles of the cumulative probability of exposure" as fact
+      // in its design-summary table while the page was refusing that very
+      // number in red.
+      const noteBlock = (head, list, colour) => {
+        if (!list.length) return;
+        children.push(p([text(head, { bold: true, color: colour })], { spacing: { after: 60 } }));
+        list.forEach((m) => children.push(new D.Paragraph({ children: [text(m, { color: colour })], bullet: { level: 0 }, spacing: { before: 0, after: 0 } })));
+        children.push(p([text("")], { spacing: { after: 120 } }));
+      };
+      noteBlock(BLK_HEAD, blockers(s), "9E3A2C");
+      noteBlock(CAU_HEAD, cautions(s), "8A6100");
       window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
       children.push(para("This study uses the trend-in-trend design (Ji et al, Epidemiology 2017) to estimate the effect of " + E + " on " + O + " in " + P + "."));
       children.push(para("In plain terms: the use of " + E + " rises steeply in some kinds of patient and barely at all in others. If " + E + " really causes " + O + ", then " + O + " should rise fastest exactly where the use of " + E + " rose fastest. The design reads the effect off that co-movement rather than off a comparison of treated with untreated people."));
-      children.push(para("Precisely: the population is stratified by the cumulative probability of exposure (CPE) — each person's predicted probability of being exposed at some point in the study period, from a model fitted to covariates that affect exposure but are not affected by it. Because exposure trends differ across those strata, the outcome trends across strata identify the effect. The design is unbiased unless there are unmeasured factors affecting " + O + " whose prevalence trends over calendar time in a way correlated with the exposure trend across CPE strata; a confounder that is stable over time therefore cannot bias it. The conditions under which trend-in-trend is biased are a subset of those under which a cohort study is biased."));
+      children.push(para("Precisely: the population is stratified by the cumulative probability of exposure (CPE) — each person's predicted probability of being exposed at some point in the study period, from a model fitted to covariates that affect exposure but are not affected by it. Because exposure trends differ across those strata, the outcome trends across strata identify the effect. The design is unbiased unless there are unmeasured factors affecting " + O + " whose prevalence trends over calendar time in a way correlated with the exposure trend across CPE strata; a confounder that is stable over time therefore cannot bias it. Ji et al report that the conditions under which a trend-in-trend study is biased are a subset of those under which a cohort study is biased."));
 
       children.push(h1("2. Design summary"));
       children.push(labelTable([
@@ -550,8 +799,8 @@ ${window.PC.tailMd(pcOf(s))}
         ["Population", P],
         ["Exposure", E],
         ["Outcome", O],
-        ["Calendar range", or(s.first, "(first)") + "–" + or(s.last, "(last)") + " (" + or(s.period, "yearly") + ", " + s.nperiods + " periods)"],
-        ["CPE strata", s.nstrata + " quantiles of the cumulative probability of exposure"],
+        ["Calendar range", or(s.first, "(first)") + "–" + or(s.last, "(last)") + " (" + or(s.period, "yearly") + ", " + perText(s) + " periods)"],
+        ["CPE strata", strText(s) + " quantiles of the cumulative probability of exposure"],
         ["Stage-1 covariates (define CPE)", or(s.cpecov, "(to be specified)")],
         ["Estimator", "Trend-in-trend maximum likelihood on the stratum × period tables"],
         ["Effect measure", effectShort(s.effect)],
@@ -574,9 +823,9 @@ ${window.PC.tailMd(pcOf(s))}
       // without it the figure reaches a text-only reader as a caption with
       // nothing under it, and that text is what carries HARPER 7.2.
       const __figLines = [
-        "Time axis: " + s.nperiods + " " + s.period + " calendar period(s) from " + or(s.first, "(first)") + " to " + or(s.last, "(last)") + " (this design is not anchored to a person-level day 0).",
+        "Time axis: " + perText(s) + " " + s.period + " calendar period(s) from " + or(s.first, "(first)") + " to " + or(s.last, "(last)") + " (this design is not anchored to a person-level day 0).",
         "Exposure-prevalence trend: the proportion exposed in each calendar period; a strong time trend is required for the design to identify anything.",
-        "CPE strata: " + s.nstrata + " quantile(s) of the cumulative probability of exposure, from the stage-1 model" + (s.cpecov ? " fitted on " + s.cpecov : "") + "; each person keeps one stratum for the whole study.",
+        "CPE strata: " + strText(s) + " quantile(s) of the cumulative probability of exposure, from the stage-1 model" + (s.cpecov ? " fitted on " + s.cpecov : "") + "; each person keeps one stratum for the whole study.",
         "Read-out: the outcome trend is compared across CPE strata — a steeper outcome trend where exposure rose faster is what identifies the effect.",
       ];
       const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: __cap, lines: __figLines });
@@ -584,22 +833,22 @@ ${window.PC.tailMd(pcOf(s))}
       if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
 
       children.push(h1("3. Exposure-prevalence trend"));
-      children.push(para(or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure.") + " A strong time trend in exposure is a requirement of the design, not a convenience: without one there is nothing for the likelihood to identify the effect from. The observed prevalence trend is reported before any effect estimate is interpreted, overall and within each CPE stratum."));
+      children.push(para(sent(or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure.")) + " A strong time trend in exposure is a requirement of the design, not a convenience: without one there is nothing for the likelihood to identify the effect from. The observed prevalence trend is reported before any effect estimate is interpreted, overall and within each CPE stratum."));
 
       children.push(h1("4. CPE strata (stage 1)"));
-      children.push(para("A logistic model of exposure is fitted on: " + or(s.cpecov, "(specify the covariates — variables that affect exposure and are not affected by it; no mediators, no post-exposure variables)") + ". Each person's predicted probability of exposure over the study period is their cumulative probability of exposure (CPE). " + or(s.cpedef, "The population is then divided into " + s.nstrata + " quantiles of CPE.") + " Covariates are treated as time-invariant, so each person remains in the same CPE stratum for every calendar period."));
+      children.push(para("A logistic model of exposure is fitted on: " + or(s.cpecov, "(specify the covariates — variables that affect exposure and are not affected by it; no mediators, no post-exposure variables)") + ". Each person's predicted probability of exposure over the study period is their cumulative probability of exposure (CPE). " + sent(or(s.cpedef, "The population is then divided into " + strText(s) + " quantiles of CPE.")) + " Covariates are treated as time-invariant, so each person remains in the same CPE stratum for every calendar period."));
 
       children.push(h1("5. Outcome model and estimator (stage 2)"));
-      children.push(para("For every CPE stratum and calendar period, a 2 x 2 table of exposed / unexposed by case / non-case is tabulated, and the effect is estimated by " + estimatorText() + ". The reference implementation is the TrendInTrend R package (OR()), which returns the maximum-likelihood beta and a bootstrap confidence interval, and flags non-identification."));
+      children.push(para("For every CPE stratum and calendar period, a 2 x 2 table of exposed / unexposed by case / non-case is tabulated, and the effect is estimated by " + estimatorText() + ". The reference implementation is the TrendInTrend R package (OR()), which returns the maximum-likelihood beta and a bootstrap confidence interval, together with an indicator of whether that estimate is not identifiable or only weakly identified. The package's documentation notes that the bootstrap interval may have slightly lower coverage than the nominal 95%, so it is reported as the somewhat optimistic interval it is."));
 
       children.push(h1("6. Estimand and effect measure"));
       children.push(para("The estimand is the causal effect of " + E + " on " + O + ", reported as the " + effectText(s.effect) + " with a 95% bootstrap confidence interval." + (s.effect === "RR" ? " The risk-ratio reading is stated as an approximation and the outcome frequency that justifies it is reported alongside it." : "")));
 
       children.push(h1("7. Statistical analysis"));
       ["Compute exposure prevalence per calendar period and report the trend; confirm it is strong enough to identify an effect.",
-       "Fit the stage-1 exposure model and assign each person to one of " + s.nstrata + " CPE strata by quantiles of the predicted probability.",
+       "Fit the stage-1 exposure model and assign each person to one of " + strText(s) + " CPE strata by quantiles of the predicted probability.",
        "Report the exposure-prevalence trend within each CPE stratum, to demonstrate the strata really do differ in exposure trend.",
-       "Tabulate the stratum x period 2 x 2 counts and maximise the trend-in-trend likelihood; report exp(beta1) with a 95% bootstrap CI, and report explicitly if the model is not identified.",
+       "Tabulate the stratum x period 2 x 2 counts and maximise the trend-in-trend likelihood; report exp(beta1) with a 95% bootstrap CI, and report explicitly if the fit was flagged as not identifiable or only weakly identified - a weakly-identified fit still prints an odds ratio.",
        "Plot the exposure-prevalence trend and the CPE-stratum-specific outcome trends."].forEach((l) => children.push(numItem(l)));
 
       children.push(h1("8. Subgroup analyses"));
