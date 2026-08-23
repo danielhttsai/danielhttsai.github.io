@@ -289,8 +289,8 @@ const SENSITIVITY = [
     // what to press; in the exported protocol there is no button to press, and
     // an instruction to press one reads as a defect in the document.
     const staleMsg = (x) => x.saved === ""
-      ? "“" + x.label + "” was restored with no value at all — the draft or link it came from left it blank. The field has been set to “" + x.used + "” and this protocol describes THAT, which is a choice nobody made."
-      : "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + x.used + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
+      ? "“" + clip(x.label, 60) + "” was restored with no value at all — the draft or link it came from left it blank. The field has been set to “" + clip(x.used, 60) + "” and this protocol describes THAT, which is a choice nobody made."
+      : "“" + clip(x.label, 60) + "” was saved as “" + clip(x.saved, 80) + "”, and this page does not offer that choice. The field has been set to “" + clip(x.used, 60) + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
     const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + x.used + "”” to confirm it.");
     const staleMsgsDoc = () => staleSelects.map(staleMsg);
 
@@ -327,12 +327,16 @@ const SENSITIVITY = [
       // elsewhere in this repo, so it is refused by name rather than by luck.
       if (!/^[+-]?(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i.test(t)) return { raw: t, n: null, state: "bad" };
       const v = Number(t);
-      if (!isFinite(v) || !Number.isInteger(v) || v < 0) return { raw: t, n: null, state: "bad" };
+      // A negative count reads perfectly well as a whole number — it is
+      // negative, which is a different objection, and saying "could not be
+      // read" about "-5" states a false reason for a true refusal.
+      if (isFinite(v) && Number.isInteger(v) && v < 0) return { raw: t, n: null, state: "bad", why: "negative" };
+      if (!isFinite(v) || !Number.isInteger(v)) return { raw: t, n: null, state: "bad" };
       return { raw: t, n: v, state: "ok" };
     };
     const ptsText = (p) => p.state === "ok" ? String(p.n)
       : p.state === "blank" ? "(not specified)"
-      : "(not specified — “" + p.raw + "” could not be read as a whole number of periods)";
+      : "(not specified — “" + clip(p.raw, 40) + "” " + (p.why === "negative" ? "is a negative number of periods" : "could not be read as a whole number of periods") + ")";
     const prePts = (s) => readPts(s.prePoints);
     const postPts = (s) => readPts(s.postPoints);
 
@@ -381,7 +385,14 @@ const SENSITIVITY = [
     const effectText = (s) => s.controlled
       ? (s.model === "linear"
         ? "the DIFFERENCE between the intervention and control series in the change in level and in the change in slope (a difference-in-differences on the outcome's natural scale), with 95% confidence intervals"
-        : "the RATIO of the intervention series' level change to the control series' level change, and the same for the slope change — the group-by-segment interaction terms, which on the log scale are ratios of rate ratios rather than rate ratios — with 95% confidence intervals")
+        // Said "on the log scale are ratios of rate ratios", which is exactly
+        // backwards: on the log scale the interaction is a DIFFERENCE of log
+        // rate ratios, and it is a ratio of rate ratios once exponentiated.
+        // Phrased so that it agrees with the "difference" every other section
+        // uses rather than appearing to correct it — they are one quantity on
+        // two scales, and saying so is what stops the document reading as a
+        // contradiction.
+        : "the between-series DIFFERENCE in the change in level and in the change in slope — the group-by-segment interaction terms, which on the log scale are differences of log rate ratios and therefore exponentiate to RATIOS of rate ratios, not to rate ratios — reported exponentiated, with 95% confidence intervals")
       : (s.model === "linear"
         ? "the change in level (immediate step) and the change in slope (trend), both on the outcome's natural scale, with 95% confidence intervals"
         : "the change in level and the change in slope expressed as rate ratios (incidence-rate ratios) with 95% confidence intervals");
@@ -389,9 +400,18 @@ const SENSITIVITY = [
     // controlled ITS the intervention series' own extrapolated pre-trend is
     // precisely what the control series exists to replace, so naming it under a
     // controlled design describes the analysis the control was added to avoid.
+    // The controlled version used to end "— not its own extrapolated
+    // pre-trend, which is the object the control series exists to replace",
+    // and the clause before it described exactly that trend, control-adjusted:
+    // the sentence denied what it had just said. What the control series
+    // replaces is the ASSUMPTION that the pre-trend would have continued
+    // unchanged, not the trend itself, which is still fitted and still the
+    // baseline. The adjustment is also multiplicative under a log link and
+    // additive on the natural scale, so it is named per model rather than left
+    // scale-agnostic beside an estimand that has a scale.
     const cfText = (s) => s.controlled
-      ? "the counterfactual (the intervention series' pre-intervention trend carried forward with the change the control series shows over the same periods — not its own extrapolated pre-trend, which is the object the control series exists to replace)"
-      : "the counterfactual (this series' extrapolated pre-intervention trend)";
+      ? "the counterfactual (the intervention series' own pre-intervention trend extrapolated forward and then adjusted " + (s.model === "linear" ? "by the change" : "by the relative change") + " the control series shows over the same periods, so that a co-intervention affecting both series cancels — the control replaces the assumption that the pre-intervention trend would have continued unchanged, which an uncontrolled ITS has to make outright)"
+      : "the counterfactual (this series' extrapolated pre-intervention trend, on the assumption that it would have continued unchanged)";
     // The contrast with the counterfactual grows with how far past the
     // interruption you look — it is linear in the slope-change coefficient — so
     // "the difference from the counterfactual" is a family of estimands until a
@@ -573,7 +593,7 @@ const SENSITIVITY = [
       // document with no incomplete banner at all.
       const seg = (p, which, why) =>
         p.state === "blank" ? "the number of " + which + "-intervention points"
-        : p.state === "bad" ? "the number of " + which + "-intervention points (“" + p.raw + "” is not a whole number of periods)"
+        : p.state === "bad" ? "the number of " + which + "-intervention points (“" + clip(p.raw, 40) + "” " + (p.why === "negative" ? "is a negative number of periods" : "is not a whole number of periods") + ")"
         : p.n === 0 ? "the number of " + which + "-intervention points (0 was entered, and " + why + ")"
         : "";
       return [
@@ -595,9 +615,21 @@ const SENSITIVITY = [
     // complete-looking document with no trace of either warning, while the page
     // that built it showed both in amber. The reader of the Word file is the
     // person who most needs them.
+    // Check messages quote things the user typed, and a saved draft or a
+    // ?seed= link can put a newline in one — the form's own inputs cannot, but
+    // nothing else validates that. Once the messages travel into the Markdown
+    // as a blockquote, a newline ENDS the blockquote: a seed link carrying
+    // "X\n\n## 99. Forged section\n" put a forged top-level heading and a free
+    // paragraph between the banner and §1 of the exported protocol. Someone
+    // else's link is enough; no tampering with this browser's storage is
+    // needed. So every message is flattened to one line before it is quoted,
+    // and any single quoted value is capped — a 500-character control-series
+    // name is not a reason for a page of blockquote.
+    const oneLine = (m) => String(m == null ? "" : m).replace(/[\r\n\u2028\u2029]+/g, " ").replace(/\s{2,}/g, " ").trim();
+    const clip = (t, n) => { const v = oneLine(t); return v.length > n ? v.slice(0, n) + "…" : v; };
     const docChecks = (s) => computeChecks(s, true);
-    const blockers = (s) => docChecks(s).filter((c) => c.level === "error").map((c) => c.msg);
-    const cautions = (s) => docChecks(s).filter((c) => c.level === "warn").map((c) => c.msg);
+    const blockers = (s) => docChecks(s).filter((c) => c.level === "error").map((c) => oneLine(c.msg));
+    const cautions = (s) => docChecks(s).filter((c) => c.level === "warn").map((c) => oneLine(c.msg));
     const BLK_HEAD = "This draft is not ready to be used as a protocol. The items below must be settled first; until then the sections that depend on them say what is missing rather than supplying a value.";
     const CAU_HEAD = "Flagged while this protocol was drafted. These are not blocking, but each is a choice a reader will expect to see justified.";
 
@@ -633,7 +665,7 @@ The outcome is aggregated per **${unitPhrase(s.unit)}** interval across the stud
 - **Transition / phase-in:** ${or(s.lag, "none (a single, sharp interruption is assumed)")}
 
 ## 6. Model specification
-The outcome is modelled with ${modelText(s.model)}. The segmented model estimates: (i) the **baseline level** and **pre-intervention slope**; (ii) the **change in level** (immediate step at the interruption); and (iii) the **change in slope** (post- minus pre-intervention trend). ${seasonText(s.seasonality)}. ${autocorrText(s.autocorr)}.${s.controlled ? ` A control series (${or(s.controlSeries, "a comparison group/region/outcome unaffected by the intervention")}) is included, with group-by-segment interaction terms so the **difference** in level and slope changes (intervention minus control) is the primary estimate.` : ""}
+The outcome is modelled with ${modelText(s.model)}. The segmented model estimates: (i) the **baseline level** and **pre-intervention slope**; (ii) the **change in level** (immediate step at the interruption); and (iii) the **change in slope** (post- minus pre-intervention trend). ${seasonText(s.seasonality)}. ${autocorrText(s.autocorr)}.${s.controlled ? ` A control series (${or(s.controlSeries, "a comparison group/region/outcome unaffected by the intervention")}) is included, with group-by-segment interaction terms, so the primary estimate is the **between-series difference** in the level and slope changes; the estimand section states the scale it is reported on.` : ""}
 
 ## 7. Estimand and effect measures
 The primary estimands are ${effectText(s)}.
@@ -706,11 +738,12 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // Counted as a LOWER bound: harmonic seasonality is charged one
       // sine/cosine pair, which is the fewest anyone would fit.
       if (pp.state === "ok" && qp.state === "ok" && pp.n > 0 && qp.n > 0) {
-        const seasonP = s.seasonality === "month" ? (s.unit === "quarterly" ? 3 : 11) : (s.seasonality === "harmonic" ? 2 : 0);
+        const seasonP = s.seasonality === "month" ? (s.unit === "quarterly" ? 3 : (SUBANNUAL.indexOf(s.unit) >= 0 ? 11 : 0)) : (s.seasonality === "harmonic" ? 2 : 0);
         const params = (s.controlled ? 8 : 4) + seasonP;
         const nObs = (pp.n + qp.n) * (s.controlled ? 2 : 1);
         const how = params + " parameter(s) (" + (s.controlled ? "8 segmented terms for two series" : "4 segmented terms") + (seasonP ? " plus at least " + seasonP + " seasonality term(s)" : "") + ") against " + nObs + " observation(s)";
-        if (nObs <= params) checks.push({ level: "error", msg: "This model cannot be fitted: " + how + ". There is no residual degree of freedom, so nothing can be estimated and no standard error exists. Shorten the model or lengthen the series." });
+        if (nObs < params) checks.push({ level: "error", msg: "This model cannot be fitted: " + how + ". There are fewer observations than terms, so the coefficients are not identified. Shorten the model or lengthen the series." });
+        else if (nObs === params) checks.push({ level: "error", msg: "This model has no residual degrees of freedom: " + how + ". The design is exactly determined, so every coefficient is estimated exactly and the model reproduces the data perfectly — but the residual variance is zero by construction, so there is no standard error, no confidence interval and no p-value for any of them. Shorten the model or lengthen the series." });
         else if (nObs - params < 10) checks.push({ level: "warn", msg: "Only " + (nObs - params) + " residual degrees of freedom: " + how + ". Every interval will be very wide and the diagnostics this protocol promises (Durbin–Watson, ACF/PACF) have almost nothing to work with." });
       }
       if (s.model === "poisson" && !s.denom) checks.push({ level: "warn", msg: "A Poisson model with no denominator / offset models the raw COUNT per period, and so assumes the population at risk is identical in every period. If the population grew or shrank, that change is read as a trend. Specify person-time or the eligible population as a log offset." });
@@ -720,7 +753,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // series with the box unticked was dropped from the protocol, from the
       // Word design-summary table (which then read "None (uncontrolled)") and
       // from the figure, with nothing anywhere saying it had been discarded.
-      if (!s.controlled && s.controlSeries) checks.push({ level: "warn", msg: "A control series is named (“" + s.controlSeries + "”) but “Controlled ITS” is not ticked, so this protocol describes a single-group analysis and that series appears nowhere in it. " + (forDoc ? "Either the analysis is a controlled ITS, in which case this protocol understates it, or the series is not part of the study and should not have been named." : "Tick “Controlled ITS” to analyse it as one, or clear the field.") });
+      if (!s.controlled && s.controlSeries) checks.push({ level: "warn", msg: "A control series is named (“" + clip(s.controlSeries, 120) + "”) but “Controlled ITS” is not ticked, so this protocol describes a single-group analysis and that series appears nowhere in it. " + (forDoc ? "Either the analysis is a controlled ITS, in which case this protocol understates it, or the series is not part of the study and should not have been named." : "Tick “Controlled ITS” to analyse it as one, or clear the field.") });
       // No check read the model against the inference method, so the panel
       // endorsed combinations that are not defined. Prais–Winsten is a GLS
       // quasi-differencing transform of a LINEAR model with AR(1) errors; it
@@ -728,9 +761,9 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // called it "a sound choice for this protocol" while §6 of the export
       // named both in consecutive sentences.
       if (s.model === "poisson" && s.autocorr === "prais")
-        checks.push({ level: "error", msg: "Prais–Winsten (and Cochrane–Orcutt) is a generalised-least-squares transform of a LINEAR model with AR(1) errors. It is not defined for the Poisson / negative-binomial model selected above, which has a log link and an offset. Either fit the segmented linear model — on the log rate, if a multiplicative effect is what you want — or choose an autocorrelation method defined for a count model." });
+        checks.push({ level: "error", msg: "Prais–Winsten (and Cochrane–Orcutt) is a generalised-least-squares transform of a LINEAR model with AR(1) errors. It is not defined for the Poisson / negative-binomial model this protocol specifies, which has a log link and an offset. Either fit the segmented linear model — on the log rate, if a multiplicative effect is what you want — or choose an autocorrelation method defined for a count model." });
       if (s.model === "poisson" && s.autocorr === "arima")
-        checks.push({ level: "warn", msg: "“ARIMA errors” with a Poisson / negative-binomial model is under-specified: an ARIMA error structure is defined for a Gaussian model, so on counts it means either a count-specific formulation (GLARMA, INGARCH and similar) or an ARIMA model fitted to the log rate, which is a different model from the one §6 names. State which one you mean." });
+        checks.push({ level: "warn", msg: "“ARIMA errors” with a Poisson / negative-binomial model is under-specified: an ARIMA error structure is defined for a Gaussian model, so on counts it means either a count-specific formulation (GLARMA, INGARCH and similar) or an ARIMA model fitted to the log rate, which is a different model from the one this protocol's model-specification section names. State which one you mean." });
       if (s.autocorr === "prais" || s.autocorr === "arima")
         checks.push({ level: "info", msg: (s.autocorr === "prais" ? "Prais–Winsten" : "ARIMA errors") + " is not implemented by RWE Studio's in-browser ITS, which offers Newey–West (HAC) or model-based standard errors only. Plan to run this analysis in R, SAS or Stata, or switch to Newey–West if you want the Studio to execute it." });
       // The one place this repo has already paid for the evidence. RWE Studio
@@ -1004,7 +1037,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       children.push(para("The outcome is aggregated per " + unitPhrase(s.unit) + " interval (" + ptsText(prePts(s)) + " pre + " + ptsText(postPts(s)) + " post points)." + (s.model === "poisson" ? " Denominator / offset: " + or(s.denom, "(person-time / eligible population, entered as a log offset)") + "." : "") + " Each interval is indexed by a continuous time variable; an interruption indicator marks intervals from " + Dt + " onward; and a time-since-interruption variable is coded 0 at the first affected period and counts up from there. " + CODING_NOTE + (s.lag ? " Transition / phase-in: " + s.lag + "." : "")));
 
       children.push(h1("5. Model specification"));
-      children.push(para("The outcome is modelled with " + modelText(s.model) + ". The segmented model estimates the baseline level and pre-intervention slope, the change in level (step at the interruption), and the change in slope (post minus pre). " + seasonText(s.seasonality) + ". " + autocorrText(s.autocorr) + "." + (s.controlled ? " A control series (" + or(s.controlSeries, "a comparison series unaffected by the intervention") + ") is included with group-by-segment interactions, so the difference in level and slope changes is the primary estimate." : "")));
+      children.push(para("The outcome is modelled with " + modelText(s.model) + ". The segmented model estimates the baseline level and pre-intervention slope, the change in level (step at the interruption), and the change in slope (post minus pre). " + seasonText(s.seasonality) + ". " + autocorrText(s.autocorr) + "." + (s.controlled ? " A control series (" + or(s.controlSeries, "a comparison series unaffected by the intervention") + ") is included with group-by-segment interactions, so the primary estimate is the between-series difference in the level and slope changes; the estimand section states the scale it is reported on." : "")));
 
       children.push(h1("6. Estimand and effect measures"));
       children.push(para("Primary estimands: " + effectText(s) + "."));
