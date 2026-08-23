@@ -1914,15 +1914,36 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         const naiveHi = (bT !== null && bTse !== null) ? bT + 1.959964 * bTse : null;
         const bootLo = pscNum(s.pscBootLo), bootHi = pscNum(s.pscBootHi);
         const hasBoot = bootLo !== null && bootHi !== null;
-        const ratio = s.effectMeasure !== "RD";
-        const measure = ({ HR: "HR", RR: "RR", RD: "RD", IRR: "IRR" })[s.effectMeasure] || "HR";
+        // One resolved measure drives every branch below. These were four
+        // independent readings of s.effectMeasure — `!== "RD"`, a four-entry
+        // lookup with `|| "HR"`, `=== "HR"`, and `=== "HR" || !s.effectMeasure`
+        // — and an unset measure sent them in different directions at once:
+        // the lookup substituted "HR" while `=== "HR"` stayed false, so the
+        // collapsible branch ran with measure "HR" and indexed a three-entry
+        // map that has no HR key. The protocol printed "**4. Your effect
+        // measure is collapsible…** undefined is collapsible — it is the odds
+        // ratio and the hazard ratio that are not — so Wan's non-collapsibility
+        // bias does not apply": a literal undefined, a heading asserting a
+        // property of a measure the same document calls unspecified, and a
+        // false all-clear retiring a bias source for the one measure it applies
+        // to. Reproduced in Chromium from a draft naming an effect measure this
+        // page does not offer.
+        //
+        // `em` is null exactly when the measure is not one of the four offered.
+        // Nothing downstream may test s.effectMeasure directly again: a
+        // not-equal against one value is true of the empty string too, which is
+        // the whole bug.
+        const MEASURES = ["HR", "RR", "RD", "IRR"];
+        const em = MEASURES.indexOf(String(s.effectMeasure || "")) >= 0 ? String(s.effectMeasure) : null;
+        const measure = em || "HR";
+        const ratio = measure !== "RD";
         // Wan bias source 1. Of the four measures this builder offers, only the
         // hazard ratio is non-collapsible; the risk ratio and the incidence rate
         // ratio are collapsible, as is the risk difference. This read
         // `!== "RD"`, so a user reporting an RR or an IRR was told their measure
         // was non-collapsible by a paragraph whose own first sentence correctly
         // names the odds and hazard ratio as the non-collapsible pair.
-        const nonCollapsible = s.effectMeasure === "HR";
+        const nonCollapsible = measure === "HR";
         const scaleLabel = s.pscScale === "logit" ? "logit(PS)" : "PS (probability scale)";
         // Surrogacy verdict. S (Lunt 2012, Table 2 footnote g) is the primary
         // instrument and the p-value is demoted to a secondary one, because the
@@ -1956,7 +1977,7 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         return {
           claims, clinical, excluded, a0, a1, a2, a1se, a2se, bT, bTse, bP,
           k, bC, naiveLo, naiveHi, bootLo, bootHi, hasBoot,
-          ratio, measure, nonCollapsible, scaleLabel,
+          em, ratio, measure, nonCollapsible, scaleLabel,
           surroP, surroCoef, surroS, surroSRaw, surroSBad, surroTestable, surroVerdict,
           releaseLevel: pscRelease(surroVerdict), contradiction: pscContradiction(clinical, claims, a1, a2),
           bootB: (s.pscBootB || "").trim() || "1000",
@@ -1983,12 +2004,17 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
             : "Neither S nor the p-value can be computed without outcomes in the validation dataset. This is precisely the cross-sectional-validation setting Lunt et al. (2012) address, and their conclusion is not to trust the point correction but to present PSC as a bias analysis over a plausible range for the unmeasured confounder's outcome association. Either obtain outcomes in the validation data, or take that route."]);
         out.push(["3. Failing the test is not a caveat — the correction reverses",
           "When surrogacy fails, calibration does not merely lose power; it moves the estimate the wrong way. Our simulation (linear outcome, so no non-collapsibility involved) gave a naive bias of +0.53 and a calibrated bias of −0.83 on the log scale at a moderate departure from proportionality; at a larger departure the naive estimate was nearly unbiased (+0.09) while calibration introduced −1.02. Stürmer's own 2007 simulation reports the same direction of failure: \"If surrogacy is violated, PSC can lead to an increase in bias.\" If S is low, report the naive estimate, report S, and follow the route under 'If surrogacy cannot be supported' rather than presenting a correction."]);
-        if (m.nonCollapsible) {
+        if (!m.em) {
+          // Neither branch below can be written honestly without knowing the
+          // measure, and guessing one retires a bias source or invents one.
+          out.push(["4. Whether a residual non-collapsibility gap remains cannot be stated yet",
+            "Section 8 does not name an effect measure, so this item cannot be resolved. Wan identifies non-collapsibility as an independent source of PS-calibration bias, and of the four measures this builder offers it applies to the hazard ratio and not to the risk ratio, the incidence rate ratio or the risk difference. Choose the effect measure in Section 8 and this item will say which of those two situations you are in."]);
+        } else if (m.nonCollapsible) {
           out.push(["4. Your effect measure is non-collapsible, so a residual gap remains even when surrogacy holds",
             "This protocol reports a " + m.measure + ". Wan identifies non-collapsibility of the odds and hazard ratio as an independent source of PSC bias: conditioning on a propensity score is not the same as conditioning on the covariates, and for a non-collapsible measure that changes the coefficient being estimated. So the calibrated " + m.measure + " is conditional on the gold-standard propensity score, not on baseline covariates — a subtly different estimand from the one the protocol otherwise describes. The gap shrinks as the outcome becomes rarer. In our simulation with proportional coefficients the calibrated log odds ratio still sat 0.13 below the truth, against a naive bias of +0.84. State the estimand you are reporting."]);
         } else {
           out.push(["4. Your effect measure is collapsible, which removes one of the two bias sources",
-            ({ RD: "A risk difference", RR: "A risk ratio", IRR: "An incidence rate ratio" })[m.measure] + " is collapsible — it is the odds ratio and the hazard ratio that are not — so Wan's non-collapsibility bias does not apply. Residual confounding — the calibrated score not being a valid propensity score — still does, and is still governed by the proportionality condition above."]);
+            ({ RD: "A risk difference", RR: "A risk ratio", IRR: "An incidence rate ratio" })[m.em] + " is collapsible — it is the odds ratio and the hazard ratio that are not — so Wan's non-collapsibility bias does not apply. Residual confounding — the calibrated score not being a valid propensity score — still does, and is still governed by the proportionality condition above."]);
         }
         out.push(["5. What to report",
           "Report the naive claims-only estimate as the primary result and the calibrated estimate as a pre-specified sensitivity analysis, never the calibrated one alone. Report the surrogacy test with it. Report the calibration coefficients α₀, α₁, α₂ with standard errors and R² so the correction is reproducible and reusable. Give the calibrated estimate a bootstrap interval, not a closed-form one. If surrogacy is doubtful or untestable, Lunt et al. (Am J Epidemiol 2012;175(12):1294-1302, doi:10.1093/aje/kwr463) give a bias formula that lets you present PSC as a sensitivity analysis over a plausible range for the unmeasured confounder's outcome association rather than as a point correction."]);
@@ -1998,7 +2024,11 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
       const pscRCode = (s, m) => {
         const rv = (a) => a.length ? a.map((x) => '  "' + String(x).replace(/["\\]/g, "") + '"').join(",\n") : '  # (none listed yet)';
         const link = s.pscScale === "logit" ? "link" : "response";
-        const surv = m.ratio && (s.effectMeasure === "HR" || !s.effectMeasure);
+        // Driven by the resolved measure, not by s.effectMeasure. It used to
+        // read `=== "HR" || !s.effectMeasure` — an unset measure was declared a
+        // survival analysis outright, so the appendix shipped coxph() while
+        // Section 8 of the same document said "(effect measure not specified)".
+        const surv = m.ratio && m.measure === "HR";
         // One outcome model, used for the surrogacy check, the point estimate
         // and every bootstrap replicate. These used to be written out
         // separately: the point estimate was Poisson with a person-time offset
@@ -3065,7 +3095,8 @@ _Drafted with the AsPEN protocol builder (${today})._
           if (m.surroVerdict === "p-ok") checks.push({ level: "info", msg: "The surrogacy p-value does not reject, which is weak evidence. Compute S from the same models and judge on its magnitude." });
           if (m.surroVerdict === "untested") checks.push({ level: "warn", msg: "Surrogacy has not been measured. Your validation data have outcomes, so compute S — of the outcome information carried by both propensity scores, the percentage carried by the gold-standard score alone (Lunt 2012) — and enter it in Section 8b. Wan (2024) shows PS calibration is generally biased unless surrogacy holds." });
           if (m.surroVerdict === "untestable") checks.push({ level: "warn", msg: "Surrogacy cannot be measured because the validation dataset has no outcomes. This is the cross-sectional-validation setting Lunt et al. (2012) address, and their answer is to present PS calibration as a bias analysis over a range for the unmeasured confounder's outcome association rather than as a point correction." });
-          if (m.nonCollapsible) checks.push({ level: "info", msg: "You are reporting a " + m.measure + ", which is non-collapsible. Wan (2024) identifies this as an independent source of PS-calibration bias: the calibrated estimate is conditional on the gold-standard propensity score, not on baseline covariates, so it is a slightly different estimand. The gap narrows as the outcome becomes rarer — state which estimand you report." });
+          if (!m.em) checks.push({ level: "warn", msg: "PS calibration is enabled but Section 8 names no effect measure, so this panel cannot say whether Wan's non-collapsibility bias applies to you — it applies to the hazard ratio and not to the risk ratio, the incidence rate ratio or the risk difference. The generated R also has to assume an outcome model; choose the measure and both will follow it." });
+          else if (m.nonCollapsible) checks.push({ level: "info", msg: "You are reporting a " + m.measure + ", which is non-collapsible. Wan (2024) identifies this as an independent source of PS-calibration bias: the calibrated estimate is conditional on the gold-standard propensity score, not on baseline covariates, so it is a slightly different estimand. The gap narrows as the outcome becomes rarer — state which estimand you report." });
           if (pscImport && pscImport.ageDays !== null && pscImport.ageDays !== undefined && pscImport.ageDays > 30) checks.push({ level: "info", msg: "The imported calibration handoff was generated " + pscImport.ageDays + " days ago. If the covariate list has moved since, α₁ and α₂ no longer belong to it — re-export from RWE Studio and import again." });
           if (pscImport && !pscImport.varsApplied) checks.push({ level: "info", msg: "The calibration coefficients were imported but the covariate split was not taken from the handoff. The method assumes PS_ep uses the same C the coefficients were fitted from — confirm the two agree." });
           if (!Object.keys(pscAi).length && (m.claims.length + m.clinical.length) > 0) checks.push({ level: "info", msg: "The claims/clinical split is still the keyword rule's guess. It reads names only, so it cannot distinguish a measurement from a billing code and it misses unfamiliar instruments — run 'Let AI classify' in Section 8b and check the rows it changes. A clinical variable left in the claims list collapses the correction toward zero, which reads as 'no unmeasured confounding'." });
