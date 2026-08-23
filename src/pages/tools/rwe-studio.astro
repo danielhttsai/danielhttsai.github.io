@@ -1758,12 +1758,20 @@ const DESIGNS = [
           "if(length(badids)>0) cat(sprintf('TABLE1|People set aside for impossible values|%d\\n', length(badids)))\n" +
           "cat(sprintf('TABLE1|Cases (people with >=1 event)|%d\\n', ncase))\n" +
           "if(sum(epc==0)>0) cat(sprintf('TABLE1|People with no event (contribute nothing)|%d\\n', sum(epc==0)))\n" +
-          "cat(sprintf('TABLE1|Person-interval rows|%d\\n', nrow(a)))\n" +
+          // These two rows used to be taken over every person in the file, while the note
+          // below asserted that every count describing the analysis was taken over the
+          // cases. On a cohort extract that is not a small discrepancy: with 88 event-free
+          // people carrying most of the exposed time, Table 1 read 62.5% of person-time
+          // exposed against 21.2% of events, whose crude ratio is 0.16 - which is exactly
+          // the pooled row the tool tells the reader NOT to report, and a factor of 19 from
+          // the headline. A case series describes its cases.
+          "ac<-a[a$ID %in% names(ev)[ev>0],,drop=FALSE]\n" +
+          "cat(sprintf('TABLE1|Person-interval rows (cases)|%d\\n', nrow(ac)))\n" +
           "cat(sprintf('TABLE1|Events, total|%d\\n', sum(a$EVENTS)))\n" +
           "if(ncase>0) cat(sprintf('TABLE1|Events per case, median (range)|%s (%s-%s)\\n', fmn(median(epc[epc>0])), fmn(min(epc[epc>0])), fmn(max(epc[epc>0]))))\n" +
           "cat(sprintf('TABLE1|Cases with an event and both exposed and unexposed person-time|%d (%s%% of cases)\\n', ninf, if(ncase>0) sprintf('%.1f',100*ninf/ncase) else '0.0'))\n" +
-          "cat(sprintf('TABLE1|Person-time exposed|%s (%.1f%%)\\n', fmn(sum(a$INTERVAL[a$EXPOSED==1])), 100*sum(a$INTERVAL[a$EXPOSED==1])/sum(a$INTERVAL)))\n" +
-          "cat(sprintf('TABLE1|Events during exposed time|%d (%.1f%%)\\n', sum(a$EVENTS[a$EXPOSED==1]), if(sum(a$EVENTS)>0) 100*sum(a$EVENTS[a$EXPOSED==1])/sum(a$EVENTS) else 0))\n" +
+          "cat(sprintf('TABLE1|Person-time exposed (cases)|%s (%.1f%%)\\n', fmn(sum(ac$INTERVAL[ac$EXPOSED==1])), if(sum(ac$INTERVAL)>0) 100*sum(ac$INTERVAL[ac$EXPOSED==1])/sum(ac$INTERVAL) else 0))\n" +
+          "cat(sprintf('TABLE1|Events during exposed time (cases)|%d (%.1f%%)\\n', sum(ac$EVENTS[ac$EXPOSED==1]), if(sum(ac$EVENTS)>0) 100*sum(ac$EVENTS[ac$EXPOSED==1])/sum(ac$EVENTS) else 0))\n" +
           "if(sum(epc==0)>0) cat(sprintf('RESULT_NOTE|%d of the %d people analysed had no event at all. A case series contains only cases: these people contribute nothing to the estimate, and every count above that describes the analysis is taken over the %d who did have one. If you meant to upload a case series, this file is a cohort extract.\\n', sum(epc==0), length(epc), ncase))\n" +
           "if(ndropna>0) cat(sprintf('RESULT_NOTE|%d row(s) were dropped because the exposure indicator, event count or interval length was missing. Dropping an interval removes that person-time from its case while leaving the case in the analysis, so check that the missingness is not concentrated in one exposure state.\\n', ndropna))\n" +
           "if(ndrop0>0) cat(sprintf('RESULT_NOTE|%d row(s) with zero person-time and no event were dropped; they carry no information either way.\\n', ndrop0))\n" +
