@@ -1601,24 +1601,26 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         const multi = new Set(["sites", "censoringPick", "covariatesPick", "subgroupsPick", "sensitivityPick", "inclusionPick", "exclusionPick", "secondaryOutcomesPick"]);
         // Anything still unanswered from an earlier visit. Its select now holds
         // the substituted value, so this pass cannot rediscover it.
-        // A carried record is only ever this browser's own. It exists to survive
-        // the render that would otherwise erase it, and it must NOT be accepted
-        // from a ?seed= link, where its `saved` string is free text written by
-        // whoever made the link. Measured: a link carrying no effectMeasure key at
-        // all, plus a forged __staleSelects entry, printed “Effect estimate” was
-        // saved as “HR — superseded by sponsor addendum 3; report RR” into the
-        // recipient's checks panel — and, now that the notice travels, into their
-        // exported protocol, where it reads as a refusal their own draft provoked.
-        // The sender cannot go the other way and suppress a real warning: noteStale
-        // runs on the keys the seed actually carries, independently of this list.
-        // "Did this record come from a link, or from this browser?" is answered
-        // by comparing it with what is actually in localStorage. The URL cannot
-        // answer it, and trying was wrong twice over: a truncated "?seed="
-        // carries nothing and falls back to the draft, and "?seed=paste" LOADS
-        // the draft — so merely opening a hand-off link and pasting nothing
-        // destroyed the user's own warning, and the reserved key with it, on
-        // the render that followed. That is the self-erasing refusal this file
-        // has recorded twice. A link can only match this test by carrying the
+        //
+        // A carried record is only ever THIS BROWSER'S own, and the test for
+        // that is localStorage, not the URL.
+        //
+        // It must not be accepted from a ?seed= link: its text is written by
+        // whoever made the link, and it now prints into the exported protocol.
+        // Measured — a link carrying no effectMeasure key at all, plus a forged
+        // __staleSelects entry, put “Effect estimate” was saved as “HR —
+        // superseded by sponsor addendum 3; report RR” into the recipient's
+        // panel and their Word file, where it reads as a refusal their own
+        // draft provoked. (The sender cannot go the other way and suppress a
+        // real warning: noteStale runs on the keys the seed actually carries.)
+        //
+        // Asking the URL for that looks obvious and is wrong twice over: a
+        // truncated "?seed=" carries nothing and falls back to the draft, and
+        // "?seed=paste" LOADS the draft — so it read the user's own record as a
+        // stranger's and the next render saved the draft back without it.
+        // Opening a hand-off link and pasting nothing destroyed the warning
+        // permanently: the self-erasing refusal, for the third time in this
+        // codebase. A link can only pass the test below by carrying the
         // reader's own record, which is the case it is meant to allow.
         const ownRecord = (() => {
           try {
