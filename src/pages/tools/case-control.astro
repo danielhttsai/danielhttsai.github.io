@@ -318,6 +318,10 @@ const SENSITIVITY = [
       expdef: V("expdef"), lookback: V("lookback"), covlookback: V("covlookback"),
       covariatesPick: MV("covariatesPick"), covariatesCustom: V("covariatesCustom"),
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
+      // See the note in sequential-trial: without this key the autosave drops a
+      // seeded amendments log, so one draft exports two protocols that disagree
+      // about whether the study has been amended.
+      amendments: V("amendments"),
     });
 
     const isMatched = (s) => mergeList(s.matchingPick, s.matchingCustom).length > 0;

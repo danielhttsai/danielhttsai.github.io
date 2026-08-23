@@ -276,6 +276,13 @@ const SENSITIVITY = [
       assignment: V("assignment"), multiple: V("multiple"), confounding: V("confounding"), estimand: V("estimand"), effect: V("effect"),
       followup: V("followup"), washout: V("washout"), covlookback: V("covlookback"), covWindows: V("covWindows"), futrial: V("futrial"),
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
+      // PC.restore creates the hidden "amendments" textarea on every builder, so
+      // a ?seed= link or a pasted hand-off lands amendment rows here and the
+      // export prints them. This object is what gets autosaved, and it did not
+      // mention the field — so the draft came back without it and the SAME
+      // draft produced two documents, one saying "amended 1 time" and the next
+      // saying "no amendments have been made", with no user action in between.
+      amendments: V("amendments"),
     });
     // Numbers are read RAW above — no silent fallback. A blank washout / look-back /
     // follow-up box used to be quietly replaced by 365/365/1825 in the exported

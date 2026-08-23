@@ -341,6 +341,10 @@ const SENSITIVITY = [
       model: V("model") || "poisson", seasonality: V("seasonality") || "none", autocorr: V("autocorr") || "none",
       controlled: CH("controlled"), controlSeries: V("controlSeries"),
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
+      // See the note in sequential-trial: without this key the autosave drops a
+      // seeded amendments log, so one draft exports two protocols that disagree
+      // about whether the study has been amended.
+      amendments: V("amendments"),
     });
 
     // ONE reading of a period count, shared by the protocol text, the diagram,
