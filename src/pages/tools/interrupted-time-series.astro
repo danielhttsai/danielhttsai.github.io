@@ -504,20 +504,29 @@ const SENSITIVITY = [
         [s.controlled && !s.controlSeries, "the control series (controlled ITS is ticked but no comparison series is named)"],
       ].filter((x) => x[0]).map((x) => x[1]);
     };
-    const missingMd = (s) => {
-      const m = missing(s);
-      return m.length ? "> **This draft is incomplete.** Still to be specified: " + m.join("; ") + ".\n\n" : "";
-    };
+    // Everything computeChecks produces used to die on screen: only the
+    // `missing()` gaps travelled. So a protocol with every field filled, no
+    // seasonality adjustment on monthly data and no autocorrelation handling —
+    // the two things that most often invalidate an ITS — exported as a clean,
+    // complete-looking document with no trace of either warning, while the page
+    // that built it showed both in amber. The reader of the Word file is the
+    // person who most needs them.
+    const docChecks = (s) => computeChecks(s, true);
+    const blockers = (s) => docChecks(s).filter((c) => c.level === "error").map((c) => c.msg);
+    const cautions = (s) => docChecks(s).filter((c) => c.level === "warn").map((c) => c.msg);
+    const BLK_HEAD = "This draft is not ready to be used as a protocol. The items below must be settled first; until then the sections that depend on them say what is missing rather than supplying a value.";
+    const CAU_HEAD = "Flagged while this protocol was drafted. These are not blocking, but each is a choice a reader will expect to see justified.";
 
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
       const P = or(s.population, "(population)"), O = or(s.outcome, "(outcome)"), I = or(s.intervention, "(intervention/policy)");
       const D = or(s.interruptDate, "(interruption date)");
+      const quote = (head, list) => list.length ? "> **" + head + "**\n" + list.map((m) => ">\n> - " + m).join("\n") + "\n\n" : "";
       return `# ${or(s.title, "(Untitled interrupted time series study)")}
 
 _Study protocol · interrupted time series (segmented regression) · drafted ${today}_
 
-${missingMd(s)}${window.PC.abstractMd(pcOf(s))}
+${quote(BLK_HEAD, blockers(s))}${quote(CAU_HEAD, cautions(s))}${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
 This study uses an **interrupted time series (ITS)** design to evaluate whether **${I}** changed the **level** and/or the **slope (trend)** of **${O}** in **${P}**.
 
@@ -588,6 +597,12 @@ ${window.PC.tailMd(pcOf(s))}
       if (!s.controlled) checks.push({ level: "info", msg: "Single-group ITS assumes no co-intervention or secular change coincides with the interruption. A control series (controlled ITS) lets you difference those out and strengthens causal inference." });
       if (s.model === "poisson" && !s.denom) checks.push({ level: "warn", msg: "A Poisson model with no denominator / offset models the raw COUNT per period, and so assumes the population at risk is identical in every period. If the population grew or shrank, that change is read as a trend. Specify person-time or the eligible population as a log offset." });
       if (s.controlled && !s.controlSeries) checks.push({ level: "warn", msg: "Controlled ITS is ticked but no control series is named. A control series only helps if it shares the secular environment and is genuinely unaffected by the intervention — say which series that is and why it qualifies." });
+      // The mirror case had no check at all, and every surface that prints the
+      // control series is gated on `controlled` first — so a named comparison
+      // series with the box unticked was dropped from the protocol, from the
+      // Word design-summary table (which then read "None (uncontrolled)") and
+      // from the figure, with nothing anywhere saying it had been discarded.
+      if (!s.controlled && s.controlSeries) checks.push({ level: "warn", msg: "A control series is named (“" + s.controlSeries + "”) but “Controlled ITS” is not ticked, so this protocol describes a single-group analysis and that series appears nowhere in it. Tick the box to analyse it as a controlled ITS, or clear the field." });
       if (s.autocorr === "prais" || s.autocorr === "arima")
         checks.push({ level: "info", msg: (s.autocorr === "prais" ? "Prais–Winsten" : "ARIMA errors") + " is a sound choice for this protocol, but RWE Studio's in-browser ITS does not implement it — it offers Newey–West (HAC) or model-based standard errors only. Plan to run this analysis in R, SAS or Stata, or switch to Newey–West if you want the Studio to execute it." });
       if (s.lag) checks.push({ level: "info", msg: "You have specified a transition / phase-in period. RWE Studio cannot exclude periods around the interruption, so that part of the protocol would have to be done in your own analysis code (or by excluding those rows before upload)." });
@@ -763,8 +778,14 @@ ${window.PC.tailMd(pcOf(s))}
       if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
       children.push(p([text(or(s.title, "(Untitled interrupted time series study)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
       children.push(p([text("Study protocol · interrupted time series (segmented regression) · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
-      const miss = missing(s);
-      if (miss.length) children.push(p([text("This draft is incomplete. Still to be specified: " + miss.join("; ") + ".", { bold: true, color: "9E3A2C" })], { spacing: { after: 160 } }));
+      const noteBlock = (head, list, colour) => {
+        if (!list.length) return;
+        children.push(p([text(head, { bold: true, color: colour })], { spacing: { after: 60 } }));
+        list.forEach((m) => children.push(new D.Paragraph({ children: [text(m, { color: colour })], bullet: { level: 0 }, spacing: { before: 0, after: 0 } })));
+        children.push(p([text("")], { spacing: { after: 120 } }));
+      };
+      noteBlock(BLK_HEAD, blockers(s), "9E3A2C");
+      noteBlock(CAU_HEAD, cautions(s), "8A6100");
       window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
@@ -813,7 +834,20 @@ ${window.PC.tailMd(pcOf(s))}
         "Interruption: " + Dt + (I ? " — " + I : "") + (s.lag ? " (transition / phase-in: " + s.lag + ")" : ""),
         "Post-intervention segment: " + ptsText(postPts(s)) + " " + unitPhrase(s.unit) + " point(s) from the interruption onward.",
         "Estimated at the interruption: the change in level (immediate step) and the change in slope (trend).",
-      ].concat(s.controlled ? ["Control series: " + or(s.controlSeries, "(a comparison series unaffected by the intervention)") + " — same calendar periods, differenced against the intervention series."] : []);
+      ].concat(s.controlled ? ["Control series: " + or(s.controlSeries, "(a comparison series unaffected by the intervention)") + " — same calendar periods, differenced against the intervention series."] : [])
+      // The picture draws at most 36 points a segment and the on-screen caption
+      // says so; that sentence never travelled, so a 60-point series exported a
+      // figure of 36 under bullets asserting 60. This is the figure's only
+      // machine-readable description, so it has to carry the disclaimer too.
+      .concat((() => {
+        const pp = prePts(s), qp = postPts(s);
+        const drawn = (p) => Math.max(2, Math.min(36, p.state === "ok" && p.n > 0 ? p.n : 24));
+        if ((pp.state === "ok" && pp.n > 36) || (qp.state === "ok" && qp.n > 36))
+          return ["Schematic: the figure draws at most 36 points per segment, so it shows " + drawn(pp) + " before and " + drawn(qp) + " after. The counts above are the protocol's; the picture is illustrative."];
+        if (pp.state !== "ok" || qp.state !== "ok" || pp.n === 0 || qp.n === 0)
+          return ["Schematic: at least one segment length was left empty, zero or unreadable, so the figure falls back to an illustrative " + drawn(pp) + " / " + drawn(qp) + " points and is NOT showing this study's series."];
+        return [];
+      })());
       const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: __cap, lines: __figLines });
       figParas.forEach((c) => children.push(c));
       if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
