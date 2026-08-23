@@ -2636,3 +2636,294 @@ because its test dispatched a synthetic `change` event, which cleared the
 blocker where a real re-pick would not — and said so rather than reporting it as
 executed. That honesty is what made the finding usable: it was reasoned from the
 DOM spec, it was right, and it became live only after the fix above.
+
+### Found 2026-08-23 by a twelfth run — sequential trial emulation, and the hub card that routes to it
+
+Eleven runs had worked ACNU (×3), RWE Studio (×2), the Protocol Checker,
+case-control, clone-censor-weight, descriptive-analysis, SCCS and
+case-crossover. **Three builders had still never been opened**:
+`sequential-trial`, `interrupted-time-series` and `trend-in-trend` (`git log
+--` on each shows only the initial import). This run took
+**`src/pages/tools/sequential-trial.astro`** (773 lines) plus the ST card in
+`protocol-generator.astro`, on the grounds that target-trial emulation is the
+most used framework of the three and the hub card is what every user reads
+first.
+
+Two reviewers ran concurrently with genuinely different briefs and a 45-minute
+deadline; both reported, on time, with executed evidence. The deadline
+instruction works — keep using it. A third reviewer was then sent at this run's
+own two commits.
+
+#### Environment: nothing newly blocked, three notes
+
+- `npm i --no-package-lock --no-audit --fund=false`, `npm pack docx@8.5.0` +
+  `page.route('**unpkg.com/**', …)`, Crossref/PubMed/doi.org blocked with
+  `WebSearch` only, the live site unreachable — all still true. **Nothing here
+  was checked against `danielhttsai.github.io`**; the deploy was confirmed green
+  via the Actions API instead.
+- Detached HEAD again. `git push origin HEAD:main`.
+- **A `.docx` escapes apostrophes as `&apos;` even after you strip the tags.** A
+  regex containing a literal `'` will report your own text as missing. That cost
+  this run one false alarm on a fix that was working; it was caught by dumping
+  the surrounding characters instead of trusting the boolean.
+- Ports: orchestrator 8161/8162, reviewers 8141/8142, 8151/8152, round two
+  8171/8172. Assign up front.
+- A reusable `harness.mjs` is in this run's scratch: static server, CJS-safe
+  Playwright import by absolute path, the `docx` CDN route, and an `armCapture`
+  whose `URL.createObjectURL` stub **delegates for `image/*`** so `svgToPng`
+  still works — the tenth run's trap, avoided by construction.
+
+#### Fixed this run
+
+All executed in Chromium against a local build, before and after; every export
+claim asserted by unzipping a generated `.docx` and reading
+`word/document.xml`, never inferred.
+
+- ~~**A day count read three ways.**~~ The file opens with a comment promising
+  "ONE reading of a day-count, shared by the protocol text, the diagram and the
+  checks, so they cannot tell three different stories about the same box".
+  `covLbText` was the single consumer that never used it. `covlookback = "-5"`
+  gave a checks panel reading "the protocol prints (invalid) rather than
+  guessing", a diagram with no look-back drawn, and §4 asserting "a covariate /
+  eligibility look-back of **-5 days before each origin**" — which reached the
+  Word design summary and **TARGET item 7a**. `"1e3"` printed verbatim beside a
+  diagram drawn at 1000; `"365.7"` printed beside 366 under a note claiming the
+  rounding applied "in the protocol and the diagram alike". **When a file
+  declares a single reader, grep every consumer against it — one had escaped.**
+- ~~**Unreadable ≠ zero, on the way OUT as well as in.**~~ The standing brief
+  item from the third run, live here. `dayInt` coerced an unreadable
+  per-covariate length to 0, so `Comedications | six months` became a covariate
+  measured on the origin day alone, and `rowsJoin` wrote that 0 back over the
+  textarea — the only copy — whenever a chip was clicked or a handle dragged.
+  Rows now split on the **last** `|` (so `Sex (M|F)` keeps its name) and carry
+  `{name, raw, days}` where `days` is a number, `null` or `NaN`.
+- ~~**`parseInt`, again.**~~ The chip buttons seeded rows with
+  `parseInt(covlookback) || 365`: two faults in one expression. A 1000-day
+  look-back seeded a **one-day** row, and the fallback invented a year for
+  anyone whose box was empty — including immediately after "Clear all", which
+  blanks it and then promises "every number is now blank".
+- ~~**A follow-up nobody set, drawn as five years.**~~ `Math.max(1,
+  dayInt(s.futrial) || 1825)` gave the across-trials strip a `+5y` label beside
+  prose reading "(not specified)" and a check asserting the diagram showed a
+  placeholder — true of the top figure, false of the strip.
+- ~~**A stale draft blanked three `<select>`s and the export answered for
+  them.**~~ The brief's standing item, **executed in a browser here for the
+  first time**. A draft naming `estimand: "per-protocol"`, `effect: "SDIFF"`,
+  `interval: "fortnightly"` left all three at `selectedIndex = -1`, and a select
+  with no selection contributes nothing to the form — so §3 asserted **monthly**
+  origins, §9 read "The target estimand is the treatment effect", and §10 step 3
+  said "run ITT and per-protocol variants" (the ternary's else-branch): **two
+  different answers to one blanked field, neither the draft's**, with the checks
+  panel silent. Captured before the first render saves over the draft, persisted
+  **in** the draft under a reserved key, cleared per control, cleared by "Clear
+  all", dismissible by a Keep button, and it travels into both exports and
+  TARGET. See the trap below — the first version of this fix was wrong.
+- ~~**Refusals that never left the screen.**~~ Nothing `computeChecks` produced
+  reached any export. Errors and warnings are computed once and painted into the
+  panel, the Markdown, the `.docx` and TARGET item 7h.
+- ~~**No design diagram in the Word protocol** (HARPER 7.2).~~ This was the
+  **only one of the nine builders exporting no figure at all** — `grep -l
+  designDiagramFigure src/pages/tools/*.astro` returned the other eight. The
+  page draws two figures, captions them, and `word/media` held the logo alone.
+  Both embed now; `fig.lines` is nulled so the written description comes from
+  the same readers as the prose, because the shared `fmtDay` rounds 350 days to
+  "1y".
+- ~~**Two mutually exclusive designs, shipped as simultaneous defaults.**~~
+  Reviewer A's top finding, and the sharpest thing in the file. The assignment
+  default said "patients initiating the comparator in that interval … form the
+  control arm" — an **active-comparator** sequential trial, in which a patient is
+  assigned at the one origin at which they initiate and enters exactly ONE
+  trial. The enrolment default, **in the same exported document**, said "A
+  patient may enrol in several consecutive trials until they are treated" — the
+  **initiator-versus-not-yet-treated** design of Hernán 2008 / Danaei 2013, in
+  which the control arm IS the untreated. Each deletes the other's control arm.
+  Every argument the protocol then makes about re-use — non-independence, the
+  bootstrap over patients, the refusal to meta-analyse, `pcOf.limitations` — is
+  idle under the first design. All four cited papers are the second; the
+  placeholders were the first; the hub's example ("Benzodiazepine **vs no use**
+  in pregnancy") routes users to the second before they arrive. The page has no
+  field that chooses, so it **names the fork and asks**. The three near-duplicate
+  copies of every default sentence (Markdown / Word / TARGET) are one `DEF` now —
+  that duplication is *why* they drifted into two designs.
+- ~~**Proportional hazards certified on the wrong grounds.**~~ "Unlike the cloned
+  design, the arms within one nested trial are different people, so proportional
+  hazards is not violated by construction here", in the effect-measure helper
+  text and again in the checks panel. Wrong mechanism (a cloned design breaks PH
+  because the same clones occupy both arms until the grace period ends — shared
+  identity is not what does it) and wrong conclusion (under ITT the arms
+  converge as controls initiate, so the HR drifts to the null **by
+  construction**, by the mechanism §9 already describes).
+- ~~**Three surfaces named a different primary variance method.**~~ Header:
+  "estimates are pooled with a patient-clustered robust variance". §10: the
+  bootstrap over patients is the reference and the robust variance "the cheaper
+  alternative". Hub `assumes`: "a variance clustered on the patient" — listed
+  beside exchangeability and positivity, where an estimator is a category error.
+- ~~**The hub's "Breaks when" named analyst mistakes, not design failures**~~ —
+  and both were mistakes the builder already catches. Replaced with: eligibility
+  that does not actually vary over time (the design collapses to a single-origin
+  new-user study); within-trial positivity failure; confounders affected by
+  earlier treatment (a baseline PS per origin is not enough — a g-method is).
+- ~~**Competing risks appeared nowhere**~~ — no `competing`, `Fine-Gray` or
+  `cause-specific` in the file — while the default follow-up censors at death and
+  the default effect measure is a **survival difference plus RMST**. This is
+  sharper here than the same item in ACNU, where the default was a Cox HR (=
+  the cause-specific hazard, defensible): 1−KM censoring at death is not the
+  cumulative incidence, and an RMST difference built that way is defined in a
+  world where the competing event cannot happen. The seeded example is dementia
+  in adults ≥ 50.
+- Smaller, same species: a **default-ticked sensitivity analysis asked for an I²
+  the checks panel warns on the same untouched page is meaningless here**; "the
+  same machinery as a clone-censor-weight analysis" omitted that the arms being
+  different people is exactly why this estimator needs IPTW **and** IPCW
+  together; the pooled estimate is now described as the information-weighted
+  average it is; what happens to a control's earlier records when they later
+  initiate (kept under ITT, censored under PP) is stated; within-trial
+  positivity diagnostics are a planned output; the RMST-horizon check fired for
+  a blank τ but not an unreadable one; a window over fifty years is flagged
+  rather than drawn as **−273972.6y**; `doReset` restores each select's authored
+  default instead of `selectedIndex = 0`.
+
+#### Checked and clean (do not re-derive)
+
+- **`washout` and `futrial` are correct across the whole matrix** — `1e3`→1000,
+  `-5`→refused, `7.5`→8 with a rounding note, `0`, blank, `99999999`: prose,
+  both diagrams and the checks agree.
+- **Number boxes cannot be poisoned by text.** Typing `365 days` or `one year`
+  into `<input type=number>` with a real keyboard yields `"365"` / `""`.
+- **`name=` ↔ `s.<x>` is clean** — all 24 control names are read by `readForm`.
+- **`effect` has five options and `effectText` five keys; `estimand` three and
+  three.** No fall-through to a `||` default.
+- **Layout is clean at 390 / 768 / 1024 / 1440 px** (`scrollWidth ===
+  clientWidth` at all four), measured twice.
+- **Citations — all six `REFS` confirmed from search snippets**, author lists,
+  volumes, issues, pages and DOIs matched: Hernán 2008 Epidemiology
+  19(6):766-779; Danaei 2013 SMMR 22(1):70-96 (author list exact, including
+  "García Rodríguez LA"); Gran 2010 Stat Med 29(26):2757-2768; Keogh 2023 Stat
+  Med 42(13):2191-2225; Hernán & Robins 2016 AJE 183(8):758-764; Cashin 2025
+  JAMA 334(12):1084-1093. **Search-snippet evidence, not a Crossref check. No
+  citation text was changed.**
+  - **One attribution is UNCONFIRMED and was left in place**: "Danaei et al.
+    (2013) … described the resulting intervals as *conservative*". No snippet
+    from Danaei 2013 says this. The *claim* is independently supported (Limozin,
+    Seaman & Su, SMMR 2025 / arXiv:2407.08317: "The sandwich variance estimator
+    is popular but conservative"), but the attribution needs journal access.
+    Either verify it or drop the attribution and keep the claim.
+
+#### Round two: the reviewer was pointed at this run's own commits
+
+**Four for four.** After shipping, a third reviewer was given only this run's
+diff and told to break it. Its sharpest finding was a bug this run had just
+written, worse than several it had inherited. Seven executed findings, all
+fixed and each re-executed. The pattern is now well enough established that it
+should be treated as a required step, not an optional one.
+
+- ~~**A check asserted a fact by ruling one value out.**~~ The new
+  competing-risks check fired `if (s.effect !== "HR")`, true of `""` as well. A
+  `?seed=` link carrying `effect: ""` produced a protocol whose §9 read "We
+  report (not specified)" and whose first page read "An absolute contrast is
+  selected". **The defect this run existed to remove, reintroduced by the fix
+  for a different one.** General rule, and it belongs in the bug-class list:
+  **never assert a positive fact about a `<select>` by ruling one value out —
+  use a whitelist.** A blank estimand or effect measure now blocks; the
+  stale-select machinery does not cover it, because it only fires for a value
+  the page does not *offer*, and an empty string is not a value.
+- ~~**A page-breaking stray identifier.**~~ Hoisting the figure descriptions out
+  of `buildDocx` left the fragment `an` on a line of its own. **Trap worth
+  knowing: `astro build` does not parse `is:inline` scripts, and neither does
+  `new Function(src)` catch this** — a bare identifier is a valid expression
+  statement, so it parses and throws a `ReferenceError` only when the code runs.
+  A `new Function` check is still worth running (it caught a duplicate `const`
+  in the same edit, which had killed the entire page's JS with a green build),
+  but **only clicking the button in a browser finds the runtime case.**
+- ~~**The last-`|` split ate a name when no day count followed it.**~~ This
+  run's own claim that `Sex (M|F)` keeps its name held only when a number
+  followed the pipe. `Sex (M|F)` alone became a covariate called "Sex (M" with
+  an unreadable length "F)", and one chip click rewrote the textarea to
+  `Sex (M | F)` — **the exact destruction the same commit set out to fix.**
+  Every row keeps `line` (the user's text) now, is written back byte-for-byte
+  when unreadable, and is quoted whole rather than split.
+- ~~**A blocker stated something false on screen**~~ — "(…and that box is
+  currently empty)" while the box read 365. Conditional now.
+- ~~**Four places still asserted the design the previous commit had just
+  stopped asserting**~~ — the abstract (`pcOf.analysis`), `pcOf.limitations`,
+  TARGET item 7g, and **Figure 2's written description, added by this run**.
+  Naming a fork in §§4-6 is worth little while four other strings answer it.
+  **When you make a claim conditional, grep the whole file for the claim.**
+- ~~**Making the checks travel changed their audience**~~ and three strings had
+  not noticed: one named a section number that exists only in the export (the
+  form is numbered 1-5, the protocol 1-13), one said "above" while rendering at
+  the *top* of the document, one told the reader to press a button. The
+  stale-select message has two renderings now, identical in substance.
+- ~~**A judgement call, decided the reviewer's way.**~~ Promoting the
+  proportional-hazards and competing-risks notes to `warn` put an amber banner
+  above the abstract of **every** finished protocol the page can produce — no
+  input clears them, since any effect measure fires one or the other. A warning
+  nobody can answer is what teaches people to ignore the panel, which this run's
+  own code comment said three lines above the code that did it. Both are `info`
+  now and their substance is stated unconditionally in the protocol prose (§8
+  competing risks, §9 proportional hazards), which is where it reaches the
+  reader of the Word file anyway. **Measured: a fully completed protocol exports
+  with 0 flagged bullets; an untouched one carries 6, all of them "you have not
+  filled this in yet".**
+
+#### What the reviewers disagreed about, and who was right
+
+- **The two briefs split cleanly and neither could see the other's half.** The
+  applied analyst closed with "the load-bearing gaps on this page are
+  **transport**, not statistics: a stronger sentence about estimands that stays
+  on screen is worth nothing to the person who receives the `.docx`". The
+  methodologist's top finding was that the page shipped **two mutually
+  exclusive designs**. Both were right about their own half and wrong to rank
+  the other below it — transport a contradiction faithfully and you have
+  faithfully transported a contradiction. Doing only one would have left the
+  page broken in the other's terms.
+- **The applied analyst predicted the methodologist would overstate "no target
+  estimand is named"** (carried over from the ACNU brief entry). It did not —
+  `estimand` is a real select here and §9/§10/TARGET 7f all read it. The
+  prediction was sound and the item genuinely does not apply to this builder.
+- **The methodologist predicted the applied analyst would re-report the chip
+  `parseInt` and the `+5y` label as live.** It did, correctly labelling them
+  ALREADY FIXED — it had executed them against the pre-diff build before the
+  orchestrator's commit landed. Both reviewers handled the moving tree well
+  because both were told explicitly that it was moving.
+- **Both were wrong about `doReset`'s select fallback, in opposite ways.** The
+  reviewer called it "vacuous" because `defaultSelected` is false for every
+  option in this file, so `fallback` collapses to `options[0]` — identical to
+  the `selectedIndex = 0` it replaced. That is true *today* and the point is
+  that it stops being true the moment someone adds a `selected` attribute,
+  which is the failure the brief already records from another builder. Left as
+  written; recorded here so it is not "fixed" back.
+
+#### Open, examined this run, deliberately left
+
+- **`ProtocolCommon`'s tail is wrong in kind here too** — "the study targets
+  ≥ 80% power to detect the smallest clinically important effect at a two-sided
+  α = 0.05" for a design whose power depends on the number of trials, the
+  overlap within each, and how fast controls initiate. **Fourth builder to
+  record this objection.** It remains the best-evidenced item in this brief and
+  should be done deliberately across all nine, not locally in one.
+- **`ProtocolCommon`'s amendments sentence**, and **this builder does not call
+  `PC.mountAmendments`** — seven of nine still do not. Cross-cutting, unchanged
+  since the third run.
+- **`shortDbName()`'s trailing-parenthetical bug** — this file has its own copy.
+  Standing cross-cutting item; the id migration and the label must be done together.
+- **Missing data are not mentioned anywhere** (2 hits, both parser messages).
+  HARPER/TARGET reviewers expect a statement; STROBE item 12 asks for one.
+- **The "conservative" attribution to Danaei 2013 is unconfirmed** — see the
+  citations note above. Verify or drop the attribution and keep the claim.
+- **Four subgroups and five sensitivity analyses ship ticked**, the ACNU /
+  descriptive-analysis / CCW / case-crossover pattern. **Defaults policy —
+  Daniel's call.**
+- **There is still no field that chooses the control arm.** This run made the
+  fork explicit in the prose and blocked on the eligibility rule, which is the
+  cheap half. A `<select>` for it would let the page stop hedging in six
+  places and would make the re-use machinery conditional on a real value rather
+  than on a sentence the user typed — but that is a feature, so it is Daniel's
+  call. **It is the highest-leverage one on this list.**
+- **`interrupted-time-series.astro` and `trend-in-trend.astro` have still never
+  been opened** — `git log --` on each shows only the initial import. They are
+  the obvious next rotation. `trend-in-trend` looked carefully written on a
+  read-through (tri-state estimator handling, a real refusal for a stale
+  estimator, comments that name the bugs they fixed); `interrupted-time-series`
+  overlaps the ITS statistics two runs have already gone deep on in RWE Studio,
+  so knowledge transfers.
