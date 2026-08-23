@@ -264,6 +264,16 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   events per keystroke, 13.6ms vs 7.2ms on ACNU. No re-entrancy, no loop, no
   caret loss. Both reviewers agreed it is not worth changing. Do not "fix" it
   without a reason.
+- ~~The Protocol Checker's planned-outputs path: `normName`'s `/` vs `-` gap, a
+  deliverable with `name: ""` dropped silently, `skip` as the un-validated twin
+  of `skipOutputs`, and the tool quoting itself as "the AI's own words".~~
+  **Done 2026-08-23 (thirtieth run)** — all four, plus five more the two
+  reviewers found and eight that the round sent back at this run's own diff
+  found. See that run's section at the bottom. **Do not re-clear `normName` on
+  an en-dash test**: three reviewers have now done exactly that and the fourth
+  found six live variants in twenty minutes. The itemised list of what is wrong
+  in the worker's seven deliverable descriptions is also there — that is the
+  best next target in this tool, and it needs the worker to be reachable.
 - **In the Protocol Checker, `"present"` on a planned output is satisfied by a
   promise rather than a shell** — the twenty-third run's own top-ranked open
   item, still the best next target there, with a drafted one-sentence fix in its
