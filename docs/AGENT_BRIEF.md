@@ -3265,3 +3265,272 @@ either, since the source is only invalid once the line breaks are interpreted.
   cross-cutting commit and nothing else. It is the last one. A read-through
   suggests it is carefully written (tri-state estimator handling, a real refusal
   for a stale estimator), which is exactly what was said about this file too.
+
+### Found 2026-08-23 by a fourteenth run — trend-in-trend, the last never-opened builder
+
+Thirteen runs had worked ACNU (×3), RWE Studio (×2), the Protocol Checker,
+case-control, clone-censor-weight, descriptive-analysis, SCCS, case-crossover,
+sequential-trial and ITS. This run took **`src/pages/tools/trend-in-trend.astro`**
+(651 lines), which `git log --` showed had one cross-cutting commit and no
+review ever. **Every builder in the set has now been opened at least once.**
+
+Two reviewers ran concurrently on genuinely different briefs with a 40-minute
+deadline; both reported on time with executed evidence, and **converged
+independently on three defects** (the calendar/period contradiction, the blank
+numeric field, the wrong study-size paragraph), which is good evidence those
+were real. A third was then sent at this run's own commits.
+
+#### Environment: nothing newly blocked, four notes
+
+- `npm i --no-package-lock --no-audit --fund=false`, `npm pack docx@8.5.0` +
+  `page.route('**unpkg.com/**', …)`, Crossref/PubMed/doi.org/**CRAN**/publisher
+  hosts all 403 with `WebSearch` the only way out, the live site unreachable,
+  detached HEAD (`git push origin HEAD:main`) — all still true.
+- **R is not needed for this builder** and was not installed.
+- Ports: reviewers 8141/8142 and 8151/8152, orchestrator 8161-8167, round two
+  8171/8172. Assign up front.
+- A reusable `harness.mjs` is in this run's scratch (`scratchpad/tit/`): static
+  server, Playwright by absolute path, the `docx` CDN route, an `open({ draft,
+  seed })` that pre-seeds localStorage or a `?seed=` link, and
+  `armCapture`/`grabText`/`grabBytes` for capturing a real download. `v1`–`v4`
+  and `msgs.mjs` are worked examples.
+- The `<script is:inline>` block is a classic script, so `page.evaluate(() =>
+  readNum('1e3'))` and `page.evaluate(() => computeChecks(readForm(), true))`
+  reach its functions directly. Much the fastest way to test this file.
+
+#### The trap that nearly cost this run the page, again
+
+The thirteenth run recorded that a **literal U+2028 inside a regex character
+class** breaks an `is:inline` script at runtime while the build reports success.
+Porting that run's `oneLine` helper, this run **reintroduced exactly that bug**
+— the literal characters travelled instead of the `\u2028\u2029` escapes. It was
+caught within a minute only because the brief said to look. **Scan for it after
+any edit that copies a regex between files:**
+`python3 -c "import io;print([hex(ord(c)) for c in io.open(P,encoding='utf-8').read() if ord(c) in (0x2028,0x2029)])"`
+The brief paid for itself here; keep the entry.
+
+#### Fixed this run
+
+All executed in Chromium against a local build, before and after; every export
+claim asserted by unzipping a generated `.docx` and reading `word/document.xml`,
+never inferred.
+
+- ~~**The hub defined CPE as the thing the builder has a red error to
+  refute.**~~ `protocol-generator.astro` told the reader that trend-in-trend
+  strata "are defined by their **cumulative percentage exposed (CPE)**". Ji et
+  al's abstract divides the population into strata "based on the **cumulative
+  probability of exposure given covariates**" — a probability predicted per
+  person by a stage-1 model, which is the entire reason the design is robust to
+  time-invariant unmeasured confounding. Stratifying on the observed percentage
+  exposed defines the strata by the exposure trend itself and gives that
+  property away. `descriptive-analysis.astro` states it correctly in two places
+  and the builder ships a red error saying exactly this; **three files defined
+  CPE and only the hub — the page a reader meets first — was wrong.** Snippet
+  evidence for the abstract wording; every publisher host is 403.
+- ~~**One box, four different numbers.**~~ `nperiods = "1e3"` — which
+  `<input type="number">` accepts without complaint — gave §3 "**1e3** periods",
+  a checks panel saying "Only **1**", a caption reading "1e3" and a drawing of
+  **3**, with the clamp disclosure silent because it tested
+  `parseInt("1e3") > 24`. One `readNum` now, consumed by the prose, the checks,
+  the caption, the drawing, both Word tables and the figure description.
+- ~~**A blank count exported as 10 and silenced its own warning.**~~
+  `V("nperiods") || "10"`. Emptying the box exported "10 periods" the form was
+  not showing **and** cleared the "aim for ≥ 5" bar at the same moment, because
+  10 is not fewer than 5. The page's own reset handler carried a comment saying
+  precisely this was unacceptable and fixed it only for "Clear all". Same for
+  `nstrata` and 5. Also closes the paste case: `<input type="number">` discards
+  `"10 years"`, `" 7 "` and `"0x10"` to `""` before any script sees them, so the
+  user saw an **empty box** beside a confident number.
+- ~~**Zero periods drew ten.**~~ `parseInt(s.nperiods) || 10` — `0` is falsy —
+  drew a ten-period figure under a caption reading "0" and a panel reading
+  "Only 0". The drawing now discloses **both** clamp directions; it had only
+  ever admitted to clamping down.
+- ~~**A stale draft rewrote the analysis and then destroyed the evidence.**~~
+  This page had the machinery for `estimator` alone. A draft or `?seed=` link
+  naming a `period` or `effect` it does not offer left those selects at
+  `selectedIndex = -1`, contributing nothing to `FormData`, so `|| "yearly"` and
+  `|| "OR"` substituted silently — and the first render's autosave then wrote
+  the substitutions **back over the draft**, so the user's own values were gone
+  within a second of page load, unrecoverable. A colleague opening your link got
+  a different protocol from the one you sent. Ported the twelfth run's
+  machinery: all selects, the empty string included, the record persisted inside
+  the draft under a reserved key, per-control clearing, a Keep button, two
+  renderings for the two audiences.
+- ~~**The warnings that decide whether the estimate means anything never left
+  the screen.**~~ Only `missing()` travelled. A user could watch the page refuse
+  a strata count of `-5` in red and export a Word file whose design-summary
+  table stated "**-5 quantiles of the cumulative probability of exposure**" as
+  fact, with §7 step 2 instructing sites to "assign each person to one of -5 CPE
+  strata". Blockers and cautions now open both exports, flattened by `oneLine`
+  and capped by `clip` first — the messages quote what the user typed, a shared
+  link can carry a newline, and a newline ends a Markdown blockquote.
+- ~~**Nothing reconciled four inputs describing one axis.**~~ "2005–2018 in
+  yearly periods (**10** periods)" exported with a straight face, and the page's
+  own placeholders (`e.g. 2005`, `e.g. 2018`) beside a default of 10 handed the
+  user that contradiction **before they typed anything**. Checked only where it
+  is unambiguous — both ends bare four-digit years, where all four offered
+  period lengths divide the span exactly. A month-precision end is not guessed
+  at, because a wrong period count is the thing the check exists to catch.
+- ~~**The sparse-cell note was about the wrong axis.**~~ It fired on strata > 5
+  and said nothing about periods, so 5 strata × 168 monthly periods — 840 cells
+  over a fixed number of cases — passed in silence while 10 × 10 was flagged.
+  Sparsity is a property of the `G × Tn` grid. What the tool genuinely cannot do
+  is *judge* sparsity, because it never learns the case count, so it now reports
+  the grid it will produce and says that rather than inventing a threshold.
+- ~~**The study-size paragraph was the generic person-level cohort one.**~~
+  "Power … from observed exposure and outcome frequencies", "person-time and
+  event counts" — for a design with no exposed-versus-unexposed contrast, in a
+  document whose own figure description says it "is not anchored to a
+  person-level day 0", so the exported protocol contradicted itself across two
+  sections. **The paper that says how to size it was already in this page's
+  bibliography and had never been invoked.** Sixth builder to record this
+  objection; closed locally, as the thirteenth run established, via
+  `ProtocolCommon`'s `nz(s.studySize, …)` hook. The new paragraph names the
+  determinant that actually matters (the strength of the exposure-prevalence
+  trend), cites Ertefaie et al 2018 for it, and names the package's Monte-Carlo
+  routines `ttpower()` / `ttdetect()` with the parameters the form already
+  collects.
+- ~~**Half of the identification flag was missing.**~~ Three surfaces said
+  `TrendInTrend::OR()` "flags non-identification". The documented indicator
+  covers "not identifiable **or weakly identified**", and weak identification is
+  much the more dangerous of the two because a number still prints — it is
+  simply unstable. Also added the package's own documented caveat that the
+  bootstrap interval may have slightly **below-nominal** coverage, which four
+  surfaces had promised as a plain 95%.
+- Smaller, same species: the file's strongest comparative claim ("the conditions
+  under which trend-in-trend is biased are a subset of those under which a
+  cohort study is biased") was stated in the tool's own voice on 2 of 8 surfaces
+  and is now attributed to Ji et al; a user's own sentence ran into the
+  boilerplate after it in **both** exports, because the placeholders carry no
+  full stop ("Proportion dispensed A strong time trend in exposure is…"); the
+  legend now says the per-stratum exposure trends — whose divergence the design
+  turns on, and which the analysis plan asks to be reported — are **not** the
+  curves drawn; "Clear all" promised to "forget the saved draft" and then had
+  `render()` write it straight back; `doReset` set selects to `selectedIndex =
+  0` rather than their authored default; and the two rule-of-thumb thresholds
+  (≥ 5 periods, ≥ 3 strata) now say they are this tool's heuristics rather than
+  sitting in the same authoritative voice as the sourced "Ji et al used
+  quintiles (5)".
+
+#### Checked and clean (do not re-derive)
+
+- **All four citations resolve, author lists included** — Ji 2017 Epidemiology
+  28(4):529-536 / PMID 27775954; Ertefaie 2018 Epidemiology 29(3):e21-e23 /
+  doi 10.1097/EDE.0000000000000803; Dasgupta 2019 Pharmacoepidemiol Drug Saf
+  28(5):716-725 / doi 10.1002/pds.4736 / PMID 30714239 (author list confirmed
+  verbatim and in order); the `TrendInTrend` CRAN package by Ji X & Ertefaie A.
+  **Snippet evidence, checked independently by two agents; NOT a Crossref
+  check** — Crossref, PubMed, doi.org and CRAN are all 403 here. **No fabricated
+  reference in this file.** Ertefaie's PMID could not be seen in any snippet.
+- **A lead was resolved IN THE PAGE'S FAVOUR, which is why leads are not
+  findings.** The claim that `OR()` flags non-identification looked invented —
+  the first snippet found described the failure as "may fail to converge". A
+  second search of the package reference lists exactly that indicator among its
+  return values. Do not rewrite it.
+- **The stage-2 description is correct.** `OR()` takes `n11`/`n10`/`n01`/`n00`
+  as `G × Tn` matrices, so the page's "2 × 2 table per stratum per period" is
+  right, not the ecologic-marginals shortcut a reviewer suspected.
+- **Stage 1 / CPE is correct and consistent on all six surfaces that state it**,
+  and matches Ji's abstract.
+- **exp(β₁) is an odds ratio and every surface agrees** — no surface claims RR,
+  HR or RD; the RR option's rare-outcome rationale appears in all five places it
+  needs to and is nowhere overstated.
+- **All 19 `name=` attributes are read by `readForm`.** Diffed mechanically.
+- **Layout is clean at 390 / 768 / 1024 / 1440 px** (`scrollWidth ===
+  clientWidth`), re-measured after the new and much longer check messages.
+- **A sweep of all 35 distinct messages `computeChecks` can emit** found **zero**
+  positional or screen-only language in the document rendering (the three that
+  say "press Keep" are the screen variants, correctly split). Worth repeating
+  whenever checks start travelling; it is cheap.
+- The Word export builds (302 KB, valid zip, logo and Figure 1 placed), the
+  five numbered analysis steps are present in **both** exports, and no acronym
+  is lower-cased. The drag handle works. The `?seed=` path decodes correctly.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The two briefs split cleanly and neither could see the other's half.** The
+  methodologist's top finding was that the exported protocol is sized by a
+  person-level cohort paragraph while the same document's figure description
+  says the design "is not anchored to a person-level day 0". The applied
+  analyst's was that opening the page with a stale draft **destroyed the user's
+  saved values within a second** and then described a study they had not
+  specified. One is a claim about statistics, the other a lifecycle bug with no
+  wrong sentence in it. Both shipped. **Keep running the two briefs disjoint.**
+- **The orchestrator overruled the methodologist twice, and both times the
+  weaker version of the finding was the right one.**
+  - It argued the tool "flags by default the analysis it recommends by default"
+    (the > 5 strata note firing at 10, while a default-ticked sensitivity
+    analysis suggests 3 vs 5 vs 10). **Rejected**: the note explicitly asks the
+    user to "compare against 5 strata as a sensitivity analysis", which is what
+    that ticked analysis does. They agree; they do not conflict.
+  - It argued the legend asserts per-stratum *exposure* trends the figure never
+    draws. **Half right.** "Outcome trend, high-CPE stratum (steep rise in
+    exposure)" describes *which stratum* the curve belongs to, not a second
+    drawn curve. But the underlying gap is real — the divergence of exposure
+    trends across strata is the one thing the design turns on and the one thing
+    the figure does not show. Fixed by **saying so**, not by drawing invented
+    per-stratum curves, which would assert something false.
+- **The methodologist named its own least-confident finding and it was left, on
+  its own advice.** `exp(β₁)` is a single odds ratio fitted across all `G × Tn`
+  cells, so it is identified only under no effect modification by CPE — and CPE
+  strata are strata of propensity to be treated, which in pharmacoepidemiology
+  is routinely an effect modifier. The page's assumption box is headed
+  "Assumptions, stated as the paper states them", a positive completeness
+  claim, and never mentions it. The reviewer wrote: "Anyone acting on this must
+  read Ji 2017 §Methods first" — which is impossible from this container, every
+  publisher host being 403. **Left deliberately. This repo has already had a
+  fabricated citation introduced by exactly the route of reasoning about a
+  paper nobody could open.**
+- **The applied analyst named its own least-confident finding and it was also
+  left.** The Markdown and the Word file number their sections differently (the
+  `.docx` swaps this page's §3 prose for a design-summary table, so everything
+  after is offset by one), making "Section 7" ambiguous in an amendment. It
+  flagged this as possibly deliberate; **the brief confirms it is the house
+  pattern**, recorded by the thirteenth run for ITS. Not changed — but the
+  lesson *was* applied: no travelling message hard-codes a section number.
+- **A citation suspicion was resolved IN THE PAGE'S FAVOUR by two agents
+  independently.** Both suspected `OR()`'s non-identification flag might be
+  invented; both found the package reference listing exactly that indicator.
+  Recorded because it is the counter-example to the run's own instinct: **a
+  reviewer's suspicion is a lead, and leads lose about as often as they win.**
+
+#### Open, examined this run, deliberately left
+
+- **The homogeneity assumption** (above). Needs Ji 2017 §Methods. Also absent:
+  any statement that the design assumes the outcome does not affect subsequent
+  exposure. **Do not write either from memory.**
+- **"A time-stable confounder cannot bias it" is stated unqualified on six
+  surfaces.** It is a consequence of the unbiased-unless condition *within the
+  model*, not an unconditional guarantee. Consistent everywhere, so it is a
+  minor overreach rather than a contradiction — but a scope clause would be
+  more honest.
+- **The diagram always draws a positive effect.** `slope` is strictly
+  increasing in the stratum index with no null case, so the picture asserts a
+  causal effect whatever the data would show. "Schematic only — the shapes are
+  illustrative, not your data" mitigates it. A null-case toggle is a feature.
+- **`PC.mountAmendments` is never called here** — seven of nine builders still
+  do not, unchanged since the third run.
+- **Both "📚 Library" buttons drop the validated code set.** They set
+  `data-target-name` only and this page has no codes field, so picking from a
+  modal headed "Validated phenotype library" writes the bare phenotype name and
+  discards the codes, the definition and the validation citation. Same species
+  as ACNU's and ITS's; closing it properly means adding a field.
+- **Two subgroups and four sensitivity analyses ship ticked.** Seventh builder
+  to record it. **Defaults policy — Daniel's call.**
+- **The hub's TIT card still says the design assumes "the unmeasured
+  confounding is time-invariant"**, which is a stronger framing than the
+  paper's condition. Left as a defensible simplification for a chooser card;
+  the builder states it precisely. Only the CPE definition was wrong enough to
+  change.
+- **The drag handle's px-per-period accuracy is unverified.** The handle sits
+  ~2800-4400 px down the page and Playwright clamps mouse coordinates to the
+  viewport, so displacement could not be measured. Scroll the diagram into view
+  and assert against `pxPer = (plotR - plotL) / (np - 1)`.
+- **Ertefaie 2018's PMID (29337845) was never observed in a snippet** — every
+  other field of all four references was. Unverified, not wrong.
+- **`impliedPeriods` deliberately checks only the unambiguous case** (both ends
+  bare four-digit years). A month- or day-precision range, or a free-text one
+  like "Q1 2005", is not checked at all and says nothing. Widening it means
+  deciding what "2005-03" to "2018" means, and guessing there would recreate
+  the bug the check exists to catch.
+
