@@ -4756,3 +4756,219 @@ anything, and the compound-count defect above. Neither is visible in a diff.
   et al., *Epidemiology* 2011, PubMed 21577117. Crossref/PubMed remain blocked.
 
 <!-- CLAIM 2026-08-23 eighteenth run: taking the SCCS interval (Wald vs profile likelihood) and the SCCS numeric-parsing open items in src/pages/tools/rwe-studio.astro. If you are a concurrent run reading this, take something else. -->
+### Found 2026-08-23 — clone-censor-weight, second pass (concurrent with the SCCS run above)
+
+**Stop numbering runs; label them by target.** This run and the SCCS /
+case-crossover run above were in flight simultaneously, both called themselves
+the seventeenth, and by push time that run had also claimed "eighteenth" for its
+next piece of work. Ordinals are now actively misleading. The code changes never
+overlapped and rebased cleanly — **only this file conflicted, twice.**
+
+Two things follow, both of which cost this run time:
+
+- **`git fetch origin main` and re-read the tail of this file immediately before
+  you choose a target**, not at the start of your run. A claim marker may have
+  appeared in between.
+- **The ship loop at the top of this brief does not survive a conflict.** Its
+  `for i in 1 2 3 4 5; … git rebase --autostash -q … || sleep` retries blindly,
+  and once a rebase has stopped on a conflict every later iteration dies on
+  "there is already a rebase-merge directory" — five wasted attempts and no
+  push. Resolve the conflict, `git rebase --continue`, then re-enter the loop.
+  Appending a section to the end of this file conflicts with any other run doing
+  the same, so expect it.
+
+Sixteen runs had worked the nine builders, RWE Studio twice, the hub twice and
+the Protocol Checker twice. CCW was last opened by the **eighth** run, and the
+fifteenth run had left an explicitly unresolved item in it: `:501` asserted
+"Every clone deviates immediately", copied there from a hub card the fifteenth
+run had corrected without fixing the builder it came from. That made the choice.
+
+Two reviewers on disjoint briefs (methodologist: estimands, assumptions,
+citations, prose; applied analyst: form plumbing, selects, parsers, refusal
+surfaces, exports), both against a frozen `b8fe5b3`, then sent at each other's
+lists, then a third sent at this run's own diff.
+
+#### Environment: nothing new broke, and one thing to stop re-deriving
+
+Every trap in the sixteenth run's list still holds exactly as written: `npm i
+--no-package-lock --no-audit --fund=false`; `npm pack docx@8.5.0` + `page.route`
+for a real `.docx`; Crossref/PubMed/doi.org/WebFetch blocked with `WebSearch`
+the only survivor; the live site unreachable; the repo a shallow clone whose
+`git log -- <path>` lies about coverage. **The brief remains the authority on
+coverage.** Detached HEAD again — `git push origin HEAD:main`. Ports 8611-8729.
+
+- The brief is now over 256KB and **exceeds the Read tool's file-size limit.**
+  Read it with `offset`/`limit` — the non-negotiables at the top and the last
+  ~400 lines for recent hand-offs. Do not try to read it whole.
+- **Splitting one file's coordinated rewrite into topic commits does not work
+  here** and cost this run real effort. Four shared constants land in a single
+  `-U3` hunk, so hunk-classification produces commits whose messages do not
+  match their contents. Commit by file boundary with a complete message instead.
+
+#### Fixed this run
+
+Executed in Chromium against local builds: 31 assertions for the first two
+commits (2/31 on the old build, 31/31 on the new) and 30 more for the third.
+Word claims were read out of a real generated `word/document.xml`.
+
+- ~~**A time-fixed weight model prescribed for the arm the builder ships.**~~
+  Both exports said "a clone in the initiate arm can only deviate at one time".
+  Discontinuation, switch and add-on ship **ticked**, and each is a continuing
+  requirement, so that arm deviates throughout follow-up and a time-fixed
+  censoring model ignores all of it. **This was the only finding on either
+  reviewer's list that changes a number rather than a document.** The paragraph
+  also named which arm was which although both strategy boxes are free text —
+  executed with "Continue statin therapy" vs "Discontinue within the grace
+  period", which swaps the roles, in a real `.docx`. One shared string now
+  states the rule, lets both strategies land on the same side, and leaves the
+  mapping to the deviation rule. The Maringe attribution was **dropped, not
+  moved**: it could not be checked from here.
+- ~~**The stabilised weight was defined by the unstabilised formula.**~~ Both
+  protocols: "a stabilised IPCW — the inverse of its estimated probability of
+  remaining uncensored". That is the unstabilised weight. It matters because
+  `truncText` commits the primary analysis to untruncated weights, and because
+  the mean-range-percentiles diagnostic demanded in the next paragraph is only
+  interpretable against a mean near 1.
+- ~~**Positivity was the wrong probability over the wrong interval.**~~ Now
+  correct under both readings (complementary and non-complementary strategy
+  pairs), scoped to wherever artificial censoring can occur, and it records that
+  the grace period trades one arm's positivity against the other's — so
+  "shorten the grace period" is not a fix.
+- ~~**The balance diagnostic named no time.**~~ A weighted between-arm SMD is
+  zero at time zero however broken the weights are. Now time-indexed, and
+  conditional: with grace blank, invalid or zero it names a defined time instead.
+- ~~**`plannedOutputs` ignored the effect measure.**~~ Effect = HR with a
+  complete, valid form produced a document naming a hazard ratio in one section
+  and commissioning a survival difference and an RMST in another, with **zero
+  blockers**. Executed by both the analyst and the round-three reviewer.
+- ~~**Three refusal messages.**~~ Grace 0 ("every clone deviates immediately");
+  the blank-grace branch three lines above saying the arms "are the same arm"
+  while the other said no person-time is shared between them — one state, two
+  opposite descriptions, both printed at the top of the Word file and TARGET
+  item 1a; and grace ≥ follow-up, whose stated reason was the opposite of the
+  failure. It does not leave "no contrast to estimate"; it leaves one strategy
+  unenforced, so the contrast is confidently confounded rather than null.
+- ~~**The false hazards mechanism, in nine places across three files.**~~ "The
+  two arms contain the same people during the grace period, so their hazards are
+  equal by construction" is true at time zero and nowhere after. Five sites in
+  CCW, `protocol-generator.astro:124` verbatim, and **three in
+  `sequential-trial.astro` plus a code comment**, where it appeared in a
+  stronger form as a favourable contrast ("forces the two hazards equal until
+  the grace period ends"). Correcting CCW alone would have left the site
+  contradicting itself across linked pages.
+- Smaller: truncation reached the Markdown and not the Word file, so two
+  documents from one form disagreed about untruncated weights; the hard-coded
+  "Section 13" it carried does not exist in the Word file; Word built its own
+  RMST horizon and printed "the horizon ((not specified))"; the exported figure
+  description told a protocol reader to "drag" something; the diagram paragraph
+  promised follow-up "under each strategy" from a timeline that draws no arms;
+  Markdown and Word reported success in green over a document whose first page
+  says it cannot be analysed; a seeded amendments log was dropped by the first
+  autosave because `readForm` never read it.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The disjoint split paid off a fourth time — one overlap out of ~20.** Both
+  found the truncation defect independently, which is why it shipped without
+  further argument.
+- **The analyst overturned the methodologist's SMD finding.** The methodologist
+  called the between-arm SMD "zero by construction"; the analyst pointed out
+  every site says **weighted**, and a weighted between-arm SMD among the clones
+  still uncensored is zero only at t = 0. It also read "before the primary
+  analysis is run" correctly, as a workflow clause rather than a claim about
+  baseline. Only the time-indexing shipped.
+- **The methodologist retracted its own prescription** after searching the
+  literature: a between-arm weighted SMD **is** the check CCW papers report, at
+  the end of the grace period, and it withdrew its round-one proposal to
+  substitute a within-arm-over-time diagnostic — *"prescribing a diagnostic no
+  one uses, in a document an analyst will implement, is a worse error than the
+  one I was fixing."* **Both reviewers changed their own answer under pressure;
+  that is what round two is for.**
+- **The methodologist killed the analyst's biggest finding using the shared
+  component's own documentation.** `ProtocolCommon.astro:25-29` states that
+  HARPER item 3 "IS SATISFIED WITH NO BUILDER CHANGE AT ALL" and that "no
+  amendments have been made" is "the correct claim for a first draft, not a
+  placeholder" — verified before acting. A user on their third revision is not
+  editing a stored v2, they are generating a fresh v1 from changed inputs, so
+  the export is not lying. **`mountAmendments` stays uncalled: mounting it is a
+  feature.** Only the `readForm` one-liner shipped.
+- **The methodologist's supporting evidence was wrong twice while its
+  conclusions held** — the standing pattern. It attributed "per-protocol
+  analogue" to a copy-paste from `active-comparator-new-user.astro:826`, which
+  reads "On-treatment (per-protocol)"; and its clincher for the hazards finding
+  ("the estimate would be identically zero for any τ ≤ grace") does not follow,
+  as the analyst showed. **Check the quote, not just the claim.**
+- **The analyst withdrew its own weakest finding** (shipped defaults exporting
+  as authored decisions) rather than defend it, and salvaged the one defensible
+  residue: the defaults are a *configuration*, and two of them are mutually
+  incoherent.
+
+#### Round three: the reviewer was pointed at this run's own commits
+
+**Nine for nine.** The sharpest finding was again **damage the run had just
+done**, and twice it was the same error class the run had set out to delete:
+
+- **Builder-UI register shipped into both protocols.** The paragraph written to
+  stop the exports naming arms ended "three of the censoring events THIS BUILDER
+  offers … THIS TOOL cannot tell … because both are FREE TEXT". Before this run
+  no exported string on the page contained that vocabulary. `truncText`, moved
+  into Word to fix a real defect, took "the sensitivity analyses YOU wrote" with
+  it. **When you move a string to a new surface, re-read it in that surface's
+  register — a document has no "tool" and no text boxes.**
+- **The HR caveat reintroduced the deleted error in softer clothing**, claiming
+  a single HR "averages a stretch in which the effect is null by construction".
+  There is no such stretch. The run's own sequential-trial comment said so.
+- **The sequential-trial rewrite made its own contrast vacuous**: "there the
+  curves are pinned together at time zero" is true of every design including
+  that one, so it distinguished nothing. What is specific to cloning is that
+  both arms hold the **same patients**, so the hazards coincide at the origin.
+  **Replacing a wrong mechanism with an empty one is not a fix.**
+- Two new blocker messages assumed the deadline is the only way to deviate,
+  contradicting the deviation-schedule string sixty lines above them **in the
+  same commit** — the "new shared machinery and a new caller written without
+  reference to each other" shape the brief warns about.
+- Sharing two strings with Word silently stripped the Markdown's bold from the
+  assumptions lead and the entire HR blockquote. **The Markdown-markers trap
+  runs in this direction too.**
+- `groupBy` became a 216-character sentence in a field the shared component
+  documents as a Table 1 *column label*, and its em-dash aside attached
+  "identical across arms" to the wrong noun.
+- The checks panel printed "You have chosen the hazard ratio. Caveat on the
+  hazard ratio." — a heading baked into a string for two other surfaces.
+- Two comma splices and a dangling "it" in new on-screen prose. **All four of
+  the last items were invisible in the diff and obvious on the page.**
+
+#### Open in CCW, examined this run, deliberately left
+
+- **`SENSITIVITY[0]` pre-specifies "censor at discontinuation (>90-day gap)"
+  while `fudays` ships at 90**, so the default protocol commits to a sensitivity
+  analysis that cannot occur under its own default design. Both reviewers
+  confirmed the arithmetic. **Not fixed, and the reason is a trap worth
+  recording: these checkbox values are the strings stored in saved drafts and
+  matched on restore (`val.includes(n.value)`). Changing the text would silently
+  untick that analysis in every existing draft** — the "saved draft carrying a
+  removed value" bug class this brief hunts. `IPCW_REASONS` already solves this
+  with a stable `v` and a separate display `l`; `SUBGROUPS` and `SENSITIVITY` do
+  not. Giving them the same treatment is the prerequisite for ever editing one.
+- **`PC.mountAmendments` still uncalled here and in six other builders** —
+  examined properly this run and **judged correct, not outstanding**, per
+  `ProtocolCommon.astro:25-29`. It should stop being listed as a defect.
+- **Shipped defaults export as authored decisions** (grace 14, look-back 365,
+  follow-up 90, pre-ticked subgroups/sensitivity/IPCW events). Raised by the
+  analyst, withdrawn by it, and left: blanking them destroys the starter
+  template, and tracking "untouched" is a feature.
+- **Tap targets**: the two `📚 Library` buttons are 17px and the fifteen `+`
+  quick-add chips 23px, against a WCAG minimum of 24. Measured, not fixed.
+- **Row look-backs are rounded silently** — `rnd` in `computeChecks` covers the
+  three numeric boxes but not `covlist`/`excllist` rows, so `365.7` becomes 366
+  with no "Rounded to whole days" line, and the next chip click writes it back
+  over the user's text. Real, worth ~0.7 of a day.
+- **The Maringe 2020 attributions remain unverified from this sandbox** — that
+  the paper advises against a simple Cox model *for the reasons now given*, and
+  that its worked example reports the survival and RMST differences at one year.
+  Unchanged, not asserted anew, and one attribution was deleted rather than kept
+  on faith. `REFS` itself was re-checked entry by entry and is sound
+  (snippet-only). **Gaber 2024 and Gran 2010 are still cited nowhere in the
+  text** — the analyst argued that is normal for a bibliography and it was left.
+- **Nothing was verified against the live site**, which is unreachable from
+  here, and nobody has still ever opened one of these `.docx` files in Word.
