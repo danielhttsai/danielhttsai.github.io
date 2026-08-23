@@ -318,8 +318,15 @@ const SENSITIVITY = [
         }
       });
     };
-    const staleMsgs = () => staleSelects.map((x) =>
-      "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + x.used + "” and this protocol describes THAT — a different specification from the one your draft named. Pick the option you want, or press “Keep “" + x.used + "”” to confirm it.");
+    // Two renderings, because this message goes to two audiences. On screen it
+    // must tell the user what to press; in the exported protocol there is no
+    // button to press, and an instruction to press one reads as a defect in the
+    // document. The substance — what was saved, what was substituted, and that
+    // the protocol describes the substitute — is identical in both.
+    const staleMsg = (x) =>
+      "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + x.used + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
+    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + x.used + "”” to confirm it.");
+    const staleMsgsDoc = () => staleSelects.map(staleMsg);
     // Free text the user typed is followed by more of our prose. Without this the
     // exported Word ran the two together ("…or 5 years Maximum follow-up per trial…");
     // with a naive "." appended it double-punctuated anyone who typed one.
@@ -557,8 +564,11 @@ const SENSITIVITY = [
     // Word file never sees — and the Word file is what gets circulated. Every
     // blocking check is computed once and painted into the panel, the Markdown
     // and the .docx alike, so the three cannot disagree about what is wrong.
-    const blockers = (s) => computeChecks(s).filter((c) => c.level === "error").map((c) => c.msg);
-    const cautions = (s) => computeChecks(s).filter((c) => c.level === "warn").map((c) => c.msg);
+    // computeChecks is pure apart from reading staleSelects, so one call per
+    // export is enough for both lists.
+    const docChecks = (s) => computeChecks(s, true);
+    const blockers = (s) => docChecks(s).filter((c) => c.level === "error").map((c) => c.msg);
+    const cautions = (s) => docChecks(s).filter((c) => c.level === "warn").map((c) => c.msg);
     const BLK_HEAD = "This draft is not ready to be used as a protocol. The items below must be settled first; until then the sections that depend on them say what is missing rather than supplying a value.";
     const CAU_HEAD = "Flagged while this protocol was drafted. These are not blocking, but each is a choice a reader will expect to see justified.";
 
@@ -633,9 +643,11 @@ ${REFS.map((r) => "- " + r).join("\n")}
 `;
     };
 
-    const computeChecks = (s) => {
+    // forDoc picks the wording for a reader of the exported protocol rather
+    // than of the page — see staleMsg / staleMsgs above.
+    const computeChecks = (s, forDoc) => {
       const checks = [];
-      staleMsgs().forEach((m) => checks.push({ level: "error", msg: m }));
+      (forDoc ? staleMsgsDoc() : staleMsgs()).forEach((m) => checks.push({ level: "error", msg: m }));
       const covRows = parseRows(s.covWindows);
       const lb = covRows.length ? 1 : dayInt(s.covlookback), fu = dayInt(s.futrial);
       const wash = dayInt(s.washout);
@@ -665,13 +677,13 @@ ${REFS.map((r) => "- " + r).join("\n")}
       const badRows = covRows.filter((r) => r.raw && !Number.isFinite(r.days)).map((r) => r.name + " | " + r.raw);
       const noneRows = covRows.filter((r) => !r.raw).map((r) => r.name);
       if (badRows.length) checks.push({ level: "error", msg: "These per-covariate rows have a look-back that could not be read as a whole number of days, so the protocol says so rather than guessing a length, and no window is drawn for them: " + badRows.join("; ") + ". A row is read as “Name | days”, and the days must be a whole number of 0 or more." });
-      if (noneRows.length) checks.push({ level: "error", msg: "These per-covariate rows have no look-back after the “|”, so their windows are unspecified: " + noneRows.join("; ") + ". Give each one a whole number of days. (Adding a row from a chip copies the single look-back box above, and that box is currently empty.)" });
+      if (noneRows.length) checks.push({ level: "error", msg: "These per-covariate rows have no look-back after the “|”, so their windows are unspecified: " + noneRows.join("; ") + ". Give each one a whole number of days. A row added from a chip button copies the single look-back setting, which is itself empty." });
       if (zeroRows.length) checks.push({ level: "warn", msg: "These per-covariate rows have a look-back of 0 days, so the covariate is measured only on the origin day itself: " + zeroRows.join("; ") + ". If that is deliberate, nothing further is needed." });
       if (badNum(s.futrial)) { /* already reported */ }
       else if (blank(s.futrial)) checks.push({ level: "error", msg: "Maximum follow-up per trial is empty. The diagram shows a placeholder bar labelled “length not set” and the protocol prints “(not specified)” — nothing is assumed." });
       else if (fu <= 0) checks.push({ level: "warn", msg: "Set the per-trial follow-up window." });
       if (!s.multiple || !s.multiple.trim()) checks.push({ level: "warn", msg: "Say how many trials one patient can enter, and how the re-use is handled. It follows from the control-arm definition above. If a patient does enter several trials and that is ignored, precision is over-stated: the analysis behaves as though there were as many people as there are patient-trial records." });
-      if (!s.eligibility || !s.eligibility.trim()) checks.push({ level: "error", msg: "State the eligibility rule applied at each origin, and in particular say what the CONTROL ARM is. Two versions of this design exist: if the control arm is those not yet treated, a patient enters a trial at every origin until they initiate, and the same person appears in several trials; if both arms initiate at the origin (an active comparator), each patient sits in one trial. They are different studies, and the choice decides whether section 10's bootstrap over patients and the refusal to meta-analyse the per-trial estimates apply at all. This page cannot infer it, so the protocol names both and asks." });
+      if (!s.eligibility || !s.eligibility.trim()) checks.push({ level: "error", msg: "State the eligibility rule applied at each origin, and in particular say what the CONTROL ARM is. Two versions of this design exist: if the control arm is those not yet treated, a patient enters a trial at every origin until they initiate, and the same person appears in several trials; if both arms initiate at the origin (an active comparator), each patient sits in one trial. They are different studies, and the choice decides whether the bootstrap over patients, and the refusal to meta-analyse the per-trial estimates, apply at all. This page cannot infer it, so the protocol names both and asks." });
       if (!s.assignment || !s.assignment.trim()) checks.push({ level: "warn", msg: "State how arms are assigned at each origin. Assignment must use only information available at the origin — a rule that peeks after it (e.g. “initiated within the next 90 days”) puts immortal time straight back in." });
       if (!s.confounding || !s.confounding.trim()) checks.push({ level: "warn", msg: "Specify how confounding is controlled within each trial (e.g. PS weighting or matching). Covariates must be re-measured at each origin, so a patient in several trials has a different propensity score in each." });
       if (!s.population || !s.population.trim()) checks.push({ level: "info", msg: "Specify the population." });
@@ -860,7 +872,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // A value this page had to substitute for one the saved draft named must
       // be declared in the checklist item that reports it — a TARGET checklist
       // whose item 7f states an estimand nobody chose is worse than no checklist.
-      const staleFor = (n) => { const x = staleSelects.find((y) => y.name === n); return x ? "\nNOTE: " + staleMsgs()[staleSelects.indexOf(x)] : ""; };
+      const staleFor = (n) => { const x = staleSelects.find((y) => y.name === n); return x ? "\nNOTE: " + staleMsg(x) : ""; };
       // Item 7 (a–h): one target trial specified per origin; emulated at each.
       const item7 = [
         ["a. Eligibility criteria",
