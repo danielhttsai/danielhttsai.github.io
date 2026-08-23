@@ -585,8 +585,30 @@
     // pc.skip (e.g. AsPEN builders skip "studySize"/"ethics"). Each entry is
     // [key, heading, bodyLines[], kind?] where kind "bullets" renders a list.
     function tailSections(s) {
-      const skip = s.skip || [];
-      return [
+      // `skip` was the un-validated twin of `skipOutputs`, which has carried a
+      // visible defect notice since the day a misspelled key was found to omit
+      // nothing. Same mistake here, with a worse consequence in each direction:
+      //   skip: ["ethic"]        — one keystroke — silently omits nothing, so
+      //     the shared "Human subjects…" section stands beside the builder's
+      //     own ethics paragraph and the protocol carries the section TWICE.
+      //   skip: "ethics"         — what you write when you are dropping exactly
+      //     one — works only by the accident that String.prototype.includes
+      //     exists, with substring semantics, so "studySize,ethics" also
+      //     "works" and "ae" would silently drop nothing while matching inside
+      //     another word.
+      //   skip: 5 / {ethics:true} — throws `skip.includes is not a function`
+      //     out of this function and takes the whole export down with it.
+      // A builder is authored by hand, so all three are one-keystroke-away
+      // states, and a duplicated or missing section in a regulatory document is
+      // exactly what nobody proof-reads for. Reported in the document, below,
+      // in the same words and the same shape `skipOutputs` uses.
+      const rawSkip = s.skip;
+      const skip = Array.isArray(rawSkip) ? rawSkip.map(String) : [];
+      const badSkip = [];
+      if (rawSkip != null && !Array.isArray(rawSkip)) {
+        badSkip.push("skip was given as " + JSON.stringify(rawSkip) + " rather than a list, so no section was omitted");
+      }
+      const all = [
         ["studySize", "Study size and feasibility", [nz(s.studySize, s.descriptive
           ? "There is no effect size to detect, so the study is sized for PRECISION rather than power: for every reported rate or proportion the expected number of events and the person-time available are established per data source and per stratum in a pilot extraction, and the expected width of the 95% confidence interval is reported alongside them. Cells that will fall below the small-cell suppression rule are identified before the analysis is executed."
           : "Power is assessed per data source from observed exposure and outcome frequencies in a pilot extraction; the study targets ≥ 80% power to detect the smallest clinically important effect at a two-sided α = 0.05. Feasibility (available person-time and event counts) is confirmed before the analysis is executed.")]],
@@ -634,7 +656,24 @@
         ["registration", "Registration and amendments", ["The protocol is registered before analysis (e.g. the EU PAS Register / ClinicalTrials.gov) where applicable" + (s.registration ? ": " + s.registration : "") + ". Amendments are recorded in the amendment table in this protocol's front matter."]],
         ["ae", "Adverse-event reporting", ["As a secondary-data analysis of a pre-specified outcome, individual adverse-event reporting does not apply; safety is addressed through the pre-specified outcome analyses."]],
         ["funding", "Funding and conflicts of interest", ["Funding source(s) and each author's conflicts of interest are declared in the final report."]],
-      ].filter((x) => !skip.includes(x[0]));
+      ];
+      // Derived from the list itself, so a section renamed or added here cannot
+      // leave the check behind — the failure `skipOutputs`'s hand-written
+      // OUTPUT_KEYS is one edit away from at all times.
+      const KEYS = all.map((x) => x[0]);
+      skip.forEach(function (k) {
+        if (KEYS.indexOf(k) === -1) {
+          badSkip.push('skip asked to omit "' + k + '", which is not one of ' + KEYS.join(", ") + ', so nothing was omitted for it');
+        }
+      });
+      const kept = all.filter((x) => !skip.includes(x[0]));
+      // Appended rather than folded into a section, because every section here
+      // is skippable and the notice must not be the thing that got skipped.
+      if (badSkip.length) {
+        kept.push(["skipDefect", "Tool defect in this document", ["⚠ PROTOCOL-GENERATOR DEFECT — " + badSkip.join("; ") +
+          ". A section of this protocol may therefore be duplicated or missing. Please report this — it is a bug in the tool, not a decision about your study."]]);
+      }
+      return kept;
     }
 
     /* The field has to exist before anything restores into it. If it were
