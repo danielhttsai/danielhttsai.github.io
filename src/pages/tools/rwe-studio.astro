@@ -2310,6 +2310,16 @@ const DESIGNS = [
           // drop attenuates the very effect being measured. Say what was dropped
           // and why it is not a neutral loss.
           L.push("ok<-!is.na(key) & key!='' & !is.na(Y); if(sum(!ok)>0) cat(sprintf('RESULT_NOTE|%d row(s) were dropped before aggregation because the time value or the outcome value was missing or could not be read as a number. An outcome written as text - \"<5\", \"n/a\", \"suppressed\" - is dropped here rather than read as a number. That is not a neutral loss: if the unreadable rows are the ones the intervention created, dropping them pulls the estimate toward the null. Check this count against how many rows you expected to lose.\\n',sum(!ok)))");
+          // A blank cell in the control-series column used to survive this filter,
+          // because chk01 passes NAs through (it tests unique(x[!is.na(x)])) and the
+          // filter above only looks at the period and the outcome. One such cell in
+          // a 48-row file was enough to make `max(a$g)` NA, `a$g == gref` all NA and
+          // the fitted-period count zero, and the run died reporting "there are only
+          // 0 period(s) before and 0 from the interruption onward" about a series
+          // with twelve of each. A row that does not say which series it belongs to
+          // cannot be placed in either one.
+          L.push("gna<-if(HASG) sum(is.na(G[ok])) else 0");
+          L.push("if(gna>0){ cat(sprintf('RESULT_NOTE|%d row(s) were dropped because the control-series indicator was blank. A row that does not say which series it belongs to cannot be assigned to the intervention series or to the comparator, and guessing either way would move an outcome from one arm of the comparison to the other.\\n', gna)); ok<-ok & !is.na(G) }");
           L.push("key<-key[ok]; Y<-Y[ok]; N<-N[ok]; G<-G[ok]; SS<-SS[ok]");
           L.push("if(length(Y)<6) stop('Fewer than 6 usable rows — an interrupted time series needs a series, not a handful of points.')");
           L.push("");
@@ -2381,6 +2391,59 @@ const DESIGNS = [
           // in use, which is why the note below says which one this is.
           L.push("a$level<-as.integer(a$t>=t0); a$tsince<-pmax(0,a$t-t0)");
           L.push("");
+          // --- what is actually left to fit ------------------------------------
+          // This drop used to sit twenty lines further down, AFTER the seasonality
+          // guards and after `rhs` was chosen. Two things went wrong because of
+          // that order. The harmonic guard ("a cycle at least as long as the
+          // series is not a cycle") counted periods COLLECTED rather than periods
+          // FITTED, so a 20-period file with six blank denominators walked a
+          // cycle of 18 straight past it and fitted sin/cos of order 1e-15 over
+          // 14 periods, widening the end-of-follow-up interval 4.5x on the log
+          // scale for nothing. And `rhs` was chosen from HASG, so a control
+          // series that did not survive this drop still put g, g:t, g:level and
+          // g:tsince into the model, where R aliased all four away.
+          //
+          // It has to run before both, and it cannot run any earlier than this:
+          // ukey, np, a$t and t0 are all established above, so a period dropped
+          // here still occupies its own index. That is deliberate — the HAC lag
+          // is measured in periods, not in rows, and closing the gap would tell
+          // the correction that two periods a quarter apart are neighbours.
+          // Taken before the drop, so the two single-series states stay separable.
+          L.push("ngrp0<-length(unique(a$g))");
+          L.push("if(HASN){ bad<-is.na(a$N)|a$N<=0");
+          L.push("  if(any(bad)){ lost<-if(HASG) sprintf(' (%d from the intervention series, %d from the control series)', sum(bad & a$g>0), sum(bad & a$g==0)) else ''");
+          L.push("    cat(sprintf('RESULT_NOTE|%d period(s)%s were dropped before the model was fitted because the denominator was missing or not positive. A period with no population at risk cannot contribute a rate, so it is removed rather than counted as a population of zero - but everything below describes only the periods that remain, and if the periods you lost fall on one side of the interruption, or in one series, that loss is not neutral.\\n', sum(bad), lost))");
+          L.push("    a<-a[!bad,,drop=FALSE] } }");
+          L.push("if(nrow(a)==0) stop('Every period was dropped because its denominator was missing or not positive, so there is nothing left to fit. Check that the column mapped to \"Population denominator / offset\" is the one you meant and that it is filled in for the periods you want analysed, or unmap it to model the counts themselves.')");
+          // HASG says a SERIES column was MAPPED. It has been standing in for
+          // "a controlled analysis was fitted" everywhere below, and after the
+          // drop above the two can differ: one arm can lose every period it had.
+          // A constant SERIES column reaches the same state without any drop at
+          // all, because chk01 accepts a 0/1 column whose only value is 1.
+          L.push("ngrp<-length(unique(a$g)); ctrl<-HASG && ngrp>1");
+          L.push("gref<-if(ctrl) max(a$g) else a$g[1]");
+          // Two different single-series states, and only one of them can be named.
+          // If the column held both values and the drop above killed one arm, the
+          // survivor is a fact: say which it is, because the mirror case matters —
+          // when it is the INTERVENTION arm that lost its denominator, every number
+          // reported is the comparator hospital's, the comparator is flat, and the
+          // study reads "no effect" with nothing on the page saying whose data it
+          // is. If instead the column never varied at all, there is no fact of the
+          // matter about which series survived: `gref` is then just whichever
+          // constant the column happened to hold, and a file of all-zeros would get
+          // the intervention's own numbers labelled "control". Naming it there
+          // would be a guess, so it is not named — and the browser refuses that
+          // case before the run, which is where it belongs.
+          L.push("gname<-if(ctrl || !HASG) '' else if(ngrp0>1) (if(gref>0) 'intervention' else 'control') else ''");
+          // The loudest thing in the run, and it has to come before the estimates
+          // so it is the first note the panel prints. What it must not do is imply
+          // the numbers below are wrong: they are a perfectly good UNCONTROLLED
+          // interrupted time series. What is gone is the difference-in-differences
+          // estimand the control column was mapped for, and the fact that it is
+          // gone was previously stated nowhere at all — the rows simply stopped
+          // appearing, while the remaining ones kept the words "control series".
+          L.push("if(HASG && !ctrl) cat(sprintf('RESULT_NOTE|NO CONTROLLED ANALYSIS WAS FITTED. A control-series indicator was mapped, but only one series has any periods left in the data that was fitted%s, so the difference-in-differences terms - the whole reason for mapping a control series - cannot be estimated and are not in the model. Everything below is an ordinary uncontrolled interrupted time series of %s, and its counterfactual is projected from its own pre-intervention trend rather than from a comparator. Nothing below is wrong; it is a weaker question than the one you set up, and it is the only one this data can answer.\\n', if(ngrp0>1) ' after the periods named above were dropped' else ' - the column mapped to the control-series indicator holds the same value in every row', if(gname!='') paste0('the ',gname,' series alone') else 'that single series'))");
+          L.push("");
           L.push("# --- seasonality ---");
           L.push("seasok<-FALSE");
           L.push("if(SEASON!='none'){ if(!('seas' %in% names(a))){ kd2<-pdate(a$key); if(all(!is.na(kd2))) a$seas<-if(CYC==4) as.character((as.integer(format(kd2,'%m'))-1)%/%3+1) else as.character(as.integer(format(kd2,'%m'))) else a$seas<-as.character(((a$t-1)%%CYC)+1) }");
@@ -2390,10 +2453,10 @@ const DESIGNS = [
           // coefficient of the order 1e12 on floating-point noise rather than
           // refusing. Caught in the browser too, but the browser cannot know how
           // many periods survive aggregation, and this is where that is known.
-          L.push("  nper0<-if(HASG) min(as.numeric(table(a$g))) else nrow(a)");
+          L.push("  nper0<-if(ctrl) min(as.numeric(table(a$g))) else nrow(a)");
           L.push("  if(seasok && SEASON=='harmonic' && CYC>=nper0){ cat(sprintf('RESULT_NOTE|A cycle of %g period(s) cannot be estimated from a series of %d period(s): over less than one full cycle the sine and cosine terms are not a season, they are a constant and a straight line, and fitting them silently changes the level and slope estimates. Seasonality was dropped. Shorten the cycle or lengthen the series.\\n',CYC,nper0)); seasok<-FALSE } }");
           L.push("");
-          L.push("rhs<-if(HASG) 'g + t + level + tsince + g:t + g:level + g:tsince' else 't + level + tsince'");
+          L.push("rhs<-if(ctrl) 'g + t + level + tsince + g:t + g:level + g:tsince' else 't + level + tsince'");
           L.push("if(seasok && SEASON=='dummies') rhs<-paste(rhs,'+ factor(seas)')");
           // A harmonic term whose column is numerically constant is not a season.
           // sin(2*pi*t/2) is sin(pi*t), which is zero for every whole t — but in
@@ -2406,10 +2469,9 @@ const DESIGNS = [
           L.push("if(seasok && SEASON=='harmonic'){ hterm<-c(); for(hn in c('sin','cos')){ hv<-if(hn=='sin') sin(2*pi*a$t/CYC) else cos(2*pi*a$t/CYC)");
           L.push("  if(sd(hv)>1e-8) hterm<-c(hterm,paste0(hn,'(2*pi*t/',CYC,')')) else cat(sprintf('RESULT_NOTE|The %s term of a %g-period cycle takes the same value in every period of this series, so it carries no seasonal information. It was left out rather than fitted: in floating point it is not exactly constant, and R would estimate it as a coefficient of the order 1e13 on rounding error rather than refusing it.\\n', hn, CYC)) }");
           L.push("  if(length(hterm)) rhs<-paste0(rhs,' + ',paste(hterm,collapse=' + ')) else { seasok<-FALSE; cat('RESULT_NOTE|Neither harmonic term varies over this series, so no seasonality was fitted at all.\\n') } }");
-          L.push("if(HASN){ bad<-is.na(a$N)|a$N<=0; if(any(bad)){ cat(sprintf('Dropped %d period(s) with a missing or non-positive denominator.\\n',sum(bad))); a<-a[!bad,,drop=FALSE] } }");
           // Counted after the drop above, so the summary describes what was fitted
           // rather than what was collected.
-          L.push("gref<-if(HASG) max(a$g) else 0; tt<-sort(unique(a$t[a$g==gref]))");
+          L.push("tt<-sort(unique(a$t[a$g==gref]))");
           L.push("npre<-sum(tt<t0); npost<-sum(tt>=t0); nfit<-length(tt)");
           L.push("if(npre<2 || npost<2) stop(sprintf('After aggregation there are only %d period(s) before and %d from the interruption onward. Segmented regression needs at least 2 of each, and really wants 8.', npre, npost))");
           L.push("counts<-all(abs(a$Y-round(a$Y))<1e-8) && all(a$Y>=0)");
@@ -2465,7 +2527,7 @@ const DESIGNS = [
           // nrow(a) meant a controlled ITS of two six-period series counted as
           // twelve, so the correction was applied to a six-period series and the
           // lag was chosen for a series twice as long as any that exists.
-          L.push("nser<-if(HASG) min(as.numeric(table(a$g))) else nrow(a)");
+          L.push("nser<-if(ctrl) min(as.numeric(table(a$g))) else nrow(a)");
           L.push("Lg<-max(1,floor(4*(nser/100)^(2/9)))");
           L.push("Vm<-vcov(fit)[gdn,gdn,drop=FALSE]; Vh<-tryCatch(hacv(fit,Lg,a$g,a$t),error=function(e) NULL)");
           // Durbin-Watson on GLM Pearson residuals has no standard null distribution,
@@ -2512,14 +2574,35 @@ const DESIGNS = [
           // "Pre-intervention slope" in both cases, so a controlled run told the
           // reader the baseline trend was flat while the intervention series was
           // rising 5% a month.
-          L.push("rep1(paste0(if(HASG) 'Pre-intervention slope, control series, per period' else 'Pre-intervention slope, per period',sc),'t')");
+          // When a SERIES column was mapped but only one series survived, these are
+          // the ordinary uncontrolled coefficients — and saying so is not enough on
+          // its own, because the reader still has to know WHICH series they are
+          // about. `slab` names it in every row, so the number and its provenance
+          // cannot be separated by copying one line out of the table.
+          L.push("slab<-if(HASG && !ctrl && gname!='') paste0(', ',gname,' series only') else ''");
+          L.push("rep1(paste0(if(ctrl) 'Pre-intervention slope, control series, per period' else paste0('Pre-intervention slope',slab,', per period'),sc),'t')");
           // g:t IS the parallel-pre-trends test the whole controlled estimand rests
           // on. It was fitted and never shown.
-          L.push("if(HASG){ rep1(paste0('Difference in pre-intervention slope, intervention vs control',sc),'g:t')");
+          L.push("if(ctrl){ rep1(paste0('Difference in pre-intervention slope, intervention vs control',sc),'g:t')");
           L.push("  if('g:t' %in% nmv && !is.na(cf[['g:t']])){ zpt<-abs(as.numeric(cf[['g:t']])/as.numeric(se[['g:t']])); if(is.finite(zpt) && zpt>crit) cat(sprintf('RESULT_NOTE|The two series were NOT on parallel trends before the intervention: the difference in pre-intervention slope is %.3f per period, %.1f standard errors from zero. A controlled interrupted time series estimates the intervention effect by assuming the control series shows what the intervention series would have done, and that assumption is contradicted here. The difference-in-differences rows below inherit the divergence and should not be read as an effect.\\n', if(expo) exp(as.numeric(cf[['g:t']])) else as.numeric(cf[['g:t']]), zpt)) } }");
-          L.push("if(HASG){ rep1(paste0('Level change, control series',sc),'level'); rep1(paste0('Slope change per period, control series',sc),'tsince')");
+          // `ctrl` catches a control series with no periods at all. It does NOT
+          // catch a control series that has periods but does not SPAN the
+          // interruption — a comparator whose extract stops before the change, say.
+          // There both series are present, so `ctrl` is true and `g` and `g:t` are
+          // estimable, but `g:level` aliases away: and `level` is then identified
+          // only from rows that HAVE a post-intervention period, which are the
+          // intervention's. So the row labelled "Level change, control series" is
+          // the intervention's own step, under the name of the series that never
+          // saw the intervention — the same inversion `ctrl` exists to stop, one
+          // layer in. Read the attribution off what was actually estimated.
+          L.push("gpre<-unique(a$g[a$t<t0]); gpst<-unique(a$g[a$t>=t0]); gboth<-intersect(gpre,gpst)");
+          L.push("snm<-function(z) paste0(if(z>0) 'intervention' else 'control',' series')");
+          L.push("didl<-'g:level' %in% nmv && !is.na(cf[['g:level']]); didt<-'g:tsince' %in% nmv && !is.na(cf[['g:tsince']])");
+          L.push("attrib<-if(length(gboth)==1) snm(gboth) else 'both series pooled'");
+          L.push("if(ctrl){ rep1(paste0('Level change, ',if(didl) 'control series' else attrib,sc),'level'); rep1(paste0('Slope change per period, ',if(didt) 'control series' else attrib,sc),'tsince')");
           L.push("  rep1(paste0('Difference in level change, intervention vs control',sc),'g:level'); rep1(paste0('Difference in slope change per period, intervention vs control',sc),'g:tsince')");
-          L.push("} else { rep1(paste0('Level change, immediate step',sc),'level'); rep1(paste0('Slope change, per period',sc),'tsince') }");
+          L.push("  if(!didl || !didt) cat(sprintf('RESULT_NOTE|The control series does not span the interruption, so there is no difference-in-differences estimate on this data: %s could not be estimated and %s not reported. A comparator can only show what the intervention series would have done if it was observed on both sides of the change. The level and slope rows above are therefore attributed to the %s rather than to the control series, which is what the model actually identifies them from - read them as an uncontrolled result, and note that the pre-intervention trend comparison above them is still valid because both series were observed before the interruption.\\n', if(!didl && !didt) 'the difference in level change and the difference in slope change' else if(!didl) 'the difference in level change' else 'the difference in slope change', if(!didl && !didt) 'are' else 'is', attrib))");
+          L.push("} else { rep1(paste0('Level change, immediate step',slab,sc),'level'); rep1(paste0('Slope change, per period',slab,sc),'tsince') }");
           L.push("");
           L.push("# --- observed vs counterfactual at the end of follow-up ---");
           L.push("gmax<-max(a$g); tn<-max(a$t[a$g==gmax]); tsn<-max(0,tn-t0)");
@@ -2553,7 +2636,7 @@ const DESIGNS = [
           L.push("fv<-inv(as.numeric(X%*%bb)+off); cv<-inv(as.numeric(Xc%*%bb)+off)");
           L.push("cat('FITTED|series|period|t|observed|denominator|fitted|counterfactual\\n')");
           L.push("for(i in seq_len(nrow(a))) cat(sprintf('FITTED|%s|%s|%d|%.6g|%s|%.6g|%.6g\\n', if(HASG) (if(a$g[i]>0) 'intervention' else 'control') else 'series', a$key[i], a$t[i], a$Y[i], if(useoff) sprintf('%.6g',a$N[i]) else '', fv[i], cv[i]))");
-          L.push("cat(sprintf('ITSMETA|t0=%d|cutlabel=%s|np=%d|pre=%d|post=%d|controlled=%s\\n',t0,ukey[t0],np,npre,npost,if(HASG) 'yes' else 'no'))");
+          L.push("cat(sprintf('ITSMETA|t0=%d|cutlabel=%s|np=%d|pre=%d|post=%d|controlled=%s\\n',t0,ukey[t0],np,npre,npost,if(ctrl) 'yes' else 'no'))");
           L.push("");
           // A series should describe itself before it is modelled.
           L.push("pre<-a$g==gref & a$t<t0; pst<-a$g==gref & a$t>=t0");
@@ -2563,7 +2646,7 @@ const DESIGNS = [
           L.push("cat(sprintf('TABLE1|Total outcome|%.6g|%.6g\\n', sum(a$Y[pre]), sum(a$Y[pst])))");
           L.push("cat(sprintf('TABLE1|%s|%.6g|%.6g\\n', if(useoff) 'Rate per period (outcome/denominator)' else 'Mean per period', rt(pre), rt(pst)))");
           L.push("if(useoff) cat(sprintf('TABLE1|Denominator per period, mean|%.6g|%.6g\\n', mean(a$N[pre]), mean(a$N[pst])))");
-          L.push("if(HASG) cat(sprintf('TABLE1|Control-series periods|%d|%d\\n', sum(a$g!=gref & a$t<t0), sum(a$g!=gref & a$t>=t0)))");
+          L.push("if(ctrl) cat(sprintf('TABLE1|Control-series periods|%d|%d\\n', sum(a$g!=gref & a$t<t0), sum(a$g!=gref & a$t>=t0)))");
           L.push("dwt<-if(is.na(dw)) 'not computable' else sprintf('%.2f (lag-1 residual autocorrelation %+.2f)',dw,r1)");
           L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s) fitted: %d before and %d from %s onward%s. Inference uses %s, with %s for the 95%% intervals. Durbin-Watson %s (descriptive only - on GLM Pearson residuals it has no standard null distribution).\\n', famlab, nfit, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, critlab, dwt))");
           L.push("cat(sprintf('RESULT_NOTE|Periods were ordered by %s. Level change is the immediate step at %s; slope change accrues from the period after it (Wagner 2002 convention, time-since-intervention = 0 at the first affected period).\\n', ordmode, ukey[t0]))");
@@ -2584,8 +2667,19 @@ const DESIGNS = [
           // not help, and spent on the Seasonality dropdown the one sentence that
           // could have told the reader their control series had collapsed. The
           // cause has to be read off the names that aliased.
-          L.push("if(length(alias)>0){ asea<-any(grepl('^factor\\\\(seas\\\\)|^sin\\\\(|^cos\\\\(', alias)); ag<-any(grepl('^g($|:)', alias))");
-          L.push("  cat(sprintf('RESULT_NOTE|%d model term(s) could not be estimated because they are collinear with the rest of the model (%s), and were dropped.%s\\n', length(alias), paste(alias,collapse=', '), if(asea) ' Over only a couple of complete cycles, calendar dummies and a linear time trend are not separately identifiable - shorten the seasonal terms, switch to harmonic terms, or lengthen the series.' else if(ag) ' Every dropped term belongs to the control series, which means that series does not vary across the contrast the term describes: it may have collapsed to one series, or have no periods on one side of the interruption. The difference-in-differences estimates do not exist on this data and are not reported.' else ' This tool cannot say which of the terms listed is the redundant one - R drops whichever it reaches last, so read the list as naming a rank deficiency in the design matrix rather than as naming the culprit. A term taking the same value in every period, or one that is an exact multiple of another, is the usual cause.')) }");
+          //
+          // Two families can alias in the same fit, so the causes are APPENDED and
+          // never chosen between. A first version of this note tested the seasonal
+          // family first and used `else if`, which suppressed the control-series
+          // sentence exactly when both were true — the case where it matters most.
+          // A calendar dummy identical to the pre/post indicator aliases for that
+          // reason and not for want of complete cycles, so the seasonal clause says
+          // both things rather than assuming the length of the series is at fault.
+          L.push("if(length(alias)>0){ asea<-any(grepl('^factor\\\\(seas\\\\)|^sin\\\\(|^cos\\\\(', alias)); ag<-any(grepl('^g($|:)', alias)); awhy<-c()");
+          L.push("  if(ag) awhy<-c(awhy,'The dropped terms include the control-series terms, which means that series does not vary across the contrast those terms describe: it may have collapsed to a single series, or have no periods on one side of the interruption. The difference-in-differences estimates do not exist on this data and are not reported.')");
+          L.push("  if(asea) awhy<-c(awhy,'The dropped terms include seasonal terms. Over only a couple of complete cycles a set of calendar dummies and a linear time trend are not separately identifiable, which is answered by shortening the seasonal terms, switching to harmonic terms, or lengthening the series. A single calendar dummy can also alias because it is identical to some other column in the model - the pre/post indicator, most often - and that happens whatever the length of the series.')");
+          L.push("  if(!length(awhy)) awhy<-'This tool cannot say which of the terms listed is the redundant one - R drops whichever it reaches last, so read the list as naming a rank deficiency in the design matrix rather than as naming the culprit. A term taking the same value in every period, or one that is an exact multiple of another, is the usual cause.'");
+          L.push("  cat(sprintf('RESULT_NOTE|%d model term(s) could not be estimated because they are collinear with the rest of the model (%s), and were dropped. %s\\n', length(alias), paste(alias,collapse=', '), paste(awhy,collapse=' '))) }");
           L.push("if(ratemode) cat('RESULT_NOTE|A denominator was mapped with a linear model, so the outcome is the rate (value divided by the denominator); the level and slope changes are on that rate scale.\\n')");
           L.push("if(npre<8) cat(sprintf('RESULT_NOTE|Only %d pre-intervention period(s) — the baseline trend, and therefore the counterfactual, is poorly estimated. Aim for at least 8 (ideally 12).\\n',npre))");
           L.push("if(npost<8) cat(sprintf('RESULT_NOTE|Only %d post-intervention period(s) — a slope change is hard to detect. Aim for at least 8 (ideally 12).\\n',npost))");
@@ -2613,7 +2707,7 @@ const DESIGNS = [
           // choice, and the option text cannot say so per-series.
           L.push("if(semode=='hac' && nser<60) cat(sprintf('RESULT_NOTE|You asked for Newey-West standard errors and they were used. On a series of %d period(s) that is the narrower of the two options and the anti-conservative one: simulated on this model with independent residuals, the sandwich rejects a true null roughly two to four times as often as it should at this length, while the model-based standard error is close to nominal. \"Auto\" reports the wider of the two.\\n', nser))");
           // Say where the HAC correction stops, next to the numbers it produced.
-          L.push("if(HASG && semode!='model') cat('RESULT_NOTE|With a control series the HAC correction is applied within each series: lag products that cross the two series are excluded, so serial correlation is handled but any contemporaneous correlation between the intervention and control series at the same time point is assumed to be zero. If the two series move together period by period, these standard errors are too narrow.\\n')");
+          L.push("if(ctrl && semode!='model') cat('RESULT_NOTE|With a control series the HAC correction is applied within each series: lag products that cross the two series are excluded, so serial correlation is handled but any contemporaneous correlation between the intervention and control series at the same time point is assumed to be zero. If the two series move together period by period, these standard errors are too narrow.\\n')");
           L.push("");
           L.push("cat('\\n--- Segmented regression coefficients ---\\n'); print(summary(fit)$coefficients)");
           L.push("cat(sprintf('\\nPeriods: %d (%s to %s); interruption at %s (period %d).\\n',np,ukey[1],ukey[np],ukey[t0],t0))");
@@ -2937,12 +3031,18 @@ const DESIGNS = [
         // Two different faults share this list: values that cannot be read as yes/no,
         // and a treatment column that reads fine and never varies. Each entry states
         // its own, so a file with one of each does not lose one of the messages.
-        const oneArm = bt.some((b) => b.oneArm !== undefined), unread = bt.some((b) => b.bad);
+        // The never-varies sentence has to name the role's own consequence. The
+        // propensity-score wording below was written for TREAT and is simply false
+        // of a control series, which fits no propensity score at all.
+        const oneArm = bt.some((b) => b.oneArm !== undefined && b.role !== "SERIES"), oneSeries = bt.some((b) => b.role === "SERIES" && b.oneArm !== undefined), unread = bt.some((b) => b.bad);
         m.innerHTML = bt.map((b) => (b.oneArm !== undefined
           ? "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but every row in the file reads as " +
-            (b.oneArm === 1 ? "<strong>exposed</strong>" : "<strong>comparator</strong>") + "."
+            (b.role === "SERIES"
+              ? "<strong>" + (b.oneArm === 1 ? "intervention" : "control") + "</strong>."
+              : "<strong>" + (b.oneArm === 1 ? "exposed" : "comparator") + "</strong>.")
           : "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but holds " +
             esc(b.bad.join(", ")) + " — value(s) this tool cannot read as yes or no.")).join(" ") +
+          (oneSeries ? " With only one series there is no controlled comparison to make: the difference-in-differences terms have nothing to contrast, and the run would report an ordinary uncontrolled interrupted time series. It is refused here rather than run, because a column that never varies cannot say which of the two series the numbers belong to — an all-zero indicator would have the intervention series’ own result reported as the control’s. Map a column that distinguishes the intervention site from the comparator, check under <strong>Coded flags</strong> that the right value is being read as the intervention, or leave this optional role unmapped to run an uncontrolled analysis on purpose." : "") +
           (oneArm ? " With only one arm there is nothing to compare: a propensity score would predict the same value for everyone, the common-support range would be empty, and every hazard ratio undefined. Map a column that distinguishes the two treatments, or check under <strong>Coded flags</strong> in the structure panel that the right value is being read as yes." : "") +
           (unread ? " A 0/1 role must be unambiguous: if the column has exactly two levels, say which one means yes under <strong>Coded flags</strong> in the structure panel above; if it has three or more (1 = yes, 2 = no, 9 = unknown, say), recode it before uploading. It is not treated as “yes” just because it is not zero." : "");
         m.className = "mt-3 text-xs text-rose-700";
@@ -2997,10 +3097,21 @@ const DESIGNS = [
         // and every diagnostic downstream reports on a cohort that has no comparator
         // while looking perfectly healthy. Checked here rather than only in R, because
         // an R stop lands in the debug pre at the end of a run.
-        if (r.k === "TREAT" && getDesign() === "acnu" && !bad.length) {
+        // The control-series indicator is the same shape of role and the same
+        // argument applies to it word for word: with one series there is no
+        // controlled comparison, the difference-in-differences terms alias out of
+        // the model, and the run reports an uncontrolled fit. R can now tell that
+        // has happened and relabels the rows — but only for a column that HELD both
+        // values and lost one. For a column that never varied there is no fact
+        // about which series survived, so nothing downstream can name it honestly:
+        // a single-site file whose `site` column is all zeros would have the
+        // intervention's own numbers reported as the control's. That has to be
+        // refused here, before the run, which is also where the user can act on it.
+        const oneArmRole = (r.k === "TREAT" && getDesign() === "acnu") || (r.k === "SERIES" && getDesign() === "its");
+        if (oneArmRole && !bad.length) {
           const seen = new Set();
           for (let i = 0; i < DATA.rows.length && seen.size < 2; i++) { const b = toBin(DATA.rows[i][col]); if (b != null) seen.add(b); }
-          if (seen.size === 1) out.push({ label: r.label, col: col, oneArm: [...seen][0] });
+          if (seen.size === 1) out.push({ label: r.label, col: col, role: r.k, oneArm: [...seen][0] });
         }
       });
       return out;
