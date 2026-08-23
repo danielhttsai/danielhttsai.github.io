@@ -761,13 +761,23 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         // exported protocol, where it reads as a refusal their own draft provoked.
         // The sender cannot go the other way and suppress a real warning: noteStale
         // runs on the keys the seed actually carries, independently of this list.
-        // `get`, not `has`: a truncated "?seed=" carries nothing, restore falls
-        // back to this browser's own draft, and treating that as a link would
-        // throw away a warning the user really is owed. A non-empty value —
-        // including the literal "paste", which is a colleague's protocol
-        // arriving by another route — is a link.
-        const fromLink = (() => { try { return !!new URLSearchParams(location.search).get("seed"); } catch (e) { return false; } })();
-        const carried = (!fromLink && Array.isArray(state[STALE_KEY])) ? state[STALE_KEY] : [];
+        // "Did this record come from a link, or from this browser?" is answered
+        // by comparing it with what is actually in localStorage. The URL cannot
+        // answer it, and trying was wrong twice over: a truncated "?seed="
+        // carries nothing and falls back to the draft, and "?seed=paste" LOADS
+        // the draft — so merely opening a hand-off link and pasting nothing
+        // destroyed the user's own warning, and the reserved key with it, on
+        // the render that followed. That is the self-erasing refusal this file
+        // has recorded twice. A link can only match this test by carrying the
+        // reader's own record, which is the case it is meant to allow.
+        const ownRecord = (() => {
+          try {
+            const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+            return (d && Array.isArray(d[STALE_KEY])) ? JSON.stringify(d[STALE_KEY]) : null;
+          } catch (e) { return null; }
+        })();
+        const carried = (ownRecord && Array.isArray(state[STALE_KEY]) && JSON.stringify(state[STALE_KEY]) === ownRecord)
+          ? state[STALE_KEY] : [];
         staleSelects = [];
         for (const el of form.querySelectorAll("input, textarea, select")) {
           const name = el.name; if (!name) continue;
