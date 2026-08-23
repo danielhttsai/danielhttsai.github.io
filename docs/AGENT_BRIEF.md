@@ -176,12 +176,8 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
 
 ## Known open items
 
-- **CLAIMED 2026-08-23 ~11:00 UTC by a twenty-first run: the duplicated
-  planned-analytical-outputs list** (`defaultOutputs` in `ProtocolCommon.astro`
-  vs. every builder's own `plannedOutputs`) — the item the twentieth run named
-  "the sharpest well-scoped work left" at the bottom of this file. If you are
-  starting after that timestamp, pick something else; if this marker is more
-  than a few hours old with no follow-up commit, assume the run died and take it.
+- ~~The duplicated planned-analytical-outputs list.~~ **Done 2026-08-23
+  (twenty-first run)** — see the section at the bottom of this file.
 - SCCS's Farrington event-dependent-exposure sensitivity item is ticked by default
   with no explanation or citation. Daniel said to leave it for now.
 - Weight diagnostics in RWE Studio cover IPTW only; SMR, overlap and
@@ -5661,3 +5657,166 @@ house species:
   this sandbox. Nobody has still opened one of these `.docx` files in Word —
   six were generated and their `word/document.xml` read, which is not the same
   thing.
+
+### Found 2026-08-23 by a twenty-first run — the duplicated planned-outputs list
+
+**The item the twentieth run put at the top of the open list and called "the
+sharpest well-scoped work left". It was, and it was also the trap it warned
+about**: the fix is not "delete your duplicates" anywhere. Which half of each
+duplicate is wrong differs by design, and on two builders the answer is
+"neither — leave it alone".
+
+Two reviewers on disjoint briefs, run against a frozen tree, plus a claim
+marker pushed before either started (`07327bf`..): a methodologist on which of
+the three shared bullets each design can actually produce, and an applied
+analyst on what silently breaks in the mechanism and the export path. The
+analyst's report did not arrive; its half was written by the orchestrator
+before any builder was touched, and where the two disagreed it is recorded
+below. Do not read that as the subagent route failing — the methodologist's
+report was worth the wait and overruled the orchestrator three times.
+
+#### What the defect was
+
+`defaultOutputs` (`ProtocolCommon.astro`) did `base.concat(s.plannedOutputs)`
+with nothing de-duplicating, and every builder's own `plannedOutputs` is a
+design-specific rewrite of the same three items. Eight of nine protocols
+commissioned a flow diagram, a Table 1 and a results table twice. Verified in
+the rendered preview of all nine pages and in real `.docx` files, before and
+after.
+
+#### The mechanism
+
+`skipOutputs: ["flow","table1","results"]` on `pcOf`. Keys, not indices. Two
+guards, both driven and observed firing:
+
+- An **unrecognised key prints a `⚠ PROTOCOL-GENERATOR DEFECT` bullet into the
+  document** naming itself. `"table-1"` for `"table1"` is one keystroke, and
+  without this it omits nothing and says nothing — the exact species this file
+  has recorded three times (the three-entry map behind a four-option select;
+  the `/negative control/` regex that never matched `Negative-control
+  outcome`). A `console.warn` would not have been enough.
+- An **empty list refuses in words** rather than leaving `tailMd` printing a
+  bare heading. Not reachable from any builder today; it became reachable the
+  moment all three shared bullets could be dropped.
+- Ordering changed too, and this was a defect this run *introduced and caught
+  by rendering rather than by reading its own diff*: shared-then-own concat
+  reads correctly only while all three shared bullets survive. Drop the middle
+  one and the results table floats above a Table 1 not yet commissioned. Order
+  is now flow, table1, the design's own, results-last.
+
+#### Per design — the table a future run should not have to re-derive
+
+| builder | dropped | why |
+|---|---|---|
+| case-control | all three | its own three are strictly better; the generic results bullet lost the sampling-scheme naming, which is the one discipline this design cannot do without |
+| SCCS | flow | case-only: nobody is followed, cases are ascertained. Table 1 and results **kept** — nothing duplicates them |
+| case-crossover | flow | same |
+| ITS | all three | the unit is a calendar period; there is no cohort and no day 0. Replaced with a per-period numerator/denominator table and a period-composition figure |
+| sequential-trial | table1 | a patient enters a trial at every origin, so a pooled by-arm table double-counts with person-varying multiplicity **and its two columns share people** |
+| ACNU | its own flow bullet; shared table1 only on the PS branch | the shared flow text says more; under the four non-PS methods its own bullet is a balance table, not a Table 1 |
+| trend-in-trend | its own last bullet | person-level at stage 1, so the shared flow and Table 1 are right; the bare "Effect estimate with 95% CI." was the duplicate |
+| clone-censor-weight | **nothing** | the one builder the shared default fits |
+| descriptive-analysis | **nothing** | already fixed in a previous run |
+
+**The two `nothing` rows are the point.** A run trying to be thorough would
+have "fixed" CCW and made it worse: it commissions no table of numbers
+anywhere else, so the shared results bullet is its only numeric shell.
+
+#### Where the two reviewers disagreed, and who was right
+
+- **ACNU's results bullet.** The orchestrator's analyst wanted it dropped for
+  symmetry with the other seven. **The methodologist was right to keep it**:
+  ACNU's own list is a forest plot and KM curves, and a forest plot carries no
+  denominators — no n per arm, no events, no person-time. With RD and IRR among
+  the effect measures, dropping it would have removed the flagship builder's
+  only numeric result. *Symmetry is not an argument.*
+- **The direction of the ACNU and trend-in-trend deletions.** The orchestrator
+  assumed the shared half always goes. The methodologist showed the shared text
+  is the better one in both, so the **builder's** bullet is what goes. Check
+  which text says more before deleting either.
+- **SCCS / case-crossover Table 1.** Methodologist: KEEP; analyst: DROP,
+  because "baseline characteristics" imports a cohort framing. Kept — the
+  objection is to wording, and the fix for wording is not deletion. **Still
+  open** (below).
+- **How loud the bad-key notice should be.** A thrown error would be caught by
+  the `pageerror` assertion every run already runs, but breaking the page for a
+  developer's typo punishes the user. Visible bullet instead.
+
+#### Also fixed, found by reading the pcOf rather than the diff
+
+**ITS `plannedOutputs` was unconditional while everything else in that pcOf
+branches on `s.controlled`** — abstract, groupBy, limitations, studySize. With
+a control series the primary estimate is the *difference* in the level and
+slope changes, and the outputs went on commissioning the single-series
+coefficients and a one-series figure. A controlled ITS named one primary
+quantity in its abstract and another in its outputs. Both bullets conditional
+now, driven with the box ticked and unticked.
+
+#### Verified, and how
+
+- Preview rendered on all nine builders before and after; every duplicate gone,
+  zero `pageerror`, `typeof window.PC === "object"` on all nine.
+- Six real `.docx` files generated through the blocked-CDN route and
+  `word/document.xml` read — identical to the preview, bullet for bullet.
+- All **fourteen** states of ACNU's `psMethod` select driven, including the
+  select blanked as a stale draft leaves it: exactly one Table 1 in every one.
+- Both guards driven directly through `PC.tailMd(...)` with a bad key, an empty
+  list, empty strings in `plannedOutputs`, an absent `skipOutputs` and a
+  non-array `skipOutputs`. All six behaved as designed.
+
+#### Checked and found NOT to be a problem — do not re-derive these
+
+- **Markdown and Word cannot drift on this section.** `tailMd` and `tailDocx`
+  both call `tailSections(s)` and consume the same array with the same
+  `kind === "bullets"` test.
+- **The existing `skip` arrays have not drifted.** Every entry in every
+  builder's `skip` checked character-for-character against the nine
+  `tailSections` keys. All valid. No builder skips `"outputs"`.
+- **`groupBy` cannot come out blank or stale.** Eight of nine pass a string
+  literal; only ITS computes it, from a checkbox, which has no third state. The
+  `nz(s.groupBy, "exposure group")` fallback is unreachable from the UI.
+- **The checker does not key on these strings.** `DELIVERABLE_NAMES` in
+  `protocol-checker.astro` is mirrored only to tell "judged absent" from "never
+  answered"; the judging is a model told to judge substance not keywords, and
+  the page already says "Absent is not automatically a fault". Dropping a
+  bullet cannot mechanically lower a score. **But see the open item below.**
+
+#### Open, examined this run, deliberately left
+
+- **"Baseline characteristics" on SCCS and case-crossover.** In SCCS, *baseline
+  period* is a technical term for the unexposed reference person-time, and the
+  same document says "risk period vs baseline period" in §6 and "baseline
+  characteristics" in the outputs. That is a vocabulary collision inside one
+  protocol. The right fix is a case-series description (n cases, n informative,
+  age at event, observation length, events per case, proportion ever exposed),
+  not a deletion. Left because the two reviewers split on it and rewording two
+  builders' Table 1 was not what this run had verified.
+- **The checker's deliverables rubric has no "not applicable" verdict.** Now
+  that ITS correctly declines to commission a participant-flow diagram, this
+  repo's own checker will mark an ITS protocol absent for lacking it. The page
+  frames absent as "not automatically a fault", so it is not a wrong score —
+  but the toolchain now visibly disagrees with itself on one design, and the
+  honest fix is an `"na"` verdict in `workers/target-checker/worker.js`. **This
+  is the sharpest well-scoped work left, and it is small.**
+- **The methodologist's HARPER "Table 1" collision.** `src/data/harper.ts:42`
+  maps HARPER item 4 to "Milestones and timeline (Table 1)". If that mapping is
+  right, every export asserts "follows the HARPER template" and then commissions
+  a *different* Table 1. This file already records the Table 1-13 mapping as
+  unverified against the template, and the template is unreachable from this
+  sandbox, so **verify the mapping before acting on it**. Not touched.
+- **No citations were added or changed this run**, so nothing here needed
+  Crossref or PubMed. The methodologist independently corroborated HARPER as
+  *Pharmacoepidemiol Drug Saf* 2023;32(1):44-55, doi:10.1002/pds.5507, PMID
+  36215113 against three index records — and flagged that it is **not** *Ann
+  Intern Med* and **not** *BMJ*, which is worth knowing before anyone cites it
+  from memory.
+- **The live site was not checked** — still blocked from this sandbox. Verified
+  against a local `astro build` + `http-server` throughout. Nobody has still
+  opened one of these `.docx` files in Word.
+
+#### One environment note
+
+The ship loop's detached-HEAD correction from the twentieth run is right and
+was needed again: `git push origin HEAD:main`. Also, **a subagent may overwrite
+your scratch files** — one reviewer rewrote a script of the orchestrator's that
+happened to share a name. Give scratch scripts distinct names per role.
