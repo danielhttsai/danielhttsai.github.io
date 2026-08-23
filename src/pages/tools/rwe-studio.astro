@@ -423,6 +423,13 @@ const DESIGNS = [
     let WB = null;          // the parsed workbook, kept so the sheet can be re-picked
     let SHEETS = [];        // every sheet in the workbook, with a score and any flags
     let SPLITINFO = null;   // result of repairing a delimited dump, if that was asked for
+    // Per column, the ORIGINAL text of cells whose comma this tool would silently
+    // resolve. SheetJS coerces "14,0" to the number 140 while parsing, so by the time
+    // DATA.rows exists the comma is gone and nothing downstream can see it. The text
+    // survives on the cell as .w, which sheet_to_json exposes with raw:false; this is
+    // the only place it can be captured. Empty for demo data and anything not read
+    // from a workbook, which is correct — those never had a comma.
+    let RAWTXT = {};
     let CODEBOOK = {};      // normalised column name → definition text
     let CBWB = null, CBNAME = "";
     let CBINFO = null;      // { name, matched, sheet }
@@ -438,6 +445,29 @@ const DESIGNS = [
       return window.XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
     }
     const sheetAOA = (ws) => window.XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null, raw: true });
+    // The same sheet as displayed text rather than coerced values, so a decimal comma
+    // can be seen before it is thrown away.
+    const sheetAOAText = (ws) => window.XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null, raw: false });
+    // Grouping separators this tool reads correctly today and must keep reading: Western
+    // 1,234 / 12,345,678 and Indian 1,23,456. Anything else carrying a comma is either a
+    // decimal comma or unreadable, and both are refused rather than guessed at.
+    const COMMA_GROUPED = (s) => /^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s) || /^[+-]?\d{1,2}(,\d{2})+(,\d{3})(\.\d+)?$/.test(s);
+    const COMMA_DECIMAL = (s) => /^[+-]?\d+,\d+$/.test(s) || /^[+-]?\d{1,3}(\.\d{3})+,\d+$/.test(s);
+    function commaExamples(cols, rows) {
+      const out = {};
+      cols.forEach((c) => {
+        const dec = [], odd = [];
+        for (let i = 0; i < rows.length && dec.length < 4 && odd.length < 4; i++) {
+          const v = rows[i][c]; if (v == null) continue;
+          const s = String(v).trim();
+          if (s.indexOf(",") < 0 || COMMA_GROUPED(s)) continue;
+          const b = COMMA_DECIMAL(s) ? dec : odd;
+          if (b.indexOf(s) < 0 && b.length < 4) b.push(s);
+        }
+        if (dec.length || odd.length) out[c] = { dec: dec, odd: odd };
+      });
+      return out;
+    }
 
     // Which sheet holds the data? A workbook often carries notes, a pivot, or a
     // mangled export alongside the real table — picking sheet 1 blindly is how a
@@ -855,7 +885,7 @@ const DESIGNS = [
     function setData(columns, rows, name) {
       DATA = { rows: rows, columns: columns, profile: columns.map((c) => profileColumn(c, rows)), name: name || DATA.name || "dataset" };
       applyCodebook();
-      MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null;
+      MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; RAWTXT = {};
       $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden");
       $("fileinfo").textContent = DATA.name + " · " + rows.length + " rows × " + columns.length + " cols" + (STRUCT.sheet ? " · sheet “" + STRUCT.sheet + "”" : "");
       render();
@@ -869,6 +899,14 @@ const DESIGNS = [
       if (redetectHeader || STRUCT.headerRow < 0 || STRUCT.headerRow >= aoa.length) STRUCT.headerRow = detectHeaderRow(aoa);
       const t = tableFromAOA(aoa, STRUCT.headerRow);
       setData(t.columns, t.rows, DATA.name);
+      // After setData, because setData clears it. Same sheet, same split, same header
+      // row — only the coercion differs — so the columns line up by name.
+      try {
+        let ta = sheetAOAText(ws);
+        if (STRUCT.split) ta = splitDelimited(ta).aoa;
+        const tt = tableFromAOA(ta, STRUCT.headerRow);
+        RAWTXT = commaExamples(tt.columns, tt.rows);
+      } catch (e) { RAWTXT = {}; }
     }
 
     async function ingest(file) {
@@ -2537,7 +2575,7 @@ const DESIGNS = [
       const keepBlanks = !$("c_dropmiss") || !$("c_dropmiss").checked;
       const out = [];
       spec.roles.filter((r) => NUM_RULES[r.k] && MAP[r.k]).forEach((r) => {
-        const col = MAP[r.k], rule = NUM_RULES[r.k], eg = [], ceg = [];
+        const col = MAP[r.k], rule = NUM_RULES[r.k], eg = [];
         const src = MASTER || DATA.rows;
         for (let i = 0; i < src.length && eg.length < 4; i++) {
           const v = src[i][col];
@@ -2545,24 +2583,21 @@ const DESIGNS = [
           const n = typeof v === "number" ? v : Number(String(v).trim().replace(/,/g, ""));
           if (!isFinite(n) || rule.bad(n)) { const s = String(v).trim(); if (eg.indexOf(s) < 0) eg.push(s); }
         }
-        // The decimal comma, read against the RAW rows because MASTER has already
-        // stripped it. Only a comma that CANNOT be a thousands separator is refused:
-        // grouping always puts exactly three digits after each comma, so 1,234 and
-        // 1,234,567 are left alone and read as before, while 60,5 and 1.234,56 cannot
-        // be anything but a decimal point. A value that is not a number at all falls
-        // through to the rule above rather than being called a comma problem.
-        for (let i = 0; i < DATA.rows.length && ceg.length < 4; i++) {
-          const v = DATA.rows[i][col];
-          if (typeof v === "number" || isBlank(v)) continue;
-          const s = String(v).trim();
-          if (s.indexOf(",") < 0 || !isFinite(Number(s.replace(/,/g, "")))) continue;
-          if (/^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) continue;
-          if (ceg.indexOf(s) < 0) ceg.push(s);
-        }
+        // The comma, read from the text captured at ingest. It CANNOT be read from
+        // DATA.rows: SheetJS resolves "14,0" to the number 140 while parsing, so by the
+        // time any code here runs the cell is a number and the comma is gone. A first
+        // attempt at this guard tested DATA.rows and was therefore a no-op on every CSV
+        // — the only format it was written for. Grouping separators are still read
+        // exactly as before; only a decimal comma, or a comma no convention explains,
+        // reaches the reader.
+        const ct = RAWTXT[col];
         if (eg.length) out.push({ label: r.label, col: col, why: rule.why, fix: rule.fix, eg: eg });
-        if (ceg.length) out.push({ label: r.label, col: col, eg: ceg,
+        if (ct && ct.dec.length) out.push({ label: r.label, col: col, eg: ct.dec,
           why: "holds value(s) that use a comma as a decimal point",
-          fix: "This tool reads a comma as a thousands separator, so 60,5 becomes 605 — ten times too large, still a whole positive number, and so refused by nothing further down. Scaling every event count that way leaves the rate ratio exactly where it was and shrinks its confidence interval about threefold, which is worse than a wrong answer: it is the right answer carrying far more confidence than the data support. Scaling the person-time leaves the rate ratio right and every person-time figure in Table 1 wrong. Re-export the file with a decimal point." });
+          fix: "The comma is removed rather than read, so 60,5 becomes 605 and 1.234,56 becomes 1.23456 — the first ten times too large, the second a thousand times too small, and both still numbers, so nothing further down refuses them. Scaling every event count by ten leaves the rate ratio exactly where it was and shrinks its confidence interval about threefold, which is worse than a wrong answer: it is the right answer carrying far more confidence than the data support. Scaling the person-time by different amounts on different rows, which is what an unequal number of decimal places does, changes the estimate itself. Re-export the file with a decimal point." });
+        if (ct && ct.odd.length) out.push({ label: r.label, col: col, eg: ct.odd,
+          why: "holds value(s) containing a comma that is neither a decimal point nor a thousands separator this tool recognises",
+          fix: "This tool reads 1,234 and 12,345,678 and 1,23,456 as grouped whole numbers and 60,5 as a decimal comma. A value outside both conventions is not guessed at, because every guess available here changes the number by a factor of ten or more. Re-export the column as plain digits with a decimal point and no grouping." });
       });
       return out;
     }
