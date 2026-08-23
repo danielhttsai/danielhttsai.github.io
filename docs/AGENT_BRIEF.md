@@ -7115,15 +7115,10 @@ over.
   from this sandbox. Still nobody has opened one of these `.docx` files in
   Microsoft Word.
 
-<!-- CLAIM 2026-08-23 (twenty-sixth run): RWE Studio's ACNU propensity-score
-     estimation path, end to end — SPEC.acnu.rscript in
-     src/pages/tools/rwe-studio.astro (covariate coercion, the PS fit, common
-     support / trimming, the weight family and its refusal gates, the balance
-     table, matching, fine stratification, the per-protocol estimand, and the
-     browser-side PSDIAG / PSW / PSBAL panel and export that read them).
-     NOT the amendments log, NOT the numeric-role gate, NOT the checker,
-     NOT the nine builders, NOT ITS / SCCS / case-crossover.
-     If you are a concurrent run reading this, take something else. -->
+<!-- CLAIM 2026-08-23 (twenty-sixth run): DONE — RWE Studio's ACNU
+     propensity-score estimation path. Seven commits; see the section at the
+     bottom of this file for what shipped, what was deliberately left, and the
+     ranked list of what the two reviewers found and nobody has acted on yet. -->
 
 ### Found 2026-08-23 by the OTHER twenty-sixth run — the Protocol Checker's Markdown export, where the model's words became the report's structure
 
@@ -7332,3 +7327,319 @@ The generalisable lessons, both new costumes on old ones:
   not apply) are **snippet-corroborated only** — Crossref, PubMed, doi.org and the
   publishers are all blocked here — and the second one is load-bearing for a fix that was
   withdrawn, so nothing rests on it in shipped code.
+
+### Found 2026-08-23 by a twenty-sixth run — RWE Studio's ACNU propensity-score path, end to end
+
+**Chosen by rotation** (the twenty-fifth run took the amendments log across the
+builders, the twenty-fourth took RWE Studio's ingestion gate) and because RWE Studio
+is the only tool on the site that computes a number from the user's own patients.
+Target: `SPEC.acnu.rscript` and everything that feeds or reads it — the covariate
+plan, the propensity fit, common support and trimming, the weight families and their
+refusal gates, the balance table, matching, fine stratification, the per-protocol
+estimand, the `PSDIAG`/`PSW`/`PSBAL` panel and the exports.
+
+Two reviewers on disjoint briefs (a methodologist and an applied analyst) against a
+tree that kept moving under them, plus the orchestrator working a third seam.
+**Everything below was executed** — Chromium against a local `astro build`, real
+`Rscript` (R 4.3.3, survival 3.5.8) on the page's own generated scripts, and real R
+output fed back through `window.RWEngine` so the actual parsers and renderers ran.
+
+#### The environment recipe, which is now cheap — reuse it
+
+Three scratch scripts made everything else possible, and cost about twenty minutes:
+
+- `harness.mjs` — Playwright loads the built page, clicks a demo *or injects arbitrary
+  rows through the demo code path*, sets the design, roles, covariate ticks and all
+  twelve analysis options, clicks Build master file, then `page.evaluate`s the page's
+  own `analysisCSV()` and `buildScript()` and writes `data.csv` + `analysis.R` with
+  the `/data.csv` path rewritten absolute. `Rscript` then runs it.
+- `panel.mjs` — runs `Rscript` for real, feeds the output back with
+  `page.evaluate(o => { window.RWEngine = { run: async () => o } }, rout)`, clicks Run,
+  and dumps `#psdiag` / `#anaresults` / `#table1` as rendered text. This is how every
+  panel claim here was checked.
+- `matrix.mjs` — snapshots the generated R **and its real output** across fifteen
+  option combinations into a directory, so a change is diffed on OUTPUT.
+
+**To inject rows you must use the bare `DEMOS` binding, not `window.DEMOS`.** The whole
+script block is `is:inline`, so a top-level `const` is script-scoped and never lands on
+`window`; `window.DEMOS.cohort.build = …` throws. Bare `DEMOS` works.
+
+#### What shipped, in order of damage
+
+**1 · The demo the page teaches from could not be run at all.** Click
+`cohort (ACNU · ITS)`, choose the active-comparator design, map the three roles, press
+Quick pick — the steps the caption itself gives — and the mapping never validated.
+Step 4 never appeared, and none of the four numbers the caption advertises was
+reachable. One row in six hundred: `buildCohort` draws a survival time from an
+exponential (strictly positive) and rounds it to a tenth of a day (not), so patient
+D10495's draw of ~0.02 days with the outcome occurring became **an event at zero days
+of follow-up**. The `TIME` rule in `NUM_RULES` refuses exactly that and is right to —
+`coxph` does *not* object, it puts that subject in a risk set containing everybody.
+The gate the twenty-fourth run added is correct; the demo data was wrong, and had been
+since it was written. Floored at the rounding grain: exactly one row changes, in two
+fields, and the caption's numbers come back to the digit (565 analysed, crude 1.04,
+IPTW 0.70, 2:1 matching 0.77). **Nobody had run the flagship demo through ACNU since
+the gate landed.** Run the demos after touching a gate.
+
+**2 · The per-protocol rows report a confident effect for a drug that does nothing.**
+The whole PP analysis is one line: censor at the mapped discontinuation time, reuse the
+baseline treatment weights. There are no IPCW anywhere in the file and nothing said so.
+Executed on a simulated cohort of 4000 with **no treatment term anywhere in the
+hazard**, where only the treated discontinue and the sicker ones stop sooner: ITT
+returned 1.05 (0.97–1.13), correctly, and all three weighted PP rows returned **0.84
+with intervals excluding 1**. Both reviewers reached this independently with different
+generators. Worse, every PP row wore a marginal estimand badge — `IPTW (ATE) - PP HR`
+— inherited verbatim because the label is built once with `est` interpolated. Badges
+now appear on ITT rows only; a note over the PP rows says what was and was not done.
+The rows stay: refusing to compute a per-protocol contrast would be worse than naming
+its assumption.
+
+**3 · The one green tick in the diagnostics panel was the only cell that could not
+fail.** On the demo the page calls "a cohort that should not be analysed" — 30.6% with
+no counterpart, IPTW and SMR both withheld — the panel closed with a green dot reading
+*"Balance after overlap weighting — largest |SMD| 0.000 … Weighting did its job."*
+Overlap weights have an **exact** small-sample balance property: with a logistic
+propensity score, the overlap-weighted means of every covariate *in that model* are
+identical between arms by construction (Li, Morgan & Zaslavsky, *JASA*
+2018;113(521):390–400 — **search snippet only**, Crossref blocked; the same citation is
+already in `active-comparator-new-user.astro:184`). Executed: overlap 0.000000 for
+continuous and binary, 4.5e-10 through the multinomial form, on data whose unweighted
+|SMD| is 1.01, against 0.016–0.073 for IPTW on the identical data. And the `pick` chain
+makes overlap the balance scheme *exactly when IPTW and SMR are unticked or withheld*
+— the worst data the tool ever sees. **The identity belongs to the sample the model
+was fitted to**: trimming happens after the fit and keeps the original scores, so it
+degrades — 0.000 untrimmed, 0.000 after a 2% percentile trim, 0.055 after a 31%
+common-support restriction. So "exact by construction" is asserted only where it is
+exactly true; trimmed runs get their own sentence; neither gets a green dot.
+
+**4 · Twelve switches a user could change with no effect at all.** `invalidateMaster`
+was wired to the mapping, the covariates and the cleaning ticks, and to **none** of the
+analysis options. Run the demo, then set Positivity to "restrict to common support" —
+which is what the refusal box tells you to do — and the status still read `Done ✓`, the
+six estimates were still on screen, the panel still said "the inverse-probability
+weights are stabilised", and **"⬇ R script (.R)" still shipped `LAST.script` carrying
+`trimmode<-'none'`** while the control beside the button said `cs`. The nine ITS option
+boxes had a listener that only re-validated the mapping, so they were as stale.
+
+**5 · `NA (95% CI NA-NA)`, in bold, in the estimate column.** `not estimable` was
+reached only when `coxph` *threw*. It does not throw on a cohort with no events or one
+arm — it returns a fit with an NA coefficient, and `sprintf('%.2f', NA)` is the string
+`NA`. All six rows printed it, under `Done ✓`, a complete Table 1 and three green dots.
+Every row now produces three finite numbers or says it could not; the check is shared
+with the matching and fine-stratification rows, which print their own `sprintf` and had
+the identical hole. A one-arm cohort is refused at the mapping step (naming which arm
+everything reads as, and pointing at the Coded flags vocabulary — a misread treatment
+column is the likelier cause) and in the generated R, for anyone running the download.
+
+**6 · "Fine stratification (50 strata …)" when 2 were fitted.** The count was the
+number *asked for*, interpolated by the browser. Ties collapse the quantile breaks —
+one binary covariate gives two distinct scores — and the label travels verbatim into
+both exports. It now reports what was fitted.
+
+**7 · Four sentences the run's own output refutes.** *"so all rows are comparable"*
+after a restriction (the `PSDIAG` line two lines later disagreed: percentile trimming
+on the no-overlap demo removes 16 rows and leaves **229 of the 784 kept** outside
+common support). *"Every weighted estimate above extrapolates for them"* printed with
+only matching and fine stratification ticked, which do the opposite — they exclude
+those patients. *"Restrict to common support first"* said to someone who just did,
+contradicting section 1 two paragraphs above. And, in the calibration panel,
+*"further from the gold standard than doing nothing"* asserted with no comparison, with
+the three numbers needed printed in the same sentence — false in **90% of withheld runs**
+over 400 replicates. All four now check before they claim.
+
+Also: the `overlap` demo caption said the crude comparison gives "HR ≈ 1.7". It gives
+**1.95 (1.58–2.39)**, and the interval does not contain 1.7. Corrected.
+
+#### Where the two reviewers disagreed, and who was right
+
+- **The balance column.** The methodologist put `pick`/`wBAL` in his *checked and found
+  correct* list ("the chain is sound … `balHeld` fires correctly"). The analyst filed
+  the unconditional fallback as a defect. **Both missed the thing that mattered** — that
+  for overlap weights the column is an arithmetic identity — which the orchestrator
+  found by running the demo rather than reading the chain. On the narrow question the
+  methodologist was right (the `balHeld` caveat does fire and does say the right thing),
+  so nothing changed there. **Lesson: "I verified the warning fires" is not the same as
+  "the number the warning is about means anything."**
+- **Truncation.** Both independently found that it defeats the refusal gate, and
+  disagreed only on framing — the analyst called it a misleading remedy, the
+  methodologist called the accompanying note false. Both are right and neither fix
+  shipped; see below.
+- **A claim that did not survive.** The orchestrator first reported that invalidating a
+  mapping after a run left the previous estimates on screen. **It does not.**
+  `invalidateMaster` fires, `LAST` is cleared and `hideResults()` runs.
+  **The trap: `innerText` in Chromium degrades to `textContent` for a non-rendered
+  element, so a hidden panel still returns its old text.** The giveaway was that the
+  second dump had lost every tab and newline the first had. Assert visibility with
+  `isVisible()` or the `hidden` class, never by reading text back.
+- **A bug this run introduced and caught in its own diff.** The first version of the
+  fine-stratification note keyed "the score takes too few distinct values" on the
+  post-drop stratum count, and so told a reader of the no-overlap demo that their
+  propensity score was degenerate when the real cause was two strata holding one arm
+  each. **Found by diffing the R output of fifteen option combinations, not by reading
+  the change.** Build `matrix.mjs` before you edit generated R.
+
+#### Deliberately left — ranked, all reproduced, none acted on
+
+The next run on this file should start here. Every item below has a reproduction.
+
+1. **Truncation switches the refusal off, and the note about it is false twice over.**
+   `unstable` is evaluated on `dF`, the *post-truncation* weights, and truncation caps
+   the weights by construction — so the gate can always be defeated by the control the
+   refusal box itself points at. On the "should not be analysed" demo (true HR exactly
+   1.00): `none` → withheld; `p1` → **1.12 (0.85–1.49)**; `p5` → **1.47 (1.18–1.84)**,
+   excluding the null in the harmful direction. Balance is *destroyed* by the same
+   truncation (|SMD| 0.178 → 1.424) and balance is never a gate. The note then calls a
+   39% move across the null "a little bias", and tells the reader to "report the
+   untruncated estimate alongside it" — the estimate the tool refuses to print as a row,
+   which it then prints inline to three decimals. **This is the single biggest thing
+   left.** Gating on the untruncated weights is one option; the design comment at the
+   `unstable` line deliberately chose the other, so read it before changing it.
+2. **The stability gate cannot see a nearly-empty arm, and the shipped default blinds
+   it.** `wdiag` computes Kish ESS over the **pooled** weight vector. With stabilised
+   weights (the default) and rare exposure every weight is ≈1, so with **3 exposed of
+   400** the panel prints *"Effective sample size 400 of 400 (100%) — Comfortable"*,
+   three green dots, and releases a significant HR (reproduced at 6.32 (1.79–22.33) and,
+   on the reviewer's seed, 1.00 (0.29–3.47)). The **unstabilised** column immediately
+   above shows what the data really is (ESS 2.8%, top 1% holding 49%) under a sentence
+   reassuring the reader the difference is cosmetic. An arm-stratified ESS is the
+   obvious fix; nobody has shown it is the right one.
+3. **`smrbad` applies a pooled threshold to SMR weights, where it measures the
+   arm-size ratio.** SMR weights are 1 for every treated patient and `ps/(1-ps)` for
+   comparators — different scales by construction. With 10 treated of 1000 the tool
+   **refuses** an estimate whose largest weight is 1.0 and whose comparator arm has an
+   effective sample of 933 of 990, saying "a weighted hazard ratio here would be an
+   artefact of a few patients" three lines above "Largest single weight 1.0×". The
+   mirror also holds: a file where **10 comparators of 10,990 move the ATT from 1.02 to
+   0.80 across the null** passes the gate, because 5,990 treated at weight 1 dilute the
+   denominator. And the remedy it offers ("restrict to common support") provably does
+   not move it: 4.0% → 4.0%.
+4. **Complete separation produces four confident, identical hazard ratios.** With a
+   covariate that perfectly separates the arms, `csLo > csHi` (the common-support
+   interval is *empty*), every estimand is unidentified — and the panel prints IPTW ESS
+   "300 of 300 (100%) · Comfortable" with a largest weight of 0.5×, beside four
+   estimates equal to the crude one. The red common-support box at the top is correct;
+   nothing downstream acts on it. In the same run **matching and fine stratification
+   were both ticked and produced neither a row nor a note** (`length(mi)>2` and
+   `length(br)>=3` both false — the fine-stratification silent case is now fixed, the
+   matching one is not).
+5. **The weighted intervals are 24–46% too wide**, and the crude, matched and stratified
+   rows in the same table are correctly sized. Bootstrap with the propensity model refit
+   (B=600) and simulation (B=1500) agree: reported-SE ÷ empirical-SD is 1.46 for IPTW,
+   1.31 SMR, 1.26 overlap at a strong confounder, against 0.97 crude and 0.99 fine
+   stratification; coverage 99.4% / 98.7% / 98.7% against a nominal 95%. The
+   conservatism grows with how prognostic the confounder is — worst exactly where
+   propensity methods are used. The fix is bootstrap SEs, which is a real piece of work.
+   Note two things established and not to be re-derived: `robust=TRUE` is a **no-op** on
+   the crude row (SE 0.04057 vs 0.04058) and **redundant** on the weighted ones (`coxph`
+   auto-enables the sandwich for non-integer weights), so the flag is not the cause.
+6. **A covariate the tool says it "left out" still deletes most of the cohort.**
+   `c_dropmiss` builds its required-column list from raw `COVS`, not from
+   `covPlan().info`, so a covariate `covPlan` has already excluded as unusable still
+   drops every row where it is blank. A `biopsy` field recorded for 1 patient in 5 —
+   what a hospital extract always looks like — moved the crude HR from 0.97 to **0.58**
+   and the analysed population from 400 to 80, with the screen saying *"Left out:
+   biopsy (constant — it carries no information)"*. R's own missingness note never
+   fires, because the browser deleted the rows before R saw them. **The exported report
+   carries no row count at all**, so it cannot be audited for this.
+7. **The surrogacy statistic has no sampling-variability accounting.** Under the exact
+   null `S = LR1/LR2 ~ Beta(½,½)`, so `P(S ≥ 0.9) ≈ 0.205` analytically; simulated at
+   17.5% over 400 replicates, where applying the released correction inflated mean
+   absolute bias 2.5×. Also: the comment attributes `S` to "Lunt 2012, Table 2 footnote
+   g" and **search snippets do not corroborate any likelihood-ratio-ratio statistic in
+   that paper** — what they describe is a DAG-derived bias formula, and Lunt's setting
+   is a validation study *without* outcome data, in which a Cox-likelihood surrogacy
+   statistic could not be computed at all. The `"s-low"` text's claim that "in Lunt's
+   scenarios at this level calibration roughly doubled the error" is **uncorroborated**;
+   the nearest reachable figures (Stürmer, *Med Care* 2007;45(10 Suppl 2):S158–65) report
+   32–106% bias *reduction* when surrogacy holds. **Unverified, not wrong** — the papers
+   are unreachable from here. Verify against full text before acting.
+8. **"Fine stratification" names a method the code does not implement.** Desai/Rothman
+   *Epidemiology* 2017 takes stratum boundaries from the **exposed** group's propensity
+   distribution and assigns **stratum weights**; this code cuts pooled quantiles and
+   **drops** every patient in a single-arm stratum (70% of the cohort in one reproduced
+   run). It implements the comparator the paper argues against, keeps the failure mode
+   the paper exists to fix, and uses the paper's name. **Method characterisation is
+   snippet-only.**
+9. **`NA`/`NULL`/`.`/`-`/`Unknown` become legitimate factor levels**, and the profiler
+   reports the column `0%` missing and `✓ clean`. A numeric `age` with 57 such cells
+   became a 37-level factor, folded to 25 dummies in a 400-row propensity model, with
+   `-` and `.` printed in Table 1 as patient characteristics.
+10. **The fold-rare default can collapse a factor to one level** and then kill the run
+    with `contrasts can be applied only to factors with 2 or more levels`. The covariate
+    note announces "site, 200 levels → 1 after folding" and gives a green tick. Unticking
+    the box refuses it correctly — so the *default* is the broken path.
+11. **The exported report drops the entire diagnostics panel.** `PSDIAG`/`PSW`/`PSBAL`/
+    `PSHIST` are stripped from `display` and rendered only by `renderPsDiag`, so the Word
+    or Markdown file a supervisor receives shows "withheld — weights unstable" beside a
+    comfortable-looking `SMD after IPTW = 0.178` with **no ESS, no top-1% share, no
+    common-support verdict, and not the on-screen sentence that reconciles them**.
+12. **"⬇ Report (Word)" is a dead button when `unpkg.com` is unreachable** — no file, no
+    error, no message — i.e. on exactly the hospital networks this tool is built for.
+13. **Range checks on follow-up time exist only in the browser.** The download header
+    says the script "reproduces the on-screen result in desktop R"; pointed at a file
+    with 40 negative follow-up times it prints a full plausible table with no warning.
+    `chk01`/`chknum` have R-side twins precisely so guards survive export; the range rule
+    never got one.
+14. Smaller: the balance row renders *inside* the last scheme's block while labelled with
+    a different scheme's name; the collinearity note names the internal column (`COV4`),
+    which appears nowhere on screen; `PIPE_SAFE` silently rewrites covariate labels, so
+    two columns differing only in a `|` collide into one Table 1 row; a leading-zero
+    department code (`"01".."04"`) is modelled as a linear quantity; `mxof` skips a
+    covariate whose SMD is `NA` (complete separation), so `PSBAL` reports `ncov=2` about
+    a summary one covariate contributed to.
+
+#### Checked and found NOT to be a problem — do not re-derive
+
+- **Per-scheme weight diagnostics exist.** `PSW` carries each scheme's own ESS / max
+  weight / top-1% share and the panel prints a block per scheme. **The "Known open
+  items" entry saying weight diagnostics cover IPTW only is stale** for SMR and overlap;
+  fine stratification does not weight, and its own diagnostic (patients retained) travels
+  with its estimate. What remains true from that entry is only that there is still **no
+  post-matching balance table** — and when a weighted estimator is selected alongside
+  matching, nothing says the matched cohort's balance is unreported.
+- **`smdcat` is a correct Yang & Dalton multinomial SMD** — invariant to which level is
+  dropped, and its `k==2` branch agrees exactly with `wsmd` on the same 0/1 variable.
+  `wsmd` is correct for continuous and binary.
+- **The matching caliper is the Austin standard** (`0.2 × sd(logit(PS))`), the greedy
+  note's causal claim is true (matched exposed mean PS 0.483 vs dropped 0.751), and the
+  ratio-impossibility note is right including operator precedence.
+- **"Stabilising changes the estimand not at all" holds numerically** — stabilised and
+  unstabilised IPTW agree to four significant figures in point and interval.
+- **The PSC correction algebra is right**: `β_T = β*_T − (α₂/α₁)β*_PS` matches the
+  calibration model, the `lm` runs in the correct direction, both scores are on the
+  probability scale, and the bootstrap refits **both** propensity models per replicate.
+- **Thousands separators in a covariate do not reach R**: cleaning normalises them, and
+  the hypothesis that `complete.cases` running on raw strings before the covariate
+  `as.numeric` could leave `length(ps) < nrow(d)` **does not reproduce** through that route.
+- **`m_ratio` and `m_nstrata` are `<select>`s with fixed options** — no `1e3` route.
+- **Hostile column names and non-ASCII factor levels** survive `analysisCSV` → `read.csv`
+  → `TABLE1` → panel → report without shifting a cell; every rendered cell goes through
+  `esc()`.
+- **The SCCS, case-crossover and overlap demos all still map cleanly**, and the ITS half
+  of the cohort demo was never blocked (it reads `index_date` and `outcome`).
+- **Citations touched this run**: Li/Morgan/Zaslavsky *JASA* 2018;113(521):390–400 —
+  **corroborated from a search snippet only**, Crossref/PubMed/doi.org all blocked. It
+  was already in the repo verbatim; the exact-balance property it is cited for was
+  additionally **verified by executing it in R**, which is the stronger evidence.
+
+#### Verified this run, and how — and what was not
+
+- Six of the seven fixes were confirmed by **diffing the real R output of fifteen option
+  combinations** before and after; the fifteen ITT-only cases are byte-identical across
+  the per-protocol change, and the cohort demo's advertised numbers are unmoved.
+- Every panel claim was rendered from **real `Rscript` output** fed back through
+  `window.RWEngine`, with **zero `pageerror`s**, and all thirteen tool pages reload clean
+  with `typeof window.PC === "object"` after every commit.
+- The overlap exact-balance property, the per-protocol censoring bias and the strata-tie
+  collapse were each **executed in R**, not reasoned about.
+- **Not verified: the live site.** `danielhttsai.github.io` is still blocked from this
+  sandbox; everything was checked against a local build and a static server.
+- **Not verified: WebR.** Its CDN is blocked, so every R result here comes from desktop
+  R 4.3.3. Message text for degenerate fits could differ; the numbers should not.
+- **Not verified: the real upload path.** Everything went through the demo-injection
+  code path, so `RAWTXT` was empty in every run and **the decimal-comma / grouped-
+  thousands guard in `numTrouble` was never exercised**. Treat it as untested, along with
+  sheet selection, header detection, Excel serial dates and the codebook matcher.
+- **Not verified: the `.docx` export.** `unpkg.com` is blocked, so the Word claims here
+  are from reading `buildReportDocx`, not from a generated file. Still nobody has opened
+  one in Microsoft Word.

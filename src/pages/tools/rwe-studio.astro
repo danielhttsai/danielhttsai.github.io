@@ -1234,7 +1234,9 @@ const DESIGNS = [
       "<ul class='mt-1 ml-4 list-disc space-y-0.5'>" +
       "<li>A single <code>frailty_index</code> almost decides who gets the drug — the log-odds move by " + OVL.slope + " per unit — so the frailest are nearly all treated and the fittest nearly all untreated.</li>" +
       "<li>The same index strongly raises the hazard. The <strong>true treatment effect is exactly HR 1.00</strong>: the drug does nothing.</li></ul>" +
-      "<p class='mt-1'>Run it as an active-comparator cohort with <code>frailty_index</code> as the only covariate. A crude comparison says the drug is harmful (HR ≈ 1.7) because it is given to frail people. That much a propensity score can fix. What it cannot fix is that <strong>for a large share of these patients there is nobody in the other arm to compare with at all</strong> — and the tool will say so, refuse the IPTW estimate, and offer the routes out.</p>" +
+      // "HR ≈ 1.7" was not a number this demo produces. Driven through the built page
+      // against real R: 1.95 (1.58-2.39), and the interval does not contain 1.7.
+      "<p class='mt-1'>Run it as an active-comparator cohort with <code>frailty_index</code> as the only covariate. A crude comparison says the drug is harmful (HR ≈ 1.95, 95% CI 1.58–2.39) because it is given to frail people. That much a propensity score can fix. What it cannot fix is that <strong>for a large share of these patients there is nobody in the other arm to compare with at all</strong> — and the tool will say so, refuse the IPTW estimate, and offer the routes out.</p>" +
       "<p class='mt-1 text-slate-500'>This demo exists because a diagnostic nobody ever sees fire is a diagnostic nobody trusts. Try it with stabilised weights, then with truncation, then with common-support restriction, and watch which numbers move and which do not.</p>";
 
     const DEMOS = {
