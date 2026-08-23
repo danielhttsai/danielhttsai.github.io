@@ -282,9 +282,14 @@
        (grepl("N05AH\\|N05AX", code)) and it is what a Markdown-literate author
        types to mean a literal pipe.
        Newlines end a table row outright, so they collapse to a space here for
-       the same reason. */
+       the same reason — and that means a LONE CARRIAGE RETURN too. GFM counts
+       CR, LF and CRLF as line endings, so the obvious `/\r?\n/` handles two of
+       the three: a cell holding "Section 6\rand 7" kept its CR, ended the row
+       there, and the remainder became an unnumbered row with every value shifted
+       one column left, while the .docx printed the cell whole. That is the same
+       defect this function exists to prevent, one character further along. */
     function mdCell(v) {
-      return String(v == null ? "" : v).replace(/([\\|])/g, "\\$1").replace(/\r?\n/g, " ");
+      return String(v == null ? "" : v).replace(/([\\|])/g, "\\$1").replace(/\r\n?|\n/g, " ");
     }
 
     // Escape backslash first, so unescaping is unambiguous.
@@ -309,9 +314,13 @@
       // Five columns; anything beyond the fifth belongs to Reason. Only called
       // on lines that HAVE five segments — see amLog — so neither the padding
       // below nor the overflow join fires on anything the tool prints.
+      // A lone CR inside a cell survives amLog's /\r?\n/ split and then ends the
+      // Markdown row, so it is flattened here rather than in one emitter — the
+      // Word file has to see the same cell the Markdown does.
+      var flat = function (c) { return amUnesc(c).replace(/[\r\n]+/g, " ").trim(); };
       var cells = [];
-      for (var j = 0; j < 4; j++) cells.push(amUnesc(out[j] === undefined ? "" : out[j]).trim());
-      cells.push(amUnesc(out.slice(4).join("|")).trim());
+      for (var j = 0; j < 4; j++) cells.push(flat(out[j] === undefined ? "" : out[j]));
+      cells.push(flat(out.slice(4).join("|")));
       return cells;
     }
 
@@ -363,6 +372,16 @@
        who wrote five values, one of them containing a pipe, is byte-identical to
        an editor row. Nothing here validates a row's content, and no wording
        below claims it does.
+
+       One thing this deliberately gives up, because it was a real design and not
+       an accident. The overflow join in amSplit protected the trailing column:
+       a six-segment raw line whose sixth value belonged to Reason produced a
+       CORRECT row, and "… | Washout lengthened | Reviewer A | B disagreed" is
+       now refused instead. That line is genuinely indistinguishable from the
+       "7 | 8" case — same shape, pipe in a different column — so protecting one
+       means guessing on the other, and the sender sees their line in full either
+       way. The trade is one correct row lost for a class of confident wrong rows
+       refused.
 
        Numbering is by position in the whole log, so a refused entry keeps its
        place: the table shows rows 1 and 3 and the refusal block names entry 2.
@@ -528,7 +547,12 @@
       }
       var bad = log.filter(function (e) { return !e.ok; });
       if (bad.length) {
-        out += "\n**" + AM_REFUSE_HEAD + "**\n\n" + AM_REFUSE_LEAD + "\n";
+        // A blank line, not one newline. With no readable entry there is no
+        // table above, so `out` ends mid-paragraph and a single newline is a
+        // soft break: the refusal heading rendered INSIDE the intro sentence,
+        // while the .docx emitted it as its own bold paragraph. The all-refused
+        // case had been checked as a string and not as a rendered document.
+        out += (/\n\n$/.test(out) ? "" : "\n") + "\n**" + AM_REFUSE_HEAD + "**\n\n" + AM_REFUSE_LEAD + "\n";
         bad.forEach(function (e) { out += "\n" + amRefuseLabel(e) + "\n\n" + mdFence(e.line) + "\n"; });
       }
       return out;
