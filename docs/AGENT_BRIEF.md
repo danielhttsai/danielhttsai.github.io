@@ -8848,14 +8848,7 @@ Three commits, all in `protocol-checker.astro` except the second.
      take (a) or (b), both worker-side, or the Protocol Generator hub, which
      no run has opened since the fifteenth. -->
 
-<!-- CLAIM 2026-08-23 (thirty-second run, CLAIMED): the ACNU builder's
-     phenotype/method LIBRARY PICK path — what a pick writes, what it leaves
-     behind, and what reaches the exported protocol. That covers the standing
-     `pickedCitations`-never-pruned item (fixed in three other builders, still
-     live in the flagship), the two copies of the reference-merge expression,
-     the stale `psMethodDetails` mismatch, and the citation the modal never
-     shows. Deliberately NOT rwe-studio.astro: the thirty-first run was still
-     committing there at 22:53 when this one started at 22:57. -->
+<!-- The thirty-second run's claim marker; its section is at the bottom of this file. -->
 
 ### Found 2026-08-23 by a thirty-first run — the ITS path in RWE Studio, from the CSV to the model
 
