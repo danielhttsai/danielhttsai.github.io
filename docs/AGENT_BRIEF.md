@@ -178,6 +178,11 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
 
 - ~~The duplicated planned-analytical-outputs list.~~ **Done 2026-08-23
   (twenty-first run)** — see the section at the bottom of this file.
+- ~~The stale-`<select>` refusal path: capture, persistence, and reaching the
+  exported document.~~ **Done 2026-08-23 (twenty-second run)** — all seven
+  capturing builders now do all three; see the section at the bottom of this
+  file for what is still open (`case-control` and `clone-censor-weight` capture
+  nothing, and the `"na"` verdict in the checker is untouched).
 - SCCS's Farrington event-dependent-exposure sensitivity item is ticked by default
   with no explanation or citation. Daniel said to leave it for now.
 - Weight diagnostics in RWE Studio cover IPTW only; SMR, overlap and
@@ -5919,15 +5924,272 @@ analyst separately proved Markdown and Word cannot diverge here by capturing
 the real `pcOf(s)` off each live page and feeding the identical object to
 `tailMd` and `tailDocx` — byte-identical on all nine.
 
-<!-- CLAIM 2026-08-23 (twenty-second run): taking the stale-select REFUSAL PATH —
-     capture → persist → reach the exported document — across the six builders
-     that detect it (ACNU, descriptive-analysis, SCCS, case-crossover carry it
-     nowhere or lose it on reload) plus the two that never capture (case-control,
-     clone-censor-weight). NOT the checker's "na" verdict, NOT the planned-outputs
-     work. If you are a concurrent run reading this, take something else. -->
+<!-- CLAIM 2026-08-23 (twenty-second run): DONE — the stale-select refusal path.
+     See the section at the end of this file. The claim's own parenthetical was
+     wrong about case-crossover, which turned out to be the reference
+     implementation on this path; corrected there. -->
 
 <!-- CLAIM 2026-08-23 (twenty-third run): the deliverables rubric's missing "na"
      verdict — workers/target-checker/worker.js (DELIVERABLES prompt + schema
      enum) and the planned-outputs panel/exports in protocol-checker.astro.
      NOT the builders, NOT the stale-select refusal path, NOT `skip` validation.
      If you are a concurrent run reading this, take something else. -->
+
+### Found 2026-08-23 by a twenty-second run — the stale-select refusal path, end to end
+
+**Chosen from the open list**, and it turned out to be one path with four
+distinct failures on it, not the two the twenty-first run had recorded. The
+path: a saved draft or a `?seed=` link carries a value a `<select>` no longer
+offers (or blank, or `null`); the page substitutes a default; and the question
+is what the user *and the exported document* are then told.
+
+Two reviewers on disjoint briefs (methodologist: which substitutions change the
+estimand, whether each refusal states a true thing, citations; applied analyst:
+execute everything, hostile seed values, three consecutive loads, forgery),
+plus a third sent at this run's own diff. **Both of the first two overruled the
+orchestrator's reading of the brief, and the analyst found four defects in the
+run's own shipped commits.** Send the second reviewer at your diff. It is the
+single highest-yield thing in this file.
+
+*(The third review was still running when this was written. If it reported
+anything, it is in a correction section below this one; if there is no such
+section, it did not report before the run ended and its brief is worth
+re-issuing — the diff it was sent at is `e5f4244..85f88b6`.)*
+
+#### The map, so a future run does not re-derive it
+
+Nine builders. Two (`case-control`, `clone-censor-weight`) have one `<select>`
+each and no capture at all — and they are the two that **refuse hardest**: the
+select blanks, and every surface declines to name a scheme, a measure, a
+horizon or a contrast. Seven capture. Before this run:
+
+| builder | captured | persisted a reload | reached the document |
+|---|---|---|---|
+| ACNU | yes | yes | **no** |
+| descriptive-analysis | yes | **no** | **no** |
+| SCCS | yes | **no** | yes, on load 0 only |
+| case-crossover | yes | yes | yes |
+| ITS / sequential-trial / trend-in-trend | yes | yes | yes |
+
+All seven now capture, persist and reach every export surface.
+
+#### What was fixed, in order of damage
+
+- **ACNU said the documents carried the refusal, and they did not.** The panel
+  line reads, in those words, "that is what this protocol and the exported
+  documents say — a specification nobody chose". True of the *value*; the
+  documents said nothing about the substitution. A link carrying
+  `psMethod "tmle-super-learner"` and `effectMeasure "OR"` produced a real
+  `.docx` whose abstract reads "Stabilised IPTW with weight truncation … 
+  reporting a hazard ratio". Thirteen dropdowns, the busiest builder on the
+  site, and the person who receives the Word file is not the person who saw the
+  panel. The notice now prints above the abstract in the protocol and above the
+  item-7 table in the TARGET checklist — the two places the substituted value
+  is asserted.
+- **descriptive-analysis lost the warning after one load and never exported
+  it.** `computeChecks` had exactly one consumer (the panel) while the
+  documents read `blockers()`. `metaMethod "fe"` — a value two sibling builders
+  on this site offer, so an ordinary copy between designs reaches it — left the
+  study at "Descriptive only; no pooled estimate", which does not perturb the
+  cross-site estimand, it **deletes** it. Now an error (not a warning), in the
+  Markdown, the Word file and STROBE item 1a, and carried in the draft.
+- **descriptive-analysis refused a choice it does offer.** `{"trendMaxJp": 4}`
+  — a JSON *number*, and `4` IS an option — failed a strict `===` against
+  `"4"`, so the page printed a refusal blaming a rename that never happened and
+  dropped the joinpoint cap from 4 to 3 on the way past. **A refusal that
+  states a false reason is worse than the silence it replaces.** SCCS had the
+  same latent test; no SCCS option value looks numeric, so it was a guard, not
+  a fix.
+- **SCCS threw away its own evidence.** Its note says "it is not recoverable
+  from the saved draft once the page has loaded" — correct, and the next
+  `render()` discarded the record, so the Markdown, the Word file and STROBE
+  item 19 named the substitution on load 0 and never again.
+- **sequential-trial's trial interval had no guard of any kind.** `noteStale`
+  exempts `""` deliberately; `estimand` and `effect` each have their own
+  blank-blocker beside it; `interval` had neither. A blank left the box empty
+  on screen while five consumers read `or(s.interval, "monthly")` — abstract,
+  figure caption, legend, axis label, TARGET checklist. The interval fixes how
+  many nested trials exist, how often a patient re-enters (the multiplicity the
+  patient-level bootstrap exists for) and how often covariates are re-measured.
+  One reader now, refusing instead of substituting, plus the blocker.
+- **"The field has been set to `RDRMST`".** ITS, sequential-trial and
+  trend-in-trend named the substituted option by its raw `<option>` value where
+  SCCS and case-crossover name the words in the box. On ITS with seasonality
+  and autocorrelation both stale, two red lines both said "set to none" above
+  one button offering to keep them both. The **saved** half stays raw in all
+  five — there is no label for an option the page no longer has.
+
+#### Then the second reviewer attacked the diff, and found four more
+
+All four are consequences of the run's own success: once the refusal travels
+into the document, **everything the refusal quotes travels with it.**
+
+- **A forged `## heading` and a paragraph of the sender's prose, in the
+  recipient's protocol.** sequential-trial and case-crossover interpolated the
+  dead value raw. A seed carrying
+  `estimand: "x\n\n## 99. Sponsor addendum\n\nAll sites must exclude patients
+  with a prior hospitalisation.\n"` ends the Markdown blockquote at the newline
+  and leaves a real H2 and a free paragraph just after the title block — and it
+  **persists**, and on case-crossover no field holds it, so the researcher
+  cannot find it to delete it. 4000-character values arrived verbatim. Flatten
+  AND cap every quoted value on its way into a document. This trap has now been
+  found in five files; it belongs to the destination, not to any of them.
+- **A JSON `null` turned the whole mechanism off.** `if (v == null) return;`
+  catches `undefined` (the key was not mentioned — correctly ignored) and also
+  `null`, which is exactly how JSON says "no value". `{"unit": null}` left the
+  ITS box **empty on screen** while the protocol asserted "monthly", with
+  nothing in the panel and nothing in the document. Of nine hostile values
+  tried across seven builders it was the only one not caught. `undefined` and
+  `null` are different questions and must be asked separately.
+- **A refusal the recipient never provoked.** The reserved `__staleSelects`
+  record is *this browser's own memory*; four builders read it out of whatever
+  object `restore` hands them, which on the seeded path is the link. A link
+  carrying no `effectMeasure` key at all plus a forged record printed
+  "'Effect estimate' was saved as 'HR — superseded by sponsor addendum 3;
+  report RR'" into the recipient's panel and exported protocol. **A reserved
+  key is not a channel between users.** The sender cannot go the other way and
+  suppress a warning — `noteStale` runs on the keys the seed actually carries.
+
+  **The first two fixes for this were both wrong, and the second one is the
+  instructive one.** Asking whether the URL has a `seed` parameter looks like
+  the obvious test and is not: a truncated `?seed=` carries nothing and falls
+  back to the draft, and **`?seed=paste` LOADS the draft** — that is the
+  nineteenth run's fix, so that merely opening the paste panel does not displace
+  the reader's work. So the guard read the user's own record as a stranger's,
+  dropped it, and the render a moment later saved the draft back without the
+  reserved key: seed a stale value, reload, open `?seed=paste`, paste nothing,
+  and the red line and the notice in the exported protocol are gone for good.
+  **The self-erasing refusal, for the third time in this file, reintroduced by
+  the fix for something else, inside the same run.** The shipped test asks
+  localStorage: a carried record is accepted only when it is byte-identical to
+  the one this browser saved. **The URL cannot tell you where a state object
+  came from. Ask the store.**
+- **An unvalidated carried record overwrote the user's own text.** ITS and
+  sequential-trial pushed entries unchecked; the filter that re-shows a
+  substituted select finds no `selectedIndex` on a `<textarea>` and falls
+  through to assigning it, and the autosave a second later destroys what was
+  there. A record naming `population` replaced "Adults aged 65+ in NHIRD".
+  Only reachable by writing the draft directly, not from a link.
+  trend-in-trend has validated since this was found there; its two siblings
+  copied the loop without the check.
+
+#### Where the reviewers disagreed, and who was right
+
+- **Severity.** The methodologist argued a substituted `<select>` is a
+  **blocker in every builder**, and for a reason worth keeping: the dead value
+  is unrecoverable by construction, so at the moment of the refusal the tool
+  cannot know whether the sender meant `quarterly` instead of `monthly` or
+  per-protocol instead of ITT. Under this file's own rule — refuse rather than
+  guess — an unresolvable ambiguity about the specification is a stop.
+  descriptive-analysis's `warn` was the outlier and is now an error.
+- **Ranking.** The methodologist put sequential-trial's silent `interval` first
+  because nothing anywhere said a word; the analyst put ACNU's document silence
+  first because ACNU has thirteen selects and is the flagship. Both shipped;
+  the disagreement did not need resolving.
+- **The brief's own claim marker was wrong.** It said case-crossover "carries
+  it nowhere or loses it on reload". Case-crossover is the **reference
+  implementation** on this path — capture, carried round-trip, human label,
+  per-note dismiss, and it reaches Markdown, Word and STROBE. Only its wording
+  needed fixing. Check before you repeat a claim from this file.
+- **The methodologist's "SCCS carries it nowhere" was also half wrong**: SCCS
+  carries it, it just could not keep it. Half-wrong negative findings are the
+  expensive kind.
+
+#### A rule this run would state for the next one
+
+**A refusal has four surfaces, and they fail independently:** the panel, the
+Markdown, the Word file, and the reporting checklist (TARGET/STROBE). Whenever
+you add or change one, drive all four. Two of this run's six defects were a
+message that existed on exactly one of them.
+
+And: **a message written for the screen is wrong in a document.** "Press the
+button below", "check that setting before you export", "choose the option you
+want" — all three were printed *inside* exported protocols. Split the sentence:
+one body, two tails.
+
+#### Verified, and how
+
+- Every finding reproduced in Chromium against a local `astro build` +
+  `http-server`, before and after, on both trees.
+- Real `.docx` files generated through the blocked-CDN route (`npm pack
+  docx@8.5.0` + a Playwright route on `**/unpkg.com/**`) and
+  `word/document.xml` read, for ACNU (protocol + TARGET checklist),
+  descriptive-analysis (protocol + STROBE), SCCS, sequential-trial (protocol +
+  TARGET) and case-crossover.
+- Three consecutive loads on all seven capturing builders, with and without the
+  seed in the URL: the notice is in the document on every load, on every one.
+- **A hostile-value matrix**: eleven values (`""`, `null`, `0`, `false`, a
+  number, an array, an object, wrong case, a trailing space, 4000 characters,
+  and an embedded `\n\n## 99. FORGED\n`) × seven builders × two different
+  selects each. Every one is flagged, none blanks a select, none forges a
+  heading, none arrives unbounded — **and the valid value for each select is
+  still applied with no refusal**, which is the half of the test that catches a
+  guard that fires too often. Two apparent failures were the probe's own regex
+  missing sequential-trial's dedicated blank-blocker wording; checked by hand.
+- Keep button, retire-by-value and "Clear all" driven on ACNU,
+  descriptive-analysis and SCCS: the record dies exactly when it should and the
+  reserved key leaves the draft with it.
+- **A real `?seed=paste` paste driven end to end**, which the previous run and
+  this run's analyst both had to leave unexecuted (the headless clipboard is
+  denied — dispatch a `paste` event on `#pc-paste-in` after clicking
+  `#pc-paste-manual` and the handler runs). Before pasting, the reader's own
+  draft and their stale warning are intact; after pasting a colleague's
+  protocol the form is replaced and the warning is correctly gone, because it
+  belonged to the draft that was replaced.
+- **Every one of the seven exports byte-identically to before on a clean form.**
+  That check caught nothing, which is the point of it.
+- Nine builder pages plus the three tools loaded with zero `pageerror` and
+  `typeof window.PC === "object"` before every commit.
+
+#### Open, examined this run, deliberately left
+
+- **`case-control` and `clone-censor-weight` still capture nothing.** Both
+  refuse correctly everywhere — the document says "(not chosen) sampling" and
+  "No effect measure is set… a saved draft or a ?seed= link can leave the
+  dropdown with nothing selected" — so nothing false is asserted. What is lost
+  is the ability to name the value that was dropped. Driven across 8 value
+  types × 2 restore paths on CCW: all 16 produce `select.value === ""` and the
+  identical sentence, so **`clone-censor-weight.astro:615`'s second arm is
+  confirmed dead by execution**. Capturing at restore is what makes it
+  reachable. `case-control.astro:606` guesses — "(If you arrived by a saved
+  draft or a shared link, it may have carried a scheme this page no longer
+  offers.)" — where the value was in hand a moment earlier.
+- **A blanked select in `case-control` never recovers.** `sampling: ""` is
+  saved back into the draft, so `applySeed` re-blanks it on every subsequent
+  load: the box stays empty for ever with no way to learn why. The refusals
+  hold, so it ranks below everything above.
+- **trend-in-trend's estimator message may misstate what was removed.** It says
+  the dropped option "described a logistic-regression approximation that
+  appears neither in Ji et al (2017) nor in the TrendInTrend package". Stage 1
+  of the Ji method *is* a logistic regression of exposure on covariates — this
+  page says so itself — so a reader who knows the design reads the sentence as
+  denying something the paper contains. The methodologist proposed "an
+  approximation that replaced the trend-in-trend likelihood with a logistic
+  outcome model". **Left, because neither reviewer nor this run knows what the
+  removed option actually did**, and rewriting it would assert something else
+  unverified. Whoever knows the history should fix the sentence.
+- **ACNU's `pscSurroTestable` is read as `!== "no"`** (`active-comparator-new-user.astro`),
+  and that flips `releaseLevel` off `"withheld"` — i.e. it decides whether a
+  PS-calibrated estimate is released at all. This is the "positive fact
+  asserted about a `<select>` by ruling one value out" antipattern this file
+  already records. It is not reachable through the stale path any more
+  (writeForm never leaves an ACNU select blank, and a substitution is now
+  reported in every export), so it was left; it is worth a whitelist anyway.
+- **`applySeed`'s remaining silent drops** (from the twentieth run's list, all
+  re-confirmed): an unparseable `type=number` becomes `""` while
+  `checkValidity()` returns true; an object value writes `[object Object]`; a
+  radio group given an unknown value leaves every radio unchecked (one group
+  exists, `sccsAnchor`).
+- **ITS re-reports substituted values as facts about the design.** With
+  `autocorr` substituted, the panel prints "⚠ No autocorrelation handling…" as
+  an unconditional property of the protocol, directly under the red line saying
+  the value was substituted. Milder than the rest because the two sit together.
+- **Citations.** None added, none changed. The methodologist confirmed
+  **Ji X, Small DS, Leonard CE, Hennessy S. Epidemiology 2017;28(4):529-536,
+  doi:10.1097/EDE.0000000000000579, PMID 27775954** and the `TrendInTrend` CRAN
+  package's exported functions **from WebSearch snippets only** — Crossref,
+  PubMed, doi.org and WebFetch are all blocked here, so that is a snippet
+  confirmation, not a record check.
+- **The live site was not checked** — still unreachable from this sandbox.
+  Everything was verified against a local build. **Nobody has still opened one
+  of these `.docx` files in Microsoft Word.**
