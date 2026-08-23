@@ -1377,12 +1377,90 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
       const preview = document.querySelector("[data-preview]");
       const actionMsg = document.querySelector("[data-action-msg]");
 
-      // ── Picked citations (from library picks); appended to References on export.
-      // Stored as { phenotypeName: citationString } so we dedup and can clear.
-      let pickedCitations = {};
-      try { pickedCitations = JSON.parse(localStorage.getItem(STORAGE_CITATIONS_KEY) || "{}") || {}; } catch {}
+      // ── What the phenotype/method library wrote into this form.
+      //
+      // This used to be { phenotypeName: citationString }, and nothing ever
+      // evicted an entry. Pick "Myocardial infarction (MI)" as the outcome,
+      // change your mind and pick "Ischemic stroke", and the exported protocol
+      // — Markdown and Word alike — carried BOTH validation studies in its
+      // numbered reference list, the MI one for an outcome that appears
+      // nowhere else in the document. It survived a reload, and only "Clear
+      // all" removed it; browsing five outcomes while deciding exported five
+      // validation citations. Reproduced end to end before this was changed.
+      //
+      // A pick is now stored against the FIELD it wrote the phenotype's name
+      // into, so a second pick into the same field replaces the first
+      // deterministically, and the value written is stored beside it so the
+      // record can be checked against the form later. `fields` is everything
+      // that pick wrote, which is what lets the checks panel say that the
+      // method operational details came from a different method than the one
+      // now selected.
+      let libraryPicks = {};
+      try { libraryPicks = JSON.parse(localStorage.getItem(STORAGE_CITATIONS_KEY) || "{}") || {}; } catch {}
       const savePickedCitations = () => {
-        try { localStorage.setItem(STORAGE_CITATIONS_KEY, JSON.stringify(pickedCitations)); } catch {}
+        try { localStorage.setItem(STORAGE_CITATIONS_KEY, JSON.stringify(libraryPicks)); } catch {}
+      };
+      // A browser that used this page before today holds name-keyed strings
+      // that nothing in the new scheme would ever evict — they would ride into
+      // every future protocol. Anything not keyed by a field one of this
+      // page's own library buttons fills, in the new record shape, is dropped.
+      // The key set is derived by running the SAME expression the pick handler
+      // uses over each button's dataset, rather than by a second hand-written
+      // list: this file has been caught three times by two copies of one
+      // lookup drifting apart.
+      const citeKeyOf = (t) => t.name || t.alsoFill || t.value || t.def || "";
+      {
+        const validKeys = new Set([...document.querySelectorAll("[data-open-library]")].map((b) => citeKeyOf({
+          name: b.dataset.targetName, alsoFill: b.dataset.alsoFill,
+          value: b.dataset.targetValue, def: b.dataset.targetDef,
+        })).filter(Boolean));
+        for (const [k, v] of Object.entries(libraryPicks)) {
+          if (!validKeys.has(k) || !v || typeof v !== "object") delete libraryPicks[k];
+        }
+        savePickedCitations();
+      }
+      // Which picked citations still belong to this draft. A citation travels
+      // only while the field it was written into still holds what the pick put
+      // there; one that no longer does is withheld from the reference list AND
+      // named in the checks panel, because silently dropping a reference the
+      // user believes they took from a validated library is its own failure,
+      // and silently keeping it is the failure this scheme was written to end.
+      //
+      // Equality against what the pick wrote, never a substring search over the
+      // form: the SCCS builder was caught by substring matching in both
+      // directions at once — rewording an outcome deleted its reference
+      // silently, and naming a phenotype in an inclusion criterion revived an
+      // unrelated validation study.
+      const liveCitations = (s) => {
+        const live = [], lapsed = [];
+        for (const [field, v] of Object.entries(libraryPicks)) {
+          if (!v || typeof v !== "object" || !v.cite || !String(v.cite).trim()) continue;
+          const now = String(s[field] == null ? "" : s[field]).trim();
+          const was = String(v.wrote == null ? "" : v.wrote).trim();
+          if (was && was !== now) lapsed.push({ field, wrote: was, now: now, cite: String(v.cite).trim(), cat: String(v.cat || "") });
+          else live.push(String(v.cite).trim());
+        }
+        return { live, lapsed };
+      };
+      // One expression, called by both exports. It was two copies of the same
+      // five lines, one in the Markdown builder and one in the Word builder.
+      const refsOf = (s) => {
+        const set = new Set(String(s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean));
+        for (const c of liveCitations(s).live) set.add(c);
+        return Array.from(set);
+      };
+      // The label the user reads above a field, read from the page itself so a
+      // renamed field cannot leave this panel naming something that is not on
+      // screen. The indication's label element contains its library button too.
+      const fieldLabel = (name) => {
+        const el = form.elements[name];
+        if (!el) return name;
+        const wrap = el.closest("label") || el.parentElement;
+        const span = wrap && wrap.querySelector("span");
+        if (!span) return name;
+        const c = span.cloneNode(true);
+        c.querySelectorAll("button").forEach((x) => x.remove());
+        return (c.textContent || "").replace(/\s+/g, " ").trim() || name;
       };
 
       const setMsg = (msg, isError = false) => {
@@ -2818,17 +2896,7 @@ ${numbered(PSC_REFERENCES)}
           centralised: "Centralised; site-level individual data are pooled at the coordinating centre under appropriate data-sharing agreements.",
         })[s.arch] || "Federated";
 
-        const refsUser   = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        // Merge user-typed references with citations harvested from library
-        // picks (dedup by exact string).
-        const refsAll    = (() => {
-          const set = new Set(refsUser);
-          for (const cite of Object.values(pickedCitations)) {
-            if (cite && cite.trim()) set.add(cite.trim());
-          }
-          return Array.from(set);
-        })();
-        const refs       = refsAll;
+        const refs       = refsOf(s);
         const milestones = (s.timeline   || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const inclusion  = mergeList(s.inclusionPick,    s.inclusionCustom);
         const exclusion  = mergeList(s.exclusionPick,    s.exclusionCustom);
@@ -3168,6 +3236,67 @@ _Drafted with the AsPEN protocol builder (${today})._
         // finding that invalidates every other line in this panel, because the
         // panel is reading a form that no longer says what the draft said.
         staleSelects.forEach((x) => checks.push({ level: "error", msg: staleMsg(x, staleSelects.length > 1) }));
+        // A citation the library added, for a phenotype the form no longer
+        // names. Withholding it is right — the alternative is the reference
+        // list of a stroke protocol citing an MI validation study — but doing
+        // it in silence would be its own defect: the user picked from a
+        // library that says it adds the reference, and would have no way to
+        // learn that it no longer does. The citation is printed in FULL, not
+        // clipped: the sentence tells the user to paste it into the References
+        // box, and an instruction to paste something the panel truncated is
+        // not an instruction anyone can follow.
+        //
+        // A stored value is shown in the words the page uses for it. The first
+        // version of this printed a <select>'s raw option value — "the method
+        // was filled with iptw-overlap and now reads match-1to1" — a vocabulary
+        // this page never shows the user. The comment above `shownText` says
+        // exactly that about a different panel, and this run reintroduced it
+        // three inches below.
+        const asShown = (field, v) => {
+          const el = form.elements[field];
+          if (el && el.options) {
+            const o = Array.from(el.options).find((x) => x.value === String(v));
+            return o ? String(o.text).trim() : String(v);
+          }
+          return String(v);
+        };
+        // The method and its operational details are two fields that a single
+        // library pick fills together and that nothing keeps together
+        // afterwards. Changing the dropdown by hand left section 7 reading
+        // "Method: 1:1 PS matching" directly above operational details
+        // describing overlap weights — two different estimands in one section,
+        // in a document that states both without comment. The textarea says
+        // "Edit freely" and is the user's to write, so it is not touched: the
+        // panel raises the disagreement and the user decides which field is
+        // wrong.
+        //
+        // One action, one line: changing the dropdown after a library pick both
+        // orphans the details and withdraws the method reference, and the panel
+        // says so once rather than twice.
+        const psRec = libraryPicks.psMethod;
+        const psFrom = psRec && psRec.fields ? psRec.fields.psMethodDetails : null;
+        const psDetails = String(s.psMethodDetails || "").trim();
+        const psMoved = !!(psRec && String(psRec.wrote) !== String(s.psMethod || ""));
+        const psMismatch = !!(psMoved && psFrom && psDetails);
+        if (psMismatch) {
+          checks.push({ level: "warn", msg:
+            "“" + fieldLabel("psMethodDetails") + "” was filled from the library entry for “" + asShown("psMethod", psRec.wrote) +
+            "”, but the method now selected is “" + (shownText("psMethod") || String(s.psMethod || "")) + "”. " +
+            (psDetails === String(psFrom).trim()
+              ? "The details are still that entry's, word for word"
+              : "The details have been edited since, but they were written for the other method") +
+            ", and the protocol prints the method and the details in the same section — so section 7 will name one approach and describe another. Re-pick the method from the library to refill the details, or rewrite them for the method you have chosen." +
+            (psRec.cite ? " That entry's method reference is being withheld from the reference list for the same reason; if it still belongs in this protocol, paste it into the References box: " + String(psRec.cite).trim() : "") });
+        }
+        liveCitations(s).lapsed.forEach((x) => {
+          if (x.field === "psMethod" && psMismatch) return;   // said once, above
+          const method = x.cat === "confounding";
+          checks.push({ level: "warn", msg:
+            "“" + fieldLabel(x.field) + "” was filled from the library with “" + clipTxt(asShown(x.field, x.wrote), 60) + "”, and now " +
+            (x.now ? "reads “" + clipTxt(asShown(x.field, x.now), 60) + "”" : "is empty") +
+            ". The " + (method ? "method reference" : "validation study") + " that pick carried is being withheld from the reference list, because it belongs to the " +
+            (method ? "method" : "definition") + " that was replaced, not the one in the form. If it still belongs in this protocol, paste it into the References box: " + x.cite });
+        });
         const washR = readDays(s.washout), lbR = readDays(s.lookback), graceR = readDays(s.grace);
         const wash = washR.days || 0, lb = lbR.days || 0, grace = graceR.days || 0;
         // Name the window the protocol is declining to state, and why. A
@@ -3711,7 +3840,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         localStorage.removeItem(STORAGE_CITATIONS_KEY);
         localStorage.removeItem(PSC_STORAGE_KEY);
         localStorage.removeItem(PSC_IMPORT_KEY);
-        pickedCitations = {};
+        libraryPicks = {};
         pscClass = {}; pscAi = {}; pscVarsSig = ""; pscImport = null;
         // The draft that carried the dead value is gone, so the question about
         // it is answered; leaving it would strand a red blocker on a form the
@@ -3881,14 +4010,7 @@ _Drafted with the AsPEN protocol builder (${today})._
 
         const inclusion  = mergeList(s.inclusionPick,    s.inclusionCustom);
         const exclusion  = mergeList(s.exclusionPick,    s.exclusionCustom);
-        const refsUser   = (s.references || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const refs       = (() => {
-          const set = new Set(refsUser);
-          for (const cite of Object.values(pickedCitations)) {
-            if (cite && cite.trim()) set.add(cite.trim());
-          }
-          return Array.from(set);
-        })();
+        const refs       = refsOf(s);
         const milestones = (s.timeline   || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const censoring  = mergeList(s.censoringPick,    s.censoringCustom);
         const covariates = mergeList(s.covariatesPick,   s.covariatesCustom);
@@ -4472,11 +4594,16 @@ _Drafted with the AsPEN protocol builder (${today})._
           btn.addEventListener("click", () => {
             const it = filtered[parseInt(btn.dataset.phenotypeIdx, 10)];
             if (!it) return;
+            // What this pick actually wrote, field by field. The record below
+            // is built from this rather than from what the entry *contains*,
+            // so a target this trigger does not have can never leave the
+            // record claiming a value the form does not hold.
+            const wrote = {};
             const fill = (key, val) => {
               const fieldName = currentTargets[key];
               if (!fieldName || val === undefined) return;
               const el = form.querySelector(`[name="${fieldName}"]`);
-              if (el) el.value = val;
+              if (el) { el.value = val; wrote[fieldName] = String(val); }
             };
             fill("name",  it.name);
             fill("codes", it.codes);
@@ -4484,17 +4611,25 @@ _Drafted with the AsPEN protocol builder (${today})._
             // For confounding picks: drop the value into the <select> (psMethod)
             if (currentTargets.value && it.value !== undefined) {
               const el = form.querySelector(`[name="${currentTargets.value}"]`);
-              if (el) el.value = it.value;
+              if (el) { el.value = it.value; wrote[currentTargets.value] = String(it.value); }
             }
             if (currentTargets.alsoFill) {
               const el = form.querySelector(`[name="${currentTargets.alsoFill}"]`);
-              if (el && it.name) el.value = it.name;
+              if (el && it.name) { el.value = it.name; wrote[currentTargets.alsoFill] = String(it.name); }
             }
-            // Record citation for the References section
-            if (it.validation) {
-              pickedCitations[it.name] = it.validation;
-              savePickedCitations();
+            // Record the pick against the field that identifies it. Stored
+            // whether or not the entry carries a validation study, so that
+            // picking an unvalidated phenotype after a validated one evicts
+            // the earlier citation rather than leaving it behind — and so the
+            // operational-details check has a record to read even for an entry
+            // with no citation.
+            const citeKey = citeKeyOf(currentTargets);
+            if (citeKey && Object.prototype.hasOwnProperty.call(wrote, citeKey)) {
+              libraryPicks[citeKey] = { wrote: wrote[citeKey], cite: it.validation || "", fields: wrote, cat: currentCategory };
+            } else if (citeKey) {
+              delete libraryPicks[citeKey];
             }
+            savePickedCitations();
             closeLibrary();
             render();
           });
