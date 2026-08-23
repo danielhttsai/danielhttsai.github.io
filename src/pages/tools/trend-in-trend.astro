@@ -228,7 +228,7 @@ const SENSITIVITY = [
     // the exposure in the period") carry no full stop, so nobody types one, and
     // both exports read "Proportion dispensed A strong time trend in exposure
     // is a requirement…" — two sentences run together.
-    const sent = (t) => { const v = String(t == null ? "" : t).trim(); return v && !/[.!?:;]$/.test(v) ? v + "." : v; };
+    const sent = (t) => { const v = String(t == null ? "" : t).trim(); return v && !/[.!?:;\u2026]$/.test(v) ? v + "." : v; };
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
     // Check messages quote what the user typed, and once they travel into the
@@ -262,14 +262,31 @@ const SENSITIVITY = [
       const v = Number(t);
       if (!isFinite(v)) return { raw: t, n: null, state: "bad" };
       if (!Number.isInteger(v)) return { raw: t, n: null, state: "bad", why: "fraction" };
-      if (v < 0) return { raw: t, n: null, state: "bad", why: "negative" };
+      // `-0 < 0` is false, so minus zero was the one negative that slipped
+      // through and got reported as "zero periods" rather than as negative.
+      if (v < 0 || Object.is(v, -0)) return { raw: t, n: null, state: "bad", why: "negative" };
+      // Above 2^53 `String(n)` switches to exponential — 1e21 came back out as
+      // "1e+21 periods", which is the exact notation this reader exists to stop
+      // reaching the protocol. Anything that large is not a count of calendar
+      // periods anyway, so refuse it by name rather than print it.
+      if (!Number.isSafeInteger(v)) return { raw: t, n: null, state: "bad", why: "huge" };
       return { raw: t, n: v, state: "ok" };
     };
     const numText = (p, unit) => p.state === "ok" ? String(p.n)
       : p.state === "blank" ? "(not specified)"
       : "(not specified — “" + clip(p.raw, 40) + "” " + (p.why === "negative"
           ? "is a negative " + unit
-          : p.why === "fraction" ? "is not a whole " + unit : "could not be read as a whole " + unit) + ")";
+          : p.why === "fraction" ? "is not a whole " + unit
+          : p.why === "huge" ? "is far too large to be a " + unit
+          : "could not be read as a whole " + unit) + ")";
+    // numText already parenthesises its refusals; wrapping one again produced
+    // "((not specified — “-5” is a negative number of calendar periods))".
+    const inParens = (t) => /^\(.*\)$/.test(t) ? t : "(" + t + ")";
+    // "in every 6 months periods" reads as a typo in an exported protocol.
+    const PERIOD_PHRASE = { "yearly": "yearly", "quarterly": "quarterly", "every 6 months": "six-monthly", "monthly": "monthly" };
+    const perPhrase = (s) => PERIOD_PHRASE[s.period] || s.period || "yearly";
+    const nPeriods = (n) => n + " period" + (n === 1 ? "" : "s");
+    const nStrataW = (n) => n === 1 ? "1 CPE stratum" : n + " CPE strata";
     const nPer = (s) => readNum(s.nperiods);
     const nStr = (s) => readNum(s.nstrata);
     const perText = (s) => numText(nPer(s), "number of calendar periods");
@@ -362,7 +379,7 @@ const SENSITIVITY = [
       // says how to do it properly was already in this page's bibliography and
       // was never invoked. `nz(s.studySize, …)` in ProtocolCommon exists so a
       // builder can supply its own; this is that.
-      studySize: "Power for a trend-in-trend analysis is not a function of exposure and outcome frequency alone: it is driven chiefly by the STRENGTH of the exposure-prevalence trend over calendar time and by how much that trend differs across CPE strata. Ertefaie et al (Epidemiology 2018;29(3):e21-e23) report that where the exposure-prevalence trend is strong, the design retains reasonable power across a range of outcome rates, stage-1 c-statistics and numbers of strata — so the prevalence trend, not the event count, is the quantity to establish first. Power is therefore assessed by Monte-Carlo simulation rather than a closed-form formula, using the `ttpower()` and `ttdetect()` routines of the `TrendInTrend` R package, parameterised by the source population size, the number of calendar periods (" + perText(s) + "), the number of CPE strata (" + strText(s) + "), the c-statistic of the stage-1 exposure model, the assumed exposure-prevalence trend, the baseline outcome rate, and the hypothesised odds ratio. The assumed values and the resulting detectable odds ratio are stated before the analysis is executed, and the observed exposure-prevalence trend is confirmed against the assumed one in a pilot extraction. Feasibility is confirmed as the per-stratum-per-period cell counts that enter the likelihood, not as person-time.",
+      studySize: "Power for a trend-in-trend analysis is not a function of exposure and outcome frequency alone: it is driven chiefly by the STRENGTH of the exposure-prevalence trend over calendar time and by how much that trend differs across CPE strata. Ertefaie et al (Epidemiology 2018;29(3):e21-e23) report that where the exposure-prevalence trend is strong, the design retains reasonable power across a range of outcome rates, stage-1 c-statistics and numbers of strata — so the prevalence trend, not the event count, is the quantity to establish first. Power is therefore assessed by Monte-Carlo simulation rather than a closed-form formula, using the ttpower() and ttdetect() routines of the TrendInTrend R package, parameterised by the source population size, the number of calendar periods " + inParens(perText(s)) + ", the number of CPE strata " + inParens(strText(s)) + ", the c-statistic of the stage-1 exposure model, the assumed exposure-prevalence trend, the baseline outcome rate, and the hypothesised odds ratio. The assumed values and the resulting detectable odds ratio are stated before the analysis is executed, and the observed exposure-prevalence trend is confirmed against the assumed one in a pilot extraction. Feasibility is confirmed as the per-stratum-per-period cell counts that enter the likelihood, not as person-time.",
       limitations: "Trend-in-trend requires a strong time trend in exposure, and is unbiased only if no unmeasured factor affecting the outcome has a prevalence trend over calendar time that is correlated with the exposure trend across CPE strata — so a time-stable confounder cannot bias it, but a co-intervention or secular change arriving alongside uptake can. Stage-1 covariates are treated as time-invariant, so each person keeps one CPE stratum throughout.",
       plannedOutputs: ["Exposure-prevalence trend by calendar period, and by CPE stratum (evidence that the strata really do differ in exposure trend).", "Outcome trend by CPE stratum (the trend-in-trend figure).", "The stratum × period 2 × 2 tables that enter the likelihood.", "Effect estimate with 95% CI."],
     });
@@ -422,7 +439,7 @@ This study uses the **trend-in-trend (TIT)** design (Ji et al, *Epidemiology* 20
 Among **${P}**, does **${E}** affect the incidence of **${O}**, as identified by the co-movement of exposure trends and outcome trends across CPE strata?
 
 ## 3. Study design
-A **trend-in-trend** analysis using observational data from **${or(s.data, "(data source)")}**, over **${or(s.first, "(first)")}–${or(s.last, "(last)")}** in **${or(s.period, "yearly")}** periods (**${perText(s)}** periods), with **${strText(s)}** CPE strata.
+A **trend-in-trend** analysis using observational data from **${or(s.data, "(data source)")}**, over **${or(s.first, "(first)")}–${or(s.last, "(last)")}** in **${perPhrase(s)}** periods (**${perText(s)}** periods), with **${strText(s)}** CPE strata.
 
 ## 4. Exposure-prevalence trend
 ${sent(or(s.prevdef, "For each calendar period, exposure prevalence is the proportion of the population dispensed the exposure."))} A **strong time trend in exposure is a requirement of the design, not a convenience**: without one there is nothing for the likelihood to identify the effect from. The observed prevalence trend is reported before any effect estimate is interpreted, overall and within each CPE stratum.
@@ -488,13 +505,13 @@ ${window.PC.tailMd(pcOf(s))}
         ? "The number of calendar periods is blank. It is not assumed: the periods are the axis the exposure trend is read along, and every surface of this protocol that would have named a count says it is unspecified instead."
         : "The number of calendar periods was given as “" + clip(pn.raw, 40) + "”, which is not a whole number of periods" + (pn.why === "negative" ? " (it is negative)" : pn.why === "fraction" ? " (it is a fraction, and there is no such thing as part of a calendar period)" : "") + ". No count has been substituted." });
       else if (pn.n === 0) checks.push({ level: "error", msg: "Zero calendar periods. Trend-in-trend reads the effect off how exposure prevalence moves ACROSS calendar periods; with none there is no trend and nothing to identify an effect from." });
-      else if (pn.n < 5) checks.push({ level: "warn", msg: "Only " + pn.n + " calendar periods — the exposure trend is estimated across periods, and too few weakens it. This tool's own rule of thumb is ≥ 5–10; it is a heuristic, not a threshold taken from Ji et al (2017) or Ertefaie et al (2018), neither of which states one." });
+      else if (pn.n < 5) checks.push({ level: "warn", msg: "Only " + pn.n + " calendar period" + (pn.n === 1 ? "" : "s") + " — the exposure trend is estimated across periods, and too few weakens it. This tool's own rule of thumb is ≥ 5–10; it is a heuristic, not a threshold taken from Ji et al (2017) or Ertefaie et al (2018), neither of which states one." });
 
       if (sn.state !== "ok") checks.push({ level: "error", msg: sn.state === "blank"
         ? "The number of CPE strata is blank. It is not assumed: the strata are what the outcome trends are contrasted across, and every surface of this protocol that would have named a count says it is unspecified instead."
         : "The number of CPE strata was given as “" + clip(sn.raw, 40) + "”, which is not a whole number of strata" + (sn.why === "negative" ? " (it is negative)" : sn.why === "fraction" ? " (it is a fraction — a quantile cut produces whole strata)" : "") + ". No count has been substituted." });
-      else if (sn.n < 2) checks.push({ level: "error", msg: sn.n + " CPE strata. The design identifies the effect by CONTRASTING outcome trends between strata with different exposure trends, so it needs at least two; with fewer there is no contrast to read." });
-      else if (sn.n < 3) checks.push({ level: "warn", msg: "Only " + sn.n + " CPE strata — trend-in-trend contrasts outcome trends across CPE strata, and two gives the thinnest possible contrast. Ji et al used quintiles (5); ≥ 3 is this tool's own rule of thumb rather than a published threshold." });
+      else if (sn.n < 2) checks.push({ level: "error", msg: nStrataW(sn.n) + ". The design identifies the effect by CONTRASTING outcome trends between strata with different exposure trends, so it needs at least two; with fewer there is no contrast to read." });
+      else if (sn.n < 3) checks.push({ level: "warn", msg: "Only " + nStrataW(sn.n) + " — trend-in-trend contrasts outcome trends across CPE strata, and two gives the thinnest possible contrast. Ji et al used quintiles (5); ≥ 3 is this tool's own rule of thumb rather than a published threshold." });
 
       // Sparsity is a property of the stratum × period GRID, not of the strata
       // alone. The old note fired on strata > 5 and said nothing about periods,
@@ -504,7 +521,7 @@ ${window.PC.tailMd(pcOf(s))}
       // count; so it now reports the grid it will produce and says that.
       if (pn.state === "ok" && sn.state === "ok" && pn.n > 0 && sn.n > 0) {
         const cells = pn.n * sn.n;
-        if (cells > 60) checks.push({ level: "info", msg: sn.n + " CPE strata × " + pn.n + " calendar periods is " + cells + " stratum × period cells, and the same cases are spread over all of them. Whether that is too sparse depends on the number of cases, which this tool does not know and will not guess — report the per-cell counts alongside the estimate, and compare against a coarser grid as a sensitivity analysis." });
+        if (cells > 60) checks.push({ level: "info", msg: nStrataW(sn.n) + " × " + nPeriods(pn.n) + " is " + cells + " stratum × period cells, and the same cases are spread over all of them. Whether that is too sparse depends on the number of cases, which this tool does not know and will not guess — report the per-cell counts alongside the estimate, and compare against a coarser grid as a sensitivity analysis." });
       }
 
       // Four independent inputs described the same axis and nothing related
@@ -513,7 +530,7 @@ ${window.PC.tailMd(pcOf(s))}
       // beside a default of 10 handed the user that contradiction.
       const imp = impliedPeriods(s);
       if (imp && imp.y2 < imp.y1) checks.push({ level: "error", msg: "The last period (" + imp.y2 + ") is before the first (" + imp.y1 + ")." });
-      else if (imp && pn.state === "ok" && pn.n > 0 && imp.n !== pn.n) checks.push({ level: "warn", msg: imp.y1 + "–" + imp.y2 + " in " + s.period + " periods is " + imp.n + " periods, but this protocol states " + pn.n + ". One of the two is wrong, or some periods are being excluded — if they are, say which and why, because the count is what fixes the size of the stratum × period grid the likelihood is maximised over." });
+      else if (imp && pn.state === "ok" && pn.n > 0 && imp.n !== pn.n) checks.push({ level: "warn", msg: imp.y1 + "–" + imp.y2 + " in " + perPhrase(s) + " periods is " + nPeriods(imp.n) + ", but this protocol states " + nPeriods(pn.n) + ". One of the two is wrong, or some periods are being excluded — if they are, say which and why, because the count is what fixes the size of the stratum × period grid the likelihood is maximised over." });
       checks.push({ level: "info", msg: "Requirement, not a nicety: exposure prevalence must trend strongly over calendar time. Report the observed prevalence trend — overall and WITHIN each CPE stratum — before interpreting any effect estimate. If the strata do not differ in exposure trend, there is nothing to identify the effect from." });
       checks.push({ level: "info", msg: "The design is unbiased UNLESS an unmeasured factor affecting the outcome has a prevalence trend over calendar time correlated with the exposure trend across CPE strata. A time-stable confounder cannot bias it; a co-intervention or secular change arriving with uptake can. Pre-specify a negative-control outcome to probe this." });
       if (s.effect === "RR") checks.push({ level: "warn", msg: "The trend-in-trend likelihood estimates an ODDS ratio, exp(β₁). Reporting it as a risk ratio is a rare-outcome approximation — state the outcome frequency that justifies it, or report the odds ratio." });
@@ -582,7 +599,7 @@ ${window.PC.tailMd(pcOf(s))}
           : nsWant < 2 ? "the drawing shows 2 strata, the fewest it can draw" : "",
       ].filter(Boolean);
       document.getElementById("dcap").textContent =
-        "As exposure prevalence rises across " + perText(s) + " " + s.period + " period(s), the outcome trend is compared across " + strText(s) + " strata of the cumulative probability of exposure. A steeper outcome trend where exposure rose faster is what identifies a causal effect. Drag the ○ handle to change the number of periods. Schematic only — the shapes are illustrative, not your data" +
+        "As exposure prevalence rises across " + perText(s) + " " + perPhrase(s) + " period(s), the outcome trend is compared across " + strText(s) + " strata of the cumulative probability of exposure. A steeper outcome trend where exposure rose faster is what identifies a causal effect. Drag the ○ handle to change the number of periods. Schematic only — the shapes are illustrative, not your data" +
         (clampNote.length ? ", and " + clampNote.join(", and ") : "") + ".";
 
       // drag (frozen px/period)
@@ -592,7 +609,15 @@ ${window.PC.tailMd(pcOf(s))}
         h.addEventListener("pointerdown", (ev) => {
           ev.preventDefault(); ev.stopPropagation();
           if (window.__diagDrag) window.__diagDrag.cleanup();
-          const startVal = Math.max(3, parseInt(form.elements.nperiods.value) || 10);
+          // Drag from the count that is DRAWN, which is what the user is
+          // pointing at. This was the fifth consumer of the period count and
+          // the only one left on `parseInt(...) || 10`: with "1e3" in the box —
+          // prose and caption both reading 1000, figure showing its 24-period
+          // clamp — one nudge of the handle set the field to 4, because
+          // parseInt("1e3") is 1. With the box blank, which the panel refuses
+          // precisely so that no count is assumed, a nudge produced 9: the
+          // removed default of 10, handed back through the drag path.
+          const startVal = np;
           const pid = ev.pointerId, x0 = svgXof(ev.clientX);
           try { diag.setPointerCapture(pid); } catch (e) {}
           let pending = null, raf = 0;
@@ -661,8 +686,28 @@ ${window.PC.tailMd(pcOf(s))}
         if (saved) {
           // A record carried over from a previous load, so the substitution is
           // still reported after a reload the user did not make a choice in.
-          if (Array.isArray(saved[STALE_KEY])) saved[STALE_KEY].forEach((x) => {
-            if (x && x.name && !staleSelects.some((y) => y.name === x.name)) staleSelects.push(x);
+          // Validated, not trusted. This record is read back out of storage and
+          // its `used` value is then assigned to `form.elements[x.name]`, so an
+          // unchecked entry naming a text input would overwrite that field and
+          // the autosave a second later would destroy the user's value — the
+          // exact damage this whole mechanism exists to prevent, generalised to
+          // every field. A record must name a real <select> and carry a value
+          // that select actually offers.
+          // The bound is only against a pathologically long array; the real cap
+          // is the name check plus the de-duplication below, which between them
+          // cannot admit more entries than there are selects. Capping at
+          // SELECTS.length up here instead would let junk entries at the front
+          // push a legitimate record off the end.
+          if (Array.isArray(saved[STALE_KEY])) saved[STALE_KEY].slice(0, 64).forEach((x) => {
+            if (!x || typeof x !== "object" || !x.name) return;
+            const sel = SELECTS.find((y) => y.name === x.name);
+            if (!sel || staleSelects.some((y) => y.name === x.name)) return;
+            staleSelects.push({
+              name: sel.name,
+              label: String(x.label == null ? sel.label : x.label),
+              saved: String(x.saved == null ? "" : x.saved),
+              used: sel.options.indexOf(String(x.used)) >= 0 ? String(x.used) : sel.fallback,
+            });
           });
           noteStale(saved);
           for (const k in saved) {
@@ -799,7 +844,7 @@ ${window.PC.tailMd(pcOf(s))}
         ["Population", P],
         ["Exposure", E],
         ["Outcome", O],
-        ["Calendar range", or(s.first, "(first)") + "–" + or(s.last, "(last)") + " (" + or(s.period, "yearly") + ", " + perText(s) + " periods)"],
+        ["Calendar range", or(s.first, "(first)") + "–" + or(s.last, "(last)") + " (" + perPhrase(s) + ", " + perText(s) + " periods)"],
         ["CPE strata", strText(s) + " quantiles of the cumulative probability of exposure"],
         ["Stage-1 covariates (define CPE)", or(s.cpecov, "(to be specified)")],
         ["Estimator", "Trend-in-trend maximum likelihood on the stratum × period tables"],
@@ -823,7 +868,7 @@ ${window.PC.tailMd(pcOf(s))}
       // without it the figure reaches a text-only reader as a caption with
       // nothing under it, and that text is what carries HARPER 7.2.
       const __figLines = [
-        "Time axis: " + perText(s) + " " + s.period + " calendar period(s) from " + or(s.first, "(first)") + " to " + or(s.last, "(last)") + " (this design is not anchored to a person-level day 0).",
+        "Time axis: " + perText(s) + " " + perPhrase(s) + " calendar period(s) from " + or(s.first, "(first)") + " to " + or(s.last, "(last)") + " (this design is not anchored to a person-level day 0).",
         "Exposure-prevalence trend: the proportion exposed in each calendar period; a strong time trend is required for the design to identify anything.",
         "CPE strata: " + strText(s) + " quantile(s) of the cumulative probability of exposure, from the stage-1 model" + (s.cpecov ? " fitted on " + s.cpecov : "") + "; each person keeps one stratum for the whole study.",
         "Read-out: the outcome trend is compared across CPE strata — a steeper outcome trend where exposure rose faster is what identifies the effect.",
