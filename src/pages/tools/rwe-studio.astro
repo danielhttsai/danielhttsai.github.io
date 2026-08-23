@@ -1514,10 +1514,27 @@ const DESIGNS = [
           // same extract the exposure arm was worth 1.08 effective patients of 10,
           // with one patient holding 96% of the arm's weight, identically under both
           // settings. Same thresholds as before, applied where they mean something.
+          //
+          // And POOLED, on either scale, is not usable either. The first version of
+          // this fix kept the pooled figure as a second condition, on the
+          // unstabilised weights so at least it would not move with the dropdown.
+          // That reintroduced, in the IPTW path, exactly the defect being removed
+          // from smrbad three lines below: with clean overlap sum(w) ~ 2n on the
+          // unstabilised scale whatever the prevalence, while sum(w^2) is driven by
+          // the rare arm, so the pooled figure decays with exposure prevalence and
+          // nothing else. Executed on a RANDOMISED exposure with no confounding at
+          // all, where no weight is doing any work: at 3% exposure the pooled figure
+          // reads 12.4%, at 2% it reads 9.3% and refuses, at 1% it reads 4.8% and
+          // refuses — while both arms sit at 97-100% throughout. A rare exposure is
+          // not an unstable one, and a rare exposure is the normal ACNU setting.
+          //
+          // So the rule is the per-arm one alone. It is free of both artefacts: an
+          // arm's own effective size does not move when the weights are rescaled, and
+          // it does not move when the OTHER arm changes size.
           r += "aU_T<-wdiag(wU[tr]); aU_C<-wdiag(wU[!tr])\n";
           r += "unstable0<-(dU[2]<10) || (dU[4]>25)\n";
           r += "armbad<-((aU_T[2]<10)||(aU_T[4]>25)) || ((aU_C[2]<10)||(aU_C[4]>25))\n";
-          r += "unstableW<-unstable0 || armbad\n";
+          r += "unstableW<-armbad\n";
           r += "smdI<-smdvec(wI); mxI<-mxof(smdI)\n";
           // The same figure on the untruncated weights, so the panel can say whether
           // truncation is what unbalanced the arms rather than telling the reader to
@@ -3626,13 +3643,10 @@ const DESIGNS = [
               (z[3] > 25 ? ", and its heaviest patient holds " + z[3].toFixed(0) + "% of the arm's weight" : "") + ". "
             : "")
           : "";
-        const gateWhy = (dg.unstable0 === "1"
-            ? "Before stabilising or truncating anything, the weights these propensity scores imply have an effective sample of " +
-              (isFinite(dU[1]) ? dU[1].toFixed(0) + "% of the cohort" : "a small fraction of the cohort") +
-              (isFinite(dU[3]) && dU[3] > 25 ? " and their heaviest 1% hold " + dU[3].toFixed(0) + "% of the weight" : "") + ". "
-            : "") +
-          armWhy(aUT, "exposure", nT) + armWhy(aUC, "comparator", nC);
-        const balMask = isIptw && dg.balfail === "1" && dg.unstable0 !== "1" && dg.armbad !== "1";
+        // Built from the arms, because the arms are what the rule reads. The pooled
+        // figure is reported in the table above and decides nothing.
+        const gateWhy = armWhy(aUT, "exposure", nT) + armWhy(aUC, "comparator", nC);
+        const balMask = isIptw && dg.balfail === "1" && dg.armbad !== "1";
         if (balMask) {
           h += '<div class="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900"><strong>The ' + esc(s.label) + ' estimate was not reported.</strong> ' +
             "Untruncated, these weights pass every stability figure the release rule reads. Truncation at the " + esc(dg.trunc) + " capped " + num("ntrunc") + " of them, and every one of those figures improved further. " +
