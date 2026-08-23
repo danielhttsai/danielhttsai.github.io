@@ -4481,3 +4481,276 @@ the strings and read them; do not read the diff.**
   page was validated only against inputs constructed so that all of them happen
   to be right — which is why these survived sixteen runs. A second demo per
   design is a feature, so it is Daniel's call.
+### Found 2026-08-23 by the OTHER seventeenth run — same target, same day, independently
+
+**Read the section above first.** Two runs took RWE Studio's SCCS and case-crossover
+paths concurrently, from the same `521e7e9`, because the brief is deterministic about
+where the rotation gap is. This is that other run. Its commits (`6f6f32b`, `36441e4`,
+`5eb7898`) landed first; the section above was then re-authored around them. Neither run
+rewrote or reverted the other's work, and the one place they overlapped in code — the
+guard on impossible person-time — was merged by hand rather than by taking a side (see
+the last item under "Fixed this run").
+
+**The two runs corroborate each other on the things that matter, which is worth more
+than either alone.** Independently, from scratch, both concluded: the SCCS conditional
+likelihood and `clogit` are algebraically correct and must not be touched; the hard-coded
+`1.96` is right for both designs and the fifth run's ITS `t`-vs-`z` finding does **not**
+transfer; and the demo stories' quoted numbers are what the tool actually prints. Four
+reviewers reached that on four separate implementations.
+
+
+Sixteen runs had worked the nine builders, the hub, the Protocol Checker twice, and
+RWE Studio twice — but both RWE Studio runs took the **cohort/ACNU** path (fourth) and
+the **ITS** path (fifth). The `sccs` and `cco` estimation paths had never been opened,
+and the fourth run's own open list said so ("SCCS and case-crossover state no
+assumptions in their output… the case-crossover also never checks that each stratum has
+exactly one hazard window"). That was the rotation gap; this run took it.
+
+Two reviewers on disjoint briefs (the statistics; the applied path from a messy file to
+a printed number), then each sent at the other's list, then a third sent at this run's
+own diff.
+
+#### Environment: nothing new broke, and one thing to plan around
+
+- Everything the fourth and fifth runs recorded still holds: `sudo apt-get install -y
+  --no-install-recommends r-base-core r-cran-survival` works; the WebR CDN, cdnjs
+  (SheetJS), unpkg (docx), Crossref/PubMed and the live site are all blocked;
+  `npm i --no-package-lock --no-audit --fund=false`; build to `--outDir dist-$$`.
+- **The container can restart mid-session.** It did here, killing two `http.server`
+  processes and an in-flight reviewer. Commits already pushed survived; the subagent did
+  not and had to be relaunched. **Push early**, and expect to re-serve builds.
+- **`pkill -f "http.server 87"` killed the calling shell** (exit 144). Serve on a fresh
+  port instead of trying to clean up old ones.
+- The single most valuable technique this run: **generate the R into a standalone `.R`
+  file, test it against real `Rscript` until it is right, then mechanically convert it
+  to the JS string literal and splice it in — and afterwards diff `SPEC.<d>.rscript()`
+  pulled out of the BUILT page against the `.R` file you tested.** Every commit here was
+  verified byte-identical that way. Hand-transcribing R into a JS string is how escaping
+  bugs ship.
+- Ports used: 8701-8720. Reviewers used 8311/8791 and their own build dirs.
+
+#### Fixed this run
+
+All executed against real R 4.3.3 and Chromium on a local build, before and after.
+
+- ~~**"Drop exact duplicate rows" deleted the design.**~~ **The worst defect either
+  reviewer found, and it was in a shared cleaning checkbox that is on by default.** It
+  keys on every raw column, so in a long format it deletes data rather than tidying it.
+  A person-week SCCS extract — what every standard preparation pipeline emits — lost
+  **12,219 of 13,000 rows** and turned a true IRR of 3.0 into a significant *protective*
+  **0.73 (0.57-0.94)**; from genuinely null data it manufactured **0.57**. The
+  methodologist then found a far better reachability path than the analyst's synthetic
+  file: **the shipped case-crossover demo, exported with only the three columns the
+  design's own hint asks for**, loses 750 of 2000 rows and reports **1.59 (1.27-2.00)**
+  against the demo's true 2.5 — an interval excluding the truth. Both demos are immune
+  as shipped **only because they carry decorative columns the analysis never reads**,
+  which make every row unique. That is why fifteen runs never saw it.
+  **The rule was already written correctly one control lower down**: `renderDupUI` hides
+  duplicate-ID resolution for exactly these designs and the prose at `:357` says why. It
+  had simply never been applied to the more destructive checkbox above it. Now ACNU-only,
+  with the reason on screen. **ITS is included** — it aggregates rows into periods, so an
+  identical row there is another event in the same period.
+- ~~**SCCS printed its own starting value as a null result.**~~ With no within-person
+  contrast `sccsfit` breaks on iteration 1 with `b` still 0, and the caller printed
+  `exp(0)` as **`1.00 (95% CI NA-NA)`** — bold, in the estimate cell. Reached by
+  filtering an extract to on-drug person-time, or by one summary row per case. A cohort
+  extract instead of a case series gave **42793666818367.05**; a wide-format
+  case-crossover gave **`1.00 (95% CI 1.00-1.00)`**, a zero-width interval, which reads
+  as a *precise* null and is more dangerous than the `NA` beside it.
+- ~~**Counts were computed with a different predicate from the likelihood.**~~ Table 1
+  said "Cases with exposed and unexposed time | 40 (100.0%)" beside "Person-time exposed
+  | 0 (0.0%)", because it tested whether the *label* varied. `Cases (people with >=1
+  event)` was `length(unique(ID))`, self-refuting two rows under "Events per case, median
+  0 (0-3)". The case-crossover claimed "40 of 40 cases carry the estimate" when 20 did.
+  There is now one estimability predicate per design, computed once, used everywhere.
+- ~~**A case-crossover never checked its own defining structure.**~~ Two hazard windows
+  per case — a duplicated event row from a join — gave a perfectly plausible
+  **4.14 (2.52-6.79)** for a design that is not a case-crossover.
+- ~~**Monotone likelihoods printed where the solver stopped.**~~ Separation gave
+  `482631089086999.56` and `OR 3902846758.45`. The MLE exists only if the sufficient
+  statistic is strictly inside its range (`0 < sum(y*x) < sum(n)` for SCCS; `0 < S <
+  ninf` for 1:M matched sets) — checked directly now, so the refusal is exact rather
+  than a magnitude heuristic.
+- ~~**Impossible person-time was silent.**~~ An event in zero person-time adds score
+  without information: it inflated a true 2.31 to **9.23** with a *bit-identical*
+  standard error. Negative person-time gave `54.60 (NA-NA)`.
+- ~~**The fixed-effect cross-check misdiagnosed.**~~ It blamed "a numerical problem —
+  check for enormous interval lengths or zero person-time" when the real cause was that
+  the design had no contrast at all, sending the analyst to clean already-clean data.
+- ~~**Neither design stated one assumption.**~~ `grep -c "Farrington\|Maclure\|Suissa\|
+  Whitaker\|case-time-control"` was **0**. Each now states, last and once, what *this
+  tool* cannot do: SCCS fits no age or calendar-time term and offers no way to add one
+  (`covariates: false`), and the case-crossover never sees window dates, so it cannot
+  check the exposure-trend assumption the design stands or falls on. The demo narrative
+  already said the latter — but only in the demo panel, which nobody analysing their own
+  data ever sees.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The disjoint split paid off a third time and should be kept.** Neither reviewer could
+  have found the other's top item: the methodologist's was `1.00` printed from an
+  unfitted parameter, the analyst's was a cleaning checkbox.
+- **The analyst refuted the methodologist's F8 (profile-likelihood interval) — and the
+  orchestrator then refuted the refutation.** The methodologist claimed the Wald interval
+  is anticonservative below ~25 events, with `6.268 (1.331-29.517)` against a profile of
+  `0.95-25.02`. The analyst ran 574 datasets, found the flips bidirectional (4 vs 2, all
+  within 2% of 1.0), reported profile-upper > Wald-upper in 574/574, called the
+  methodologist's geometry "backwards" and suspected it had profiled a different
+  objective. **An independent implementation reproduced the methodologist's numbers
+  exactly** — IRR 6.268, Wald 1.331-29.516, profile 0.946-25.015, profile upper *below*
+  Wald upper. Both were right about their own computations: the disagreement is about
+  **typicality, not arithmetic**. The methodologist's configuration has extreme
+  person-time imbalance (14 days against 351) and few events; the analyst subsampled the
+  demo, which does not. **Lesson: when a reviewer says another's example "does not
+  reproduce", reproduce it yourself before believing either of them.** Nearly dropped a
+  correct finding.
+- **The analyst overturned the methodologist's F2 as stated, and the methodologist then
+  improved on the correction.** At *exactly* zero person-time the run dies in `glm`, and
+  because `WebrEngine` has no `catch` the user sees only "Error:" — so the alleged 9.23
+  never reaches the screen. But the analyst found the variant that does: a *tiny positive*
+  interval prints 9.23 silently, and the fixed-effect cross-check is blind to it because
+  it is handed the same offset and agrees. The finding survived, re-scoped from "the
+  fitter is wrong" to "the input is never validated".
+- **The analyst refuted the methodologist's proposed fix for the assumptions, by
+  measuring it.** Six assumption notes per design fill **59% of the panel** and push a
+  refusal to position 9 of 9, below the fold, in the same 11px grey as the boilerplate.
+  Its argument is the one to keep: **every note that fires today is conditional on the
+  data, so a note appearing means something happened; unconditional paragraphs destroy
+  that property in the exact channel the refusals need.** One tool-specific note per
+  design was shipped instead of twelve.
+- **Refusals belong in the estimate cell, not the notes.** Verified end to end: the panel,
+  the Markdown table and a real `.docx` all render `not estimable` in the column the
+  reader is already looking at. **Do not put the reason in that cell — a literal `|`
+  breaks the Markdown table row.** The reason travels as a separate `RESULT_NOTE`.
+
+#### Round two: the reviewer was pointed at this run's own commits
+
+**Nine for nine. This remains a required step and it has never come back empty.**
+
+**Its top finding was a regression the run's two commits created in combination** — the
+fifth run in a row where the diff's own new machinery was the defect, and the first where
+two separately-sound commits were only dangerous together. Commit 1 stopped removing
+duplicate rows and disabled the control that did it; commit 2 then refused the whole
+analysis when any case had more than one hazard window, **naming in its own message the
+cause commit 1 had stopped fixing**. One duplicated hazard row in 2000 — 0.05% of the
+file — left a case-crossover that returned 2.55 at baseline with **no UI path to an
+estimate at all**. **When you disable a remedy in one commit, re-read every refusal that
+assumes the remedy exists.**
+
+It also showed the refusals were disproportionate on their own terms: a case with *no*
+hazard window contributes nothing to a conditional likelihood anyway, so `clogit` already
+handles it — the direct fit on the file this tool refused was 2.552 (2.027-3.212),
+identical to the intact demo. **A false refusal is as bad as a false number**, and it was
+briefed against explicitly. The rule is now: set the bad *cases* aside and name them;
+refuse only when nothing estimable is left. That is strictly better — the methodologist's
+zero-person-time file, which used to report 9.23, now reports **2.31 (1.08-4.93)** from
+its ten clean cases, and 2.3077 is the truth.
+
+Six more, all executed, all created by this run's diff:
+
+- **Table 1 counts regressed into scientific notation.** `%.4g` — reached for so a median
+  could be fractional — turns 12345 into `1.234e+04` and makes 99999 and 100000 the same
+  number, printed two lines under an exact `%d` row. **Changing a format string to fix
+  the rare case broke the common one.**
+- **The tiny-interval note counted against one threshold and printed another**, claiming
+  three intervals were shorter than the shortest of them.
+- **"Which cases carry the estimate" was asserted on runs that had refused** — and
+  travelled into the report under the heading "How the model was fitted". The adjacent
+  note *was* guarded, which is what made it an oversight rather than a choice.
+- **The case-crossover collapsed two independent conditions into one count**, so a file
+  whose only fault was duplicated hazard rows was told none of its cases were discordant
+  on exposure when 57 of 60 were. Found by the orchestrator rendering the page, not by
+  reading the diff.
+- **The duplicate count on screen was taken before the drop-missing filter**, reporting
+  rows as "KEPT" that the tool had just removed; and **"repeated person-time" was written
+  for all three long-format designs** when a case-crossover row is a window and an ITS row
+  is a record inside a period. The code's own comment had it right; the user-facing string
+  did not.
+- **The disabled checkbox still rendered ticked** beside a note saying it was off. Fixing
+  that naively introduced a second defect the orchestrator caught by testing the round
+  trip: unticking it lost the user's ACNU preference, so a visit to another design left a
+  cohort silently un-deduplicated. It remembers now.
+
+**One thing was built, tested and deliberately removed**: a note counting identical rows.
+It fires on the shipped case-crossover demo with "750 row(s) are identical", because a
+binary case flag and a binary exposure admit only four distinct rows per case — duplicates
+there are *structural*, and the same is true of the person-week layout standard for SCCS.
+**A warning that cannot tell a join artefact from the ordinary shape of the design is one
+people learn to ignore.** The count stays at the cleaning step, where the choice is made.
+
+**Standing procedure, now four runs old and confirmed again: render every new string and
+read it cold.** It found the reassurance note ("the design working as intended, **not a
+defect**") printing as the *first* note on a run that had just refused to estimate
+anything, and the compound-count defect above. Neither is visible in a diff.
+
+#### Open in the sccs/cco paths, examined this run, deliberately left
+
+- **The SCCS Wald interval versus a profile-likelihood interval — the sharpest thing
+  left, and the dispute is already adjudicated.** Reproduced independently: 10 cases, 1
+  event each, 2 in a 14-day risk window against 351 control days gives **Wald
+  `1.331-29.516` (excludes 1) and profile `0.946-25.015` (includes 1)** — a declared
+  signal that is not one. It matters in exactly the regime SCCS exists for: signal
+  detection on few events with a short risk window. It does **not** extend to the
+  case-crossover (`clogit`'s Wald and the exact profile agree, and its lower limit is if
+  anything conservative). **No caption drift**: the demo profile is 2.567-3.489, which
+  prints as 2.57-3.49, identical to what ships. `uniroot` returned NA on 0 of 574 datasets
+  and degrades gracefully on degenerate ones. A working implementation is in this run's
+  scratch. Left because changing the headline interval deserves its own run and its own
+  review, exactly as the fourth run left the ITS standard errors for the fifth.
+  **The other run's simulation is the other half of this picture and does not contradict
+  it**: under the null the Wald interval *over*-covers (rejection 2.3-4.3% against a
+  nominal 5%) at 10-300 cases, and that run wrote its own caveat that over-coverage under
+  the null does not certify the interval away from it. The configuration above is away
+  from it. Whoever takes this should simulate coverage at a true IRR of 2-5 with a short
+  risk window, not only under the null.
+- **Numeric roles still get no pre-flight check while binary roles do.** `binTrouble`
+  covers `BIN_ROLES` only; there is no `numTrouble`, and `validateMap` never looks at
+  `NUM_ROLES`. Map SCCS's interval to a text column and you get a green "Mapping complete
+  ✓", a master file of 907 rows, and `chknum`'s (well-written) refusal only at the end of
+  the run, in the black debug pane, never reaching the report. **The fix is one function
+  shaped exactly like `binTrouble` and it would close the next item too.**
+- **The European decimal comma is still live on the SCCS path.** `Number(s.replace(/,/g,
+  ""))` turns `60,5` into `605` for `INTERVAL` and `EVENTS`. Two findings worth keeping
+  straight: a **uniform** rescale of `INTERVAL` is **exactly invariant** in the conditional
+  likelihood (confirmed to 12 decimal places — only Table 1's absolute person-time is
+  wrong, and even the percentage is right), but a fixed integer risk window against a
+  computed fractional baseline inflates the IRR **tenfold** (4.118 → 41.184); and a
+  uniform comma in **`EVENTS`** leaves the point estimate exact while dividing the standard
+  error by √k (se 0.0797 → 0.0252). That last one is the only silent statistical failure in
+  the family and it is the one to fix first.
+- **Role dropdowns ignore their own declared `types`.** `opts()` lists every column;
+  `types` is used only to pick a default. Mapping SCCS's ID to a *date* column completes
+  with no complaint and reports **2.88 (2.14-3.88)** from 261 strata that are calendar
+  dates. Enforce the declared types; **do not** try to catch events/interval swapped —
+  both are numbers and both are plausible, and that is user error the tool cannot see.
+- **`MASTER` and `LAST` are stale for these designs too.** Change a role select after
+  building and the panel still shows the old estimates and the exported `.md` carries
+  them. `MASTER` also keeps the previous `roleCol`'s coercion. Switching *design* nulls
+  both but does not hide `#anaresults`/`#table1`, so SCCS estimates sit under a
+  case-crossover heading. Same family as the fourth run's entry; still live.
+- **The exports never record the mapping or the cleaning options.** The generated script
+  names only `ID`/`EXPOSED`/`EVENTS`/`INTERVAL`, so no source column name appears anywhere
+  in the `.md` or `.docx`. This is what makes the de-duplication finding unauditable after
+  the fact.
+- **`WebrEngine.astro:33` may be discarding every R warning in the whole tool.** It filters
+  `o.type === "stdout" || "stderr"`, and `captureR` is called without `captureConditions`,
+  which defaults to true — so warnings arrive as condition objects of a *third* type and
+  would be dropped. If so, `clogit`'s "Ran out of iterations and did not converge" reaches
+  **nothing**, not merely the debug pane. **Unverifiable here** (the WebR CDN is blocked
+  and an `Rscript 2>&1` harness shows warnings only because Rscript writes them to stderr),
+  and a one-line fix if true. **Highest value per character on either list; check it the
+  moment WebR is reachable.** Not shipped, because a change to the shared engine that
+  affects all four designs must not go in unobserved.
+- **A tiny positive interval still prints a confident number** (9.23 for a true 2.31). It
+  is *not* refused, deliberately: person-time in years makes 0.001 legitimate. It carries a
+  note naming the rows now. A real fix needs the units, which the tool never asks for.
+- **Neither design's demo can make a refusal fire**, and the case-crossover script now has
+  conditional diagnostics but no demo that reaches them. The ACNU path ships `buildOverlap`
+  + `OVL_STORY` precisely so its diagnostics can be seen firing. **A second demo per design
+  is a feature, so it is Daniel's call** — but it is the same gap the fifth run recorded for
+  ITS, now true of three designs.
+- **`clogit` warnings still do not become `RESULT_NOTE`s**, so they never reach the panel or
+  the exports. Partly moot if the item above is true.
+- Citations: **still none anywhere in these two paths**, and none were added. Snippet-only
+  leads, unverified and **not asserted**: Suissa (case-time-control) PubMed 8728434; Wang
+  et al., *Epidemiology* 2011, PubMed 21577117. Crossref/PubMed remain blocked.
