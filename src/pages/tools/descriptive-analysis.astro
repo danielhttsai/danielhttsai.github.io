@@ -1078,6 +1078,44 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         data: (s.sites && s.sites.length ? s.sites.length + " data source(s)" : "multi-national data sources"),
         analysis: analysisSentence(s),
         groupBy: "stratum",
+        // ProtocolCommon's descriptive branch opens "There is no effect size to
+        // detect, so the study is sized for PRECISION rather than power", and
+        // for the occurrence, mortality and utilisation metrics that is right
+        // and is the standard this section should hold to. It is false for two
+        // of the metrics on the list, and it is the ticking of those very boxes
+        // that puts them in the protocol: `joinpoint` chooses the NUMBER of
+        // joinpoints by a selection rule, which is a test with power, and
+        // `trendInTrend` reports an odds ratio, which is an effect size by any
+        // reading. A protocol asserting there is nothing to power, in the
+        // section where the reader looks for the power calculation, directly
+        // above an analysis section commissioning a permutation test, is the
+        // confident-and-wrong shape rather than a missing sentence.
+        //
+        // Overriding means this builder no longer follows edits to the shared
+        // descriptive default. That is the same trade ITS and trend-in-trend
+        // already make, and the first two sentences are kept close to the
+        // shared wording so a future reader can see what was diverged from.
+        studySize: (() => {
+          const t = s.metricsPick || [];
+          // Whitelist with a stated fallback. `({…})[s.trendMethod]` alone
+          // yields undefined when the select is unset or carries a value the
+          // page no longer offers, and a literal "undefined" inside a protocol
+          // sentence is indefensible at any reach. Each clause is also
+          // self-contained: ticking either metric alone must not produce "the
+          // second is …" with no first.
+          const rule = ({
+            grid: "by a grid search whose number-of-joinpoints rule belongs to the analysis software",
+            permutation: "by a permutation test",
+          })[s.trendMethod] || "by a selection rule that section 9 does not yet name";
+          const jp = t.indexOf("joinpoint") >= 0
+            ? " Joinpoint regression, ticked here, is not descriptive in that sense. It does not merely estimate a trend: it SELECTS how many joinpoints the series has, " + rule + ", and a selection rule is a test with power like any other. What governs that power is the number of calendar periods in the series, the variance of the outcome around the fitted segments, the true magnitude of the change in slope, and the maximum number of joinpoints allowed — not the event count and not the person-time. State the length of the series and that maximum before fitting, and read a joinpoint the rule does not select as NOT DETECTED rather than as not present."
+            : "";
+          const tit = t.indexOf("trendInTrend") >= 0
+            ? " Trend-in-trend, ticked here, reports an odds ratio, which is an effect size to detect: precision alone cannot size it. It is established by simulation over the assumed exposure-prevalence trend, the number of calendar periods and the number of strata rather than by a closed-form formula, and the assumed values together with the resulting detectable odds ratio are stated before the analysis is executed."
+            : "";
+          return "For the occurrence, mortality and utilisation metrics there is no effect size to detect, so they are sized for PRECISION rather than power: for every reported rate, proportion or standardised ratio the expected number of events and the person-time available are established per data source and per stratum in a pilot extraction, and the expected width of the 95% confidence interval is reported alongside them. Cells that will fall below the small-cell suppression rule are identified before the analysis is executed."
+            + jp + tit;
+        })(),
         skip: ["ethics"],
         limitations: "They are sensitive to case-ascertainment and denominator definitions, and to differences in coding and capture practice between the contributing databases.",
         // The shared tail already supplies the flow diagram and the Table 1 row;
