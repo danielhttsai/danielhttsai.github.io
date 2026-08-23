@@ -658,6 +658,7 @@ Farrington CP. Relative incidence estimation from case series for vaccine safety
 Petersen I, Douglas I, Whitaker H. Self controlled case series methods: an alternative to standard epidemiological study designs. BMJ 2016;354:i4515. doi:10.1136/bmj.i4515
 Whitaker HJ, Ghebremichael-Weldeselassie Y, Douglas IJ, Smeeth L, Farrington CP. Investigating the assumptions of the self-controlled case series method. Stat Med 2018;37(4):643-58. doi:10.1002/sim.7536 (tests and graphical checks for the assumptions above.)
 Farrington CP, Anaya-Izquierdo K, Whitaker HJ, Hocine MN, Douglas I, Smeeth L. Self-controlled case series analysis with event-dependent observation periods. J Am Stat Assoc 2011;106(494):417-26. doi:10.1198/jasa.2011.ap10108 (the method to use when the event curtails observation, e.g. a fatal outcome.)
+Musonda P, Farrington CP, Whitaker HJ. Sample sizes for self-controlled case series studies. Stat Med 2006;25(15):2618-31. doi:10.1002/sim.2477 (sample-size formulae for this likelihood, including the age-adjusted case.)
 Wang GH, Man KKC, Chang WH, Liao TC, Lai EC. Use of antipsychotic drugs and cholinesterase inhibitors and risk of falls and fractures: self-controlled case series. BMJ 2021;374:n1925. doi:10.1136/bmj.n1925; PMID 34503972. (AsPEN exemplar; 14-day pretreatment window, pretreatment IRR 6.17.)
 Hsieh CY, Su CC, Shao SC, Sung SF, Lin SJ, Kao Yang YH, Lai EC. Taiwan's NHIRD: past and future. Clin Epidemiol 2019;11:349-358.
 Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database. Pharmacoepidemiol Drug Saf 2019;28(5):593-600.</textarea>
@@ -985,6 +986,30 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
           pool ? "pooled across sites by " + pool : "pooled across sites as described in section 10",
         ].join(", ");
       };
+      // ProtocolCommon's default study-size paragraph is written for a
+      // person-level cohort: power "from observed exposure and outcome
+      // frequencies", feasibility as "available person-time and event counts".
+      // Neither quantity is the sample size of a case series. Non-cases never
+      // enter the likelihood at all, so the source population's exposure
+      // prevalence decides only how many cases turn up, not how much any of
+      // them tells you — and person-time in the cohort sense is not the
+      // constraint. tailSections reads nz(s.studySize, …) for exactly this, and
+      // ITS and trend-in-trend already supply their own paragraph, so this is
+      // the house-sanctioned route rather than a change to the shared
+      // component.
+      //
+      // The variant clause is a whitelist, not a chain of not-equals: the value
+      // is "" whenever a saved draft or ?seed= link blanked the select, and the
+      // three variants disagree about WHICH cases are informative — standard
+      // needs unexposed time, active-comparator needs time on both drugs. An
+      // unrecognised value gets no clause, because the base sentence is true of
+      // all three and inventing a fourth reading is how this file's other
+      // dropdown bugs happened.
+      const SCCS_POWER_VARIANT = {
+        "standard": " Under the standard variant the informative cases are those exposed at some point and with unexposed time remaining inside the observation period.",
+        "extended-unexposed": " The extended variant borrows strength from never-exposed cohort members, which helps when within-person unexposed time is sparse; the count of EXPOSED cases still bounds what can be learned about the relative incidence.",
+        "active-comparator": " Under the active-comparator variant the informative cases are those with time on BOTH drugs; a case who only ever took one of them carries no within-person contrast.",
+      };
       const pcOf = (s) => ({
         design: "self-controlled case series",
         tte: false,
@@ -1003,6 +1028,9 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         // actually differs in a multi-national case series; the distribution of
         // person-time and events across the windows is a planned output below.
         groupBy: "site",
+        studySize: "A self-controlled case series is sized in cases, and only in cases: a person who never has the outcome contributes nothing to the likelihood, so the exposure prevalence and outcome rate of the source population decide how many cases will be found, not how much each one tells you. What decides the answer is: the number of cases who have both risk-period and reference-period time inside their observation period — a case with no within-person contrast contributes nothing at all — the fraction of observation time that falls inside a risk window, which carries no information at either extreme, the size of the incidence rate ratio to be detected, and whether age and season are adjusted for, which can raise the number of cases needed substantially."
+          + (SCCS_POWER_VARIANT[s.sccsVariant] || "")
+          + " Sample size is therefore established from the SCCS-specific formulae of Musonda et al (Stat Med 2006;25(15):2618-31), which are derived for this likelihood and extended there to the age-adjusted case, or by simulation from the same quantities — not from a cohort power formula. Feasibility is confirmed before the analysis is executed as a count of INFORMATIVE CASES per data source and per site; the person-time of the source population is not the sample size of this design.",
         skip: ["ethics"],
         amendments: s.amendments,
         version: s.version,

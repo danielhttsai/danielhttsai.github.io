@@ -550,6 +550,7 @@ const TIMELINE_PRESETS: Record<string, string> = {
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Key references (one per line)</span>
               <textarea name="references" rows="8" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">Maclure M. The case-crossover design: a method for studying transient effects on the risk of acute events. Am J Epidemiol 1991;133(2):144-53. doi:10.1093/oxfordjournals.aje.a115853
 Mittleman MA, Maclure M, Robins JM. Control sampling strategies for case-crossover studies: an assessment of relative efficiency. Am J Epidemiol 1995;142(1):91-8. doi:10.1093/oxfordjournals.aje.a117550
+Dharmarajan S, Lee JY, Izem R. Sample size estimation for case-crossover studies. Stat Med 2019;38:956-968. doi:10.1002/sim.8030 (sample size derived for this design; Dupont's matched case-control formula can understate what is needed.)
 Janes H, Sheppard L, Lumley T. Case-crossover analyses of air pollution exposure data: referent selection strategies and their implications for bias. Epidemiology 2005;16(6):717-26. doi:10.1097/01.ede.0000181315.18836.9d
 Suissa S. The case-time-control design. Epidemiology 1995;6(3):248-53. doi:10.1097/00001648-199505000-00010 (adjusts for exposure-time trend using a matched non-case control series.)
 Wang S, Linkletter C, Maclure M, Dore D, Mor V, Buka S, Wellenius GA. Future cases as present controls to adjust for exposure trend bias in case-only studies. Epidemiology 2011;22(4):568-74. doi:10.1097/EDE.0b013e31821d09cd (the case-case-time-control method.)
@@ -976,6 +977,42 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         data: (s.sites && s.sites.length ? s.sites.length + " AsPEN data source(s)" : "multi-national AsPEN data sources"),
         analysis: "conditional logistic regression contrasting exposure in the hazard window vs matched control windows within each case, pooled across sites",
         groupBy: "site",
+        // ProtocolCommon's default is a cohort paragraph — power "from observed
+        // exposure and outcome frequencies", feasibility as "available
+        // person-time". In a design whose referents are the case's own
+        // person-time, neither is the constraint, and the sentence would have a
+        // reader sizing a cohort that is never assembled. ITS and trend-in-trend
+        // already supply their own; nz(s.studySize, …) is the route for it.
+        //
+        // The referent count comes from ccoGeom, the same reader the diagram and
+        // the window table use, so this sentence cannot name a different scheme
+        // from the one drawn two sections above. When that reader refuses — a
+        // blanked <select>, "1e3", a negative offset — this refuses too, rather
+        // than printing the page's default of three as though it had been
+        // chosen.
+        //
+        // It is also gated on the variant, by whitelist. VARIANT_CAVEAT already
+        // says that under "time-stratified" and "symmetric" the days drawn above
+        // are NOT this protocol's referent scheme — the builder has no field for
+        // either one — so ccoGeom's count is a number from a scheme the document
+        // has just disowned. Naming it as "the number of referent windows
+        // sampled per case" would put a figure the page refuses to draw into the
+        // one section a reader takes a sample size from.
+        studySize: (() => {
+          const G = ccoGeom(s);
+          const drawn = s.ccoVariant === "standard" || s.ccoVariant === "cctc";
+          const nTxt = !drawn
+            ? "not established here: the referent scheme of this variant is not the fixed-offset scheme in section 6, and this builder has no field for it"
+            : G.ok
+              ? "here " + G.n + ", from the window scheme in section 6"
+              : "not established here: the window scheme could not be read, so no number is assumed";
+          const cctc = s.ccoVariant === "cctc"
+            ? " Under the case-case-time-control variant two case series are sized, not one: the reported odds ratio is a ratio of two odds ratios, so the variance of its logarithm is the sum of the two, and the future-case control series needs enough discordant cases in its own right. A number of cases that would suffice for a plain case-crossover does not suffice here."
+            : "";
+          return "A case-crossover study is sized in discordant cases. Every referent is the case's own person-time, so a case whose exposure status is the same in the hazard window as in all of its referent windows drops out of the conditional likelihood and contributes nothing. What decides the answer is: the number of cases ascertained, the probability that a case is exposure-discordant — which depends not only on how prevalent the exposure is but on how transient it is relative to the spacing of the windows, since an exposure persisting across the whole scheme leaves almost every case concordant and uninformative — the within-person correlation of exposure across windows, the number of referent windows sampled per case (" + nTxt + "), which raises efficiency with diminishing returns and never attains the efficiency of using all of the case's person-time (Mittleman 1995), and the size of the odds ratio to be detected."
+            + cctc
+            + " Power is therefore computed for the matched (conditional) analysis that will actually be run, from the expected number of discordant cases rather than from an event count, and with a method derived for this design: Dharmarajan et al (Stat Med 2019;38:956-968, doi:10.1002/sim.8030) show that borrowing Dupont's matched case-control formula, which is the common practice, can understate the number of cases actually required. Feasibility is confirmed before the analysis is executed as the expected number of EXPOSURE-DISCORDANT cases per data source, and as the count of cases with continuous data coverage back to the earliest day any referent window reaches; available person-time is not the constraint in a design whose referents come from the cases themselves.";
+        })(),
         skip: ["ethics"],
         amendments: s.amendments,
         version: s.version,

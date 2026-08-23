@@ -434,6 +434,43 @@ const SENSITIVITY = [
       data: s.data,
       analysis: analysisText(s) + ", giving an exposure odds ratio that estimates " + orMeansPlain(s.sampling) + ", with 95% confidence intervals",
       groupBy: "case/control status",
+      // ProtocolCommon's default sizes a cohort: power "from observed exposure
+      // and outcome frequencies", feasibility as "available person-time and
+      // event counts". A case-control study assembles no cohort, and only ONE
+      // of the three schemes in SAMPLING is a person-time design at all —
+      // cumulative and case-cohort have no person-time denominator, and
+      // case-cohort does not even have a per-case ratio, as controlsText
+      // already says in the two places it is printed. So the default names a
+      // denominator this study may not possess, in the one section a reader
+      // takes a sample size from. nz(s.studySize, …) is the sanctioned route
+      // and ITS and trend-in-trend already use it.
+      //
+      // Everything scheme-dependent here reads the same helpers as the rest of
+      // the file — scheme(), orMeansPlain(), readCount(), isMatched() — so this
+      // paragraph cannot name a scheme, an estimand or a ratio that the
+      // analysis section contradicts. Unset stays unset: the closing sentence
+      // says what cannot be stated rather than defaulting to risk-set.
+      studySize: (() => {
+        const R = readCount(s.nControls);
+        const sch = s.sampling;
+        const ctrl = sch === "casecohort"
+          ? "the size of the subcohort relative to the source population — a per-case ratio is a risk-set concept and is not what sets precision here"
+          : "the number of controls sampled per case (" + (R.ok ? String(R.n) : "not stated in this draft") + "), where precision rises with the ratio but with diminishing returns, because only the controls' half of the variance shrinks while the cases' half is fixed";
+        const match = isMatched(s)
+          ? " Controls are individually matched here, so only matched sets DISCORDANT on exposure contribute to the conditional likelihood: precision depends on the within-set correlation of exposure, and matching on a variable strongly associated with the exposure destroys informative sets and costs power. The calculation has to be done for the matched analysis that will actually be run, not for an unmatched one."
+          : " No individual matching is specified, so this is the unmatched calculation; adding matching later means redoing it, because a matched analysis is powered on exposure-discordant sets rather than on totals.";
+        const feas = sch === "riskset"
+          ? "the number of cases accruing over the accrual period, the number of controls that can be drawn from each risk set, and the expected exposure prevalence among controls"
+          : sch === "cumulative"
+            ? "the number of cases, the number of outcome-free survivors available to sample at the end of the period, and the expected exposure prevalence among them — cumulative sampling has no person-time denominator"
+            : sch === "casecohort"
+              ? "the number of cases, the subcohort's sampling fraction or size, and the expected exposure prevalence in the subcohort"
+              : "the number of cases and the expected exposure prevalence among controls. The rest cannot be stated until a control-sampling scheme is chosen, because the three schemes do not share a feasibility unit — one samples risk sets, one samples end-of-period survivors, and one samples a baseline subcohort";
+        return "A case-control study samples controls; it does not assemble a cohort and accrue person-time, so the exposure and outcome frequencies of a cohort are not what size it. What decides the answer is: the number of cases the source population yields over the accrual period, almost always the binding constraint; " + ctrl
+          + "; the prevalence of the exposure among the controls, since an exposure that is rare or near-universal in the source population leaves little contrast to measure; and the size of the effect to be detected — named on the scale this sampling scheme entitles, which is " + orMeansPlain(sch) + "."
+          + match
+          + " Feasibility is confirmed before the analysis is executed as " + feas + ".";
+      })(),
       limitations: "The dominant threat is control selection: if the controls do not represent the person-time of the source population that produced the cases, the estimate is biased however it is analysed. Exposure is ascertained before the index date from records collected for other purposes, so exposure misclassification and protopathic bias (early symptoms of the outcome prompting the exposure) also apply.",
       plannedOutputs: ["Case/control selection flow (source population → eligible cases → sampled controls, with counts and matching yield).", "Table 1 — characteristics of cases vs controls.", "Odds ratio (crude and adjusted) with 95% CI, named as the rate ratio or risk ratio the sampling scheme entitles."],
     });

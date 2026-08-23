@@ -551,6 +551,25 @@ const SENSITIVITY = [
       data: s.data,
       analysis: "a sequence of nested trials emulated at each eligible origin and pooled across trials, with the uncertainty from any re-use of patients across trials handled as in Section 10, estimating " + estimandText(s.estimand).replace(/\*\*/g, "") + ", reported as " + effectText(s),
       groupBy: "treatment arm",
+      // ProtocolCommon's default sizes a cohort from "observed exposure and
+      // outcome frequencies" and "available person-time and event counts". Read
+      // off the stacked, trial-indexed dataset those counts are inflated by the
+      // mean number of trials a patient enters — which is the very
+      // non-independence `limitations` two lines below names as the design's
+      // central statistical hazard, and which Section 10 handles with a
+      // patient-level bootstrap. The document was therefore stating the trap in
+      // one section and walking into it in another.
+      //
+      // Conditional in exactly the way REUSE is, and for the same reason: this
+      // page has NO field that chooses between the not-yet-treated design (a
+      // patient enters many trials) and the active-comparator design (one
+      // trial per patient). It names the fork and asks. A flat "the same person
+      // appears in several trials" here would re-introduce, in the study-size
+      // section, the assumption the rest of the file was rewritten to stop
+      // making.
+      studySize: "A sequential trial emulation is not sized by the number of rows in its stacked, trial-indexed dataset. Where a patient enters more than one trial — the usual case when the control arm is those not yet treated, and not the case when both arms initiate at the origin — the same person supplies several patient-trial records, so those rows are larger in number than the study is in patients, and any figure computed from them overstates the information available for the same reason a model-based standard error does. What decides the answer is: the number of distinct eligible patients; how many trials each of them enters, which is how much of the apparent sample is duplication, and which is what the enrolment table commissioned below establishes; the number of initiators of the index treatment, usually the binding constraint because they are the treated arm of every trial; the variability of the propensity-score and censoring weights, which sets the effective sample size within each trial; and the size of the effect to be detected."
+        + (s.estimand === "both" ? " Two figures are needed, not one: the intention-to-treat and per-protocol analyses do not have the same precision, because deviation censoring and its weights remove information the ITT analysis keeps." : "")
+        + " Precision is therefore established by simulation, or by applying to a pilot extraction the same patient-level bootstrap that Section 10 specifies for the confidence intervals — never from a formula applied to patient-trial records. Feasibility is confirmed before the analysis is executed as the number of distinct eligible patients and the number of initiators at each origin.",
       limitations: "Where the control arm is those not yet treated, the same patient contributes to several trials, often with overlapping follow-up, so the nested trials are not independent: standard errors that ignore this are too small, and per-trial estimates cannot be treated as separate studies. Where both arms initiate at the origin, each patient sits in one trial and that does not arise. Residual and unmeasured confounding within each trial cannot be excluded, and confounders are measured only up to each origin.",
       plannedOutputs: ["Number of trials, and the number of patients and of patient-trial records enrolled in each — with the distribution of how many trials each patient enters.", "Per-trial and pooled effect estimates, the per-trial estimates read as a descriptive check rather than as independent studies.", "Within-trial covariate-balance (SMD) diagnostics, before and after weighting or matching.", "Within-trial positivity diagnostics: the number assigned to each arm at every origin, the propensity-score overlap, and the number and size of extreme weights, with any truncation rule stated in advance.", "Cumulative-incidence or survival curves by arm, stated as cause-specific or as accounting for competing risks."],
     });

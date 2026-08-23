@@ -662,6 +662,42 @@ Comedications | 180</textarea>
       // it as a shell table without saying that invites an analyst to present
       // a comparison that cannot show anything.
       groupBy: "strategy (identical across arms at time zero by construction, since cloning places every patient in both)",
+      // ProtocolCommon's default sizes a person-level cohort from "observed
+      // exposure and outcome frequencies" and "available person-time and event
+      // counts". Read off a cloned dataset every one of those numbers is
+      // doubled by construction — the same construction groupBy above already
+      // has to explain — so the default is not merely ill-fitting here, it is
+      // the exact arithmetic the rest of this file spends its comments warning
+      // against. The default also promises "≥ 80% power ... at a two-sided
+      // α = 0.05", an apparatus this analysis does not use: `analysis` two
+      // lines up says the intervals come from a bootstrap that re-runs cloning,
+      // censoring and weighting inside each replicate.
+      //
+      // No citation. A search of the CCW literature turned up applied papers
+      // and the method papers this file already cites, and none of them is a
+      // power or sample-size paper; attributing a CCW power method to Hernán
+      // 2018 or Maringe 2020 would be inventing one. Every claim below follows
+      // from the construction of the design or from a diagnostic this builder
+      // already commissions in plannedOutputs.
+      studySize: (() => {
+        // Whitelist, not `s.effect ? … : …`. A saved draft or ?seed= link
+        // carrying a value this <select> no longer offers leaves it unset, and
+        // "" is truthy-false but so is a live-but-unrecognised value; both must
+        // land on the refusal rather than on a sentence that names a measure.
+        const known = ["RD", "RMST", "RDRMST", "HR", "both"].indexOf(s.effect) >= 0;
+        const meas = known
+          // effectText() is several sentences long and ends without a full
+          // stop, so this used to run on into the middle of one of them: the
+          // RDRMST branch closes "…the worked example of Maringe et al. (2020)"
+          // and the clause below arrived as ", so the quantity to establish is
+          // …", attaching this sentence's claim to that citation. Close it
+          // first, then start a new sentence.
+          ? " This protocol reports " + effectText(s) + ". The quantity to establish is therefore the number still at risk at the times that contrast is read, and not the total number of events."
+          : " No effect measure is set in section 5, so this protocol cannot yet say what to power: an absolute contrast read at a horizon is governed by the number still at risk at that horizon, a ratio measure by the events accumulated. The measure has to be chosen before a study size can be argued for.";
+        return "Cloning does not create information. Every eligible patient is copied into both strategy arms at time zero, so the analytic dataset holds twice the rows and exactly the same people, and any power or feasibility figure read off those rows — event counts included — is double-counted by construction. There is also no contrast at all at time zero, because the arms are identical until patients act: the information accrues as clones are artificially censored over the grace period of " + daysTxt(s.grace) + " and afterwards. Two things then limit it — artificial censoring, which ends a clone's follow-up the moment its observed data stop being compatible with the strategy that clone was assigned, so a patient who deviates early contributes almost nothing to the arm they deviated from; and the inverse-probability-of-censoring weights that stand the survivors in for the clones removed, which inflate the variance in proportion to how variable they are. What decides the answer is therefore: the number of distinct patients; the number of clones still uncensored in EACH arm at the end of the grace period and at every later time at which the curves are read; the effective sample size implied by the censoring weights at those same times, (Σw)² / Σw², which can fall far below the number of uncensored clones, and which is what the weight-distribution diagnostics commissioned below establish; and the size of the contrast to be detected."
+          + meas
+          + " Because the weights are estimated and each patient appears in both arms, precision is established by simulation, or by applying to a pilot extraction the same non-parametric bootstrap over PATIENTS that this protocol uses for its confidence intervals, and never from a closed-form formula applied to the cloned dataset. Feasibility is confirmed on that basis before the analysis is executed.";
+      })(),
       limitations: "Artificial censoring is informative and adjusted with inverse-probability-of-censoring weights, which assume that every predictor of deviation is measured, that the weight models are correctly specified, and that no covariate pattern makes deviation from either strategy a certainty at any time at which a clone can still be artificially censored — throughout follow-up wherever a strategy requires sustained use, not only within the grace period (Maringe 2020). Cloning removes confounding of the assigned strategy at time zero, but only the observed covariates enter the weight models, so residual confounding of adherence remains possible.",
       // These are shell tables and figures — what the analysis will produce —
       // so they must follow the effect measure actually chosen. This list was
