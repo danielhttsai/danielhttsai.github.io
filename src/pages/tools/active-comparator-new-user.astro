@@ -320,109 +320,111 @@ const PHENOTYPES = {
       name: "Myocardial infarction (MI)",
       codes: "ICD-10 I21.*, I22.* (primary discharge diagnosis)",
       definition: "First hospitalisation with a primary discharge diagnosis of acute MI.",
-      validation: "PPV ~88% in NHIRD when restricted to inpatient primary diagnosis; Cheng CL, Lee CH, Chen PS, Li YH, Lin SJ, Yang YH. Validation of acute myocardial infarction cases in the National Health Insurance Research Database in Taiwan. J Epidemiol 2014;24(6):500-7.",
+      validation: "Cheng CL, Lee CH, Chen PS, Li YH, Lin SJ, Yang YH. Validation of acute myocardial infarction cases in the National Health Insurance Research Database in Taiwan. J Epidemiol 2014;24(6):500-7.",
+      provenance: "PPV ~88% in NHIRD when restricted to inpatient primary diagnosis. That study validated ICD-9-CM 410 records; the code set above is ICD-10, so the PPV is evidence about the construct rather than about these codes at your site.",
     },
     {
       name: "Ischemic stroke",
       codes: "ICD-10 I63.*, I64.* (primary discharge diagnosis)",
       definition: "First hospitalisation with a primary discharge diagnosis of ischemic stroke.",
-      validation: "Multiple AsPEN-network validations in Taiwan claims: Cheng CL et al. Validation of the NHIRD with ischemic stroke cases in Taiwan. Pharmacoepidemiol Drug Saf 2011;20(3):236-42. Hsieh CY et al. Validating the diagnosis of acute ischemic stroke in a National Health Insurance claims database. J Formos Med Assoc 2015;114(3):254-9.",
+      validation: "Hsieh CY et al. Validating the diagnosis of acute ischemic stroke in a National Health Insurance claims database. J Formos Med Assoc 2015;114(3):254-9.",
+      provenance: "A second validation of the same construct, Cheng CL et al. Validation of the NHIRD with ischemic stroke cases in Taiwan. Pharmacoepidemiol Drug Saf 2011;20(3):236-42, is not numbered here because one reference list entry can hold one reference. Both validations were carried out in ICD-9-CM records and both find that specificity comes from the more specific infarction codes. I64 (\u201cstroke, not specified as haemorrhage or infarction\u201d) is included above for sensitivity and is the code to drop first if positive predictive value matters more than capture.",
     },
     {
       name: "Heart failure hospitalisation",
       codes: "ICD-10 I50.*, I11.0, I13.0, I13.2 (primary discharge diagnosis)",
       definition: "First hospitalisation with a primary discharge diagnosis of heart failure.",
-      validation: "Validated in NHIRD- and CGRD-linked studies; see Shao SC et al, Clinical Epidemiology series, and the broader CGRD foundational paper: Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database - a multi-institutional electronic medical records database for real-world epidemiological studies in Taiwan. Pharmacoepidemiol Drug Saf 2019;28(5):593-600. doi:10.1002/pds.4713.",
+      provenance: "Used in NHIRD- and CGRD-based studies. The paper this entry used to cite as its validation \u2014 Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Chang Gung Research Database. Pharmacoepidemiol Drug Saf 2019;28(5):593-600 \u2014 describes the data source; it does not measure how accurately these codes identify heart failure.",
     },
     {
       name: "3-point MACE",
       codes: "Composite: ICD-10 I21.*, I22.* (MI); I63.*, I64.* (stroke); cause-of-death I00-I99 (CV death)",
       definition: "Time to first of: non-fatal MI, non-fatal ischemic stroke, or cardiovascular death; whichever occurs first.",
-      validation: "Standard composite endpoint in CV outcome trials; component validation as per individual outcomes above (Cheng CL 2014 J Epidemiol; Cheng CL 2011 PDS).",
+      provenance: "Standard composite endpoint in cardiovascular outcome trials. Its components carry their own validations (see the MI and ischemic-stroke entries); the composite as assembled here has not been validated as a unit, and the cardiovascular-death component is the weakest of the three.",
     },
     {
       name: "4-point MACE",
       codes: "3-point MACE + heart-failure hospitalisation, ICD-10 I50.*, I11.0, I13.0, I13.2",
       definition: "Time to first of: non-fatal MI, non-fatal ischemic stroke, CV death, or heart-failure hospitalisation.",
-      validation: "Composite of validated components; Cheng CL 2014 (MI), Cheng CL 2011 (stroke), Shao SC et al CGRD HF studies.",
+      provenance: "Composite of components that carry their own entries above. No validation of the four-component composite as a unit, and the heart-failure component has no validation study in this library at all.",
     },
     {
       name: "All-cause mortality",
       codes: "National death-registry linkage (NHIRD ↔ Cause-of-Death; HIRA ↔ KOSIS; etc.); site-specific",
       definition: "Date of death from any cause.",
-      validation: "Near-complete in NHIRD via Cause-of-Death registry; see Lu TH et al, Hsieh CY et al for NHIRD mortality linkage validation. Sites without linkage use disenrolment + ≥30-day gap as proxy.",
+      provenance: "Near-complete in NHIRD via Cause-of-Death registry linkage. Sites without linkage use disenrolment plus a 30-day gap as a proxy, which is a different measurement and should be reported as one. This library names no specific linkage-validation paper; find one for your own site rather than citing this entry.",
     },
     {
       name: "Cardiovascular death",
       codes: "Cause-of-death ICD-10 I00-I99 (primary cause); requires death-registry linkage",
       definition: "Death with a cardiovascular primary cause on the death certificate.",
-      validation: "NHIRD-linked Cause-of-Death studies (Hsieh CY et al Clinical Epidemiology 2019); cause-of-death accuracy is moderate, so sensitivity analysis with broader CV cause definition is recommended.",
+      provenance: "Cause-of-death accuracy is moderate wherever it has been measured, so a sensitivity analysis with a broader cardiovascular cause definition is worth pre-specifying. This library carries no study measuring the accuracy of a cardiovascular cause of death in these registries.",
     },
     {
       name: "Acute kidney injury (AKI)",
       codes: "ICD-10 N17.* (primary discharge diagnosis); KDIGO criteria where serum creatinine available",
       definition: "First hospitalisation with primary discharge AKI diagnosis OR serum-creatinine-based KDIGO definition where lab linkage exists.",
-      validation: "Code-only AKI ascertainment has moderate PPV; Shao SC et al have used both code-based and lab-confirmed AKI in CGRD; pair with eGFR / serum-creatinine trajectories where available.",
+      provenance: "Code-only AKI ascertainment has moderate positive predictive value wherever it has been measured; pair it with eGFR or serum-creatinine trajectories where the site has them. No validation study is carried here.",
     },
     {
       name: "Diabetic ketoacidosis (DKA)",
       codes: "ICD-10 E10.1, E11.1, E13.1, E14.1 (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge diagnosis of DKA.",
-      validation: "High specificity when restricted to inpatient primary diagnosis; used in NHIRD-based SGLT2i safety studies (e.g., Shao SC et al Clinical Epidemiology). Confirm with site-specific PPV where possible.",
+      provenance: "Used as an outcome in NHIRD-based SGLT2 inhibitor safety studies, restricted to an inpatient primary diagnosis for specificity. Confirm the positive predictive value at your own site; no validation study is carried here.",
     },
     {
       name: "Hip fracture",
       codes: "ICD-10 S72.0, S72.1, S72.2 (primary discharge diagnosis); paired with surgical procedure code for highest PPV",
       definition: "First hospitalisation with primary discharge diagnosis of hip fracture (typically also requiring surgical-fixation code).",
-      validation: "High PPV reported across multiple AsPEN-network sites; see also AsPEN multi-country hip-fracture study (Lai EC et al, BMJ Open 2021/2023; protocol & epidemiology papers).",
+      provenance: "Used as an outcome in AsPEN multi-country fracture work. This entry names no specific paper well enough to cite, so nothing is added to the reference list; cite the site-specific positive predictive value you are relying on.",
     },
     {
       name: "Any fracture",
       codes: "ICD-10 S02 (skull), S12 (neck), S22 (rib), S32 (lumbar/pelvis), S42 (shoulder), S52 (forearm), S62 (hand), S72 (femur), S82 (leg), S92 (foot)",
       definition: "First hospitalisation or specialist outpatient visit with a fracture diagnosis.",
-      validation: "Site-dependent. AsPEN antipsychotic-falls/fractures SCCS (Wang GH, Man KKC, Chang WH, Liao TC, Lai ECC. BMJ 2021;PMID 34503972) used inpatient primary-diagnosis restriction for specificity.",
+      provenance: "Site-dependent. An AsPEN self-controlled case series of antipsychotics and falls/fractures (Wang GH, Man KKC, Chang WH, Liao TC, Lai ECC, BMJ 2021, PMID 34503972) restricted to an inpatient primary diagnosis for specificity \u2014 a study that used this definition, not one that measured its accuracy.",
     },
     {
       name: "Falls",
       codes: "ICD-10 W00-W19 (external cause); R29.6 (history of falling); injury-by-fall codes",
       definition: "First ED or hospital encounter with a fall code (often combined with fall-related injury for higher capture).",
-      validation: "Used as a primary outcome in the AsPEN antipsychotic-cholinesterase falls/fractures BMJ study (Wang GH et al, BMJ 2021;PMID 34503972); defined as fall + injury composite for specificity.",
+      provenance: "Used as a primary outcome in the AsPEN antipsychotic/cholinesterase-inhibitor falls and fractures study (Wang GH et al, BMJ 2021, PMID 34503972), defined as a fall-plus-injury composite for specificity. A study that used this definition, not one that measured its accuracy.",
     },
     {
       name: "Pneumonia hospitalisation",
       codes: "ICD-10 J12-J18 (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge pneumonia diagnosis.",
-      validation: "Used as outcome in multiple AsPEN-network pharmacoepi studies (e.g., antipsychotic safety in older adults). Specificity is high when restricted to inpatient primary diagnosis.",
+      provenance: "Used as an outcome in AsPEN-network studies of medication safety in older adults; specificity is higher when restricted to an inpatient primary diagnosis. No specific paper is named here and none is added to the reference list.",
     },
     {
       name: "GI bleeding",
       codes: "ICD-10 K25.0, K25.2, K25.4, K25.6, K26.0, K26.2, K26.4, K26.6, K27.*, K28.*, K29.0, K92.0, K92.1, K92.2 (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge diagnosis of GI bleeding.",
-      validation: "Used in AsPEN PSSA studies on NSAID and PPI safety; see Andersen M, Bergman U, Choi NK, et al. The Asian Pharmacoepidemiology Network (AsPEN): promoting multi-national collaboration for pharmacoepidemiologic research in Asia. Pharmacoepidemiol Drug Saf 2013;22(7):700-704. doi:10.1002/pds.3439. PMID: 23653370.",
+      provenance: "Used as an outcome in AsPEN prescription-sequence symmetry work on NSAID and PPI safety. The paper this entry used to cite as its validation — Andersen M, Bergman U, Choi NK, et al. The Asian Pharmacoepidemiology Network. Pharmacoepidemiol Drug Saf 2013;22(7):700-704, PMID 23653370 — introduces the network; it measures nothing about these codes.",
     },
     {
       name: "Intracranial haemorrhage",
       codes: "ICD-10 I60.*, I61.*, I62.* (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge intracranial-haemorrhage diagnosis.",
-      validation: "High specificity when restricted to inpatient primary diagnosis (NHIRD-validated; CGRD-confirmed in Shao SC et al Cardiovascular Diabetology 2019 DOAC studies).",
+      provenance: "Specificity is higher when restricted to an inpatient primary diagnosis. The paper this entry used to cite \u2014 Shao SC et al, Cardiovasc Diabetol 2019 \u2014 compares dapagliflozin with empagliflozin on a cardiovascular composite; it is neither a DOAC study nor an intracranial-haemorrhage validation. No validation study is carried here.",
     },
     {
       name: "Suicide / self-harm",
       codes: "ICD-10 X60-X84 (suicide attempts), Y87.0 (sequelae); T-codes for intentional poisoning; combined with mortality-record cause of death",
       definition: "First ED or hospital encounter with suicide / intentional self-harm code, or mortality with intentional-injury cause.",
-      validation: "Used in AsPEN psychotropic-COVID work (e.g., Man KKC et al Lancet Psychiatry 2024;PMID 39241791). Codes have low sensitivity; mortality linkage substantially improves capture.",
+      provenance: "Self-harm codes have low sensitivity in claims and mortality-registry linkage substantially improves capture \u2014 the single most important thing to say about this definition. The paper this entry used to cite (PMID 39241791) is Luo H et al, Lancet Psychiatry 2024;11(10):807-17, on psychotropic prescribing before and during the COVID-19 pandemic; it has no self-harm outcome, and it is withdrawn rather than replaced. No validation study is carried here.",
     },
     {
       name: "Dementia (incident)",
       codes: "ICD-10 F00-F03, G30.*, G31.0, G31.83; OR ≥1 dispensing of donepezil / galantamine / rivastigmine / memantine",
       definition: "First diagnosis of dementia OR first dispensing of a dementia medication, whichever earlier.",
-      validation: "AsPEN dementia work uses this combined definition; see Tsai DHT et al CNS Drugs 2025 (PMID 40437158, NHIRD dementia survival) and the AsPEN 2023 NeuroGEN infrastructure paper (Tsai DHT et al Clinical Epidemiology 2023;PMID 38146486).",
+      provenance: "A combined code-plus-dispensing definition of the kind used in NeuroGEN/AsPEN dementia work; see the network infrastructure paper (Clin Epidemiol 2023;15:1241-1252, PMID 38146486). PMID 40437158, cited here previously as \u201cCNS Drugs 2025\u201d, is A multinational cohort study of trends in survival following dementia diagnosis, Communications Medicine 2025 \u2014 a survival study, not a validation, and not that journal. Neither measures how accurately this definition identifies dementia.",
     },
     {
       name: "Thyroid cancer",
       codes: "ICD-10 C73; cancer-registry linkage (NHIRD ↔ TCR; HIRA ↔ KNCI); strongly recommended",
       definition: "First diagnosis of thyroid cancer from cancer-registry linkage (preferred) or claims (with lower PPV).",
-      validation: "AsPEN GLP-1 RA thyroid-cancer studies (Shao SC et al / Lai EC et al, 2025) used NHIRD ↔ Cancer Registry linkage; see PMIDs 39772758 and 40465422 in the AsPEN publication list.",
+      provenance: "Cancer-registry linkage is what makes this endpoint usable; claims codes alone are not enough. PMID 39772758, attributed here previously to Shao SC / Lai EC, is Baxter SM et al, Glucagon-Like Peptide 1 Receptor Agonists and Risk of Thyroid Cancer: An International Multisite Cohort Study, Thyroid 2025;35(1):69-78 — a study that used such linkage, not one that validated this definition, and not by those authors.",
     },
   ],
 };
@@ -4627,6 +4629,7 @@ _Drafted with the AsPEN protocol builder (${today})._
               : (isMethod
                 ? `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No method reference</span> · This library carries no reference for this variant of the method. Nothing is added to the reference list; cite the estimator and variance treatment you intend to use.</p>`
                 : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring how accurately this definition identifies the condition in routinely collected data. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`)}
+            ${it.provenance ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Used in</span> · ${esc(it.provenance)}</p>` : ""}
           </button>
         `).join("");
         // Click handler; fill targets + close
