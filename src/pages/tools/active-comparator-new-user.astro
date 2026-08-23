@@ -1559,7 +1559,28 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
           const name = el.name;
           if (!name) continue;
           if (el.type === "checkbox" && multi.has(name)) {
-            el.checked = (state[name] || []).includes(el.value);
+            // `(state[name] || []).includes(...)` read an ABSENT key as "the
+            // empty set" rather than as "not mentioned", and this branch ran
+            // unconditionally. So a ?seed= link carrying only the three fields
+            // a colleague had actually written down unticked all 67 ticked
+            // boxes on this page — every covariate, every censoring rule, every
+            // inclusion and exclusion criterion, every subgroup and sensitivity
+            // analysis — and exported a propensity-score-adjusted protocol
+            // whose covariate list read "_(none specified)_" directly above the
+            // promise that SMDs would be reported "across all covariates".
+            // Seeding a proposal from elsewhere is the whole point of ?seed=,
+            // and a seed will never carry 67 ticks; the feature deleted the
+            // page's own starter template every time it was used as designed.
+            //
+            // hasOwnProperty, not `!== undefined`: readForm() pre-seeds every
+            // multi key with [], so a saved draft ALWAYS carries the key and a
+            // deliberate untick still restores as unticked. A seed that omits
+            // the key leaves the markup defaults, exactly as opening the page
+            // fresh would. The distinction is between "the form told us none"
+            // and "the sender did not mention it", and only ownership carries it.
+            if (Object.prototype.hasOwnProperty.call(state, name)) {
+              el.checked = (state[name] || []).includes(el.value);
+            }
           } else if (el.type === "checkbox") {
             // Single (non-list) checkbox, e.g. pscEnable. FormData omits it
             // entirely when unchecked, so an absent key means unchecked —

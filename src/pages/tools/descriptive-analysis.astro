@@ -895,7 +895,16 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         for (const el of form.querySelectorAll("input, textarea, select")) {
           const name = el.name;
           if (!name) continue;
-          if (el.type === "checkbox" && multi.has(name)) el.checked = (state[name] || []).includes(el.value);
+          // hasOwnProperty, not a truthiness test on the value: an ABSENT key
+          // means the sender did not mention this group, not that they chose
+          // none of it. Run unconditionally, this branch unticked all 11 default
+          // ticks here whenever a ?seed= link carried only the few fields a
+          // colleague had written down — which is what a seed link always is.
+          // readForm() pre-seeds every multi key with [], so a saved draft
+          // always owns the key and a deliberate untick still restores.
+          if (el.type === "checkbox" && multi.has(name)) {
+            if (Object.prototype.hasOwnProperty.call(state, name)) el.checked = (state[name] || []).includes(el.value);
+          }
           else if (state[name] !== undefined) {
             // A <select> whose stored value is no longer one of its options
             // used to be assigned anyway: el.value = x is a no-op that leaves
