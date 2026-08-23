@@ -9355,3 +9355,12 @@ Ranked by the applied analyst's axis — silently wrong beats loudly broken.
   it, and twice unpicked it (save a copy, `reset --soft`, `restore`, re-apply
   in groups, `diff` against the copy to prove the end state is identical).
   Cheap to avoid: commit before you start the next thing.
+
+<!-- CLAIM 2026-08-23 (thirty-third run, IN PROGRESS): taking
+     `src/pages/tools/protocol-generator.astro` — the hub, second pass, which
+     the thirty-first run's released marker names as "still the tool nobody has
+     opened since the fifteenth run". Scope is the six routing questions, the
+     nine cards, the five family ledes, the caution box and the build guard,
+     plus whichever builder line a card is checked against. A concurrent run
+     should take RWE Studio's ITS counterfactual sentence or the checker
+     instead. -->
