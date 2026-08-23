@@ -84,6 +84,12 @@ codebase, all of which produced confident, wrong, non-crashing output:
   checklist row.
 - `"a" + map[k] || "b" + "."` — `+` binds tighter than `||`, so the fallback is
   unreachable and the trailing string is swallowed.
+- **A positive fact asserted about a `<select>` by ruling one value out.**
+  `if (s.effect !== "HR")` is true of the empty string too, and a `<select>`
+  reads as `""` whenever a saved draft or `?seed=` link blanked it. The document
+  then claimed "An absolute contrast is selected" directly above a section
+  reading "(not specified)". **Use a whitelist of the values that make the claim
+  true, never a not-equal against one value.**
 - A field read from `s.subgroups` when the form's controls are `subgroupsPick`
   and `subgroupsCustom`, so a whole checklist item reported "(none specified)"
   forever. Worth diffing every `name="…"` against every `s.<x>` once per builder.
