@@ -183,6 +183,19 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   capturing builders now do all three; see the section at the bottom of this
   file for what is still open (`case-control` and `clone-censor-weight` capture
   nothing, and the `"na"` verdict in the checker is untouched).
+- **`PC.mountAmendments` is still called in only two of nine builders** — open
+  since the third run, and examined in full by the twenty-fifth run, which
+  deliberately did not do it and explains why in its section at the bottom.
+  It is now **unblocked**: the four builders that could not have persisted what
+  the user typed now can. Read that section's opening before starting, and note
+  the methodologist's argument that mounting fixes none of the defects that
+  actually ship.
+- **A raw `?seed=` payload bypasses the amendment log's pipe escaping entirely**,
+  reproducing verbatim the "complete, plausible, wrong row" that
+  `ProtocolCommon.astro`'s own comment claims to have fixed. The twenty-fifth
+  run's best next target in that area; it wants the mounting item done first,
+  because the honest fix is a visible warning and seven builders have no panel
+  to put one in.
 - SCCS's Farrington event-dependent-exposure sensitivity item is ticked by default
   with no explanation or citation. Daniel said to leave it for now.
 - Weight diagnostics in RWE Studio cover IPTW only; SMR, overlap and
@@ -6839,3 +6852,249 @@ snippets do not reach table footnotes. Full text at
   and the cycle-length guard** were all driven and are all correct.
 - **Ordinary US grouped data is untouched**, including `1,234` alone, `12,345,678`,
   `1,23,456`, `1,234.56`, and a column mixing `1,234` with `10.5`.
+### Found 2026-08-23 by a twenty-fifth run — HARPER item 3, the amendments log, end to end
+
+**The longest-standing open item in this file — "`PC.mountAmendments` is still never
+called in seven of nine builders", open since the third run — was examined in
+full and deliberately NOT done. What was done instead is six defects in the
+amendment path that all nine builders already ship.**
+
+Two reviewers on disjoint briefs against a frozen tree (a methodologist and an
+applied analyst), then a third sent at this run's own uncommitted diff.
+
+#### Why the mounting item was left, after being the reason this run picked the area
+
+The obvious move is to add the three documented lines to the seven builders that
+lack them. Two independent facts killed it:
+
+- **Four of the seven could not have kept what the user typed.** `sequential-trial`,
+  `interrupted-time-series`, `trend-in-trend` and `case-control` build `readForm()`
+  as a fixed object literal that never mentioned `amendments`, so the autosave
+  dropped it. Mounting an editor there would have shipped a control that loses
+  the user's work on reload — a *new* silent-data-loss bug, in the name of
+  closing an old item. (That hole is now fixed on its own merits; see below. It
+  is the precondition for mounting, not a substitute for it.)
+- **The methodologist's argument, which held up:** mounting is seven file edits
+  and fixes none of the six defects found this run, *all six of which reproduce
+  on the two builders that already have the editor*. Mounting the editor
+  everywhere makes the tool more capable and no more honest.
+
+So the item stays open, and it is now unblocked rather than merely unstarted.
+
+#### What shipped
+
+`src/components/ProtocolCommon.astro`
+
+- **A sentence that printed its own refutation.** `amendmentIntro` appended the
+  version string as a parenthetical, so the four builders with a Version box
+  exported *"This is the original version of the protocol (v2.0 · 2026-08-01);
+  no amendments have been made."* No seed, no draft, no trickery — type a
+  version and download. On two of those four (ACNU, descriptive-analysis) there
+  is no editor with which to make the claim true. The parenthetical was pure
+  duplication: every builder with a version field already prints it in the
+  document header. Deleted.
+- **A count of rows asserted as a count of amendments.** *"The protocol has been
+  amended 3 times since its original version"* is not something the tool can
+  know. Recording the original version as row 1 — ordinary practice — made the
+  prose say "amended 1 time" about a table whose only row *was* the original;
+  and a hand-off payload with a newline inside its Reason cell splits into three
+  rows, so **one amendment was reported as three**. It now describes the table
+  it stands above. The empty-case sentence is **unchanged and deliberately so** —
+  see the argument below.
+- **One exploratory click asserting an amendment.** `writeRows` states in its own
+  comment that "an accidental '+ Add' never becomes an empty amendment"; the add
+  handler defeated it by prefilling today's date, which made the row non-blank
+  and so survived the filter. One click on "+ Add an amendment" — what a
+  first-time visitor does to see what the panel is for — put *"The protocol has
+  been amended 1 time"* and a row of four em dashes into the exported protocol.
+  The new row is now empty.
+- **A panel that read out the DOM instead of the document.** `writeRows` drops
+  blank rows but does not repaint, so a row emptied by hand stayed on screen
+  with the "no amendments" line gone: the panel showed a pending amendment while
+  the document denied any existed. The status line is now derived from the rows
+  that will actually export.
+- **An empty date box above a Word file printing the date.** `<input type="date">`
+  discards any value that is not `yyyy-mm-dd` and reads back `""`. Nothing ever
+  copies the DOM back into the row array, so the original string **survived and
+  exported**: a draft or `?seed=` link carrying `04/03/2026` showed a blank
+  Version date — sitting between two dated rows, reading as one the sender
+  forgot to date — while the `.docx` printed `04/03/2026`. Confirmed in a real
+  Word file. The control now falls back to a text box carrying the real value,
+  amber, with a counted panel-level warning. **Nothing was ever lost and nothing
+  errored; the screen and the document simply disagreed.**
+- **The pipe the comment promised would survive.** The block comment claims a
+  typed pipe round-trips end to end. It does through the *field*, and not through
+  the *Markdown emitter*, which escaped `|` but not `\`: a cell holding `a\|b`
+  was emitted as `a\\|b`, which GFM reads as an escaped backslash followed by a
+  **live** delimiter. Parsed against the real rule the row went from 6 cells to
+  7, the cell truncated to `a\`, and `b` became its own column before the
+  renderer truncated to the header width. The `.docx` printed it correctly, so
+  the two exports of one protocol disagreed about the table's shape.
+
+`src/pages/tools/{sequential-trial,interrupted-time-series,trend-in-trend,case-control}.astro`
+
+- **The same draft, two exports, opposite answers.** `PC.restore` creates the
+  hidden `amendments` textarea on all nine builders, so all nine accept and
+  export a seeded amendments log. These four never persisted it. Seed a link,
+  download Word — *"amended 1 time"* plus the table. Reload with no query string,
+  download again — *"no amendments have been made"*. Two Word files, same study,
+  same browser, no user action in between. One key each.
+
+`src/pages/tools/active-comparator-new-user.astro`
+
+- **The study design diagram, filed under "Amendments and updates".**
+  `abstractMd`/`abstractDocx` end at the amendments section, not at the abstract,
+  so whatever a builder appends lands under that heading. Eight builders open a
+  `## 1. …` heading immediately after the call; ACNU appends the HARPER 7.2
+  figure. In Word's navigation pane and any generated TOC the diagram was a
+  child of the amendment log, and with amendments recorded it printed directly
+  beneath the amendment table, reading as an illustration of the amendment
+  history. It now has its own Heading 1 (verified as `pStyle=Heading1` in a real
+  `.docx`).
+
+#### What the two reviewers disagreed about, and who was right
+
+The methodologist argued the tool is not entitled to assert *"no amendments have
+been made"* — a claim about the world, from a tool that can only observe a field,
+and one that **no user action on seven of nine builders can falsify** — and
+proposed "no amendments are recorded in this protocol".
+
+The applied analyst rebutted: that reintroduces exactly the ambiguity the feature
+exists to kill ("no log" vs "no changes yet"), a reader holding the softened
+sentence learns nothing because the investigator may keep a log elsewhere, and —
+decisively — **the edit touches none of the eight findings**, every one of which
+is the tool asserting a *positive* count from content the user never entered.
+
+**The analyst won on the sentence and the methodologist won on the cause.** The
+self-contradiction the methodologist correctly identified is produced by the
+*parenthetical*, not by the sentence: delete `(v2.0 · 2026-08-01)` and the
+contradiction is gone with the claim intact. The empty-case sentence ships
+unchanged. Both reviewers independently converged on the *positive* branch being
+the over-claim, and that is what was rewritten.
+
+**Do not re-open the "no amendments have been made" wording** without reading
+both arguments; two reviewers on opposite briefs have now been over it.
+
+#### The third reviewer, sent at this run's own diff — now 8 for 8
+
+**It found executed damage again, and the sharpest finding was that this run's
+fix had inverted the very failure it was written to remove.** Do not skip this
+step, and do not trust a diff because you drove seven scenarios through it.
+
+- **The status line was recomputed once per repaint, and typing does not
+  repaint.** So the commonest path of all — click "+ Add an amendment", type
+  into the row — left *"This row is still empty, so the protocol states that
+  this is the original version"* on screen above a document that already
+  carried the row. Before the diff there was no line at all in that state: the
+  false sentence existed **only** because of the fix, and it was reached by
+  every user's first amendment. Fixed by moving the notes into their own
+  container and recomputing them on every keystroke.
+- **The empty starting row made "+ Add" non-additive.** The handler re-read the
+  field, which had just correctly dropped the blank row, so pressing the button
+  twice before typing left one row. Fixed by giving the panel a row model that
+  is rebuilt from the field only in `sync`.
+- **The new ACNU heading could be emitted with nothing under it.** It was pushed
+  above the `try` whose `catch` pushes nothing, so a throw from
+  `designDiagramFigure` produced a table-of-contents entry promising a figure
+  that was not there. Moved inside the `try`.
+
+The generalisable lesson, and it is the same one in a new costume: **a panel
+that describes a document must be recomputed on every event that changes the
+document, not on the subset of events that happen to redraw it.** When you add
+a sentence that reports state, enumerate every path that mutates that state and
+check the sentence is refreshed on each one.
+
+The reviewer also confirmed, by reverting to a control build and by parsing the
+real Markdown with micromark, that the escaping fix is correct and that the old
+code genuinely lost content — and noted one thing left untouched: the *other*
+tables in `case-crossover`, `self-controlled-case-series` and
+`descriptive-analysis` still escape pipes only, the same latent hole one panel
+over.
+
+#### Deliberately left, argued, not manufactured
+
+- **A raw `?seed=` payload bypasses the pipe escaping entirely.** `amEsc` is
+  applied only in `writeRows`, i.e. only to text typed into the mounted editor.
+  A seed carrying `2026-03-04 | v2.0 | 7 | 8 | Sections 7 and 8 harmonised |
+  Reviewer comment` — "7 | 8" meaning sections 7 and 8 — exports **verbatim the
+  "complete, plausible, wrong row"** this file's own comment says was fixed:
+  Section = "7", Amendment = "8", the description shoved into Reason. Reproduced
+  on trend-in-trend, which has no editor to show anything. **Left because the
+  storage format is genuinely ambiguous for raw input** — nothing distinguishes
+  "a cell containing a pipe" from "an extra column" — so the honest fix is a
+  visible warning on an ambiguous row, and seven of nine builders have no panel
+  to put one in. **This is the best next target here, and it wants the mounting
+  item done first.** The count claim it used to inflate is already fixed.
+- **A newline inside a cell still splits one amendment into several rows**, with
+  the continuation text landing in the Version date column. Same root cause, same
+  reason for leaving. The false *count* is fixed; the row splitting is not.
+- **A seeded amendments log persists invisibly into the user's own draft** on
+  ACNU, descriptive-analysis and clone-censor-weight, and the only removal is
+  "Clear all", which destroys the whole draft. The analyst ranked this first; the
+  methodologist argued it is the seed trust model, identical to population,
+  comparator and outcome, all silently overwritten and more consequential.
+  **Checked, and the analyst's framing overstates it: the text IS on screen** —
+  the live `#preview` pane renders the amendment table — and Clear all does
+  remove it (verified on all seven). Real but ranked below what shipped.
+- **HARPER's Reason column carries an instruction the tool drops**: note whether
+  the amendment occurred after registration / finalization / approval — the one
+  distinction item 3 exists for. **Corroborated by search snippet only.** Not
+  acted on because the template is unreachable from this sandbox and the change
+  would put words in HARPER's mouth. Verify against the template before acting.
+- The two amendment statements (front matter, and the `"registration"` tail
+  section) were examined by both reviewers: they do **not** contradict in any
+  reachable state — one is a state claim, one a process claim — and no builder
+  skips `"registration"`. Both reviewers said leave it. Left.
+
+#### Checked and found NOT to be a problem — do not re-derive these
+
+- **`AM_COLS` matches HARPER.** Columns 1, 2, 3 and 5 directly corroborated from
+  a snippet quoting the template's own column instructions; the 4th inferred.
+  Right count, right order, right labels. **Do not "fix" it** — and note the
+  analyst's argument that changing it at all is a silent data migration on an
+  unversioned format whose overflow rule (`amSplit`: everything past the fourth
+  pipe is Reason) would re-split every existing draft and every link already sent.
+- **Every one of the nine "Clear all" paths really does clear the textarea.**
+  Four different idioms, all bottoming out at `""`. Verified on all seven.
+- **`fromForm`'s fallback picks the right form on all nine pages** — each has
+  exactly one `<form>`, and no shared component or layout emits one.
+- **`mountAmendments` lands inside the form on all nine** (tested by mounting at
+  runtime on the seven that do not): inside the form, before the download
+  buttons, visible, and the editor's row inputs carry no `name` so they never
+  leak into `FormData` or any export.
+- **`amEsc`/`amSplit`/`amUnesc` round-trip correctly for everything typed through
+  the editor**, including `7 | 8`, lone and doubled backslashes, and 5+ pipes.
+- **Every degenerate seeded `amendments` fails safe** — array, object, number,
+  boolean, null, whitespace — with no console error.
+- **The non-ISO date was never deleted.** Both reviewers and the orchestrator
+  traced every `writeRows` and `paint` call site independently: nothing copies
+  the DOM back into the row array. The hypothesis that it silently destroyed the
+  user's date is **wrong**; it was a display divergence only.
+- **The HARPER citation**, corroborated by search snippet only, never against
+  Crossref (blocked): Wang SV, Pottegård A, … Schneeweiss S, … *Pharmacoepidemiol
+  Drug Saf.* 2023 Jan;32(1):44-55, doi:10.1002/pds.5507; co-published in *Value in
+  Health*. Item 3 is front matter, immediately after the abstract, and is a table.
+  Nothing in the repo cites it; no citation was added or changed this run.
+
+#### Verified this run, and how
+
+- Everything was driven in Chromium against a local `astro build` + a static
+  server. Both `?seed=` and typed-into-the-editor paths.
+- **Real `.docx` files generated** through the blocked-CDN route (`npm pack
+  docx@8.5.0` + `page.route`) and `word/document.xml` read — including
+  `w:pStyle`, which is how the new ACNU heading was confirmed to be a genuine
+  Heading 1 rather than bold text.
+- The Markdown escaping fix was checked against a **GFM-faithful scanner**
+  (backslash escapes the next character), not by eyeballing the string: the old
+  escaper yields 7 cells for a 6-column header and eats `b`; the new one yields 6
+  and round-trips `a\|b`. Diffing the expression would have shown nothing.
+- States driven: nine date spellings (`2026-3-4`, `04/03/2026`, `March 2026`,
+  `2026-03-04T00:00:00`, `4 March 2026`, `2026/03/04`, `2026-13-45`, `not a
+  date`, empty); one "+ Add" click with nothing typed; add-then-clear; multi-row
+  with one bad date among good ones; row deletion; degenerate seeds; the
+  persistence round trip on all nine builders.
+- **All twelve tool pages re-loaded with zero `pageerror` and
+  `typeof window.PC === "object"` on all nine builders**, before and after.
+- **The live site was not checked** — `danielhttsai.github.io` is still blocked
+  from this sandbox. Still nobody has opened one of these `.docx` files in
+  Microsoft Word.
