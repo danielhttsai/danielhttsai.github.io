@@ -69,7 +69,8 @@
     "pmcid": "PMC12987583",
     "ris": "TY  - JOUR\r\nTI  - SGLT2 inhibitors, GLP-1 RAs, and DPP4 inhibitors and the risk of hypomagnesemia in type 2 diabetes: A target trial emulation\r\nAU  - Shao, Shih-Chieh\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Chuang, Albert Tzu-Ming\r\nAU  - Liu, Kuan-Hung\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - PLOS Medicine\r\nT2  - PLOS Medicine\r\nPY  - 2026\r\nVL  - 23\r\nIS  - 3\r\nSP  - e1004968\r\nDO  - 10.1371/journal.pmed.1004968\r\nUR  - https://doi.org/10.1371/journal.pmed.1004968\r\nAN  - 41790761\r\nER  - \r\n",
     "date": 20260306,
-    "cover": "papers/sdg-mg.jpg"
+    "cover": "papers/sdg-mg.jpg",
+    "tag": "Drug Repurposing"
   },
   {
     "year": "2026",
@@ -117,7 +118,8 @@
     "pmcid": "PMC12888456",
     "ris": "TY  - JOUR\r\nTI  - SGLT-2 Inhibitor use and liver-related and mortality outcomes in patients with type 2 diabetes and compensated cirrhosis\r\nAU  - Chou, Tien-Shin\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Shao, Shieh-Chieh\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - BMC Medicine\r\nT2  - BMC Medicine\r\nPY  - 2026\r\nVL  - 24\r\nIS  - 1\r\nDO  - 10.1186/s12916-026-04629-x\r\nUR  - https://doi.org/10.1186/s12916-026-04629-x\r\nAN  - 41526898\r\nER  - \r\n",
     "date": 20260112,
-    "cover": "papers/sglt2-liver.jpg"
+    "cover": "papers/sglt2-liver.jpg",
+    "tag": "Drug Repurposing"
   },
   {
     "year": "2026",
@@ -166,7 +168,8 @@
     "pmcid": "PMC13065125",
     "ris": "TY  - JOUR\r\nTI  - Sodium-Glucose Cotransporter 2 Inhibitors Prevent Nephrolithiasis in Patients with Diabetes\r\nAU  - Liu, Chia-Min\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Tung, Hsiu-Ting\r\nAU  - Lu, Ze-Hong\r\nAU  - Lai, Edward Chia-Cheng\r\nAU  - Liu, Chan-Jung\r\nJO  - Kidney360\r\nT2  - Kidney360\r\nPY  - 2025\r\nVL  - 7\r\nIS  - 3\r\nSP  - 633\r\nEP  - 641\r\nDO  - 10.34067/kid.0000000981\r\nUR  - https://doi.org/10.34067/kid.0000000981\r\nAN  - 41117521\r\nER  - \r\n",
     "date": 20251020,
-    "cover": "papers/sglt2-nephrolithiasis.jpg"
+    "cover": "papers/sglt2-nephrolithiasis.jpg",
+    "tag": "Drug Repurposing"
   },
   {
     "year": "2025",
@@ -178,7 +181,8 @@
     "pmcid": "PMC12495931",
     "ris": "TY  - JOUR\r\nTI  - Association Between Pneumonia Risk and Anticholinergic Burden Among Patients with Different Frailty Levels\r\nAU  - Yang, Avery Shuei-He\r\nAU  - Fan Chiang, Hsin-Yu\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Chuang, Albert Tzu-Ming\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - Clinical Epidemiology\r\nT2  - Clinical Epidemiology\r\nPY  - 2025\r\nVL  - Volume 17\r\nSP  - 787\r\nEP  - 796\r\nDO  - 10.2147/clep.s524645\r\nUR  - https://doi.org/10.2147/clep.s524645\r\nAN  - 41050470\r\nER  - \r\n",
     "date": 20250900,
-    "cover": "papers/acb-pn.jpg"
+    "cover": "papers/acb-pn.jpg",
+    "tag": "Polypharmacy"
   },
   {
     "year": "2025",
@@ -202,7 +206,8 @@
     "pmcid": "PMC13083378",
     "ris": "TY  - JOUR\r\nTI  - Emulating Six Cardiovascular Outcome Trials of Antidiabetic Drugs in Individuals with Type 2 Diabetes: Analyses Based on Real‐World Databases from Korea and Taiwan\r\nAU  - Ko, Hwa Yeon\r\nAU  - Au, Philip C. M.\r\nAU  - Cheng, Michael Chun‐Yuan\r\nAU  - Cheung, Ching‐Lung\r\nAU  - Choi, Ahhyung\r\nAU  - Hsieh, Miyuki Hsing‐Chun\r\nAU  - Jeong, Han Eol\r\nAU  - Lai, Edward Chia‐Cheng\r\nAU  - Li, Brian Meng‐Hsun\r\nAU  - Man, Kenneth K. C.\r\nAU  - Rassen, Jeremy A.\r\nAU  - Tsai, Daniel Hsiang‐Te\r\nAU  - Wang, Shirley V.\r\nAU  - Wong, Ian C. K.\r\nAU  - Shin, Ju‐Young\r\nAU  - Park, Sohee\r\nJO  - Clinical Pharmacology &amp; Therapeutics\r\nT2  - Clinical Pharmacology &amp; Therapeutics\r\nPY  - 2025\r\nVL  - 119\r\nIS  - 5\r\nSP  - 1265\r\nEP  - 1274\r\nDO  - 10.1002/cpt.70027\r\nUR  - https://doi.org/10.1002/cpt.70027\r\nAN  - 40820495\r\nER  - \r\n",
     "date": 20250817,
-    "cover": "papers/asian-duplicate.jpg"
+    "cover": "papers/asian-duplicate.jpg",
+    "tag": "Multinational Studies"
   },
   {
     "year": "2025",
@@ -313,7 +318,8 @@
     "pmcid": "PMC10912959",
     "ris": "TY  - JOUR\r\nTI  - Use of SGLT2 Inhibitors vs GLP-1 RAs and Anemia in Patients With Diabetes and CKD\r\nAU  - Hu, Jia-Chian\r\nAU  - Shao, Shih-Chieh\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Chuang, Albert Tzu-Ming\r\nAU  - Liu, Kuan-Hung\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - JAMA Network Open\r\nT2  - JAMA Network Open\r\nPY  - 2024\r\nVL  - 7\r\nIS  - 3\r\nSP  - e240946\r\nDO  - 10.1001/jamanetworkopen.2024.0946\r\nUR  - https://doi.org/10.1001/jamanetworkopen.2024.0946\r\nAN  - 38436955\r\nER  - \r\n",
     "date": 20240304,
-    "cover": "papers/sglt2-anaemia.jpg"
+    "cover": "papers/sglt2-anaemia.jpg",
+    "tag": "Drug Repurposing"
   },
   {
     "year": "2023",
