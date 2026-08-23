@@ -21,7 +21,7 @@ const SUBGROUPS = [
 ];
 const SENSITIVITY = [
   "Trial interval (e.g. quarterly vs yearly)",
-  "Pooled vs trial-stratified estimate (with I²)",
+  "Pooled vs trial-stratified estimates, compared descriptively across calendar time",
   "Maximum follow-up per trial",
   "Per-protocol (deviation censoring + IPCW) vs ITT",
   "Restrict outcomes to inpatient / emergency records",
@@ -41,9 +41,10 @@ const SENSITIVITY = [
       <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Sequential Trial Emulation protocol</h1>
       <p class="mt-3 text-base text-slate-600 max-w-3xl">
         Draft a target-trial-emulation protocol as a <strong>sequence of nested trials</strong> — one emulated trial at
-        each eligible time origin. Patients who stay eligible enter several trials; estimates are pooled with a
-        patient-clustered robust variance. Handles time-varying eligibility, staggered entry, and the prevalent-user
-        problem. Everything runs in your browser.
+        each eligible time origin. Where the control arm is those not yet treated, patients who stay eligible enter
+        several trials, so estimates are pooled across trials and the uncertainty has to account for that re-use —
+        by a bootstrap over patients, or a patient-clustered robust variance. Handles time-varying eligibility,
+        staggered entry, and the prevalent-user problem. Everything runs in your browser.
       </p>
       <a class="mt-4 inline-block text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools/protocol-generator`}>← All designs</a>
     </div>
@@ -101,7 +102,8 @@ const SENSITIVITY = [
           <details class="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600">
             <summary class="cursor-pointer font-semibold text-slate-700">In one sentence: instead of one trial starting on one day, you run the same trial again on every day someone could have been randomised.</summary>
             <p class="mt-2 leading-relaxed">A single-origin new-user study has to pick one moment and discard everyone who becomes eligible later. Here each origin gets its own trial: eligibility, treatment assignment and the start of follow-up are all re-assessed at that origin, so each nested trial is itself a complete new-user trial and time zero stays aligned — which is what keeps immortal time out.</p>
-            <p class="mt-2 leading-relaxed">The price is that <strong>the same person appears in several trials</strong>, often with overlapping follow-up. The trials are therefore not independent samples, and two things follow: the variance must account for the re-use (Section 10 of the protocol), and per-trial estimates cannot be pooled as if they came from separate studies.</p>
+            <p class="mt-2 leading-relaxed">Two versions of this design exist and they are <strong>not interchangeable</strong>, so section 3 asks which you mean. If the control arm is <em>those not yet treated</em> at each origin (Hernán 2008, Danaei 2013, Gran 2010 — every paper cited on this page), a patient enters a trial at every origin until they initiate or have the outcome. If instead both arms initiate at the origin — an <em>active comparator</em> — a patient is assigned at the single origin at which they initiate.</p>
+            <p class="mt-2 leading-relaxed">The price of the first is that <strong>the same person appears in several trials</strong>, often with overlapping follow-up. Those trials are not independent samples, and two things follow: the variance must account for the re-use (Section 10 of the protocol), and per-trial estimates cannot be pooled as if they came from separate studies. Under the second, each patient sits in one trial and none of that applies.</p>
           </details>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">First origin</span>
@@ -114,15 +116,15 @@ const SENSITIVITY = [
               </select></label>
           </div>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Eligibility, re-assessed at each origin</span>
-            <textarea name="eligibility" rows="2" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. At each origin: meets the population definition, is outcome-free, and has not yet been enrolled as an index-treatment initiator in an earlier trial."></textarea></label>
+            <textarea name="eligibility" rows="2" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. At each origin: meets the population definition and is outcome-free. Control arm = those not yet treated at that origin (so a patient enters a trial at every origin until they initiate or have the outcome). — or — Control arm = comparator initiators at that origin (so a patient is assigned at the one origin at which they initiate)."></textarea></label>
         </fieldset>
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
           <legend class="px-2 text-sm font-bold text-brand-700">4 · Assignment &amp; enrolment</legend>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Assignment at each origin</span>
-            <textarea name="assignment" rows="2" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Within each trial, patients using the index treatment in that interval form the treated arm; those using the comparator (and otherwise eligible) form the control arm."></textarea></label>
+            <textarea name="assignment" rows="2" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="e.g. Within each trial, patients initiating the index treatment in that interval form the treated arm; the control arm is as defined in section 3. Only information available at or before the origin enters the rule."></textarea></label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Multiple enrolment</span>
-            <input name="multiple" placeholder="e.g. A patient may enter several consecutive trials until treated/outcome; variance clustered on patient." class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+            <input name="multiple" placeholder="e.g. With a not-yet-treated control arm: a patient enters every trial until they initiate or have the outcome, so the same person appears in several trials. With comparator initiators as controls: one trial per patient." class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
         </fieldset>
 
         <fieldset class="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
@@ -451,11 +453,19 @@ const SENSITIVITY = [
     }
 
     const or = (s, d) => (s && s.length ? s : d);
-    const estimandText = (e) => ({
-      ITT: "the **intention-to-treat effect** — the effect of the treatment strategy assigned at each origin, regardless of subsequent adherence",
-      PP: "the **per-protocol effect** — the effect of receiving and adhering to the assigned strategy, with censoring at deviation and inverse-probability-of-censoring weights (a clone-censor-weight step within each trial)",
-      both: "both the **intention-to-treat** and the **per-protocol** effects (the latter using censoring at deviation with inverse-probability-of-censoring weights)",
-    })[e] || "**(not specified — choose intention-to-treat, per-protocol, or both under “Estimand”)**";
+    // One map, two renderings. There were three near-copies of this — here, in
+    // the Word export and in the TARGET handler — and two had already drifted
+    // apart ("assignment at each origin, ignoring later switching" against
+    // "assignment at each origin"), which is how this codebase keeps getting a
+    // document naming a different analysis from the one chosen.
+    const ESTIMAND = {
+      ITT: { md: "the **intention-to-treat effect** — the effect of the treatment strategy assigned at each origin, regardless of subsequent adherence", plain: "the intention-to-treat effect (assignment at each origin, ignoring later switching)" },
+      PP: { md: "the **per-protocol effect** — the effect of receiving and adhering to the assigned strategy, with censoring at deviation and inverse-probability-of-censoring weights within each trial", plain: "the per-protocol effect (censoring at deviation, with inverse-probability-of-censoring weights, within each trial)" },
+      both: { md: "both the **intention-to-treat** and the **per-protocol** effects (the latter using censoring at deviation with inverse-probability-of-censoring weights)", plain: "both the intention-to-treat and the per-protocol effects" },
+    };
+    const EST_MISSING = "(not specified — choose intention-to-treat, per-protocol, or both under “Estimand”)";
+    const estimandText = (e) => (ESTIMAND[e] && ESTIMAND[e].md) || "**" + EST_MISSING + "**";
+    const estimandPlain = (e) => (ESTIMAND[e] && ESTIMAND[e].plain) || EST_MISSING;
     // The horizon τ for the absolute measures is the per-trial maximum follow-up.
     const horizon = (s) => (blank(s.futrial) ? "the per-trial horizon (length not yet specified)" : "the per-trial horizon (τ = " + daysTxt(s.futrial) + " from each origin)");
     const effectText = (s) => {
@@ -469,6 +479,40 @@ const SENSITIVITY = [
       })[s.effect] || "**(not specified — choose an effect measure under “Effect measure”)**";
     };
     const usesRMST = (e) => e === "RMST" || e === "RDRMST";
+
+    // ── One copy of every default sentence, because there were three (Markdown,
+    // Word, TARGET) and they had drifted into describing two different designs
+    // at once.
+    //
+    // The assignment default said "patients initiating the comparator in that
+    // interval form the control arm" — an ACTIVE-COMPARATOR sequential trial, in
+    // which a patient is assigned only at the origin at which they initiate one
+    // of the two drugs, and therefore enters exactly ONE trial. The enrolment
+    // default, in the same exported document, said "A patient may enrol in
+    // several consecutive trials until they are treated" — the
+    // initiator-versus-not-yet-treated design of Hernán 2008 and Danaei 2013, in
+    // which the control arm IS the untreated and a patient enters a trial at
+    // every origin until they initiate. Each default deletes the other's control
+    // arm. Every argument the protocol then makes about re-use — the
+    // non-independence of the trials, the bootstrap over patients, the refusal
+    // to meta-analyse, the limitations paragraph — belongs to the second design
+    // and is simply idle under the first.
+    //
+    // Both designs are legitimate and the page has no field that chooses between
+    // them, so it names the fork and asks, rather than picking one silently. All
+    // four cited papers are the second design; the placeholders were the first.
+    const DEF = {
+      eligibility: "At each origin, a patient is eligible if they meet the population definition and are outcome-free. State also which control arm this study uses, because much of the protocol below depends on it: either the control arm is initiators of the comparator at that origin, in which case a patient is assigned at the one origin at which they initiate; or the control arm is those not yet treated at that origin, in which case a patient enters a trial at every origin until they initiate or have the outcome.",
+      assignment: "Within each trial, patients initiating the index treatment in that interval form the treated arm. The control arm is whichever of the two was specified above — comparator initiators at that origin, or those not yet treated at that origin. Only information available at or before the origin may enter the rule.",
+      multiple: "How many trials a patient enters follows from that choice. With comparator initiators as the control arm, a patient is assigned at the single origin at which they initiate. With the not-yet-treated as the control arm, a patient enters every trial for which they remain eligible until they initiate or have the outcome, so the same person appears in several trials with overlapping follow-up.",
+      followup: "Within each trial, follow-up runs from the origin to the outcome, death, disenrolment, or the maximum follow-up, whichever comes first.",
+      confounding: "The propensity score is estimated within each trial (or pooled across trials with a trial indicator) from baseline covariates measured at that origin; treated and control arms are balanced by inverse-probability-of-treatment weighting (or matching) within trial.",
+    };
+    // Stated conditionally, because whether it applies at all is the question
+    // section 4 asks. It used to be flat ("The nested trials are NOT independent
+    // samples"), which is false of an active-comparator sequential trial where
+    // each patient sits in one trial.
+    const REUSE = "Where a patient enters more than one trial — which is the usual case when the control arm is those not yet treated, and does not arise when both arms initiate at the origin — the nested trials are not independent samples. Standard errors computed as if each patient-trial record were a separate person are then too small, and per-trial estimates cannot be pooled as if they came from separate studies. How this is handled is set out in Section 10.";
     // The deviation-censoring rule IS the difference between the two estimands,
     // so it belongs in the analysis plan of both exported documents. The Word
     // version of step 3 stopped at "…follow-up time, and trial." in every
@@ -493,7 +537,7 @@ const SENSITIVITY = [
       analysis: "a sequence of nested trials emulated at each eligible origin and pooled across trials, with the uncertainty from patients entering several trials handled as in Section 10, estimating " + estimandText(s.estimand).replace(/\*\*/g, "") + ", reported as " + effectText(s),
       groupBy: "treatment arm",
       limitations: "The same patient contributes to several trials, often with overlapping follow-up, so the nested trials are not independent: standard errors that ignore this are too small, and per-trial estimates cannot be treated as separate studies. Residual and unmeasured confounding within each trial cannot be excluded, and confounders are measured only up to each origin.",
-      plannedOutputs: ["Number of trials, and the number of patients and of patient-trial records enrolled in each — with the distribution of how many trials each patient enters.", "Per-trial and pooled effect estimates, the per-trial estimates read as a descriptive check rather than as independent studies.", "Within-trial covariate-balance (SMD) diagnostics, before and after weighting or matching.", "Cumulative-incidence or survival curves by arm."],
+      plannedOutputs: ["Number of trials, and the number of patients and of patient-trial records enrolled in each — with the distribution of how many trials each patient enters.", "Per-trial and pooled effect estimates, the per-trial estimates read as a descriptive check rather than as independent studies.", "Within-trial covariate-balance (SMD) diagnostics, before and after weighting or matching.", "Within-trial positivity diagnostics: the number assigned to each arm at every origin, the propensity-score overlap, and the number and size of extreme weights, with any truncation rule stated in advance.", "Cumulative-incidence or survival curves by arm, stated as cause-specific or as accounting for competing risks."],
     });
 
     // One list, shared by the Markdown and Word exports so they cannot drift.
@@ -537,33 +581,37 @@ Among **${or(s.population, "(population)")}**, what is the effect of **${or(s.ex
 A **sequential trial emulation**: a series of nested trials with origins **${or(s.interval, "monthly")}** from **${or(s.first, "(first origin)")}** to **${or(s.last, "(last origin)")}**, using observational data from **${or(s.data, "(data source)")}**.
 
 ## 4. Eligibility (re-assessed at each origin)
-${or(s.eligibility, "At each origin a patient is eligible if they meet the population definition, are outcome-free, and have not already been enrolled as an index-treatment initiator in an earlier trial.")}
+${or(s.eligibility, DEF.eligibility)}
 
 Every nested trial is itself a **new-user trial started at that origin**, so the same windows as an active-comparator new-user design are applied at *each* origin, all measured **before** that origin: a **new-user washout of ${daysTxt(s.washout)}** with no prior exposure or comparator, and a **covariate / eligibility look-back of ${covLbText(s)}**. Because these windows move with the origin, eligibility, treatment assignment and the start of follow-up remain aligned at every trial's time zero — which is what prevents immortal-time bias. A patient who is ineligible at one origin (for example, still inside the washout) may become eligible at a later one.
 
 ## 5. Time zero and treatment assignment
-For each trial, **time zero is that trial's origin**, and each trial has a maximum follow-up of **${daysTxt(s.futrial)}**. ${or(s.assignment, "Within each trial, patients initiating the index treatment in that interval form the treated arm; patients initiating the comparator in that interval, and otherwise eligible, form the control arm.")}
+For each trial, **time zero is that trial's origin**, and each trial has a maximum follow-up of **${daysTxt(s.futrial)}**. ${or(s.assignment, DEF.assignment)}
 
 Assignment is determined by what happens *at* the origin. Nothing after the origin may enter the eligibility or assignment rule — a rule that looks forward (for example, "initiated within the next 90 days") reintroduces immortal time, because it can only be evaluated in patients who survived long enough for it to be evaluated.
 
 ## 6. Enrolment across trials
-${or(s.multiple, "A patient may be eligible for, and enrol in, several consecutive trials until they are treated or have the outcome. The same patient therefore appears in multiple trials, often with overlapping follow-up.")}
+${or(s.multiple, DEF.multiple)}
 
-The nested trials are **not independent samples**. Standard errors computed as if each patient-trial record were a separate person are too small, and per-trial estimates cannot be pooled as if they came from separate studies. How this is handled is set out in Section 10.
+${REUSE}
 
 ## 7. Confounding adjustment
-${or(s.confounding, "The propensity score is estimated within each trial (or pooled across trials with a trial indicator) from baseline covariates measured at that origin; treated and control arms are balanced by inverse-probability-of-treatment weighting (or matching) within trial.")}
+${or(s.confounding, DEF.confounding)}
 
 Covariates are re-measured at **each** origin, over the look-back windows above. A patient who enters several trials therefore carries a different covariate vector — and a different propensity score — in each. Balance (standardised mean differences) is assessed **within trial**, not only in the pooled dataset, because a pooled table can appear balanced while individual trials are not.
 
 ## 8. Follow-up and outcome
-${stop(or(s.followup, "Within each trial, follow-up runs from the origin to the outcome, death, disenrolment, or the maximum follow-up, whichever comes first."))} Maximum follow-up per trial: **${daysTxt(s.futrial)}**. Outcome: **${or(s.outcome, "(outcome)")}**.
+${stop(or(s.followup, DEF.followup))} Maximum follow-up per trial: **${daysTxt(s.futrial)}**. Outcome: **${or(s.outcome, "(outcome)")}**.
 
 Trials with later origins have less calendar time remaining before the data end, so they are administratively censored earlier. Long-term contrasts are therefore informed mainly by the earliest trials; we report how many trials are still contributing at each follow-up time.
 
+Competing risks. The follow-up rule above censors at death from any cause, and the outputs below include cumulative-incidence or survival curves. Censoring at a competing death and fitting a Cox model estimates the cause-specific hazard, which is a defensible primary analysis; but one minus the Kaplan-Meier curve is NOT the cumulative incidence in that setting — it overstates it — and a survival difference or an RMST difference computed the same way is a quantity defined in a world where the competing event has been eliminated. State which of the two you intend, and if absolute risk is the target, estimate it with a method that keeps the competing event in the denominator.
+
 ## 9. Estimand and effect measure
 The target estimand is ${estimandText(s.estimand)}. We report ${effectText(s)}.
-${s.estimand === "ITT" || s.estimand === "both" ? "\nThe intention-to-treat contrast here is a contrast of *initiation* strategies. If control-arm patients later start the index treatment, or treated patients stop, the ITT effect is attenuated toward the null by an amount the ITT estimate alone cannot reveal. We therefore report the observed switching and discontinuation over follow-up alongside it.\n" : ""}${s.estimand === "PP" || s.estimand === "both" ? "\nThe per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. This is the same machinery as a clone-censor-weight analysis, applied inside each trial.\n" : ""}
+
+The pooled estimate is not the effect in one population: with a single treatment coefficient across all trials it is an average of the origin-specific effects, weighted by how much information each trial contributes — and those weights are data-dependent, because later trials carry less remaining follow-up (Section 8). We report the per-trial estimates and their sizes so the average can be read for what it is.
+${s.estimand === "ITT" || s.estimand === "both" ? "\nThe intention-to-treat contrast here is a contrast of *initiation* strategies. If control-arm patients later start the index treatment, or treated patients stop, the ITT effect is attenuated toward the null by an amount the ITT estimate alone cannot reveal. We therefore report the observed switching and discontinuation over follow-up alongside it. Where the control arm is those not yet treated, a control who later initiates stays in the control arm of the trials they had already entered, for the whole of their follow-up — that is precisely what produces the attenuation. Their records are not censored at the moment they initiate; censoring them is the per-protocol analysis, not this one.\n" : ""}${s.estimand === "PP" || s.estimand === "both" ? "\nThe per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. The censoring weights are the same machinery a clone-censor-weight analysis uses, but the cloning step is not: assignment here is determined at the origin, so the arms are different people, and the per-protocol estimator therefore needs the treatment weights AND the censoring weights together, where a cloned design needs only the latter. Note what this means for a control who later initiates: under this contrast their earlier control-arm records ARE censored at the moment they initiate, which is exactly the step the intention-to-treat contrast does not take.\n" : ""}
 ## 10. Statistical analysis
 1. Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset (one record per patient per trial they enter).
 2. Within each trial, estimate the propensity score from covariates measured at that origin and apply weighting (or matching); check balance within trial.
@@ -604,6 +652,8 @@ ${REFS.map((r) => "- " + r).join("\n")}
       else if (blank(s.washout)) checks.push({ level: "error", msg: "New-user washout is empty. It is not assumed to be anything — the protocol prints “(not specified)” until you set it." });
       else if (wash <= 0) checks.push({ level: "warn", msg: "New-user washout is 0 — each nested trial is itself a new-user trial started at its origin, so prevalent users can be enrolled at every origin. Set a washout with no prior exposure or comparator before each origin." });
       else if (wash < 180) checks.push({ level: "info", msg: "New-user washout < 180 days — consider a longer washout so that patients enrolled at each origin are truly new users." });
+      const HUGE = NUMS.filter(([k]) => Number.isFinite(numDays(s[k])) && numDays(s[k]) > 18262);
+      if (HUGE.length) checks.push({ level: "warn", msg: "Longer than fifty years, which is almost certainly a typo and makes the diagram unreadable: " + HUGE.map(([k, l]) => l + " = " + numDays(s[k]) + " days").join("; ") + ". The number is used as given — nothing is clamped — but check it before exporting." });
       if (!s.first || !s.last) checks.push({ level: "warn", msg: "Set the first and last trial origins so the sequence of nested trials is defined." });
       if (covRows.length && blank(s.covlookback)) checks.push({ level: "info", msg: "Per-covariate windows are set, so the single look-back box is not used and the protocol reports the per-covariate list instead." });
       if (lb <= 0) checks.push({ level: "warn", msg: "No covariate / eligibility look-back — each trial would assess eligibility and covariates only on the origin day itself. Set a look-back window before the origin." });
@@ -620,8 +670,8 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (badNum(s.futrial)) { /* already reported */ }
       else if (blank(s.futrial)) checks.push({ level: "error", msg: "Maximum follow-up per trial is empty. The diagram shows a placeholder bar labelled “length not set” and the protocol prints “(not specified)” — nothing is assumed." });
       else if (fu <= 0) checks.push({ level: "warn", msg: "Set the per-trial follow-up window." });
-      if (!s.multiple || !s.multiple.trim()) checks.push({ level: "warn", msg: "Patients can enter multiple trials — say so, and say how the re-use is handled. If it is ignored, precision is over-stated: the analysis behaves as though there were as many people as there are patient-trial records." });
-      if (!s.eligibility || !s.eligibility.trim()) checks.push({ level: "warn", msg: "State the eligibility rule applied at each origin, including whether a patient already enrolled as an index initiator can re-enter a later trial. Without it, the same person can be counted as a new initiator more than once." });
+      if (!s.multiple || !s.multiple.trim()) checks.push({ level: "warn", msg: "Say how many trials one patient can enter, and how the re-use is handled. It follows from the control-arm definition above. If a patient does enter several trials and that is ignored, precision is over-stated: the analysis behaves as though there were as many people as there are patient-trial records." });
+      if (!s.eligibility || !s.eligibility.trim()) checks.push({ level: "error", msg: "State the eligibility rule applied at each origin, and in particular say what the CONTROL ARM is. Two versions of this design exist: if the control arm is those not yet treated, a patient enters a trial at every origin until they initiate, and the same person appears in several trials; if both arms initiate at the origin (an active comparator), each patient sits in one trial. They are different studies, and the choice decides whether section 10's bootstrap over patients and the refusal to meta-analyse the per-trial estimates apply at all. This page cannot infer it, so the protocol names both and asks." });
       if (!s.assignment || !s.assignment.trim()) checks.push({ level: "warn", msg: "State how arms are assigned at each origin. Assignment must use only information available at the origin — a rule that peeks after it (e.g. “initiated within the next 90 days”) puts immortal time straight back in." });
       if (!s.confounding || !s.confounding.trim()) checks.push({ level: "warn", msg: "Specify how confounding is controlled within each trial (e.g. PS weighting or matching). Covariates must be re-measured at each origin, so a patient in several trials has a different propensity score in each." });
       if (!s.population || !s.population.trim()) checks.push({ level: "info", msg: "Specify the population." });
@@ -629,8 +679,8 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (!s.outcome || !s.outcome.trim()) checks.push({ level: "info", msg: "Specify the outcome." });
       const est = s.estimand;
       if (est === "ITT" || est === "both") checks.push({ level: "info", msg: "ITT (assignment at each origin): the strategy is fixed at the origin — later switching or add-on is ignored (no deviation censoring). Switching attenuates this estimate toward the null by an amount the ITT estimate itself cannot tell you, so report how much switching occurred." });
-      if (est === "PP" || est === "both") checks.push({ level: "info", msg: "Per-protocol: within each trial, censor at deviation and apply IPCW (a clone-censor-weight step) — fit the weights separately per arm, and list the predictors of deviation. Without the weights, censoring at deviation is itself a source of selection bias." });
-      if (usesRMST(s.effect) && blank(s.futrial)) checks.push({ level: "error", msg: "RMST is selected but no per-trial maximum follow-up is set. Restricted mean survival time is the area under the survival curve up to a horizon τ, so it has no value until τ is fixed — and τ must be pre-specified rather than chosen after seeing the curves." });
+      if (est === "PP" || est === "both") checks.push({ level: "info", msg: "Per-protocol: within each trial, censor at deviation and apply IPCW — fit the weights separately per arm, and list the predictors of deviation. Without the weights, censoring at deviation is itself a source of selection bias. Note that the arms here are different people, so the treatment weights and the censoring weights multiply; a cloned design needs only the censoring weights, because its two arms are the same person." });
+      if (usesRMST(s.effect) && !(Number.isFinite(numDays(s.futrial)) && numDays(s.futrial) > 0)) checks.push({ level: "error", msg: "RMST is selected but no per-trial maximum follow-up is set. Restricted mean survival time is the area under the survival curve up to a horizon τ, so it has no value until τ is fixed — and τ must be pre-specified rather than chosen after seeing the curves." });
       // This used to certify proportional hazards ("not violated by
       // construction"), on the ground that the arms of one nested trial are
       // different people. That is the wrong mechanism and the wrong conclusion.
@@ -642,6 +692,17 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // follow-up proceeds, so the hazard ratio drifts toward the null.
       if (s.effect === "HR" || s.effect === "both") checks.push({ level: "warn", msg: "Proportional hazards is not guaranteed here. This design does not fail in the way a cloned design does — there the same clones occupy both arms until the grace period ends. But under an intention-to-treat contrast the arms converge as control patients start treatment, so the hazard ratio drifts toward the null with follow-up time; a weighted marginal hazard ratio need not be proportional even when the conditional one is; and one pooled coefficient across trials with different amounts of remaining follow-up is an average of time-varying hazard ratios whose value moves with the data cut-off. Report an absolute contrast alongside it, and check proportionality rather than assuming it." });
       if (mergeList(s.sensitivityPick, s.sensitivityCustom).some((x) => /I²|I2|heterogen/i.test(x))) checks.push({ level: "warn", msg: "A trial-stratified estimate with I² is planned. Nested trials share patients, so they are not independent studies and I² does not carry its usual meaning here. Report the per-trial estimates as a descriptive check on stability over calendar time rather than as a meta-analysis." });
+      // Competing risks were mentioned nowhere on this page — no "competing",
+      // no "Fine-Gray", no "cause-specific" — while the default follow-up rule
+      // censors at death and the default effect measure is a survival
+      // difference plus an RMST difference. Censoring at a competing death and
+      // fitting a Cox model gives the cause-specific hazard, which is
+      // defensible; one minus Kaplan-Meier is not the cumulative incidence, and
+      // an RMST difference computed that way is defined in a world where the
+      // competing event has been removed. The page's own seeded example is
+      // dementia in adults over 50, where death is the dominant competing event.
+      if (s.effect !== "HR") checks.push({ level: "warn", msg: "An absolute contrast is selected (survival / risk difference, or RMST). If death from a non-outcome cause is treated as ordinary censoring, one minus the Kaplan–Meier curve overstates the cumulative incidence, and a survival or RMST difference built the same way is a quantity defined in a world where that death cannot happen. Say whether the target is the cause-specific quantity or the real-world absolute risk, and if it is the latter, estimate it by a method that keeps the competing event in the denominator." });
+      else checks.push({ level: "info", msg: "Censoring at death from a non-outcome cause and fitting a Cox model estimates the CAUSE-SPECIFIC hazard ratio, which is a defensible primary analysis — but say so, because it is not the effect on the real-world absolute risk, and the accompanying absolute contrast must be computed consistently." });
       checks.push({ level: "info", msg: "Uncertainty: the reference method is a bootstrap resampling patients, re-running trial construction and weighting inside each replicate (Keogh 2023). A robust variance clustered on patient is the cheaper alternative and was described by Danaei et al. (2013) as conservative. Model-based standard errors are wrong in either case." });
       return checks;
     };
@@ -793,7 +854,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       const s = readForm();
       const E = or(s.exposure, "(treatment)"), C = or(s.comparator, "(comparator)");
       const origins = or(s.interval, "monthly") + " (" + or(s.first, "start") + "–" + or(s.last, "end") + ")";
-      const estPlain = { ITT: "the intention-to-treat effect (assignment at each origin, ignoring later switching)", PP: "the per-protocol effect (deviation censoring + IPCW within each trial)", both: "both the intention-to-treat and per-protocol effects" }[s.estimand] || "the treatment effect";
+      const estPlain = estimandPlain(s.estimand);
       const subg = mergeList(s.subgroupsPick, s.subgroupsCustom).join("; ") || "none pre-specified";
       const sens = mergeList(s.sensitivityPick, s.sensitivityCustom).join("; ") || "(see protocol)";
       // A value this page had to substitute for one the saved draft named must
@@ -804,16 +865,16 @@ ${REFS.map((r) => "- " + r).join("\n")}
       const item7 = [
         ["a. Eligibility criteria",
           "At each origin, patients meeting the population definition, outcome-free, and not previously enrolled as an index initiator.",
-          or(s.eligibility, "Meets the population definition, outcome-free, not already enrolled as an index-treatment initiator in an earlier trial.") + "\nRe-assessed at every origin, which is that trial's time zero: new-user washout " + daysTxt(s.washout) + " and covariate / eligibility look-back " + covLbText(s) + ", both measured before the origin (the same scheme as an active-comparator new-user design applied at every origin). Only information available at or before the origin may enter the rule."],
+          or(s.eligibility, DEF.eligibility) + "\nRe-assessed at every origin, which is that trial's time zero: new-user washout " + daysTxt(s.washout) + " and covariate / eligibility look-back " + covLbText(s) + ", both measured before the origin (the same window scheme as a new-user design, applied at every origin). Only information available at or before the origin may enter the rule."],
         ["b. Treatment strategies",
           "Initiate " + E + " vs " + C + ", assigned at each trial's origin.",
-          E + " vs " + C + ".\n" + or(s.assignment, "Within each trial, patients initiating the index treatment in that interval form the treated arm; eligible comparator initiators form the control arm.")],
+          E + " vs " + C + ".\n" + or(s.assignment, DEF.assignment)],
         ["c. Assignment procedures",
           "Random assignment at each origin.",
           "One nested trial is emulated at each origin (" + origins + "). Baseline confounding within each trial is addressed by " + or(s.confounding, "a propensity score estimated at that origin, with weighting or matching") + "." + staleFor("interval")],
         ["d. Follow-up",
           "Follow-up begins at assignment (each trial's origin) and ends at outcome, death, or end of study.",
-          "Time zero = each trial's origin.\n" + or(s.followup, "Within each trial, follow-up runs from the origin to outcome, death, disenrolment, or the maximum follow-up.") + "\nMaximum follow-up per trial: " + daysTxt(s.futrial) + ".\n" + or(s.multiple, "A patient may enrol in several consecutive trials until treated or the outcome occurs.") + "\nTrials with later origins have less calendar time before the data end, so long-term contrasts rest mainly on the earliest trials."],
+          "Time zero = each trial's origin.\n" + or(s.followup, DEF.followup) + "\nMaximum follow-up per trial: " + daysTxt(s.futrial) + ".\n" + or(s.multiple, DEF.multiple) + "\nTrials with later origins have less calendar time before the data end, so long-term contrasts rest mainly on the earliest trials."],
         ["e. Outcomes",
           "Primary outcome: " + or(s.outcome, "(specify)") + ".",
           "Outcome: " + or(s.outcome, "(specify)") + "."],
@@ -853,7 +914,11 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // checkboxes ticked. Walk every control and zero it out.
       form.querySelectorAll("input, textarea, select").forEach((el) => {
         if (el.type === "checkbox" || el.type === "radio") el.checked = false;
-        else if (el.tagName === "SELECT") el.selectedIndex = 0;
+        // selectedIndex = 0 is the authored default only while no option carries
+        // a `selected` attribute. The brief records this exact line moving a
+        // maximum follow-up from five years to one in another builder the day
+        // someone added one. SELECTS already knows each authored default.
+        else if (el.tagName === "SELECT") { const d = SELECTS.find((x) => x.name === el.name); el.value = d ? d.fallback : (el.options[0] || {}).value || ""; }
         else el.value = "";
       });
       render();
@@ -882,7 +947,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       });
 
       const E = or(s.exposure, "(treatment)"), C = or(s.comparator, "(comparator)");
-      const estPlain = ({ ITT: "the intention-to-treat effect (assignment at each origin)", PP: "the per-protocol effect (deviation censoring + IPCW within each trial)", both: "both the intention-to-treat and per-protocol effects" })[s.estimand] || "the treatment effect";
+      const estPlain = estimandPlain(s.estimand);
       const subg = mergeList(s.subgroupsPick, s.subgroupsCustom);
       const sens = mergeList(s.sensitivityPick, s.sensitivityCustom);
 
@@ -964,29 +1029,31 @@ ${REFS.map((r) => "- " + r).join("\n")}
       }
 
       children.push(h1("4. Eligibility (re-assessed at each origin)"));
-      children.push(para(or(s.eligibility, "At each origin: meets the population definition, is outcome-free, and has not already enrolled as an index-treatment initiator in an earlier trial.")));
+      children.push(para(or(s.eligibility, DEF.eligibility)));
       children.push(para("Every nested trial is itself a new-user trial started at that origin, so the same windows as an active-comparator new-user design are applied at each origin, all measured before that origin: a new-user washout of " + daysTxt(s.washout) + " with no prior exposure or comparator, and a covariate / eligibility look-back of " + covLbText(s) + ". Because these windows move with the origin, eligibility, treatment assignment and the start of follow-up remain aligned at every trial's time zero — which is what prevents immortal-time bias. A patient who is ineligible at one origin may become eligible at a later one."));
 
       children.push(h1("5. Time zero and treatment assignment"));
-      children.push(para("For each trial, time zero is that trial's origin, and each trial has a maximum follow-up of " + daysTxt(s.futrial) + ". " + stop(or(s.assignment, "Within each trial, patients initiating the index treatment in that interval form the treated arm; eligible comparator initiators form the control arm."))));
+      children.push(para("For each trial, time zero is that trial's origin, and each trial has a maximum follow-up of " + daysTxt(s.futrial) + ". " + stop(or(s.assignment, DEF.assignment))));
       children.push(para("Assignment is determined by what happens at the origin. Nothing after the origin may enter the eligibility or assignment rule — a rule that looks forward (for example, “initiated within the next 90 days”) reintroduces immortal time, because it can only be evaluated in patients who survived long enough for it to be evaluated."));
 
       children.push(h1("6. Enrolment across trials"));
-      children.push(para(or(s.multiple, "A patient may enrol in several consecutive trials until treated or the outcome occurs. The same patient therefore appears in multiple trials, often with overlapping follow-up.")));
-      children.push(para("The nested trials are NOT independent samples. Standard errors computed as if each patient-trial record were a separate person are too small, and per-trial estimates cannot be pooled as if they came from separate studies. How this is handled is set out in Section 10."));
+      children.push(para(or(s.multiple, DEF.multiple)));
+      children.push(para(REUSE));
 
       children.push(h1("7. Confounding adjustment"));
-      children.push(para(or(s.confounding, "The propensity score is estimated within each trial (or pooled with a trial indicator); arms are balanced by inverse-probability-of-treatment weighting or matching within trial.")));
+      children.push(para(or(s.confounding, DEF.confounding)));
       children.push(para("Covariates are re-measured at each origin, over the look-back windows above. A patient who enters several trials therefore carries a different covariate vector — and a different propensity score — in each. Balance (standardised mean differences) is assessed within trial, not only in the pooled dataset, because a pooled table can appear balanced while individual trials are not."));
 
       children.push(h1("8. Follow-up and outcome"));
-      children.push(para(stop(or(s.followup, "Within each trial, from the origin to outcome, death, disenrolment, or the maximum follow-up.")) + " Maximum follow-up per trial: " + daysTxt(s.futrial) + ". Outcome: " + or(s.outcome, "(outcome)") + "."));
+      children.push(para(stop(or(s.followup, DEF.followup)) + " Maximum follow-up per trial: " + daysTxt(s.futrial) + ". Outcome: " + or(s.outcome, "(outcome)") + "."));
       children.push(para("Trials with later origins have less calendar time remaining before the data end, so they are administratively censored earlier. Long-term contrasts are therefore informed mainly by the earliest trials; we report how many trials are still contributing at each follow-up time."));
+      children.push(para("Competing risks. The follow-up rule above censors at death from any cause, and the outputs below include cumulative-incidence or survival curves. Censoring at a competing death and fitting a Cox model estimates the cause-specific hazard, which is a defensible primary analysis; but one minus the Kaplan-Meier curve is NOT the cumulative incidence in that setting — it overstates it — and a survival difference or an RMST difference computed the same way is a quantity defined in a world where the competing event has been eliminated. State which of the two you intend, and if absolute risk is the target, estimate it with a method that keeps the competing event in the denominator."));
 
       children.push(h1("9. Estimand and effect measure"));
       children.push(para("The target estimand is " + estPlain + ". We report " + effectText(s) + "."));
-      if (s.estimand === "ITT" || s.estimand === "both") children.push(para("The intention-to-treat contrast here is a contrast of initiation strategies. If control-arm patients later start the index treatment, or treated patients stop, the ITT effect is attenuated toward the null by an amount the ITT estimate alone cannot reveal. We therefore report the observed switching and discontinuation over follow-up alongside it."));
-      if (s.estimand === "PP" || s.estimand === "both") children.push(para("The per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. This is the same machinery as a clone-censor-weight analysis, applied inside each trial."));
+      children.push(para("The pooled estimate is not the effect in one population: with a single treatment coefficient across all trials it is an average of the origin-specific effects, weighted by how much information each trial contributes — and those weights are data-dependent, because later trials carry less remaining follow-up (Section 8). We report the per-trial estimates and their sizes so the average can be read for what it is."));
+      if (s.estimand === "ITT" || s.estimand === "both") children.push(para("The intention-to-treat contrast here is a contrast of initiation strategies. If control-arm patients later start the index treatment, or treated patients stop, the ITT effect is attenuated toward the null by an amount the ITT estimate alone cannot reveal. We therefore report the observed switching and discontinuation over follow-up alongside it. Where the control arm is those not yet treated, a control who later initiates stays in the control arm of the trials they had already entered, for the whole of their follow-up — that is precisely what produces the attenuation. Their records are not censored at the moment they initiate; censoring them is the per-protocol analysis, not this one."));
+      if (s.estimand === "PP" || s.estimand === "both") children.push(para("The per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. The censoring weights are the same machinery a clone-censor-weight analysis uses, but the cloning step is not: assignment here is determined at the origin, so the arms are different people, and the per-protocol estimator therefore needs the treatment weights AND the censoring weights together, where a cloned design needs only the latter. Note what this means for a control who later initiates: under this contrast their earlier control-arm records ARE censored at the moment they initiate, which is exactly the step the intention-to-treat contrast does not take."));
 
       children.push(h1("10. Statistical analysis"));
       ["Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset (one record per patient per trial they enter).", "Within each trial, estimate the propensity score from covariates measured at that origin and apply weighting (or matching); check balance within trial.", "Fit a pooled logistic (or weighted Cox) model across all trials with terms for the assigned treatment, follow-up time, and trial; " + censorClause(s), "Derive the effect measure from the fitted model: " + effectText(s) + (usesRMST(s.effect) ? ", taking the RMST in each arm as the area under its weighted survival curve from the origin to the horizon" : "") + ".", "Uncertainty: because patients enter several trials, the reference method is a non-parametric bootstrap resampling PATIENTS (not patient-trial records), repeating trial construction, propensity-score and censoring-weight estimation, and the outcome model inside every replicate (Keogh 2023). A robust (sandwich) variance clustered on the patient is the cheaper alternative; Danaei et al. (2013) used it in this design and described the resulting intervals as conservative. State which was used; model-based standard errors are not appropriate under either choice.", "Report the pooled effect as the primary result. Per-trial estimates are a descriptive check on stability across calendar time, not independent studies: because the trials share patients, I-squared and Cochran's Q do not carry their usual meaning."].forEach((l) => children.push(numItem(l)));
