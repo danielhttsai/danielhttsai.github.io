@@ -1040,7 +1040,20 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         // incidence for a cohort hazard ratio has misread the design, and this
         // is the sentence that is supposed to stop them.
         limitations: "The estimate is an incidence rate ratio: a within-person relative incidence, estimated from cases only. It is not an absolute risk, no risk difference is estimable from it without an external denominator, and it is not interchangeable with a hazard ratio from a cohort design. SCCS removes time-invariant between-person confounding but assumes events do not affect subsequent exposure and do not censor observation; time-varying confounders (age, season) must be modelled.",
-        plannedOutputs: ["Case-selection flow diagram.", "Distribution of exposed vs unexposed person-time and events.", "Incidence-rate ratio by risk window, with a forest plot across sites."],
+        // The shared flow bullet reads "Participant-flow diagram (source
+        // population → analytic cohort, with exclusions and counts)", printed
+        // directly above the case-selection diagram below. Two bullets, one
+        // artefact — and the shared wording asserts a cohort this design does
+        // not assemble: nobody is followed, cases are ascertained, and a person
+        // who never has the outcome contributes nothing to the likelihood (the
+        // studySize paragraph above says so at length). The shared bullet
+        // carried "(with exclusions and counts)", which the terse one below did
+        // not, so that content moves here rather than being lost in the trade.
+        // Table 1 and the results table are NOT dropped: nothing here
+        // duplicates them, and describing who the cases were is what carries
+        // the generalisability of an IRR across sites.
+        skipOutputs: ["flow"],
+        plannedOutputs: ["Case-selection flow diagram (source population → ascertained cases → cases contributing to the likelihood, with exclusions and counts at each step).", "Distribution of exposed vs unexposed person-time and events.", "Incidence-rate ratio by risk window, with a forest plot across sites."],
       });
       const sitesLine = (ids, otherText) => {
         const parts = (ids || []).map((c) => "- " + formatSiteFull(c));

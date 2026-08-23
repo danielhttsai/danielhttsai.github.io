@@ -1715,8 +1715,25 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
         groupBy: "treatment group",
         skip: ["studySize", "ethics"],
         limitations: "The active comparator must share the indication and have no a-priori association with the outcome; residual confounding by unmeasured indication severity and informative censoring — where follow-up is censored at treatment deviation — remain possible.",
-        plannedOutputs: ["Cohort-attrition / participant-flow diagram.", NO_PS_METHODS.indexOf(s.psMethod) !== -1
+        // One boolean, read twice. The bullet this list prints and the shared
+        // bullet it displaces have to be decided by the SAME test: written as
+        // two copies of `NO_PS_METHODS.indexOf(...)` they can drift, and the
+        // protocol then commissions either two Table 1s or none.
+        //
+        // The flow diagram used to be here as a bare "Cohort-attrition /
+        // participant-flow diagram.", directly under the shared bullet that
+        // says the same thing and says more ("source population → analytic
+        // cohort, with exclusions and counts"). Two bullets, one artefact; the
+        // shared one is the better text, so this is the copy that goes.
+        skipOutputs: NO_PS_METHODS.indexOf(s.psMethod) !== -1 ? [] : ["table1"],
+        plannedOutputs: [NO_PS_METHODS.indexOf(s.psMethod) !== -1
+            // Not a Table 1: a balance table with one column set. The shared
+            // "Table 1 — baseline characteristics by treatment group" is kept
+            // on this branch, because a reader still has to be told who these
+            // patients are, and nothing else here does.
             ? "Covariate-balance table — standardised mean differences between treatment groups; this method applies no propensity-score adjustment, so there is no after-adjustment column."
+            // This one IS the Table 1, with more in it than the shared bullet,
+            // so the shared bullet is dropped above rather than printed beside it.
             : "Table 1 with standardised mean differences before/after PS adjustment (Love plot).", "Kaplan–Meier / cumulative-incidence curves and a forest plot of site-specific and pooled effects."],
       });
       const sitesLine = (ids, otherText) => {

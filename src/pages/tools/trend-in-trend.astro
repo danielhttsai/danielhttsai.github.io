@@ -381,7 +381,18 @@ const SENSITIVITY = [
       // builder can supply its own; this is that.
       studySize: "Power for a trend-in-trend analysis is not a function of exposure and outcome frequency alone: it is driven chiefly by the STRENGTH of the exposure-prevalence trend over calendar time and by how much that trend differs across CPE strata. Ertefaie et al (Epidemiology 2018;29(3):e21-e23) report that where the exposure-prevalence trend is strong, the design retains reasonable power across a range of outcome rates, stage-1 c-statistics and numbers of strata — so the prevalence trend, not the event count, is the quantity to establish first. Power is therefore assessed by Monte-Carlo simulation rather than a closed-form formula, using the ttpower() and ttdetect() routines of the TrendInTrend R package, parameterised by the source population size, the number of calendar periods " + inParens(perText(s)) + ", the number of CPE strata " + inParens(strText(s)) + ", the c-statistic of the stage-1 exposure model, the assumed exposure-prevalence trend, the baseline outcome rate, and the hypothesised odds ratio. The assumed values and the resulting detectable odds ratio are stated before the analysis is executed, and the observed exposure-prevalence trend is confirmed against the assumed one in a pilot extraction. Feasibility is confirmed as the per-stratum-per-period cell counts that enter the likelihood, not as person-time.",
       limitations: "Trend-in-trend requires a strong time trend in exposure, and is unbiased only if no unmeasured factor affecting the outcome has a prevalence trend over calendar time that is correlated with the exposure trend across CPE strata — so a time-stable confounder cannot bias it, but a co-intervention or secular change arriving alongside uptake can. Stage-1 covariates are treated as time-invariant, so each person keeps one CPE stratum throughout.",
-      plannedOutputs: ["Exposure-prevalence trend by calendar period, and by CPE stratum (evidence that the strata really do differ in exposure trend).", "Outcome trend by CPE stratum (the trend-in-trend figure).", "The stratum × period 2 × 2 tables that enter the likelihood.", "Effect estimate with 95% CI."],
+      plannedOutputs: ["Exposure-prevalence trend by calendar period, and by CPE stratum (evidence that the strata really do differ in exposure trend).", "Outcome trend by CPE stratum (the trend-in-trend figure).", "The stratum × period 2 × 2 tables that enter the likelihood."],
+      // No skipOutputs here, deliberately. This design IS person-level at
+      // stage 1 — each person is scored by the exposure model and sits in one
+      // CPE stratum for the whole study — so the shared flow diagram is
+      // drawable and is the only place the people the stage-1 model could not
+      // score would ever be counted, and a Table 1 by CPE stratum is the
+      // evidence that the strata differ in the way the design needs. What was
+      // duplicated was the fourth bullet this list used to end on, a bare
+      // "Effect estimate with 95% CI." sitting under the shared
+      // "Primary-results table — the effect estimate with its 95% confidence
+      // interval." Of the two, the shared one is the better text, because it
+      // commissions a table rather than a number.
     });
 
     // What is still blank. A protocol that reads as finished while its defining

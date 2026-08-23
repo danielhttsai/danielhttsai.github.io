@@ -571,7 +571,24 @@ const SENSITIVITY = [
         + (s.estimand === "both" ? " Two figures are needed, not one: the intention-to-treat and per-protocol analyses do not have the same precision, because deviation censoring and its weights remove information the ITT analysis keeps." : "")
         + " Precision is therefore established by simulation, or by applying to a pilot extraction the same patient-level bootstrap that Section 10 specifies for the confidence intervals — never from a formula applied to patient-trial records. Feasibility is confirmed before the analysis is executed as the number of distinct eligible patients and the number of initiators at each origin.",
       limitations: "Where the control arm is those not yet treated, the same patient contributes to several trials, often with overlapping follow-up, so the nested trials are not independent: standard errors that ignore this are too small, and per-trial estimates cannot be treated as separate studies. Where both arms initiate at the origin, each patient sits in one trial and that does not arise. Residual and unmeasured confounding within each trial cannot be excluded, and confounders are measured only up to each origin.",
-      plannedOutputs: ["Number of trials, and the number of patients and of patient-trial records enrolled in each — with the distribution of how many trials each patient enters.", "Per-trial and pooled effect estimates, the per-trial estimates read as a descriptive check rather than as independent studies.", "Within-trial covariate-balance (SMD) diagnostics, before and after weighting or matching.", "Within-trial positivity diagnostics: the number assigned to each arm at every origin, the propensity-score overlap, and the number and size of extreme weights, with any truncation rule stated in advance.", "Cumulative-incidence or survival curves by arm, stated as cause-specific or as accounting for competing risks."],
+      // The shared "Table 1 — baseline characteristics by treatment arm" is a
+      // pooled table across every trial, and section 3 of this page says why
+      // that is not a table of any population: where the control arm is those
+      // not yet treated, a patient enters a trial at every origin until they
+      // initiate or have the outcome. So the same person is counted once per
+      // trial entered — a multiplicity that varies by person and is heaviest
+      // for those who stayed untreated longest — and the two columns are not
+      // disjoint sets of people, because that patient sits in the control
+      // column of every trial before initiating and in the treated column of
+      // the trial at which they do. An SMD computed on it belongs to no trial
+      // that was ever emulated. The within-trial version below is the one that
+      // diagnoses the confounding control this design actually applies.
+      //
+      // The flow diagram and the results table are NOT dropped. The enrolment
+      // bullet below is a tally, not an attrition diagram, and nothing else
+      // says how the source population became the eligible one.
+      skipOutputs: ["table1"],
+      plannedOutputs: ["Baseline characteristics by arm WITHIN trial, for each of a pre-specified set of origins — not pooled across trials, where a patient may enter many and may appear in both columns.", "Number of trials, and the number of patients and of patient-trial records enrolled in each — with the distribution of how many trials each patient enters.", "Per-trial and pooled effect estimates, the per-trial estimates read as a descriptive check rather than as independent studies.", "Within-trial covariate-balance (SMD) diagnostics, before and after weighting or matching.", "Within-trial positivity diagnostics: the number assigned to each arm at every origin, the propensity-score overlap, and the number and size of extreme weights, with any truncation rule stated in advance.", "Cumulative-incidence or survival curves by arm, stated as cause-specific or as accounting for competing risks."],
     });
 
     // One list, shared by the Markdown and Word exports so they cannot drift.

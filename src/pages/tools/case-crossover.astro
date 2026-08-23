@@ -1017,7 +1017,17 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         amendments: s.amendments,
         version: s.version,
         limitations: "The case-crossover design assumes a transient exposure and an abrupt-onset outcome with no time trend in exposure prevalence; an exposure-time trend or carry-over would bias the estimate (mitigated by a time-stratified or case-time-control variant). " + ESTIMAND_LIMIT,
-        plannedOutputs: ["Case-selection flow diagram.", "Exposure discordance across hazard / control windows.", "Odds ratio with a forest plot across sites."],
+        // Same trade as the SCCS builder. The shared "Participant-flow diagram
+        // (source population → analytic cohort …)" printed directly above the
+        // case-selection diagram below: two bullets for one artefact, and the
+        // shared wording asserts a cohort a case-only design never assembles —
+        // each case is their own referent, and a case whose windows agree drops
+        // out of the conditional likelihood entirely. The "(with exclusions and
+        // counts)" content the shared bullet carried moves here so the trade
+        // loses nothing. Table 1 and the results table stay: neither is
+        // duplicated here, and the forest plot is a figure, not a table shell.
+        skipOutputs: ["flow"],
+        plannedOutputs: ["Case-selection flow diagram (source population → ascertained cases → exposure-discordant cases contributing to the likelihood, with exclusions and counts at each step).", "Exposure discordance across hazard / control windows.", "Odds ratio with a forest plot across sites."],
       });
       const sitesLine = (ids, otherText) => {
         const parts = (ids || []).map((c) => "- " + formatSiteFull(c));
