@@ -348,8 +348,13 @@ const SENSITIVITY = [
     })[s] || "No explicit seasonality adjustment";
     const autocorrText = (a) => ({
       none: "Residual autocorrelation is assessed with ACF/PACF plots and the Durbin–Watson statistic (which is read descriptively rather than as a formal test when the model is a Poisson or negative-binomial fit, where it has no standard null distribution)",
-      newey: "Newey–West heteroskedasticity- and autocorrelation-consistent (HAC) standard errors are used",
-      prais: "A Prais–Winsten (Cochrane–Orcutt) correction for first-order autocorrelation is applied",
+      newey: "Newey–West heteroskedasticity- and autocorrelation-consistent (HAC) standard errors are used, with the lag/bandwidth rule and its maximum lag pre-specified rather than chosen after inspecting the residuals",
+      // Prais–Winsten and Cochrane–Orcutt are not the same estimator: the first
+      // retains the initial observation through the sqrt(1 - rho^2) transform
+      // and the second drops it. On a series this short that is one of the few
+      // pre-intervention points the whole counterfactual rests on, so the
+      // protocol has to say which.
+      prais: "A Prais–Winsten correction for first-order autocorrelation is applied, retaining the first observation through the sqrt(1 - rho-squared) transform; if the Cochrane–Orcutt variant is used instead, which drops that observation, this is stated together with how many pre-intervention points remain",
       arima: "Autocorrelated errors are modelled with an ARIMA structure (order chosen by AIC and residual diagnostics)",
     })[a] || "Residual autocorrelation is assessed with the Durbin–Watson statistic";
     // Reads `controlled`, which it did not. §6 already said the difference in
@@ -628,10 +633,44 @@ ${window.PC.tailMd(pcOf(s))}
       // question the protocol and the diagram were already answering differently.
       if (pp.state === "ok" && pp.n > 0 && pp.n < 8) checks.push({ level: "warn", msg: "Only " + pp.n + " pre-intervention points — segmented regression needs a well-estimated baseline trend; aim for ≥ 8 (ideally ≥ 12) points before the interruption." });
       if (qp.state === "ok" && qp.n > 0 && qp.n < 8) checks.push({ level: "warn", msg: "Only " + qp.n + " post-intervention points — the slope change is hard to detect with few post points; aim for ≥ 8 (ideally ≥ 12)." });
-      if ((s.unit === "monthly" || s.unit === "quarterly" || s.unit === "weekly") && s.seasonality === "none")
-        checks.push({ level: "warn", msg: "No seasonality adjustment with " + s.unit + " data — seasonal outcomes can bias the level/slope estimates. Add harmonic or calendar-period terms, or justify that the outcome is non-seasonal." });
-      if (s.autocorr === "none") checks.push({ level: "warn", msg: "No autocorrelation handling — serial correlation between adjacent time points inflates precision. Check Durbin–Watson / ACF-PACF and use Newey–West, Prais–Winsten, or ARIMA errors if present." });
+      // Written as "which units CAN resolve a within-year cycle", rather than
+      // as a list of three of the five options in the select. The previous
+      // whitelist named monthly, quarterly and weekly, so "every 6 months"
+      // and "yearly" fell through it silently — and while two observations a
+      // year genuinely cannot identify an annual cycle, that should be a stated
+      // decision rather than a gap left by a list nobody re-checked against the
+      // dropdown.
+      const SUBANNUAL = ["weekly", "monthly", "quarterly"];
+      if (SUBANNUAL.indexOf(s.unit) >= 0 && s.seasonality === "none")
+        checks.push({ level: "warn", msg: "No seasonality adjustment with " + s.unit + " data — a seasonal outcome interrupted at a particular point in its cycle has that cycle read as a step or a bend. Add harmonic or calendar-period terms, or state in the protocol why the outcome is not seasonal." });
+      if (SUBANNUAL.indexOf(s.unit) < 0 && s.seasonality === "none")
+        checks.push({ level: "info", msg: "With " + unitPhrase(s.unit) + " periods there are too few observations per year to identify a within-year cycle, so no seasonality term is expected here. If the outcome has a multi-year cycle instead, say so in the protocol — nothing in this design would catch it." });
+      // Calendar-period dummies are month-of-year (or quarter-of-year) terms.
+      // They need more than one observation per year to be identified at all;
+      // with yearly periods every observation falls in the same calendar month.
+      if (s.seasonality === "month" && SUBANNUAL.indexOf(s.unit) < 0)
+        checks.push({ level: "warn", msg: "Calendar-month / quarter dummies with " + unitPhrase(s.unit) + " periods cannot be identified: at this period length every observation falls at the same point of the calendar year, so the dummies are collinear with the intercept or with the interruption itself. Choose a shorter period, or no seasonality adjustment." });
+      // "Fourier terms" on its own pre-specifies nothing: the analyst is free to
+      // choose one pair or six after seeing the data, and the number of pairs
+      // trades directly against the change-in-slope coefficient the study is about.
+      if (s.seasonality === "harmonic")
+        checks.push({ level: "warn", msg: "Harmonic (Fourier) seasonality is specified but its cycle length and its number of sine/cosine pairs are not. Those are choices that trade directly against the change-in-slope coefficient, so name both in the protocol (for example: an annual cycle, two pairs) — “Fourier terms” alone leaves them to be picked after the data are seen." });
+      if (s.autocorr === "none") checks.push({ level: "warn", msg: "No autocorrelation handling — adjacent periods resemble each other, which does not bias the level and slope estimates but makes their standard errors too small. Report the Durbin–Watson statistic and the ACF/PACF, and pre-specify what will be done if they show serial correlation. Note that each of the corrections has its own cost: see the caveat this panel raises once one is chosen." });
       if (!s.controlled) checks.push({ level: "info", msg: "Single-group ITS assumes no co-intervention or secular change coincides with the interruption. A control series (controlled ITS) lets you difference those out and strengthens causal inference." });
+      // The form already collects the two numbers that decide whether the model
+      // can be fitted at all, and nothing compared them with the number of
+      // terms the other dropdowns add. Twelve monthly dummies plus the four
+      // segmented terms is sixteen parameters; the point counts accept 3 and 3.
+      // Counted as a LOWER bound: harmonic seasonality is charged one
+      // sine/cosine pair, which is the fewest anyone would fit.
+      if (pp.state === "ok" && qp.state === "ok" && pp.n > 0 && qp.n > 0) {
+        const seasonP = s.seasonality === "month" ? (s.unit === "quarterly" ? 3 : 11) : (s.seasonality === "harmonic" ? 2 : 0);
+        const params = (s.controlled ? 8 : 4) + seasonP;
+        const nObs = (pp.n + qp.n) * (s.controlled ? 2 : 1);
+        const how = params + " parameter(s) (" + (s.controlled ? "8 segmented terms for two series" : "4 segmented terms") + (seasonP ? " plus at least " + seasonP + " seasonality term(s)" : "") + ") against " + nObs + " observation(s)";
+        if (nObs <= params) checks.push({ level: "error", msg: "This model cannot be fitted: " + how + ". There is no residual degree of freedom, so nothing can be estimated and no standard error exists. Shorten the model or lengthen the series." });
+        else if (nObs - params < 10) checks.push({ level: "warn", msg: "Only " + (nObs - params) + " residual degrees of freedom: " + how + ". Every interval will be very wide and the diagnostics this protocol promises (Durbin–Watson, ACF/PACF) have almost nothing to work with." });
+      }
       if (s.model === "poisson" && !s.denom) checks.push({ level: "warn", msg: "A Poisson model with no denominator / offset models the raw COUNT per period, and so assumes the population at risk is identical in every period. If the population grew or shrank, that change is read as a trend. Specify person-time or the eligible population as a log offset." });
       if (s.controlled && !s.controlSeries) checks.push({ level: "warn", msg: "Controlled ITS is ticked but no control series is named. A control series only helps if it shares the secular environment and is genuinely unaffected by the intervention — say which series that is and why it qualifies." });
       // The mirror case had no check at all, and every surface that prints the
@@ -640,8 +679,30 @@ ${window.PC.tailMd(pcOf(s))}
       // Word design-summary table (which then read "None (uncontrolled)") and
       // from the figure, with nothing anywhere saying it had been discarded.
       if (!s.controlled && s.controlSeries) checks.push({ level: "warn", msg: "A control series is named (“" + s.controlSeries + "”) but “Controlled ITS” is not ticked, so this protocol describes a single-group analysis and that series appears nowhere in it. Tick the box to analyse it as a controlled ITS, or clear the field." });
+      // No check read the model against the inference method, so the panel
+      // endorsed combinations that are not defined. Prais–Winsten is a GLS
+      // quasi-differencing transform of a LINEAR model with AR(1) errors; it
+      // has no meaning for a log-link count model with an offset, and the panel
+      // called it "a sound choice for this protocol" while §6 of the export
+      // named both in consecutive sentences.
+      if (s.model === "poisson" && s.autocorr === "prais")
+        checks.push({ level: "error", msg: "Prais–Winsten (and Cochrane–Orcutt) is a generalised-least-squares transform of a LINEAR model with AR(1) errors. It is not defined for the Poisson / negative-binomial model selected above, which has a log link and an offset. Either fit the segmented linear model — on the log rate, if a multiplicative effect is what you want — or choose an autocorrelation method defined for a count model." });
+      if (s.model === "poisson" && s.autocorr === "arima")
+        checks.push({ level: "warn", msg: "“ARIMA errors” with a Poisson / negative-binomial model is under-specified: an ARIMA error structure is defined for a Gaussian model, so on counts it means either a count-specific formulation (GLARMA, INGARCH and similar) or an ARIMA model fitted to the log rate, which is a different model from the one §6 names. State which one you mean." });
       if (s.autocorr === "prais" || s.autocorr === "arima")
-        checks.push({ level: "info", msg: (s.autocorr === "prais" ? "Prais–Winsten" : "ARIMA errors") + " is a sound choice for this protocol, but RWE Studio's in-browser ITS does not implement it — it offers Newey–West (HAC) or model-based standard errors only. Plan to run this analysis in R, SAS or Stata, or switch to Newey–West if you want the Studio to execute it." });
+        checks.push({ level: "info", msg: (s.autocorr === "prais" ? "Prais–Winsten" : "ARIMA errors") + " is not implemented by RWE Studio's in-browser ITS, which offers Newey–West (HAC) or model-based standard errors only. Plan to run this analysis in R, SAS or Stata, or switch to Newey–West if you want the Studio to execute it." });
+      // The one place this repo has already paid for the evidence. RWE Studio
+      // fits the same sandwich, and simulating it there put the rejection rate
+      // of a nominal 5% test at roughly 0.38 at 12 periods, 0.21 at 24 and 0.18
+      // at 36 — worse than the model-based standard error at every length below
+      // about 60, including under AR(1) errors. So on this builder's own
+      // default series length, choosing HAC produces the failure the
+      // no-autocorrelation warning says it is fixing, and choosing it used to
+      // silence that warning with nothing said in its place.
+      if (s.autocorr === "newey") {
+        const n = (pp.state === "ok" ? pp.n : 0) + (qp.state === "ok" ? qp.n : 0);
+        if (n > 0 && n < 60) checks.push({ level: "warn", msg: "Newey–West standard errors are asymptotic, and at " + n + " periods they are anti-conservative — the intervals come out too NARROW, which is the direction the correction is meant to fix. Report the model-based interval alongside the HAC one and take the wider of the two, which is what RWE Studio's own ITS now does; pre-specify that rule here rather than choosing after seeing both." });
+      }
       if (s.lag) checks.push({ level: "info", msg: "You have specified a transition / phase-in period. RWE Studio cannot exclude periods around the interruption, so that part of the protocol would have to be done in your own analysis code (or by excluding those rows before upload)." });
       checks.push({ level: "info", msg: "Report BOTH estimates. Level change and slope change answer different questions and can point in opposite directions — a one-off drop that then drifts back up is level down, slope up. Reporting only one describes it wrongly." });
       checks.push({ level: "info", msg: "Two conventions exist for coding time-since-interruption. Under the Wagner (2002) convention it is 0 at the first affected period, so the level-change coefficient IS the immediate step and the slope change accrues from the following period. State which convention you used — the coefficients are not interchangeable." });
