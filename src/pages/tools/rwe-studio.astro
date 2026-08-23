@@ -1601,6 +1601,20 @@ const DESIGNS = [
           r += "nevT<-sum(tr&ev); nevC<-sum(!tr&ev)\n";
           r += "thinI<-thinarm(aI); thinSMR<-thinarm(aSMR); thinOVL<-thinarm(aOVL)\n";
           r += "thinmsg<-function() sprintf('withheld - %d event(s) in the exposure arm and %d in the comparator arm', nevT, nevC)\n";
+          // ── The refusal has to survive the export ──
+          // PSDIAG / PSW / PSBAL are stripped before the R output becomes part of the
+          // report, and the panel that explains a refusal is rendered only in the
+          // browser. So the Word or Markdown file a supervisor receives carried the
+          // whole of it as one table cell reading "withheld - weights unstable": no
+          // effective sample size, no top-1% share, no per-arm figures, no reason, and
+          // not even which weight setting produced the verdict. A RESULT_NOTE is the
+          // one channel that already reaches both exports, so the refusal goes out as
+          // one, with the numbers it was made on.
+          r += "wsetting<-paste0(if(wtmode=='stab') 'stabilised' else 'unstabilised', if(ntrunc>0) paste0(', truncated at the ',trunclab) else '', if(ntrim>0) paste0(', ',trimlab) else '')\n";
+          r += "refnote<-function(lab, why) cat('RESULT_NOTE|',lab,' was not reported. ',why,' Settings for this run: ',wsetting,'. The release rule is read on the untruncated, unstabilised weights and on each arm of them, so neither of the first two settings can change this verdict.\\n',sep='')\n";
+          if (M.indexOf("iptw") >= 0) r += "if(thinI || unstableW) refnote('The IPTW (ATE) estimate', if(thinI) sprintf('The exposure arm holds %d outcome event(s) and the comparator arm %d - effectively %.1f and %.1f once weighted - and it is events that carry a hazard ratio. Below 5 effective events in an arm this tool does not report a weighted estimate; that threshold is its own rule of thumb.', nevT, nevC, aI[3], aI[4]) else sprintf('Effective sample %.0f%% of the cohort, heaviest 1%% holding %.0f%% of the weight; exposure arm %.1f of %d, comparator arm %.1f of %d.', dU[2], dU[4], aI[1], sum(tr), aI[2], sum(!tr))) else if(balfail) refnote('The IPTW (ATE) estimate', sprintf('Untruncated these weights pass the stability rule, but truncation at the %s left the largest standardised difference at %.3f, above the 0.10 bar - the weighting has not removed the imbalance it exists to remove.', trunclab, mxI))\n\n";
+          if (M.indexOf("smrw") >= 0) r += "if(smrbad) refnote('The SMR weighting (ATT) estimate', if(thinSMR) sprintf('The exposure arm holds %d outcome event(s) and the comparator arm %d.', nevT, nevC) else sprintf('These weights are 1 for every exposed patient by construction, so they are judged on the comparator arm: effective sample %.1f of %d (%.0f%%), heaviest 1%% holding %.0f%% of that arm\\'s weight.', zSMR[1], sum(!tr), zSMR[2], zSMR[4]))\n";
+          if (M.indexOf("overlap") >= 0) r += "if(thinOVL) refnote('The overlap weighting (ATO) estimate', sprintf('The exposure arm holds %d outcome event(s) and the comparator arm %d. Overlap weights cannot collapse, so this is the one thing that withholds them: it is missing data, not unstable weights.', nevT, nevC))\n";
           r += "unstable<-unstable || thinI; smrbad<-smrbad || thinSMR\n";
           // Non-overlap has to reach the estimates table too. Someone reading only
           // the hazard ratios must not be able to miss that a large share of the
@@ -1728,7 +1742,17 @@ const DESIGNS = [
           // interval; every row now has to produce three finite numbers or say it could
           // not. ciok is shared with the matching and fine-stratification rows below,
           // which print their own sprintf and had the identical hole.
-          r += "ciok<-function(s) !is.null(s$conf.int) && nrow(s$conf.int)>=1 && all(is.finite(s$conf.int[1,c('exp(coef)','lower .95','upper .95')]))\n";
+          // "three finite numbers" is not the test. A Cox fit that converged on the
+          // boundary ("coefficient may be infinite") returns exp(coef) = 0 with a
+          // (0, 0) interval, all three finite, and the table printed
+          // "0.00 (95% CI 0.00-0.00)" as an estimate. Reproduced with one exposed
+          // patient and no exposed events. A hazard ratio is strictly positive, and a
+          // ratio bracketing six orders of magnitude is not an interval. The values
+          // here came back 8.3e-07 (1.2e-07 to 5.9e-06) — strictly positive, finite,
+          // and printed by this tool's own two-decimal format as "0.00 (95% CI
+          // 0.00-0.00)". So the last test is the display's own: a row whose printed
+          // figures are not the figures is not a row.
+          r += "ciok<-function(s){ if(is.null(s$conf.int) || nrow(s$conf.int)<1) return(FALSE); v<-s$conf.int[1,c('exp(coef)','lower .95','upper .95')]; if(!all(is.finite(v)) || any(v<=0)) return(FALSE); if(any(round(v,2)<=0)) return(FALSE); v[3]/v[2] <= 1e6 }\n";
           r += "fitw<-function(t,e,w,idx,label,quiet=FALSE){ dd<-data.frame(t=t[idx],e=e[idx],TREAT=d$TREAT[idx],w=w[idx]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd,weights=w,robust=TRUE),error=function(x)NULL); if(is.null(fit)){ if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label)); return(NA_real_)}; s<-summary(fit); if(!ciok(s)){ if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label)); return(NA_real_)}; if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', label, s$conf.int[1,'exp(coef)'], s$conf.int[1,'lower .95'], s$conf.int[1,'upper .95'])); invisible(as.numeric(s$conf.int[1,'exp(coef)'])) }\n";
           // Say WHY nothing is estimable, once, rather than leaving six identical
           // refusals to be interpreted.
@@ -1747,7 +1771,7 @@ const DESIGNS = [
             // it" named the estimate the tool refuses to print as a row, which it then
             // printed inline to three decimals. Report the movement, and say which of
             // the two the tool is prepared to stand behind.
-            "    if(ntrunc>0){ hr0<-fitw(t,e,w0,all,'',TRUE); if(is.finite(hr0) && is.finite(hrT)) cat(sprintf('RESULT_NOTE|Truncation moved the %s IPTW hazard ratio from %.3f (untruncated) to %.3f, a %.1f%% change, by capping %d weight(s) at the %s. %s\\n', est, hr0, hrT, 100*abs(hrT-hr0)/hr0, ntrunc, trunclab, if(unstable0) 'The untruncated weights failed the stability rule, so the untruncated figure is not one to report alongside this one - it is the estimate this tool would have refused. What truncation bought was arithmetic; the balance figure below is what says whether it cost anything.' else 'Truncation trades a little bias for precision - the capped patients are no longer counted at their full weight. The untruncated weights passed the stability rule here, so both figures are reportable and the pair is worth showing.')) } }\n";
+            "    if(ntrunc>0){ hr0<-fitw(t,e,w0,all,'',TRUE); if(is.finite(hr0) && is.finite(hrT)) cat(sprintf('RESULT_NOTE|Truncation moved the %s IPTW hazard ratio from %.3f (untruncated) to %.3f, a %.1f%% change, by capping %d weight(s) at the %s. %s\\n', est, hr0, hrT, 100*abs(hrT-hr0)/hr0, ntrunc, trunclab, if((hr0-1)*(hrT-1) < 0) 'The two estimates fall on OPPOSITE sides of the null, so they disagree about the direction of the effect. Neither is reportable without an argument for which weights are right, and this tool has none to offer: report the untruncated figure, or say why the capped patients should count for less than the model says they do.' else if(max(hrT,hr0)/min(hrT,hr0) > 2) 'That is more than a doubling, which is not the small bias-for-precision trade truncation is usually described as making. Show both figures, and treat the gap as the uncertainty it is.' else 'Truncation trades a little bias for precision - the capped patients are no longer counted at their full weight - and on this run it has taken little. Both figures are reportable and the pair is worth showing.')) } }\n";
           // SMR weights are 1 for the treated and the treatment odds for everyone
           // else: unbounded above, and just as capable of collapsing onto a handful
           // of comparators as the IPTW weights. Same rule, same refusal.
@@ -3434,7 +3458,7 @@ const DESIGNS = [
             esc(s.label) + " weights · estimate withheld</td></tr>");
           rows.push(row(null, "Effective sample size", (isFinite(ess) ? ess.toFixed(0) : "—") + " of " + (nT + nC) + " (" + essPct.toFixed(0) + "%)",
             "<strong>This is what truncation guarantees, not what the data supports.</strong> Capping the weights raises the effective sample size on any data at all. " + preTrunc));
-          rows.push(row(null, "Weight concentration", "top 1% of patients hold " + top1.toFixed(1) + "% of the weight",
+          rows.push(row(null, "Weight concentration", (Math.max(1, Math.ceil(0.01 * (s.den || (nT + nC)))) === 1 ? "the heaviest patient holds " : "the heaviest 1% hold ") + top1.toFixed(1) + "% of the weight",
             "Also a property of the cap rather than of the cohort — no weight can exceed the percentile it was capped at, so no small group can hold a large share of them."));
           rows.push(row(null, "Largest single weight", maxw.toFixed(1) + "×",
             "This is the cap itself. Untruncated, the largest weight was " + (isFinite(d0[2]) ? d0[2].toFixed(1) + "×" : "larger") + "."));
@@ -3457,8 +3481,12 @@ const DESIGNS = [
             : essPct >= 10 ? "A substantial loss — the confidence interval is wider than the row count suggests."
             : soft ? "Overlap weights are bounded, so this is not weight collapse: it means <strong>few patients sit in the region where both treatments are genuinely plausible</strong>. The estimate is valid, but it is about that small group — say so when you report it."
             : "<strong>The weighted analysis is worth a small fraction of the cohort.</strong>")));
+        // k = max(1, ceil(0.01 * n)), so on a cohort under 100 this is the single
+        // heaviest patient and "top 1%" overstates how many people it describes.
+        const kTop = Math.max(1, Math.ceil(0.01 * (s.den || (nT + nC))));
+        const topLab = kTop === 1 ? "the heaviest patient holds " : "the heaviest " + kTop + " patients (top 1%) hold ";
         rows.push(row(top1 <= 10 ? true : (top1 <= 25 ? null : (soft ? null : false)),
-          "Weight concentration", "top 1% of patients hold " + top1.toFixed(1) + "% of the weight",
+          "Weight concentration", topLab + top1.toFixed(1) + "% of the weight",
           "If a few patients hold most of the weight, the estimate is about them rather than about the cohort. " +
           (top1 > 25 && !soft ? "<strong>This is the failure mode that produces a confident hazard ratio from almost no data.</strong>" : "")));
         // Pooled Kish cannot see an arm that has collapsed, and stabilising the
