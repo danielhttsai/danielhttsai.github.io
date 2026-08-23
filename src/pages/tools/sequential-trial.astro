@@ -146,7 +146,7 @@ const SENSITIVITY = [
               <option value="HR">Hazard ratio from the pooled model</option>
               <option value="both">Both absolute (RD/RR) and relative (HR)</option>
             </select>
-            <span class="mt-1 block text-[11px] text-slate-500">A hazard ratio is the conventional report in this design and is available above. Note that it is pooled over trials with different amounts of remaining follow-up, and it cannot be read as a risk — so state an absolute contrast alongside it. Unlike the cloned design, the arms within one nested trial are different people, so proportional hazards is not violated by construction here; the reason to prefer an absolute measure is interpretability, not a broken assumption.</span></label>
+            <span class="mt-1 block text-[11px] text-slate-500">A hazard ratio is the conventional report in this design and is available above. It cannot be read as a risk, so state an absolute contrast alongside it. It does <strong>not</strong> fail in the specific way a cloned design's does — there the same clones sit in both arms for the whole grace period, which forces the two hazards equal until the grace period ends. But it is not guaranteed to be proportional here either: under an intention-to-treat contrast the arms converge as control patients start treatment, a weighted marginal hazard ratio need not be proportional even when the conditional one is, and one pooled coefficient over trials with different amounts of remaining follow-up is an average of time-varying hazard ratios whose value moves with the data cut-off.</span></label>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Follow-up window (per trial)</span>
             <input name="followup" placeholder="e.g. From each origin to outcome, death, disenrolment, or 8 years" class="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
           <div class="grid grid-cols-3 gap-3">
@@ -280,15 +280,86 @@ const SENSITIVITY = [
     // protocol, so a half-finished form (or "Clear all", which blanks every box)
     // produced a document asserting windows nobody chose. Blank now travels as ""
     // and is printed as "(not specified)" and flagged in the checks panel.
+
+    // ── A saved draft or a ?seed= link carrying a value a <select> no longer
+    // offers. Assigning it leaves selectedIndex = -1, and a select with no
+    // selection contributes nothing to the form — so the value read back is "",
+    // and every consumer falls through to its default. Executed here, on this
+    // page: a draft with interval "fortnightly", estimand "ITT-with-grace" and
+    // effect "SDIFF" produced a protocol whose section 3 asserted **monthly**
+    // origins, whose section 9 read "The target estimand is the treatment
+    // effect", and whose section 10 step 3 said "run ITT and per-protocol
+    // variants" — two different answers to one blanked field, neither of them
+    // the draft's, and the checks panel said nothing at all.
+    //
+    // Three things this needs, each learnt the hard way elsewhere in this repo:
+    // the substituted value must be recorded BEFORE the first render saves the
+    // form back over the draft; the record must live in the saved draft itself,
+    // or the warning survives exactly one page load; and it must be dismissible,
+    // because re-picking the option a select is already showing fires no
+    // `change` event, so a user who wants what it was left at has no action.
+    const STALE_KEY = "__staleSelects";
+    const SELECTS = [...form.querySelectorAll("select")].map((el) => ({
+      name: el.name,
+      label: (el.closest("label") ? (el.closest("label").querySelector("span") || {}).textContent : "") || el.name,
+      options: [...el.options].map((o) => o.value),
+      fallback: (([...el.options].find((o) => o.defaultSelected) || el.options[0] || {}).value) || "",
+    }));
+    let staleSelects = [];
+    const noteStale = (obj) => {
+      if (!obj || typeof obj !== "object") return;
+      SELECTS.forEach((sel) => {
+        const v = obj[sel.name];
+        if (v == null || v === "") return;
+        if (sel.options.indexOf(String(v)) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
+          staleSelects.push({ name: sel.name, label: String(sel.label).trim(), saved: String(v), used: sel.fallback });
+        }
+      });
+    };
+    const staleMsgs = () => staleSelects.map((x) =>
+      "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + x.used + "” and this protocol describes THAT — a different specification from the one your draft named. Pick the option you want, or press “Keep “" + x.used + "”” to confirm it.");
     // Free text the user typed is followed by more of our prose. Without this the
     // exported Word ran the two together ("…or 5 years Maximum follow-up per trial…");
     // with a naive "." appended it double-punctuated anyone who typed one.
     const stop = (t) => { const s = String(t == null ? "" : t).trim(); return s && !/[.!?:;)]$/.test(s) ? s + "." : s; };
 
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const p = l.split("|"); return { name: (p[0] || "").trim(), days: dayInt(p[1]) }; }).filter((r) => r.name);
-    const rowsJoin = (rows) => rows.map((r) => r.name + " | " + r.days).join("\n");
-    const covLbText = (s) => { const r = parseRows(s.covWindows); return r.length ? r.map((x) => x.name + " " + x.days + " d").join("; ") : (blank(s.covlookback) ? "(not specified)" : s.covlookback + " days before each origin"); };
+    // A per-covariate row is "Name | days". Two things the old reader got wrong.
+    // It split on the FIRST "|", so a covariate whose name contains one ("Sex
+    // (M|F)") lost half its name and read the rest as a day count; the last "|"
+    // is the separator. And it coerced the day count with dayInt, so a line the
+    // parser could not read came back as 0 — "Comedications | six months" became
+    // a covariate measured only on the origin day. The raw text is kept beside
+    // the number now, so `days` is a number, null (nothing after the "|") or NaN
+    // (there was something and it was not a day count), and the three are told
+    // apart everywhere downstream.
+    const parseRows = (txt) => String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+      const i = l.lastIndexOf("|");
+      const name = (i < 0 ? l : l.slice(0, i)).trim();
+      const raw = i < 0 ? "" : l.slice(i + 1).trim();
+      return { name: name, raw: raw, days: numDays(raw) };
+    }).filter((r) => r.name);
+    // The write path has to carry the same distinction the read path just
+    // learnt. rowsJoin rewrites the WHOLE textarea whenever a chip is clicked or
+    // a handle dragged, and the textarea is the only copy of what was typed — so
+    // a row whose length could not be read must come back as the user's own
+    // words, not as the 0 the old reader had turned it into.
+    const rowsJoin = (rows) => rows.map((r) => Number.isFinite(r.days) ? r.name + " | " + r.days : (r.raw ? r.name + " | " + r.raw : r.name)).join("\n");
+    const rowDays = (r) => Number.isFinite(r.days) ? r.days + " d" : (r.raw ? "(“" + r.raw + "” could not be read as a number of days)" : "(no look-back given)");
+    // The one place that still read a day count its own way. numDays exists so
+    // the prose, the diagrams and the checks cannot tell three stories about one
+    // box; this printed the raw string instead, so a look-back of "-5" — which
+    // the panel refuses, and which the diagram draws no window for — was still
+    // exported as "-5 days before each origin" into section 4, the Word design
+    // summary and TARGET item 7a.
+    const covLbText = (s) => {
+      const r = parseRows(s.covWindows);
+      if (r.length) return r.map((x) => x.name + " " + rowDays(x)).join("; ");
+      const n = numDays(s.covlookback);
+      if (n === null) return "(not specified)";
+      if (!Number.isFinite(n)) return "(not specified — “" + s.covlookback + "” could not be read as a whole number of days)";
+      return n + " day" + (n === 1 ? "" : "s") + " before each origin";
+    };
     const fmtDays = (d) => { const a = Math.abs(d); if (a >= 365) { const y = a / 365; return (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return Math.round(a / 30) + "mo"; return a + "d"; };
 
     function renderScheme(s) {
@@ -302,17 +373,22 @@ const SENSITIVITY = [
       //    difference is that time zero is each trial's origin rather than a single index date.
       const covRows = parseRows(s.covWindows);
       const wins = [];
-      if (covRows.length) covRows.forEach((r, i) => wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }));
+      // A row whose length could not be read gets no bar. Drawing it at 0 would
+      // put "Comedications" flush against the origin, which is a positive claim
+      // that the covariate is measured on the origin day alone — the checks panel
+      // names those rows instead. The index passed to onEdit stays the row's
+      // index in the FULL list, so dragging a drawn handle still edits its own row.
+      if (covRows.length) covRows.forEach((r, i) => { if (Number.isFinite(r.days) && r.days > 0) wins.push({ label: r.name, kind: "lookback", startDay: -r.days, endDay: 0, edit: { field: "covWindows", edge: "start", idx: i } }); });
       else if (lb > 0) wins.push({ label: "Covariate / eligibility look-back", kind: "lookback", startDay: -lb, endDay: 0, edit: { field: "covlookback", edge: "start" } });
       if (wash > 0) wins.push({ label: "New-user washout (no prior exposure/comparator)", kind: "washout", startDay: -wash, endDay: 0, edit: { field: "washout", edge: "start" } });
       const fuSet = dayInt(s.futrial) > 0;
       wins.push(fuSet
         ? { label: "Follow-up (this trial)", kind: "followup", startDay: 0, endDay: fu, edit: { field: "futrial", edge: "end" } }
-        : { label: "Follow-up (this trial)", kind: "followup", startDay: 0, endDay: fu, note: "length not set — drag to set", edit: { field: "futrial", edge: "end" } });
+        : { label: "Follow-up (this trial)", kind: "followup", startDay: 0, endDay: fu, note: (blank(s.futrial) ? "length not set" : "“" + s.futrial + "” could not be read") + " — the bar is a placeholder, drag to set", edit: { field: "futrial", edge: "end" } });
       const onEdit = (field, day, meta) => {
         if (field === "covWindows") {
           const el = form.elements.covWindows, rows = parseRows(el.value), idx = meta && meta.idx != null ? meta.idx : 0;
-          if (rows[idx]) { rows[idx].days = Math.max(1, Math.round(-day)); el.value = rowsJoin(rows); render(); }
+          if (rows[idx]) { rows[idx].days = Math.max(1, Math.round(-day)); rows[idx].raw = String(rows[idx].days); el.value = rowsJoin(rows); render(); }
           return;
         }
         const el = form.elements[field]; if (!el) return;
@@ -326,14 +402,26 @@ const SENSITIVITY = [
       //    be max(covlookback, washout), which ignored the per-covariate rows entirely:
       //    with "CCI | 3650" typed in and covlookback left at 365, the strip drew a
       //    1-year look-back for a design that reaches back ten.
-      const preSpan = Math.max(covRows.length ? Math.max(...covRows.map((r) => r.days)) : lb, wash);
-      renderTrialStrip(s, interval, preSpan, fu);
+      //    A row the parser could not read has days = NaN, and one NaN in
+      //    Math.max makes the whole span NaN — every rect x/width in the strip
+      //    then comes out NaN and the picture silently disappears. Only readable
+      //    rows contribute.
+      const covSpans = covRows.map((r) => r.days).filter((d) => Number.isFinite(d) && d > 0);
+      const preSpan = Math.max(covRows.length ? (covSpans.length ? Math.max(...covSpans) : 0) : lb, wash);
+      renderTrialStrip(s, interval, preSpan, fu, fuSet);
 
       document.getElementById("dcap").textContent =
         "Top — what happens inside one trial, anchored at its origin (day 0): the same scheme as the active-comparator new-user design (washout and covariate look-back before time zero, follow-up after), because each nested trial IS a new-user trial started at that origin. Bottom — that trial is repeated at every origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "), staggered along calendar time; a patient enters every trial they stay eligible for. The strip is schematic: the number of trials drawn is illustrative, not the number your date range implies. Drag the ○ handles in the top panel to edit the windows.";
     }
 
-    function renderTrialStrip(s, interval, pre, fu) {
+    // `fuSet` is false when the per-trial follow-up box is blank or unreadable.
+    // The bar still has to be drawn — the strip is about the staggered origins,
+    // not about the length — but it must not be LABELLED. It used to read "+5y"
+    // in every one of those cases, because renderScheme handed it a hard-coded
+    // 1825-day placeholder: a blank box produced a picture asserting five years
+    // of follow-up beside prose reading "(not specified)", and an unreadable one
+    // produced the same picture beside "(invalid)".
+    function renderTrialStrip(s, interval, pre, fu, fuSet) {
       const total = pre + fu || 1;
       const W = 860, gutter = 104, plotL = gutter, plotR = W - 18, plotW = plotR - plotL;
       const rowH = 36, top = 26, H = top + 4 * rowH + 26;
@@ -347,11 +435,11 @@ const SENSITIVITY = [
         svg += '<line x1="' + ox + '" y1="' + (y - 2) + '" x2="' + ox + '" y2="' + (H - 24) + '" stroke="#eef2f7"/>';
         svg += '<text x="' + (gutter - 10) + '" y="' + (y + 16) + '" text-anchor="end" font-size="11" fill="#334155">' + esc(t[0]) + '</text>';
         if (lbW > 1) svg += '<rect x="' + (ox - lbW) + '" y="' + (y + 5) + '" width="' + lbW + '" height="16" rx="3" fill="#8b5cf6" fill-opacity="0.8"/>';
-        svg += '<rect x="' + ox + '" y="' + (y + 5) + '" width="' + fuW + '" height="16" rx="3" fill="#10b981" fill-opacity="0.85"/>';
+        svg += '<rect x="' + ox + '" y="' + (y + 5) + '" width="' + fuW + '" height="16" rx="3" fill="' + (fuSet ? "#10b981" : "#cbd5e1") + '" fill-opacity="0.85"/>';
         svg += '<circle cx="' + ox + '" cy="' + (y + 13) + '" r="4" fill="#0f766e"/>';
         if (i === 0) {
           if (lbW > 30) svg += '<text x="' + (ox - lbW / 2) + '" y="' + (y + 17) + '" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">−' + fmtDays(pre) + '</text>';
-          if (fuW > 44) svg += '<text x="' + (ox + fuW / 2) + '" y="' + (y + 17) + '" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">+' + fmtDays(fu) + '</text>';
+          if (fuW > 44) svg += '<text x="' + (ox + fuW / 2) + '" y="' + (y + 17) + '" text-anchor="middle" font-size="9" fill="' + (fuSet ? "#fff" : "#475569") + '" font-weight="600">' + (fuSet ? "+" + fmtDays(fu) : "length not set") + '</text>';
         }
       });
       const dy = top + 2 * rowH + 14, dxA = baseOx + 1.7 * gap, dxB = baseOx + 3.3 * gap;
@@ -367,7 +455,7 @@ const SENSITIVITY = [
       ITT: "the **intention-to-treat effect** — the effect of the treatment strategy assigned at each origin, regardless of subsequent adherence",
       PP: "the **per-protocol effect** — the effect of receiving and adhering to the assigned strategy, with censoring at deviation and inverse-probability-of-censoring weights (a clone-censor-weight step within each trial)",
       both: "both the **intention-to-treat** and the **per-protocol** effects (the latter using censoring at deviation with inverse-probability-of-censoring weights)",
-    })[e] || "the treatment effect";
+    })[e] || "**(not specified — choose intention-to-treat, per-protocol, or both under “Estimand”)**";
     // The horizon τ for the absolute measures is the per-trial maximum follow-up.
     const horizon = (s) => (blank(s.futrial) ? "the per-trial horizon (length not yet specified)" : "the per-trial horizon (τ = " + daysTxt(s.futrial) + " from each origin)");
     const effectText = (s) => {
@@ -378,9 +466,20 @@ const SENSITIVITY = [
         RDRMST: "two absolute contrasts of the weighted survival curves — the difference in survival at " + H + ", which is equivalently the risk difference, and the difference in restricted mean survival time (RMST) up to that same horizon",
         HR: "the pooled hazard ratio from the outcome model",
         both: "both absolute effects (the difference in survival at " + H + ", the risk difference and the risk ratio) and the relative effect (the pooled hazard ratio), the absolute contrast being the primary measure",
-      })[s.effect] || "the pooled treatment effect";
+      })[s.effect] || "**(not specified — choose an effect measure under “Effect measure”)**";
     };
     const usesRMST = (e) => e === "RMST" || e === "RDRMST";
+    // The deviation-censoring rule IS the difference between the two estimands,
+    // so it belongs in the analysis plan of both exported documents. The Word
+    // version of step 3 stopped at "…follow-up time, and trial." in every
+    // branch, so a per-protocol protocol's Word analysis plan never mentioned
+    // deviation censoring or IPCW at all — the defining step of the estimand it
+    // had just named in section 9. One clause, one copy.
+    const censorClause = (s) => ({
+      ITT: "no deviation censoring (ITT).",
+      PP: "censor at deviation and apply inverse-probability-of-censoring weights (per-protocol).",
+      both: "run ITT and per-protocol (deviation censoring + IPCW) variants.",
+    })[s.estimand] || "the deviation-censoring rule follows from the estimand, which is not specified above.";
 
     // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
     const pcOf = (s) => ({
@@ -410,13 +509,24 @@ const SENSITIVITY = [
       "Cashin AG, Hansford HJ, Hernán MA, et al. Transparent reporting of observational studies emulating a target trial — the TARGET statement. JAMA 2025;334(12):1084-1093. doi:10.1001/jama.2025.13350",
     ];
 
+    // A refusal that never leaves the screen is a refusal the person reading the
+    // Word file never sees — and the Word file is what gets circulated. Every
+    // blocking check is computed once and painted into the panel, the Markdown
+    // and the .docx alike, so the three cannot disagree about what is wrong.
+    const blockers = (s) => computeChecks(s).filter((c) => c.level === "error").map((c) => c.msg);
+    const cautions = (s) => computeChecks(s).filter((c) => c.level === "warn").map((c) => c.msg);
+    const BLK_HEAD = "This draft is not ready to be used as a protocol. The items below must be settled first; until then the sections that depend on them say what is missing rather than supplying a value.";
+    const CAU_HEAD = "Flagged while this protocol was drafted. These are not blocking, but each is a choice a reader will expect to see justified.";
+
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
+      const blk = blockers(s), cau = cautions(s);
+      const quote = (head, list) => list.length ? "> **" + head + "**\n" + list.map((m) => ">\n> - " + m).join("\n") + "\n\n" : "";
       return `# ${or(s.title, "(Untitled sequential trial emulation)")}
 
 _Study protocol · sequential (nested) trial emulation · drafted ${today}_
 
-${window.PC.abstractMd(pcOf(s))}
+${quote(BLK_HEAD, blk)}${quote(CAU_HEAD, cau)}${window.PC.abstractMd(pcOf(s))}
 ## 1. Background and rationale
 This study emulates a **sequence of nested target trials** to estimate the effect of **${or(s.exposure, "(treatment)")}** versus **${or(s.comparator, "(comparator)")}**. A single-origin new-user design discards eligible person-time and cannot use patients who become eligible later; the sequential design emulates one trial at every eligible time origin, so each person contributes wherever they are eligible, mitigating the prevalent-user and selection problems (Hernán 2008; Danaei 2013; Gran 2010).
 
@@ -457,7 +567,7 @@ ${s.estimand === "ITT" || s.estimand === "both" ? "\nThe intention-to-treat cont
 ## 10. Statistical analysis
 1. Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset (one record per patient per trial they enter).
 2. Within each trial, estimate the propensity score from covariates measured at that origin and apply weighting (or matching); check balance within trial.
-3. Fit a **pooled logistic (or weighted Cox) model** across all trials for the outcome hazard, with terms for the assigned treatment, follow-up time, and trial; ${s.estimand === "ITT" ? "no deviation censoring (ITT)." : s.estimand === "PP" ? "censor at deviation and apply inverse-probability-of-censoring weights (per-protocol)." : "run ITT and per-protocol (deviation censoring + IPCW) variants."}
+3. Fit a **pooled logistic (or weighted Cox) model** across all trials for the outcome hazard, with terms for the assigned treatment, follow-up time, and trial; ${censorClause(s)}
 4. **Uncertainty.** Because patients enter several trials, the reference method is a **non-parametric bootstrap that resamples patients** (not patient-trial records), repeating trial construction, propensity-score and censoring-weight estimation, and the outcome model inside every replicate (Keogh 2023). A **robust (sandwich) variance clustered on the patient** is the cheaper alternative; Danaei et al. (2013) used it in exactly this design and described the resulting intervals as *conservative*. State which was used. Model-based standard errors are not appropriate under either choice.
 5. Derive the effect measure from the fitted model — ${effectText(s)}${usesRMST(s.effect) ? ", taking the RMST in each arm as the area under its weighted survival curve from the origin to the horizon" : ""}.
 6. Report the **pooled** effect as the primary result. Per-trial estimates are presented as a descriptive check on stability across calendar time — not as independent studies: because the trials share patients, a conventional heterogeneity statistic (I², Cochran's Q) does not carry its usual meaning here.
@@ -477,6 +587,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
 
     const computeChecks = (s) => {
       const checks = [];
+      staleMsgs().forEach((m) => checks.push({ level: "error", msg: m }));
       const covRows = parseRows(s.covWindows);
       const lb = covRows.length ? 1 : dayInt(s.covlookback), fu = dayInt(s.futrial);
       const wash = dayInt(s.washout);
@@ -496,8 +607,16 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (!s.first || !s.last) checks.push({ level: "warn", msg: "Set the first and last trial origins so the sequence of nested trials is defined." });
       if (covRows.length && blank(s.covlookback)) checks.push({ level: "info", msg: "Per-covariate windows are set, so the single look-back box is not used and the protocol reports the per-covariate list instead." });
       if (lb <= 0) checks.push({ level: "warn", msg: "No covariate / eligibility look-back — each trial would assess eligibility and covariates only on the origin day itself. Set a look-back window before the origin." });
-      const zeroRows = covRows.filter((r) => !r.days).map((r) => r.name);
-      if (zeroRows.length) checks.push({ level: "warn", msg: "These per-covariate rows have a look-back of 0 days, so the covariate is measured only on the origin day: " + zeroRows.join("; ") + ". A row is read as “Name | days” — check for a missing or non-numeric value after the “|”." });
+      // Three states, not two. A row that says "0" is a deliberate choice; a row
+      // whose length could not be read is not a choice at all and must not be
+      // reported as one — the old check collapsed both into "0 days", which is
+      // the reading this page has just stopped making everywhere else.
+      const zeroRows = covRows.filter((r) => r.days === 0).map((r) => r.name);
+      const badRows = covRows.filter((r) => r.raw && !Number.isFinite(r.days)).map((r) => r.name + " | " + r.raw);
+      const noneRows = covRows.filter((r) => !r.raw).map((r) => r.name);
+      if (badRows.length) checks.push({ level: "error", msg: "These per-covariate rows have a look-back that could not be read as a whole number of days, so the protocol says so rather than guessing a length, and no window is drawn for them: " + badRows.join("; ") + ". A row is read as “Name | days”, and the days must be a whole number of 0 or more." });
+      if (noneRows.length) checks.push({ level: "error", msg: "These per-covariate rows have no look-back after the “|”, so their windows are unspecified: " + noneRows.join("; ") + ". Give each one a whole number of days. (Adding a row from a chip copies the single look-back box above, and that box is currently empty.)" });
+      if (zeroRows.length) checks.push({ level: "warn", msg: "These per-covariate rows have a look-back of 0 days, so the covariate is measured only on the origin day itself: " + zeroRows.join("; ") + ". If that is deliberate, nothing further is needed." });
       if (badNum(s.futrial)) { /* already reported */ }
       else if (blank(s.futrial)) checks.push({ level: "error", msg: "Maximum follow-up per trial is empty. The diagram shows a placeholder bar labelled “length not set” and the protocol prints “(not specified)” — nothing is assumed." });
       else if (fu <= 0) checks.push({ level: "warn", msg: "Set the per-trial follow-up window." });
@@ -512,7 +631,16 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (est === "ITT" || est === "both") checks.push({ level: "info", msg: "ITT (assignment at each origin): the strategy is fixed at the origin — later switching or add-on is ignored (no deviation censoring). Switching attenuates this estimate toward the null by an amount the ITT estimate itself cannot tell you, so report how much switching occurred." });
       if (est === "PP" || est === "both") checks.push({ level: "info", msg: "Per-protocol: within each trial, censor at deviation and apply IPCW (a clone-censor-weight step) — fit the weights separately per arm, and list the predictors of deviation. Without the weights, censoring at deviation is itself a source of selection bias." });
       if (usesRMST(s.effect) && blank(s.futrial)) checks.push({ level: "error", msg: "RMST is selected but no per-trial maximum follow-up is set. Restricted mean survival time is the area under the survival curve up to a horizon τ, so it has no value until τ is fixed — and τ must be pre-specified rather than chosen after seeing the curves." });
-      if (s.effect === "HR") checks.push({ level: "info", msg: "The hazard ratio is the conventional report in this design, and unlike a cloned design the arms within one nested trial are different people, so proportional hazards is not violated by construction. It is still pooled over trials with different amounts of remaining follow-up, and it cannot be read as a risk — report an absolute contrast alongside it." });
+      // This used to certify proportional hazards ("not violated by
+      // construction"), on the ground that the arms of one nested trial are
+      // different people. That is the wrong mechanism and the wrong conclusion.
+      // A cloned design breaks proportionality because the SAME clones occupy
+      // both arms for the whole grace period, forcing the hazards equal until it
+      // ends — shared identity is not what does it, the grace period is. And
+      // under an ITT contrast this design breaks it too, by the very mechanism
+      // section 9 already describes: control patients start treatment as
+      // follow-up proceeds, so the hazard ratio drifts toward the null.
+      if (s.effect === "HR" || s.effect === "both") checks.push({ level: "warn", msg: "Proportional hazards is not guaranteed here. This design does not fail in the way a cloned design does — there the same clones occupy both arms until the grace period ends. But under an intention-to-treat contrast the arms converge as control patients start treatment, so the hazard ratio drifts toward the null with follow-up time; a weighted marginal hazard ratio need not be proportional even when the conditional one is; and one pooled coefficient across trials with different amounts of remaining follow-up is an average of time-varying hazard ratios whose value moves with the data cut-off. Report an absolute contrast alongside it, and check proportionality rather than assuming it." });
       if (mergeList(s.sensitivityPick, s.sensitivityCustom).some((x) => /I²|I2|heterogen/i.test(x))) checks.push({ level: "warn", msg: "A trial-stratified estimate with I² is planned. Nested trials share patients, so they are not independent studies and I² does not carry its usual meaning here. Report the per-trial estimates as a descriptive check on stability over calendar time rather than as a meta-analysis." });
       checks.push({ level: "info", msg: "Uncertainty: the reference method is a bootstrap resampling patients, re-running trial construction and weighting inside each replicate (Keogh 2023). A robust variance clustered on patient is the cheaper alternative and was described by Danaei et al. (2013) as conservative. Model-based standard errors are wrong in either case." });
       return checks;
@@ -535,31 +663,93 @@ ${REFS.map((r) => "- " + r).join("\n")}
           "\n\nYour entries are safe and still saved in this browser. Reload the page; if it keeps happening, the shared protocol component (window.PC) did not load.";
       }
       try { renderScheme(s); } catch (e) { console.error("[st] diagram failed", e); }
-      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); } catch (e) { console.error("[st] checks failed", e); }
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) { console.warn("[st] autosave failed", e); }
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); mountKeepButton(); } catch (e) { console.error("[st] checks failed", e); }
+      // The stale-select record travels IN the saved draft, under a reserved key.
+      // It cannot live in a variable: render() runs immediately after restore and
+      // writes the SUBSTITUTED state back over the draft, so on the next reload
+      // the value is valid, the record is gone, and the export asserts the
+      // substituted choice as a deliberate one. The warning would survive exactly
+      // one page load — which is how the same bug came back in another builder
+      // in the commit that named it.
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign({}, s, staleSelects.length ? { [STALE_KEY]: staleSelects } : {}))); } catch (e) { console.warn("[st] autosave failed", e); }
     };
+
+    // Re-picking the option a <select> is already showing fires no `change`
+    // event, so a user who wants the value it was left at has no way to answer a
+    // blocker that names it. Give them one.
+    function mountKeepButton() {
+      const host = document.getElementById("checks");
+      if (!host || !staleSelects.length) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mt-2 rounded-lg border border-brand-700 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50";
+      b.textContent = staleSelects.length === 1 ? "Keep “" + staleSelects[0].used + "”" : "Keep all " + staleSelects.length + " substituted choices";
+      b.addEventListener("click", () => { staleSelects = []; render(); });
+      host.appendChild(b);
+    }
 
     (() => {
       try {
         // A ?seed= link wins over the saved draft; PC.restore falls back to
         // localStorage on its own and tells the user which one it used.
+        // noteStale runs on the incoming object in BOTH paths, before anything
+        // is written to the form and before the first render saves over it.
         const seeded = (window.PC && PC.restore)
-          ? PC.restore(form, STORAGE_KEY, (s) => PC.applySeed(form, s)) === "seed"
+          ? PC.restore(form, STORAGE_KEY, (s) => { noteStale(s); PC.applySeed(form, s); }) === "seed"
           : false;
         const saved = seeded ? null : JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-        if (saved) for (const k in saved) {
-          const els = form.elements[k]; if (!els) continue;
-          const val = saved[k];
-          if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
-          else if (els.type === "checkbox") els.checked = !!val;
-          else els.value = val;
+        if (saved) {
+          noteStale(saved);
+          // A record carried over from an earlier load of this same draft. Kept
+          // unless the user has since answered it — if the select now holds a
+          // real option, the entry is dropped below.
+          if (Array.isArray(saved[STALE_KEY])) saved[STALE_KEY].forEach((x) => {
+            if (x && x.name && !staleSelects.some((y) => y.name === x.name)) staleSelects.push(x);
+          });
+          for (const k in saved) {
+            if (k === STALE_KEY) continue;
+            const els = form.elements[k]; if (!els) continue;
+            const val = saved[k];
+            if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
+            else if (els.type === "checkbox") els.checked = !!val;
+            else els.value = val;
+          }
         }
+        // Leave each blanked select showing the choice the protocol will
+        // actually describe, rather than showing nothing, now that the blocker
+        // above explains which choice that is and where it came from.
+        // "Has the user answered this yet?" cannot be asked as "does the select
+        // hold a valid value", because after the first load it holds the value
+        // WE substituted — so the record was dropped on the very next reload and
+        // the export went back to asserting the substituted choice as a
+        // deliberate one. The record survives while the select still shows
+        // exactly what was substituted, and is dropped the moment it shows
+        // anything else; re-picking the substituted option fires no change
+        // event, which is what the "Keep" button is for.
+        staleSelects = staleSelects.filter((x) => {
+          const el = form.elements[x.name];
+          if (!el) return false;
+          if (el.selectedIndex >= 0 && el.value && el.value !== x.used) return false;
+          el.value = x.used;
+          return true;
+        });
       } catch (e) { console.error("[st] restore failed", e); }
       render();
     })();
     form.addEventListener("input", render);
-    form.addEventListener("change", render);
+    // Cleared per control, on the control the user actually touched. Clearing the
+    // whole list on any change would dismiss a second blocker the user has not
+    // seen; leaving it uncleared makes a blocker nobody can dismiss, which is
+    // precisely what teaches people to ignore the panel.
+    form.addEventListener("change", (e) => {
+      const n = e.target && e.target.name;
+      if (n && staleSelects.some((x) => x.name === n)) staleSelects = staleSelects.filter((x) => x.name !== n);
+      render();
+    });
 
+    // Set by buildDocx when a figure could not be made, so the download handler
+    // can tell the user which of the two documents they got.
+    let lastFigNote = "";
     const actionMsg = document.querySelector("[data-action-msg]");
     const setMsg = (t, bad) => { if (actionMsg) { actionMsg.textContent = t || ""; actionMsg.className = "basis-full text-xs " + (bad ? "text-rose-600" : "text-emerald-600"); } };
 
@@ -575,7 +765,16 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (!el) return;
       const rows = parseRows(el.value);
       if (!rows.some((r) => r.name === name)) {
-        rows.push({ name: name, days: parseInt(form.elements.covlookback && form.elements.covlookback.value) || 365 });
+        // The seed for a new row is whatever the single look-back box says, read
+        // the one way this page reads day counts. It used to be
+        // `parseInt(...) || 365`, which is two bugs in one expression: parseInt
+        // stops at the "e", so a 1000-day look-back seeded a ONE-day row; and
+        // the `|| 365` invented a year for anyone whose box was empty —
+        // including immediately after "Clear all", which blanks it and then
+        // promises "every number is now blank". Nothing is invented now: an
+        // empty box seeds a row with no length, and the checks panel asks for one.
+        const seed = String((form.elements.covlookback && form.elements.covlookback.value) || "").trim();
+        rows.push({ name: name, raw: seed, days: numDays(seed) });
         el.value = rowsJoin(rows); render();
       }
     });
@@ -597,6 +796,10 @@ ${REFS.map((r) => "- " + r).join("\n")}
       const estPlain = { ITT: "the intention-to-treat effect (assignment at each origin, ignoring later switching)", PP: "the per-protocol effect (deviation censoring + IPCW within each trial)", both: "both the intention-to-treat and per-protocol effects" }[s.estimand] || "the treatment effect";
       const subg = mergeList(s.subgroupsPick, s.subgroupsCustom).join("; ") || "none pre-specified";
       const sens = mergeList(s.sensitivityPick, s.sensitivityCustom).join("; ") || "(see protocol)";
+      // A value this page had to substitute for one the saved draft named must
+      // be declared in the checklist item that reports it — a TARGET checklist
+      // whose item 7f states an estimand nobody chose is worse than no checklist.
+      const staleFor = (n) => { const x = staleSelects.find((y) => y.name === n); return x ? "\nNOTE: " + staleMsgs()[staleSelects.indexOf(x)] : ""; };
       // Item 7 (a–h): one target trial specified per origin; emulated at each.
       const item7 = [
         ["a. Eligibility criteria",
@@ -607,7 +810,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
           E + " vs " + C + ".\n" + or(s.assignment, "Within each trial, patients initiating the index treatment in that interval form the treated arm; eligible comparator initiators form the control arm.")],
         ["c. Assignment procedures",
           "Random assignment at each origin.",
-          "One nested trial is emulated at each origin (" + origins + "). Baseline confounding within each trial is addressed by " + or(s.confounding, "a propensity score estimated at that origin, with weighting or matching") + "."],
+          "One nested trial is emulated at each origin (" + origins + "). Baseline confounding within each trial is addressed by " + or(s.confounding, "a propensity score estimated at that origin, with weighting or matching") + "." + staleFor("interval")],
         ["d. Follow-up",
           "Follow-up begins at assignment (each trial's origin) and ends at outcome, death, or end of study.",
           "Time zero = each trial's origin.\n" + or(s.followup, "Within each trial, follow-up runs from the origin to outcome, death, disenrolment, or the maximum follow-up.") + "\nMaximum follow-up per trial: " + daysTxt(s.futrial) + ".\n" + or(s.multiple, "A patient may enrol in several consecutive trials until treated or the outcome occurs.") + "\nTrials with later origins have less calendar time before the data end, so long-term contrasts rest mainly on the earliest trials."],
@@ -616,13 +819,13 @@ ${REFS.map((r) => "- " + r).join("\n")}
           "Outcome: " + or(s.outcome, "(specify)") + "."],
         ["f. Causal contrasts",
           "Effect of being assigned (and, optionally, adhering to) the treatment strategy at the origin.",
-          "Target estimand: " + estPlain + ".\nReported as: " + effectText(s) + "."],
+          "Target estimand: " + estPlain + ".\nReported as: " + effectText(s) + "." + staleFor("estimand") + staleFor("effect")],
         ["g. Identifying assumptions",
           "Exchangeability, positivity, and consistency within each nested trial.",
           "Conditional exchangeability within each trial via " + or(s.confounding, "propensity-score methods at each origin") + ", with covariates re-measured at each origin (a patient in several trials has a different propensity score in each). Positivity and consistency are assumed within each trial." + (s.estimand === "PP" || s.estimand === "both" ? " Per-protocol contrasts censor at deviation and apply inverse-probability-of-censoring weights within each trial, which additionally assumes every predictor of deviation is measured." : "") + " Because a patient can appear in several trials, often with overlapping follow-up, the nested trials are not independent and the uncertainty must account for that (see h)."],
         ["h. Data analysis plan",
           "An estimator that recovers the causal contrast under the identifying assumptions.",
-          "Pooled logistic (or weighted Cox) regression across the stacked, trial-indexed dataset with terms for assigned treatment, follow-up time, and trial.\n95% CIs: reference method is a non-parametric bootstrap resampling PATIENTS, repeating trial construction, weight estimation and the outcome model in each replicate (Keogh 2023); a robust (sandwich) variance clustered on the patient is the cheaper alternative, described by Danaei et al. (2013) as conservative. Model-based standard errors are not used.\nPer-trial estimates are reported as a descriptive check, not as independent studies: the trials share patients, so I-squared and Cochran's Q do not carry their usual meaning.\nSubgroups: " + subg + ".\nSensitivity: " + sens + "."],
+          "Pooled logistic (or weighted Cox) regression across the stacked, trial-indexed dataset with terms for assigned treatment, follow-up time, and trial.\n95% CIs: reference method is a non-parametric bootstrap resampling PATIENTS, repeating trial construction, weight estimation and the outcome model in each replicate (Keogh 2023); a robust (sandwich) variance clustered on the patient is the cheaper alternative, described by Danaei et al. (2013) as conservative. Model-based standard errors are not used.\nPer-trial estimates are reported as a descriptive check, not as independent studies: the trials share patients, so I-squared and Cochran's Q do not carry their usual meaning.\nSubgroups: " + subg + ".\nSensitivity: " + sens + "." + (blockers(s).length ? "\nUNSETTLED AT EXPORT: " + blockers(s).join(" | ") : "")],
       ];
       const map = {
         "1a": "This study emulates a sequence of nested target trials of " + E + " vs " + C + " among " + or(s.population, "(population)") + ".",
@@ -645,6 +848,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
     document.querySelector("[data-action='reset']").addEventListener("click", () => {
       if (!confirm("Clear every field and forget the saved draft?")) return;
       localStorage.removeItem(STORAGE_KEY);
+      staleSelects = [];
       // True blank slate — form.reset() only restores HTML defaults and leaves
       // checkboxes ticked. Walk every control and zero it out.
       form.querySelectorAll("input, textarea, select").forEach((el) => {
@@ -687,6 +891,14 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (__phdcLogo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: __phdcLogo, transformation: { width: 210, height: 51 } })] }));
       children.push(p([text(or(s.title, "(Untitled sequential trial emulation)"), { bold: true, size: 32 })], { spacing: { after: 40 } }));
       children.push(p([text("Study protocol · sequential (nested) trial emulation · drafted " + today, { italics: true, color: "777777", size: 18 })], { spacing: { after: 160 } }));
+      const noteBlock = (head, list, colour) => {
+        if (!list.length) return;
+        children.push(p([text(head, { bold: true, color: colour })], { spacing: { after: 60 } }));
+        list.forEach((m) => children.push(new D.Paragraph({ children: [text(m, { color: colour })], bullet: { level: 0 }, spacing: { before: 0, after: 0 } })));
+        children.push(p([text("")], { spacing: { after: 120 } }));
+      };
+      noteBlock(BLK_HEAD, blockers(s), "9E3A2C");
+      noteBlock(CAU_HEAD, cautions(s), "8A6100");
       window.PC.abstractDocx(window.docx, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("1. Background and rationale"));
@@ -708,6 +920,48 @@ ${REFS.map((r) => "- " + r).join("\n")}
         ["Follow-up per trial", daysTxt(s.futrial)],
         ["Outcome", or(s.outcome, "-")],
       ]));
+
+      // HARPER item 7.2 — the study design diagram. This was the one builder of
+      // the nine whose Word export carried no figure at all: the page draws two
+      // (within one trial, and the trials staggered along calendar time),
+      // captions them, and shipped neither, so `word/media` held the logo and
+      // nothing else. The picture alone does not satisfy the item either — an
+      // image-stripping extractor and a reviewer reading the .docx as text see
+      // nothing — so designDiagramDocx emits the picture, a numbered caption and
+      // a written description together, and that text is what carries the item.
+      // It never throws; on failure it returns a visible note instead of a
+      // silently absent figure, and the download handler says which you got.
+      lastFigNote = "";
+      const figs = [
+        { el: "diagram", cap: "Figure 1. Within one nested trial, anchored at its origin (day 0) — the windows measured before the origin, and the follow-up after it.", lines: [
+          "Time zero: each trial's origin. Eligibility, treatment assignment and the start of follow-up are all evaluated at that moment, which is what keeps them aligned.",
+          "New-user washout, before the origin: " + daysTxt(s.washout) + " with no prior exposure or comparator.",
+          "Covariate / eligibility look-back, before the origin: " + covLbText(s) + ".",
+          "Follow-up, after the origin: " + daysTxt(s.futrial) + " maximum per trial.",
+          "The windows move with the origin, so a patient ineligible at one origin may be eligible at a later one.",
+        ] },
+        { el: "diagram2", cap: "Figure 2. The same trial repeated at every origin — the nested trials staggered along calendar time.", lines: [
+          "One trial begins at each origin: " + or(s.interval, "monthly") + ", from " + or(s.first, "(first origin)") + " to " + or(s.last, "(last origin)") + ".",
+          "Each trial carries the same pre-origin windows and the same follow-up length as Figure 1, re-measured at its own origin.",
+          "A patient enters every trial for which they remain eligible, so the same person appears in several trials with overlapping follow-up.",
+          "Trials with later origins have less calendar time before the data end and are administratively censored earlier.",
+          "Schematic: the number of trials drawn is illustrative, not the number the date range implies.",
+        ] },
+      ];
+      for (const f of figs) {
+        const fig = await window.designDiagramFigure(document.getElementById(f.el), { caption: f.cap });
+        // opts.lines is the supported way to supply the written description, but
+        // designDiagramDocx prefers fig.lines when the shared renderer has
+        // registered a spec — which it has for Figure 1. Its spec lines are
+        // rounded for display ("day −1y to 0"), and fmtDay turns 350 days into
+        // "1y", so the only machine-readable description of the figure would
+        // name a window the form does not hold. The lines below are built from
+        // the same readers the prose uses, so they carry the exact counts;
+        // fig.lines is cleared so they are the ones that survive.
+        const paras = window.designDiagramDocx(D, Object.assign({}, fig, { lines: null }), { font: FONT, caption: f.cap, lines: f.lines });
+        paras.forEach((c) => children.push(c));
+        if (!paras.placed) lastFigNote += " Exported WITHOUT " + f.cap.split(".")[0] + ": " + (fig.reason || paras.error || "unknown reason") + ".";
+      }
 
       children.push(h1("4. Eligibility (re-assessed at each origin)"));
       children.push(para(or(s.eligibility, "At each origin: meets the population definition, is outcome-free, and has not already enrolled as an index-treatment initiator in an earlier trial.")));
@@ -735,7 +989,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (s.estimand === "PP" || s.estimand === "both") children.push(para("The per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. This is the same machinery as a clone-censor-weight analysis, applied inside each trial."));
 
       children.push(h1("10. Statistical analysis"));
-      ["Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset (one record per patient per trial they enter).", "Within each trial, estimate the propensity score from covariates measured at that origin and apply weighting (or matching); check balance within trial.", "Fit a pooled logistic (or weighted Cox) model across all trials with terms for the assigned treatment, follow-up time, and trial.", "Derive the effect measure from the fitted model: " + effectText(s) + (usesRMST(s.effect) ? ", taking the RMST in each arm as the area under its weighted survival curve from the origin to the horizon" : "") + ".", "Uncertainty: because patients enter several trials, the reference method is a non-parametric bootstrap resampling PATIENTS (not patient-trial records), repeating trial construction, propensity-score and censoring-weight estimation, and the outcome model inside every replicate (Keogh 2023). A robust (sandwich) variance clustered on the patient is the cheaper alternative; Danaei et al. (2013) used it in this design and described the resulting intervals as conservative. State which was used; model-based standard errors are not appropriate under either choice.", "Report the pooled effect as the primary result. Per-trial estimates are a descriptive check on stability across calendar time, not independent studies: because the trials share patients, I-squared and Cochran's Q do not carry their usual meaning."].forEach((l) => children.push(numItem(l)));
+      ["Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset (one record per patient per trial they enter).", "Within each trial, estimate the propensity score from covariates measured at that origin and apply weighting (or matching); check balance within trial.", "Fit a pooled logistic (or weighted Cox) model across all trials with terms for the assigned treatment, follow-up time, and trial; " + censorClause(s), "Derive the effect measure from the fitted model: " + effectText(s) + (usesRMST(s.effect) ? ", taking the RMST in each arm as the area under its weighted survival curve from the origin to the horizon" : "") + ".", "Uncertainty: because patients enter several trials, the reference method is a non-parametric bootstrap resampling PATIENTS (not patient-trial records), repeating trial construction, propensity-score and censoring-weight estimation, and the outcome model inside every replicate (Keogh 2023). A robust (sandwich) variance clustered on the patient is the cheaper alternative; Danaei et al. (2013) used it in this design and described the resulting intervals as conservative. State which was used; model-based standard errors are not appropriate under either choice.", "Report the pooled effect as the primary result. Per-trial estimates are a descriptive check on stability across calendar time, not independent studies: because the trials share patients, I-squared and Cochran's Q do not carry their usual meaning."].forEach((l) => children.push(numItem(l)));
 
       children.push(h1("11. Subgroup analyses"));
       (subg.length ? subg : ["(none pre-specified)"]).forEach((l) => children.push(bullet(l)));
@@ -765,7 +1019,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
     document.querySelector("[data-action='download-docx']").addEventListener("click", async () => {
       if (!window.docx) { setMsg("The Word engine (docx) did not load — check the network, then reload the page.", true); return; }
       setMsg("Building the Word document…");
-      try { dl(await buildDocx(readForm()), fname("docx")); setMsg("Word document downloaded."); }
+      try { const n = fname("docx"); dl(await buildDocx(readForm()), n); setMsg("Downloaded " + n + "." + lastFigNote, !!lastFigNote); }
       catch (e) { console.error(e); setMsg("Word export failed: " + (e && e.message ? e.message : e), true); }
     });
   </script>
