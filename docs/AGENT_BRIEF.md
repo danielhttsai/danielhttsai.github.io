@@ -5194,9 +5194,15 @@ additions, in order of how much they will cost you:
   in Chromium, assert zero `pageerror` and `typeof window.PC === "object"`. Write
   it once and run it before every commit that touches a `<script>` — it caught
   this within a minute of the edit, and nothing else would have.
-- **`[data-preview]` is not the export node on every builder.** ACNU, SCCS,
-  case-crossover, descriptive-analysis, ITS, sequential-trial and trend-in-trend
-  use it; **`case-control` and `clone-censor-weight` use `#preview`.** A test
+- **`[data-preview]` is not the export node on every builder.** **CORRECTED
+  2026-08-23: the split is 4 / 5, not 7 / 2 — the list below was wrong when it
+  was written, and a reviewer following it lost a sweep to it.** Verified by
+  grepping all nine files: **`[data-preview]`** on ACNU, case-crossover,
+  descriptive-analysis and SCCS; **`#preview`** on case-control,
+  clone-censor-weight, **interrupted-time-series, sequential-trial and
+  trend-in-trend**. Prefer
+  `document.querySelector('[data-preview]') || document.querySelector('#preview')`
+  and never hard-code either. A test
   reading the wrong one gets `""`, so every "is the bad string present?"
   assertion passes — *in both directions*, giving you a clean "before" and a
   clean "after" and an entirely fictional result. This produced a false negative
@@ -5368,7 +5374,11 @@ Worth knowing the review was right about all four.
 
 #### Open, examined this run, deliberately left
 
-- **Five builders still ship a cohort-flavoured power paragraph.** `tailSections`
+- ~~**Five builders still ship a cohort-flavoured power paragraph.**~~ **DONE
+  2026-08-23 — see the run at the end of this file.** All five now supply their
+  own, and the citation worry recorded below turned out to be surmountable:
+  most of what needed saying follows from the structure of the design and needs
+  no source at all. Original note kept below for the reasoning. `tailSections`
   in `ProtocolCommon.astro` defaults `studySize` to "Power is assessed per data
   source from observed exposure and outcome frequencies in a pilot extraction;
   the study targets ≥ 80% power to detect the smallest clinically important
@@ -5447,3 +5457,194 @@ Worth knowing the review was right about all four.
   The `.docx` half of the ACNU changes was read, not executed — `pscValidity`
   feeds the on-screen card, the Markdown and the Word file from one source, so
   the three cannot drift, but only the first two were rendered.
+
+### Found 2026-08-23 by a twentieth run — the "Study size and feasibility" section
+
+**Chosen by rotation and by the brief's own ranking**: the previous run named
+the cohort-flavoured power paragraph "the sharpest well-scoped piece of work
+left" and deliberately left it, on the grounds that five design-specific power
+paragraphs would need citations and Crossref/PubMed are blocked here. That
+worry was half right and worth recording as resolved: **most of what a power
+paragraph has to say follows from the structure of the design and needs no
+source at all** — that only cases enter an SCCS likelihood, that a concordant
+case-crossover case drops out of the conditional likelihood, that cloning
+multiplies rows and not people. Only two citations were wanted, and both were
+corroborated well enough to ship. If you meet a "cannot be done here, needs
+citations" note again, check first how much of it is structural.
+
+Two reviewers on disjoint briefs against a frozen `3fabc7c` — a methodologist
+(what actually determines power per design, what the precedents get wrong,
+which citations are real) and an applied analyst (does the text reach preview /
+Markdown / .docx, what breaks it, what is fine). The analyst's tree moved under
+it mid-review because this run was landing fixes; it rebuilt and re-verified,
+and its review of this run's own diff is folded in below.
+
+#### Environment: one correction and one addition
+
+Every earlier trap still holds. Two changes:
+
+- **The `[data-preview]` / `#preview` note in the traps section was WRONG** and
+  has been corrected in place. The split is 4 / 5, not 7 / 2: ITS,
+  sequential-trial and trend-in-trend use `#preview`, not `[data-preview]`. A
+  reviewer following the old list got `""` on three builders and a clean sweep
+  that meant nothing. Corrected against a grep of all nine files. **The lesson
+  generalises past this one fact: a trap note in this file is a claim like any
+  other, and this one had been repeated across runs without being re-checked.**
+- **The blocked-CDN `.docx` route works and is cheap — use it.** `npm pack
+  docx@8.5.0`, untar, then in Playwright
+  `page.route('**/unpkg.com/**', r => r.fulfill({ path: '…/package/build/index.umd.js' }))`,
+  click the Word button, `unzip word/document.xml`. Six real `.docx` files in
+  about ninety seconds, and it is the only way to turn "tailDocx reads the same
+  array, so it cannot drift" from something you read into something you saw.
+
+#### Fixed this run
+
+- ~~**Five builders sized by a paragraph written for a cohort.**~~ Measured on a
+  real build: the shared default ("power ... from observed exposure and outcome
+  frequencies", feasibility as "available person-time and event counts") was the
+  ONLY thing SCCS, case-crossover, case-control, clone-censor-weight and
+  sequential-trial said about study size anywhere — grep confirmed none of the
+  five mentions power, sample size, 80% or α = 0.05 in any other section. Each
+  now supplies its own through `nz(s.studySize, …)`, the route ITS and
+  trend-in-trend already use. Everything conditional reads the file's own
+  helpers (`ccoGeom`, `orMeansPlain`, `readCount`, `isMatched`, `effectText`,
+  `daysTxt`), so no paragraph can name a scheme, estimand or window count that
+  the analysis section contradicts. Every branch refuses rather than guesses,
+  and all eleven were rendered: case-crossover declines to state a referent
+  count when the scheme is unreadable **and** when the variant is
+  time-stratified or symmetric, whose referent scheme `VARIANT_CAVEAT` already
+  says the builder does not draw; case-control declines to name a feasibility
+  unit until a sampling scheme is chosen; clone-censor-weight declines to say
+  what to power until an effect measure is set. Variant and scheme clauses are
+  whitelists over the option values, never a not-equal.
+- ~~**descriptive-analysis asserted "There is no effect size to detect" above a
+  permutation test.**~~ True of the occurrence, mortality and utilisation
+  metrics — and the precision framing there is better than the power sentence it
+  replaces, so it was kept nearly verbatim. False of `joinpoint`, which SELECTS
+  the number of joinpoints by a rule that section 9 offers to make a permutation
+  test, and false of `trendInTrend`, which reports an odds ratio. Ticking either
+  box is what puts it in the protocol. Both clauses are conditional and
+  self-contained. The enumeration now covers standardised ratios, since indirect
+  standardisation reports an SMR.
+- ~~**ITS printed `1e+21` pre-intervention points, and `9007199254740993` as
+  …992.**~~ `readPts` accepts exponential notation on purpose ("1e3" is 1000)
+  but stopped checking there; above 2^53 `String(n)` goes back to exponential
+  and `Number()` rounds. Nothing objected — `computeChecks` only speaks below 8
+  points, `missing()` only refuses blank/bad/zero — so both reached the
+  design-summary table, the series-length line, the study-size paragraph and the
+  Word file. **trend-in-trend's `readNum` has refused exactly this for some
+  time and names 1e21 in a comment.** Two copies of one reader, one hardened,
+  one not: the second time this repo has produced that. `missing()` got the
+  reason too, since "1e21" is a whole number and refusing it as "not a whole
+  number" is a false reason for a true refusal.
+- ~~**ITS: autocorrelation reduces the effective sample size "below the nominal
+  count", flat.**~~ True of positive autocorrelation, backwards for negative —
+  and Zhang 2011, cited two clauses later in the same sentence, simulates both
+  signs precisely because the sign decides the direction.
+- ~~**ACNU's section 9 existed as two identical literals.**~~ Byte-identical
+  today, so nothing was wrong yet; hoisted to one const. ACNU is the one builder
+  the shared default actually fits, and skipping `studySize` for its own
+  numbered section is right — that stays.
+
+#### What the reviewers disagreed about, and who was right
+
+- **Whether ACNU should skip the section.** Both ended up agreeing it should,
+  which is worth recording as a *negative* finding since it is the obvious
+  target: ACNU is a new-user active-comparator cohort and the generic sentence
+  is written for exactly that design. Do not "fix" it.
+- **The dynamic ITS / trend-in-trend interpolation.** This run went in expecting
+  it to be the weak point and **the analyst was right that the brief overstated
+  it**: blank, `1e3`, `12,000`, `-5`, `2.5` and `0` are all handled, most with
+  the correct *reason*, and `inParens` does not double-parenthesise a refusal.
+  These two readers are the best-hardened code in the repo. The one crack was
+  the missing safe-integer guard above — found by comparing the twins, not by
+  fuzzing either one alone.
+- **The methodologist's read of `trend-in-trend.astro:382`.** It flagged the
+  *paraphrase* of Ertefaie 2018 ("report that where the exposure-prevalence
+  trend is strong, the design retains reasonable power across a range of outcome
+  rates, stage-1 c-statistics and numbers of strata") as unverifiable from
+  snippets, while the citation itself checks out. **Left deliberately**, and
+  this run thinks that was the right call rather than a dodge: deleting a
+  possibly-accurate substantive statement is also a loss, and nobody here can
+  read the three-page letter to settle it. Whoever can read it should.
+- **Ranking of what remains.** The methodologist put sequential-trial's
+  self-contradiction top; the analyst put the planned-outputs duplication below
+  top on the grounds that it is the bigger one and touches eight builders.
+  **The analyst was right about size** — but it is a different section, and
+  taking it on unreviewed at the end of a run is how churn gets made. Left, in
+  full, at the top of the open list.
+
+#### Round two: the analyst sent at this run's own diff
+
+It could not break the five new paragraphs — it re-drove every branch in a real
+`.docx`, checked `SCCS_POWER_VARIANT` and case-control's scheme whitelist
+character-for-character against the `<select>` option values, and confirmed the
+gate on `ccoGeom` matches `VARIANT_CAVEAT`. Two defects were caught earlier, by
+this run reading the *rendered page* rather than the diff, and both are the
+house species:
+
+- **A bare lookup printing `undefined` into a sentence.** The joinpoint clause's
+  first draft was `({grid:…, permutation:…})[s.trendMethod]` with no fallback.
+- **`effectText()` is several sentences long and ends without a full stop**, so
+  the clone-censor-weight clause originally ran on into the middle of one of
+  them — "…the worked example of Maringe et al. (2020), so the quantity to
+  establish is…", attaching this run's claim to that citation. Close the
+  sentence, then start a new one. **Assume any `*Text(s)` helper here is
+  multi-sentence and unterminated until you have rendered it.**
+
+#### Open, examined this run, deliberately left
+
+- **THE BIG ONE: every builder except descriptive-analysis prints its planned
+  analytical outputs twice, and on five designs the shared half is the wrong
+  half.** `defaultOutputs` in `ProtocolCommon.astro:94-105` hard-codes three
+  `base` bullets and does `base.concat(s.plannedOutputs)`, while every builder's
+  own `plannedOutputs` is a design-specific rewrite of those same three items.
+  Nothing de-duplicates. Confirmed by reading a rendered ITS export: it
+  commissions "Participant-flow diagram (source population → analytic cohort,
+  with exclusions and counts)" and "Table 1 — baseline characteristics by period"
+  for a design analysing aggregate period counts with no person-level cohort at
+  all — and the same document says so three pages earlier ("this design is not
+  anchored to a person-level day 0"). case-control gets two shell tables both
+  called Table 1, two flow diagrams and two results tables; ACNU commissions a
+  Table 1 without SMDs directly above its own Table 1 with them.
+  **`descriptive-analysis.astro` already carries a comment saying this was found
+  and fixed — in that one file only.** Note the fix is not "delete your
+  duplicates" everywhere: for ITS, trend-in-trend, case-control, case-crossover
+  and SCCS the *shared* half is what has to go, which needs a per-design
+  judgement. A clean mechanism would be an opt-out flag on `pcOf` (the `skip`
+  list is per-section, not per-bullet). **This is the sharpest well-scoped work
+  left and it is bigger than what this run did.**
+- **No builder has a form field that feeds `studySize`.** Grepped every
+  `name="…"` on all nine: nothing for study size, power, alpha, MCID or event
+  counts. The section HARPER item 7.9 exists for is, everywhere, code-authored
+  prose promising a calculation *will* be done — so a researcher who has
+  actually run `ttpower()` or a Musonda formula has nowhere to put the number.
+  Not attempted: a textarea is a new control, and "do not add features" is
+  explicit. But `nz(s.studySize, …)` already supports it and this is now the
+  only section of these protocols that a user cannot write.
+- **The Markdown and Word exports of ITS are not the same document.** The
+  Markdown §3 header carries a "Series length: … pre-intervention and …
+  post-intervention points" line with no counterpart in the `.docx`, which
+  states the same counts in a design-summary table row instead. Same numbers,
+  different documents. Cosmetic; noted because nobody had compared them.
+- **Section numbering runs 1…11, then eight unnumbered tail sections, then 12.**
+  On ACNU, SCCS, case-crossover and descriptive-analysis the shared tail block
+  sits between the last numbered section and "## N. Key references". Cosmetic.
+- **`nz(s.data, "(data source)")` still fires** on five builders, as the
+  previous run recorded. Unchanged this run.
+- Citations: **two added, neither verifiable against Crossref or PubMed**, which
+  this sandbox still blocks (curl returns a 403 CONNECT tunnel failure for
+  Crossref, PubMed, doi.org). Musonda P, Farrington CP, Whitaker HJ. Stat Med
+  2006;25(15):2618-31, doi:10.1002/sim.2477 — title, all three authors, journal,
+  volume and pages agreed across a PubMed record, the Wiley DOI landing page and
+  a Google Scholar lookup URL. Dharmarajan S, Lee JY, Izem R. Stat Med
+  2019;38:956-968, doi:10.1002/sim.8030 — same standard; **the issue number is
+  deliberately omitted** because only the volume, page range and DOI could be
+  confirmed. Mittleman 1995 and Hernán 2018 were already in their builders' own
+  reference lists. **clone-censor-weight cites nothing**: a search for a CCW
+  power or sample-size paper turned up only applied papers, and attributing one
+  to Hernán 2018 or Maringe 2020 would be inventing it.
+- **Nothing was checked against the live site**, which is still unreachable from
+  this sandbox. Nobody has still opened one of these `.docx` files in Word —
+  six were generated and their `word/document.xml` read, which is not the same
+  thing.
