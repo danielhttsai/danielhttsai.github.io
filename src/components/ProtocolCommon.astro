@@ -1180,8 +1180,44 @@
 
     /* Write a flat {fieldName: value} object into a form. Mirrors what the
        builders' own writeForm does, for the pages that restore inline. */
+    /* A hand-off payload may carry a multi-line field as a JSON ARRAY of lines —
+       it is the obvious way to write one, and every multi-line field on these
+       pages is line-separated (the amendment log, the custom covariate and
+       sensitivity lists, the code sets). Nothing joined them, and the two
+       hand-off routes then failed differently and both wrongly. Reproduced with
+       {"amendments": ["2026-01-01 | v2 | 7 | One | R1", "2026-02-01 | v3 | 8 |
+       Two | R2"]}: on the five builders that route through applySeed, its
+       array branch indexes `nodes` — a list of ONE textarea — so line 2 was
+       dropped without a word and the protocol read "The amendment table below
+       records 1 entry", which is this file's top bug class exactly. On the four
+       that pass their own writeForm, the array reached `el.value` and
+       JavaScript's default Array-to-string put a COMMA between the two
+       amendments, producing one line of nine values that the parser then
+       refused — lossless and visible, but two perfectly good amendments
+       refused as one unreadable entry.
+
+       Joining with a newline is not a guess about intent: the field's storage
+       format IS one record per line, so an array of lines and the joined string
+       are the same value written two ways. Restricted to a lone <textarea> —
+       an <input> would strip the newlines and silently concatenate, and a
+       checkbox group is a RadioNodeList whose tagName is undefined, so neither
+       is touched. */
+    function normaliseSeedArrays(form, state) {
+      if (!form || !state || typeof state !== "object") return state;
+      var out = state, copied = false;
+      for (var k in state) {
+        if (!Array.isArray(state[k])) continue;
+        var els = form.elements[k];
+        if (!els || els.tagName !== "TEXTAREA") continue;
+        if (!copied) { out = Object.assign({}, state); copied = true; }
+        out[k] = state[k].map(function (x) { return x == null ? "" : String(x); }).join("\n");
+      }
+      return out;
+    }
+
     function applySeed(form, state) {
       if (!form || !state) return false;
+      state = normaliseSeedArrays(form, state);
       for (var k in state) {
         var els = form.elements[k];
         if (!els) continue;
@@ -1316,6 +1352,15 @@
           'font-family:ui-monospace,monospace;font-size:.8rem;padding:.5rem;' +
           'border:1px solid #9CC9AE;border-radius:6px"></textarea>';
         var f = document.querySelector("form");
+        /* The builder's <form> is a child of a two-column grid, so anything
+           inserted as its sibling becomes a GRID ITEM and takes a column. On all
+           nine builders this notice took column 1, pushed the form into column 2
+           and dropped the live preview onto the next row — the whole page
+           rearranged, on the one path a hand-off link always follows, and at a
+           1024px viewport it also overflowed the page by 61px. `1 / -1` puts it
+           back above both columns, which is where it reads as belonging, and the
+           declaration is simply ignored where the parent is not a grid. */
+        box.style.gridColumn = "1 / -1";
         if (f && f.parentNode) f.parentNode.insertBefore(box, f);
 
         var msg = box.querySelector("#pc-paste-msg");
@@ -1352,8 +1397,11 @@
        the user. */
     function restore(form, storageKey, writeForm) {
       if (form) ensureAmendmentField(form);   // must exist before anything writes into it
+      // Normalised here as well as inside applySeed, because the four builders
+      // that pass their own writeForm never reach applySeed. Running twice is a
+      // no-op: the second pass sees strings.
       var write = function (s) {
-        (writeForm || function (x) { applySeed(form, x); })(s);
+        (writeForm || function (x) { applySeed(form, x); })(normaliseSeedArrays(form, s));
         syncAmendments(form);
       };
       if (new URLSearchParams(location.search).get("seed") === "paste") {
@@ -1475,6 +1523,15 @@
       }
 
       var f = document.querySelector("form");
+      /* The builder's <form> is a child of a two-column grid, so anything
+         inserted as its sibling becomes a GRID ITEM and takes a column. On all
+         nine builders this notice took column 1, pushed the form into column 2
+         and dropped the live preview onto the next row — the whole page
+         rearranged, on the one path a hand-off link always follows, and at a
+         1024px viewport it also overflowed the page by 61px. `1 / -1` puts it
+         back above both columns, which is where it reads as belonging, and the
+         declaration is simply ignored where the parent is not a grid. */
+      d.style.gridColumn = "1 / -1";
       if (f && f.parentNode) f.parentNode.insertBefore(d, f);
     }
 
