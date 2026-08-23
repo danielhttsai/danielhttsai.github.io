@@ -7098,3 +7098,13 @@ over.
 - **The live site was not checked** — `danielhttsai.github.io` is still blocked
   from this sandbox. Still nobody has opened one of these `.docx` files in
   Microsoft Word.
+
+<!-- CLAIM 2026-08-23 (twenty-sixth run): RWE Studio's ACNU propensity-score
+     estimation path, end to end — SPEC.acnu.rscript in
+     src/pages/tools/rwe-studio.astro (covariate coercion, the PS fit, common
+     support / trimming, the weight family and its refusal gates, the balance
+     table, matching, fine stratification, the per-protocol estimand, and the
+     browser-side PSDIAG / PSW / PSBAL panel and export that read them).
+     NOT the amendments log, NOT the numeric-role gate, NOT the checker,
+     NOT the nine builders, NOT ITS / SCCS / case-crossover.
+     If you are a concurrent run reading this, take something else. -->
