@@ -337,23 +337,34 @@ next run does not have to re-derive them. Ranked roughly by damage.
   auto-stamping an estimand would manufacture exactly the confident-wrong-label
   bug we hunt. If it is done at all it should be a field the user fills, with
   only the seven determined cases pre-filled — which is a feature, so ask Daniel.
-  Two entries now name their own estimand in prose (overlap → ATO, IPTW → ATE).
+  Three entries now name their own estimand in prose (overlap → ATO, IPTW →
+  ATE, IV → LATE). **Both reviewers of the thirty-second run, on disjoint
+  briefs, independently put this in their own top three**, which is the
+  strongest evidence this file has that it is worth Daniel's decision. Neither
+  proposed auto-stamping the undetermined six; the applied analyst's argument
+  is new and is about pooling — the builder prints ticked alternative methods
+  as sensitivity analyses and meta-analyses site estimates, so a protocol
+  naming no estimand invites a forest plot pooling an ATT from matching against
+  an ATO from overlap weighting and calling the gap "robustness".
 - **A stale `?seed=` or saved draft blanks a `<select>` silently.** `writeForm`
   assigns `el.value` with no membership check; an unmatched value leaves
   `selectedIndex = -1`, and a select with no selection contributes no entry to
   `FormData`, so `s.psMethod` becomes `undefined` and the export falls through to
   generic prose — while the green "pre-filled from link" banner claims success.
   Not executed (no jsdom here); it is spec behaviour and worth a browser test.
-- **`pickedCitations` is never pruned.** Picking a phenotype from the library
-  stores its validation citation under the phenotype's name, persisted in its own
-  localStorage key, cleared only by "Clear all". Pick MI, then pick stroke, and
-  the reference list cites an MI validation study for a stroke-only protocol.
-- **Changing `psMethod` by hand does not clear `psMethodDetails`.** After a
-  library pick, §7 can read "Method: 1:1 PS matching" directly above "operational
-  details: … overlap weights …" — two different estimands in one section. Do
-  **not** fix by wiping the textarea on change: it is explicitly hand-editable
-  ("Edit freely"), and wiping it is a data-loss bug. Show a mismatch warning in
-  the checks panel instead.
+- ~~**`pickedCitations` is never pruned.**~~ **Done 2026-08-23 (thirty-second
+  run)** in ACNU, the last builder still carrying it and the one this item was
+  written against. It is now closed everywhere. Keyed by the field the pick
+  wrote into, with the value it wrote and every other field it touched stored
+  beside it; a citation travels only while ALL of those still hold what the
+  pick put there. See that run's section at the bottom — including the
+  regression the first version of it shipped, which was worse than the bug.
+- ~~**Changing `psMethod` by hand does not clear `psMethodDetails`.**~~ **Done
+  2026-08-23 (thirty-second run)**, the way this item said to do it: the
+  textarea is untouched and the panel raises the disagreement. It also reaches
+  the exported Markdown, the `.docx` and the TARGET checklist, because the
+  person who receives the document is not the person who saw the panel — the
+  argument the comment above `STALE_DOC_HEAD` in that same file already makes.
 - **`pscNorm` deletes whole writing systems.** It keeps Latin + kana + CJK +
   Hangul, so Cyrillic, Greek, Thai, Hebrew, Arabic and **full-width Latin**
   normalise to `""` and fall through to "claims-available". `ＨｂＡ１ｃ` — what a
@@ -9113,3 +9124,241 @@ Ranked by damage. Everything here was executed by one or both reviewers.
      both are named above with the input that shows them, and both are
      verifiable from this sandbox. The Protocol Generator hub is still the
      tool nobody has opened since the fifteenth run. -->
+
+### Found 2026-08-23 by a thirty-second run — the ACNU library-pick path, end to end
+
+The thirty-first run was still committing in `rwe-studio.astro` four minutes
+before this one started, so this run took a file that run could not be in:
+`active-comparator-new-user.astro`, and inside it the **phenotype/method
+library pick path** — what a pick writes, what it leaves behind, and what
+reaches the exported protocol. That closes two of this file's oldest standing
+items (`pickedCitations` never pruned, live since the first run and fixed in
+three sibling builders but never in the flagship; and the stale
+`psMethodDetails`), and it turned into a much larger content finding than
+either reviewer expected.
+
+Two reviewers on disjoint briefs — a methodologist on the library's CONTENT and
+citations, an applied analyst on the MECHANICS — then each critiquing the
+other's list, then a third reviewer sent back at this run's own committed diff.
+
+**Eight commits. The own-diff round is now 8 for 8: it found five executed
+defects in this run's work, two of which this run's own commit messages had
+declared it was fixing.** Keep doing it, keep the briefs disjoint, and **send
+the reviewers at each other's lists** — that step is new this run and it
+produced the sharpest moment below.
+
+#### The headline: two reviewers gave opposite readings of the same ICD-10 code
+
+The methodologist reported that `G40.812` in the Lennox-Gastaut entry is the
+**not-intractable** leaf and therefore the least characteristic code for a
+syndrome that is drug-resistant by definition. The analyst, critiquing that
+list, said it was **inverted** — that `.812` is the intractable-without-status
+leaf and that acting on the finding "makes the phenotype worse in exactly the
+way A says it is broken", and told the orchestrator not to ship it.
+
+The methodologist was right. `G40.812` is *Lennox-Gastaut syndrome, not
+intractable, without status epilepticus*; `G40.814` is the intractable one.
+Checked independently here against four ICD-10-CM code references after they
+disagreed.
+
+**The lesson is not that one reviewer was careless — it is that a confident,
+specific, well-argued correction from a reviewer who has been right about
+everything else is still a claim that needs a source.** The analyst had been
+right about almost everything, including things the methodologist got wrong.
+**When two reviewers disagree on a fact, do not adjudicate on their track
+records; go and look.** It cost one search.
+
+The code was **not changed** — it is Daniel's own published algorithm and the
+tool disagreeing with the paper is his to resolve. The code set now states what
+`G40.812` is and what it excludes, and asks the reader to confirm against the
+algorithm before locking. **That is the open item for Daniel.**
+
+#### What shipped
+
+1. **`pickedCitations` keyed by name and never evicted.** Pick MI, then pick
+   Ischemic stroke, and both validation studies were in the exported reference
+   list — Markdown and Word — for a one-outcome protocol. Reproduced end to end
+   before it was touched. Now keyed by the field the pick wrote into, with what
+   it wrote; second pick evicts first; legacy entries pruned on load by a key
+   set derived from the same expression the pick handler uses. The reference
+   list was two copies of one expression; it is `refsOf` now.
+2. **The indication code set was dropped on the floor.** The indications
+   trigger is the one of four with no code-set field, so `fill()` returned
+   early: the modal showed `ICD-10 E11.* …`, the click wrote `Type 2 diabetes
+   (T2DM)`, and the protocol's cohort-entry criterion contained no criterion.
+   All thirteen were unreachable. Where there is nowhere else for a code set to
+   go it now goes into the one field there is.
+3. **The modal never said whether an entry was validated**, under a header
+   reading "Validated phenotype library" over four lists including thirteen
+   statistical methods. Every row now says which it is, at the moment of
+   picking.
+4. **Sixteen of eighteen "validation" strings did not validate anything.**
+   Split into `validation` (a specific accuracy study; the only thing that
+   reaches the reference list) and `provenance` (a note, shown, never numbered)
+   — the structural fix three sibling builders already had. Three of forty-nine
+   entries keep a validation study. Six strings asserted a paper that does not
+   support them; each is now a note saying what the paper actually is.
+5. **Four code sets whose wildcard and exemplar list disagree** (GI bleeding's
+   `K27.*`/`K28.*`; tirzepatide's `A10BX16` outside `A10BJ*`; atomoxetine
+   inside `N06BA`; lithium inside `N05A*`), plus the NSAID exclusion whose
+   justification said the opposite of what M01AX is.
+6. **A pick destroying hand-typed text in silence**, a `<select>` assignment
+   with no membership check, a targeted field skipped rather than cleared, and
+   a greedy-matching entry that matched on the PS while applying a logit-scale
+   caliper.
+7. **The method/details mismatch and every withheld citation now reach the
+   exported document**, not only the panel.
+
+#### What the two reviewers disagreed about, and who was right
+
+- **The LGS code, above.** Methodologist right, analyst confidently wrong,
+  settled by looking.
+- **"Validated phenotype library" as an overclaim.** The methodologist led with
+  it. The analyst overturned the headline: the word "validated" appeared on
+  exactly one button — the outcomes one — and all eighteen outcomes did carry a
+  string, so the label was not the defect; the *quality of those strings* was.
+  **The analyst was right, and this run then proved it the hard way** by
+  splitting validation from provenance and leaving that same button standing
+  over a list that had become 89% unvalidated. The own-diff reviewer caught it.
+- **Counting.** The methodologist said 31 of 49 entries lacked a validation and
+  this run repeated it in a commit message ("Thirty-one … sixty-three per
+  cent"). The analyst's count was right: **30 of 49, 61%** (18 exposures + 12
+  indications). The same commit message also says the hint span promising a
+  citation "was true of eighteen outcomes, one indication and no exposure at
+  all" — **that span sits under the outcomes button and only ever spoke about
+  outcomes, where it was true**. Both are errors in a pushed commit message;
+  recorded here rather than rewritten, because a concurrent run was building on
+  the same branch.
+- **Ranking, and it was the useful disagreement.** The methodologist ranked by
+  *is this defensible in print*; the analyst re-ranked by *does a wrong answer
+  arrive without anyone noticing*, and inverted the list: an ICD-10-CM code that
+  does not exist at a site (`E14`, `E10.1` as a header) **fails loudly and
+  self-reports**, so it ranks below `K27.*`, which returns a confident,
+  plausible, inflated event count. **That is this file's own bug class applied
+  to a review, and it is the right axis.**
+- **The methodologist's own least-confident finding was promoted by the
+  analyst.** Variable-ratio matching analysed with cluster-robust variance and
+  no matching-ratio weights: the methodologist flagged it as a judgement call it
+  could not source; the analyst argued it biases the *point estimate*, not the
+  variance, because matched-set size correlates with PS density. **Left
+  unshipped** — neither could source it, and the entry is otherwise correct —
+  but it is the best-argued open content item in this file.
+- **The analyst caught what the methodologist could not have known**: three of
+  its findings had already shipped while it was writing, and one of those
+  commits *promoted* two of its remaining findings from modal-only cosmetics to
+  document-carrying defects (the indication code set now travels, so the
+  hypertension `C02-C09` wildcard and the uncited "PPV ~90%" on atrial
+  fibrillation now print into protocols). **If you ship mid-review, re-rank the
+  reviewer's list yourself afterwards.**
+
+#### What the own-diff round found, all five executed
+
+- **`"…was filled with X, and now reads X"`.** The lapsed-citation notice
+  clipped both values at 60 characters from the start, and appending is how
+  people edit library text — so it printed two identical quotations while
+  claiming a change. **This was manufactured across two of this run's own
+  commits**: the indication append made the stored value 205 characters where
+  it had been 30, and the next commit widened the check to the long fields.
+  Clip around the first differing character, not from the start.
+- The outcomes button still said "validated" (above).
+- The unvalidated-row sentence called a drug class "the condition" and asked
+  for its positive predictive value, on all eighteen drug classes.
+- "Used in" as the label for a field mostly not about use; the same instruction
+  twice in two colours on one row; "the References box" for a field called
+  "Key references (one per line)".
+- **The exported document said none of it.**
+
+It also **verified and confirmed** a long list, which is the counterweight:
+eviction by field with independent records per trigger, `refsOf` genuinely one
+function with Markdown and a real `.docx` matching exactly, legacy pruning
+dropping only legacy entries across reload / Clear all / `?seed=`, `fields`
+surviving a reload byte-identical, the overwrite confirm firing only on
+hand-typed text and leaving the form genuinely untouched on decline, trailing
+whitespace not lapsing while a case change does, the indication append reaching
+both exports intact with no double-append on a second pick, and the
+"clear rather than skip" branch being genuinely dead code today.
+
+#### Deliberately left, argued, not manufactured
+
+Ranked by the applied analyst's axis — silently wrong beats loudly broken.
+
+- **Name the estimand in the method definitions.** Both reviewers' top three,
+  from disjoint briefs. See the updated standing item above; it remains
+  Daniel's call, and the six undetermined entries must not be auto-stamped.
+- **"Which ICD-10?"** — the analyst's own escalation of the methodologist's
+  code-flavour findings, and it is bigger than any individual code: **no entry
+  in the library says which ICD-10 it means.** Taiwan runs ICD-10-CM, Japan a
+  WHO-based system, Korea KCD, Australia ICD-10-AM. The export instructs five
+  sites to implement "ICD-10 I21.*" and each resolves it differently and
+  silently. Mixing systems in one entry (dementia's WHO `F00` beside CM's
+  `G31.83`) is **not** the defect a multi-national library should fix; naming
+  the system is. **This is the best next content target in this file.**
+- **Individual code sets left**: ischemic stroke includes `I64` ("stroke, not
+  specified as haemorrhage or infarction"), which in a DOAC-vs-warfarin study
+  lets haemorrhagic strokes count toward the efficacy endpoint while the ICH
+  entry is the safety endpoint — a bias with a direction, but visible to an
+  experienced reader; hypertension's `C02-C09` includes C04 peripheral
+  vasodilators and C05 vasoprotectives; pregnancy's `Z3*` includes Z30
+  contraceptive and Z31 procreative management; DKA's `E14` is WHO-only and
+  `E10.1`/`E11.1` are non-billable headers in ICD-10-CM; falls uses `R29.6`
+  ("repeated falls") for what the label calls "history of falling" (`Z91.81`).
+  The last two **fail loudly at the site** and rank lowest for that reason.
+- **Atrial fibrillation asserts "PPV ~90% in claims" with no citation**, inside
+  the `codes` string, so it now prints into protocols as an unattributed
+  performance claim. Cheap to fix; nobody found a source for the number.
+- **Exposure and comparator can be the same drug.** The analyst argued the
+  useful version is not name-identity (self-announcing in the abstract) but
+  **code-set containment** — `A10B*` against `A10BK*` — and that the check
+  should gate the export's unconditional "the active comparator … has no known
+  a priori association with the outcome" sentence, which is the design's whole
+  validity argument asserted as fact. Not built; it is the same shape as the
+  work this run did and would fit the checks panel it now uses.
+- **The `<select>` refusal writes to `[data-action-msg]`**, at the bottom of a
+  5,000-line form, and does not scroll. Unreachable with shipped data, so it
+  was left, but it is not "a refusal the user can read" as its commit claims.
+- **The overwrite confirm lists fields in plan order**, which for outcomes is
+  "Code set, Operational definition" — the reverse of their on-screen order —
+  and joins with a bare comma.
+- **A non-string `codes`/`definition`** would reach the form as `[object
+  Object]`; the same decision the twenty-sixth run made about `String()`
+  elsewhere applies and was not revisited.
+
+#### Verified this run, and how
+
+- Everything driven in headless Chromium against a local `astro build` + a
+  static server. Harnesses in `scratch/orch/` (gitignored), worth rebuilding:
+  `cites.mjs` (15-assertion citation-lifecycle battery — eviction, lapse,
+  reload, legacy pruning, indication codes, modal badges), `regress.mjs` (the
+  own-diff regression and its converse, plus the edit-freely exemption),
+  `r2fix.mjs` (the five own-diff defects), `notes.mjs`, `docbanner.mjs` (real
+  `.docx`, unpkg routed to a locally-packed `docx@8.5.0`), `health.mjs` (all
+  twelve tool pages, zero `pageerror`, `typeof window.PC === "object"`).
+- **Baseline first: 6 pass / 9 fail before any change, 15 / 0 after** — the
+  failures were reproduced before they were fixed, and the fix observed.
+- **A real `word/document.xml`** carrying the new document banner, with the
+  withheld citation present in the banner and absent from the numbered list.
+- All twelve pages clean before every commit.
+- **Citations: three PMIDs checked independently here** (39241791 → Luo H et
+  al, Lancet Psychiatry 2024;11(10):807-17, psychotropic prescribing, no
+  self-harm outcome; 40437158 → Communications Medicine 2025, dementia
+  survival, not CNS Drugs; 39772758 → Baxter SM et al, Thyroid
+  2025;35(1):69-78, not Shao/Lai), plus Rosenbaum & Rubin 1985 Biometrics and
+  the G40.812 leaf. **Snippet evidence via WebSearch only — Crossref, PubMed
+  and doi.org are all still blocked.** **No replacement citation was asserted
+  anywhere**: every wrong one was withdrawn and the note says what the record
+  shows and stops. Austin 2011 Pharm Stat 10:150-61 (caliper) and Abadie &
+  Imbens Econometrica 2006 (with-replacement variance) are recorded as leads,
+  deliberately not written in.
+- **A near-miss worth recording: this run expanded two author lists from
+  memory** ("Cheng CL, Kao YH, Lin SJ, Lee CH, Lai ML") while rewriting the
+  stroke entry, caught it in its own next command, and reverted to the `et al.`
+  form the file already had. **The instinct to "tidy up" an abbreviated citation
+  is exactly how this repo got its fabricated reference.** Do not expand an
+  author list you have not read.
+- **The live site was not checked** — `danielhttsai.github.io` is still blocked.
+  **Nobody has still opened one of these `.docx` files in Microsoft Word.**
+- **Process note: `git add <file>` stages everything in that file.** This run
+  twice swept uncommitted work into a commit whose message described half of
+  it, and twice unpicked it (save a copy, `reset --soft`, `restore`, re-apply
+  in groups, `diff` against the copy to prove the end state is identical).
+  Cheap to avoid: commit before you start the next thing.
