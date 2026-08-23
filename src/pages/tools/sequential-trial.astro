@@ -346,15 +346,23 @@ const SENSITIVITY = [
       const i = l.lastIndexOf("|");
       const name = (i < 0 ? l : l.slice(0, i)).trim();
       const raw = i < 0 ? "" : l.slice(i + 1).trim();
-      return { name: name, raw: raw, days: numDays(raw) };
+      // `line` is the user's own text, kept verbatim. Splitting on the last "|"
+      // is right when a day count follows it and wrong when one does not: for
+      // "Sex (M|F)" it takes "F)" as the day count and leaves the name as
+      // "Sex (M". Rather than guess where the name ends, an unreadable row is
+      // never re-derived — it is written back and quoted exactly as typed.
+      return { name: name, raw: raw, days: numDays(raw), line: l };
     }).filter((r) => r.name);
     // The write path has to carry the same distinction the read path just
     // learnt. rowsJoin rewrites the WHOLE textarea whenever a chip is clicked or
     // a handle dragged, and the textarea is the only copy of what was typed — so
     // a row whose length could not be read must come back as the user's own
     // words, not as the 0 the old reader had turned it into.
-    const rowsJoin = (rows) => rows.map((r) => Number.isFinite(r.days) ? r.name + " | " + r.days : (r.raw ? r.name + " | " + r.raw : r.name)).join("\n");
-    const rowDays = (r) => Number.isFinite(r.days) ? r.days + " d" : (r.raw ? "(“" + r.raw + "” could not be read as a number of days)" : "(no look-back given)");
+    const rowsJoin = (rows) => rows.map((r) => Number.isFinite(r.days) ? r.name + " | " + r.days : (r.line != null ? r.line : (r.raw ? r.name + " | " + r.raw : r.name))).join("\n");
+    // An unreadable row is quoted whole, because the split that produced its
+    // name is exactly the thing that could not be trusted.
+    const rowLabel = (r) => Number.isFinite(r.days) ? r.name : "“" + (r.line != null ? r.line : r.name) + "”";
+    const rowDays = (r) => Number.isFinite(r.days) ? r.days + " d" : (r.raw ? "(no readable number of days)" : "(no look-back given)");
     // The one place that still read a day count its own way. numDays exists so
     // the prose, the diagrams and the checks cannot tell three stories about one
     // box; this printed the raw string instead, so a look-back of "-5" — which
@@ -363,7 +371,7 @@ const SENSITIVITY = [
     // summary and TARGET item 7a.
     const covLbText = (s) => {
       const r = parseRows(s.covWindows);
-      if (r.length) return r.map((x) => x.name + " " + rowDays(x)).join("; ");
+      if (r.length) return r.map((x) => rowLabel(x) + " " + rowDays(x)).join("; ");
       const n = numDays(s.covlookback);
       if (n === null) return "(not specified)";
       if (!Number.isFinite(n)) return "(not specified — “" + s.covlookback + "” could not be read as a whole number of days)";
@@ -541,9 +549,9 @@ const SENSITIVITY = [
       comparator: or(s.comparator, "(comparator)"),
       outcome: or(s.outcome, "(outcome)"),
       data: s.data,
-      analysis: "a sequence of nested trials emulated at each eligible origin and pooled across trials, with the uncertainty from patients entering several trials handled as in Section 10, estimating " + estimandText(s.estimand).replace(/\*\*/g, "") + ", reported as " + effectText(s),
+      analysis: "a sequence of nested trials emulated at each eligible origin and pooled across trials, with the uncertainty from any re-use of patients across trials handled as in Section 10, estimating " + estimandText(s.estimand).replace(/\*\*/g, "") + ", reported as " + effectText(s),
       groupBy: "treatment arm",
-      limitations: "The same patient contributes to several trials, often with overlapping follow-up, so the nested trials are not independent: standard errors that ignore this are too small, and per-trial estimates cannot be treated as separate studies. Residual and unmeasured confounding within each trial cannot be excluded, and confounders are measured only up to each origin.",
+      limitations: "Where the control arm is those not yet treated, the same patient contributes to several trials, often with overlapping follow-up, so the nested trials are not independent: standard errors that ignore this are too small, and per-trial estimates cannot be treated as separate studies. Where both arms initiate at the origin, each patient sits in one trial and that does not arise. Residual and unmeasured confounding within each trial cannot be excluded, and confounders are measured only up to each origin.",
       plannedOutputs: ["Number of trials, and the number of patients and of patient-trial records enrolled in each — with the distribution of how many trials each patient enters.", "Per-trial and pooled effect estimates, the per-trial estimates read as a descriptive check rather than as independent studies.", "Within-trial covariate-balance (SMD) diagnostics, before and after weighting or matching.", "Within-trial positivity diagnostics: the number assigned to each arm at every origin, the propensity-score overlap, and the number and size of extreme weights, with any truncation rule stated in advance.", "Cumulative-incidence or survival curves by arm, stated as cause-specific or as accounting for competing risks."],
     });
 
@@ -572,6 +580,29 @@ const SENSITIVITY = [
     const BLK_HEAD = "This draft is not ready to be used as a protocol. The items below must be settled first; until then the sections that depend on them say what is missing rather than supplying a value.";
     const CAU_HEAD = "Flagged while this protocol was drafted. These are not blocking, but each is a choice a reader will expect to see justified.";
 
+    // The two figures' written descriptions. HARPER item 7.2 is carried by
+    // this text, not by the picture: an image-stripping extractor, a reviewer
+    // reading the .docx as text, and the Markdown export (which embeds no
+    // images at all) all see only this. So it is built once and used by both
+    // exports rather than living inside buildDocx, where the Markdown could
+    // not reach it and had no figure section of any kind.
+    const figSpecs = (s) => [
+      { el: "diagram", cap: "Figure 1. Within one nested trial, anchored at its origin (day 0) — the windows measured before the origin, and the follow-up after it.", lines: [
+        "Time zero: each trial's origin. Eligibility, treatment assignment and the start of follow-up are all evaluated at that moment, which is what keeps them aligned.",
+        "New-user washout, before the origin: " + daysTxt(s.washout) + " with no prior exposure or comparator.",
+        "Covariate / eligibility look-back, before the origin: " + covLbText(s) + ".",
+        "Follow-up, after the origin: " + daysTxt(s.futrial) + " maximum per trial.",
+        "The windows move with the origin, so a patient ineligible at one origin may be eligible at a later one.",
+      ] },
+      { el: "diagram2", cap: "Figure 2. The same trial repeated at every origin — the nested trials staggered along calendar time.", lines: [
+        "One trial begins at each origin: " + or(s.interval, "monthly") + ", from " + or(s.first, "(first origin)") + " to " + or(s.last, "(last origin)") + ".",
+        "Each trial carries the same pre-origin windows and the same follow-up length as Figure 1, re-measured at its own origin.",
+        "Where the control arm is those not yet treated, a patient enters every trial for which they remain eligible, so the same person appears in several trials with overlapping follow-up; where both arms initiate at the origin, each patient sits in one trial.",
+        "Trials with later origins have less calendar time before the data end and are administratively censored earlier.",
+        "Schematic: the number of trials drawn is illustrative, not the number the date range implies.",
+      ] },
+    ];
+
     const buildMarkdown = (s) => {
       const today = new Date().toISOString().slice(0, 10);
       const blk = blockers(s), cau = cautions(s);
@@ -589,6 +620,12 @@ Among **${or(s.population, "(population)")}**, what is the effect of **${or(s.ex
 
 ## 3. Study design
 A **sequential trial emulation**: a series of nested trials with origins **${or(s.interval, "monthly")}** from **${or(s.first, "(first origin)")}** to **${or(s.last, "(last origin)")}**, using observational data from **${or(s.data, "(data source)")}**.
+
+## 3a. Study design diagram
+
+${figSpecs(s).map((f) => "**" + f.cap + "**\n" + f.lines.map((l) => "- " + l).join("\n")).join("\n\n")}
+
+_(The figures themselves are in the Word export; this Markdown carries their written description, which is what HARPER item 7.2 asks for.)_
 
 ## 4. Eligibility (re-assessed at each origin)
 ${or(s.eligibility, DEF.eligibility)}
@@ -621,7 +658,7 @@ Competing risks. The follow-up rule above censors at death from any cause, and t
 The target estimand is ${estimandText(s.estimand)}. We report ${effectText(s)}.
 
 The pooled estimate is not the effect in one population: with a single treatment coefficient across all trials it is an average of the origin-specific effects, weighted by how much information each trial contributes — and those weights are data-dependent, because later trials carry less remaining follow-up (Section 8). We report the per-trial estimates and their sizes so the average can be read for what it is.
-${s.estimand === "ITT" || s.estimand === "both" ? "\nThe intention-to-treat contrast here is a contrast of *initiation* strategies. If control-arm patients later start the index treatment, or treated patients stop, the ITT effect is attenuated toward the null by an amount the ITT estimate alone cannot reveal. We therefore report the observed switching and discontinuation over follow-up alongside it. Where the control arm is those not yet treated, a control who later initiates stays in the control arm of the trials they had already entered, for the whole of their follow-up — that is precisely what produces the attenuation. Their records are not censored at the moment they initiate; censoring them is the per-protocol analysis, not this one.\n" : ""}${s.estimand === "PP" || s.estimand === "both" ? "\nThe per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. The censoring weights are the same machinery a clone-censor-weight analysis uses, but the cloning step is not: assignment here is determined at the origin, so the arms are different people, and the per-protocol estimator therefore needs the treatment weights AND the censoring weights together, where a cloned design needs only the latter. Note what this means for a control who later initiates: under this contrast their earlier control-arm records ARE censored at the moment they initiate, which is exactly the step the intention-to-treat contrast does not take.\n" : ""}
+${s.estimand === "ITT" || s.estimand === "both" ? "\nThe intention-to-treat contrast here is a contrast of *initiation* strategies. If control-arm patients later start the index treatment, or treated patients stop, the ITT effect is attenuated toward the null by an amount the ITT estimate alone cannot reveal. We therefore report the observed switching and discontinuation over follow-up alongside it. Where the control arm is those not yet treated, a control who later initiates stays in the control arm of the trials they had already entered, for the whole of their follow-up — that is precisely what produces the attenuation. Their records are not censored at the moment they initiate; censoring them is the per-protocol analysis, not this one.\n" : ""}${s.effect === "HR" || s.effect === "both" ? "\nProportional hazards is not guaranteed here. This design does not fail in the way a cloned design does — there the same clones occupy both arms until the grace period ends. But under an intention-to-treat contrast the arms converge as control patients start treatment, so the hazard ratio drifts toward the null with follow-up time; a weighted marginal hazard ratio need not be proportional even when the conditional one is; and one pooled coefficient across trials with different amounts of remaining follow-up is an average of time-varying hazard ratios whose value moves with the data cut-off. Proportionality is therefore checked rather than assumed, and an absolute contrast is reported alongside.\n" : ""}${s.estimand === "PP" || s.estimand === "both" ? "\nThe per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. The censoring weights are the same machinery a clone-censor-weight analysis uses, but the cloning step is not: assignment here is determined at the origin, so the arms are different people, and the per-protocol estimator therefore needs the treatment weights AND the censoring weights together, where a cloned design needs only the latter. Note what this means for a control who later initiates: under this contrast their earlier control-arm records ARE censored at the moment they initiate, which is exactly the step the intention-to-treat contrast does not take.\n" : ""}
 ## 10. Statistical analysis
 1. Construct the nested trials at each origin and assemble the stacked, trial-indexed dataset (one record per patient per trial they enter).
 2. Within each trial, estimate the propensity score from covariates measured at that origin and apply weighting (or matching); check balance within trial.
@@ -656,7 +693,9 @@ ${REFS.map((r) => "- " + r).join("\n")}
       const NUMS = [["washout", "New-user washout"], ["covlookback", "Covariate / eligibility look-back"], ["futrial", "Maximum follow-up per trial"]];
       const bad = NUMS.filter(([k]) => badNum(s[k]));
       if (bad.length) checks.push({ level: "error", msg: "Not a usable number of days, so the protocol prints “(invalid)” rather than guessing: " + bad.map(([k, l]) => l + " = “" + s[k] + "”").join("; ") + ". Day counts must be whole numbers of 0 or more — a negative window has no meaning, and a value the text and the diagram would read differently is refused rather than silently rounded." });
-      const rnd = NUMS.filter(([k]) => rounded(s[k]));
+      // Not for a box already flagged as implausibly long: two notes about one
+      // box, saying different things, is the pattern this panel avoids.
+      const rnd = NUMS.filter(([k]) => rounded(s[k]) && !(Number.isFinite(numDays(s[k])) && numDays(s[k]) > 18262));
       if (rnd.length) checks.push({ level: "info", msg: "Rounded to whole days, in the protocol and the diagram alike: " + rnd.map(([k, l]) => l + " " + s[k] + " → " + numDays(s[k])).join("; ") + "." });
       // Don't also claim the box "is 0" when it was refused as unreadable above —
       // two messages about one box, saying different things, is worse than one.
@@ -674,21 +713,26 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // reported as one — the old check collapsed both into "0 days", which is
       // the reading this page has just stopped making everywhere else.
       const zeroRows = covRows.filter((r) => r.days === 0).map((r) => r.name);
-      const badRows = covRows.filter((r) => r.raw && !Number.isFinite(r.days)).map((r) => r.name + " | " + r.raw);
+      const badRows = covRows.filter((r) => r.raw && !Number.isFinite(r.days)).map((r) => "\u201c" + (r.line != null ? r.line : r.name + " | " + r.raw) + "\u201d");
       const noneRows = covRows.filter((r) => !r.raw).map((r) => r.name);
-      if (badRows.length) checks.push({ level: "error", msg: "These per-covariate rows have a look-back that could not be read as a whole number of days, so the protocol says so rather than guessing a length, and no window is drawn for them: " + badRows.join("; ") + ". A row is read as “Name | days”, and the days must be a whole number of 0 or more." });
-      if (noneRows.length) checks.push({ level: "error", msg: "These per-covariate rows have no look-back after the “|”, so their windows are unspecified: " + noneRows.join("; ") + ". Give each one a whole number of days. A row added from a chip button copies the single look-back setting, which is itself empty." });
+      if (badRows.length) checks.push({ level: "error", msg: "These per-covariate rows have no readable look-back, so the protocol says so rather than guessing a length, and no window is drawn for them. They are quoted whole because the text after the last \u201c|\u201d is what could not be read, and it is not safe to assume the rest is the covariate name: " + badRows.join("; ") + ". A row is read as “Name | days”, and the days must be a whole number of 0 or more." });
+      if (noneRows.length) checks.push({ level: "error", msg: "These per-covariate rows have no look-back after the “|”, so their windows are unspecified: " + noneRows.join("; ") + ". Give each one a whole number of days." + (blank(s.covlookback) ? " A row added from a chip button copies the single look-back setting, and that setting is currently empty." : "") });
       if (zeroRows.length) checks.push({ level: "warn", msg: "These per-covariate rows have a look-back of 0 days, so the covariate is measured only on the origin day itself: " + zeroRows.join("; ") + ". If that is deliberate, nothing further is needed." });
       if (badNum(s.futrial)) { /* already reported */ }
       else if (blank(s.futrial)) checks.push({ level: "error", msg: "Maximum follow-up per trial is empty. The diagram shows a placeholder bar labelled “length not set” and the protocol prints “(not specified)” — nothing is assumed." });
       else if (fu <= 0) checks.push({ level: "warn", msg: "Set the per-trial follow-up window." });
-      if (!s.multiple || !s.multiple.trim()) checks.push({ level: "warn", msg: "Say how many trials one patient can enter, and how the re-use is handled. It follows from the control-arm definition above. If a patient does enter several trials and that is ignored, precision is over-stated: the analysis behaves as though there were as many people as there are patient-trial records." });
+      if (!s.multiple || !s.multiple.trim()) checks.push({ level: "warn", msg: "Say how many trials one patient can enter, and how the re-use is handled. It follows from the control-arm definition given with the eligibility rule. If a patient does enter several trials and that is ignored, precision is over-stated: the analysis behaves as though there were as many people as there are patient-trial records." });
       if (!s.eligibility || !s.eligibility.trim()) checks.push({ level: "error", msg: "State the eligibility rule applied at each origin, and in particular say what the CONTROL ARM is. Two versions of this design exist: if the control arm is those not yet treated, a patient enters a trial at every origin until they initiate, and the same person appears in several trials; if both arms initiate at the origin (an active comparator), each patient sits in one trial. They are different studies, and the choice decides whether the bootstrap over patients, and the refusal to meta-analyse the per-trial estimates, apply at all. This page cannot infer it, so the protocol names both and asks." });
       if (!s.assignment || !s.assignment.trim()) checks.push({ level: "warn", msg: "State how arms are assigned at each origin. Assignment must use only information available at the origin — a rule that peeks after it (e.g. “initiated within the next 90 days”) puts immortal time straight back in." });
       if (!s.confounding || !s.confounding.trim()) checks.push({ level: "warn", msg: "Specify how confounding is controlled within each trial (e.g. PS weighting or matching). Covariates must be re-measured at each origin, so a patient in several trials has a different propensity score in each." });
       if (!s.population || !s.population.trim()) checks.push({ level: "info", msg: "Specify the population." });
       if (!s.exposure || !s.comparator) checks.push({ level: "info", msg: "Specify the treatment and comparator." });
       if (!s.outcome || !s.outcome.trim()) checks.push({ level: "info", msg: "Specify the outcome." });
+      // The two selects whose absence changes what the protocol says. A blank
+      // one is not covered by the stale-select machinery, which only fires for
+      // a value the page does not offer — an empty string is not a value.
+      if (!s.estimand) checks.push({ level: "error", msg: "No estimand is selected, so sections 9 and 10 of the protocol say so rather than naming one. Choose intention-to-treat, per-protocol, or both — the choice decides whether patients are censored at deviation, which is the analysis, not a presentational detail." });
+      if (!s.effect) checks.push({ level: "error", msg: "No effect measure is selected, so the protocol says so rather than naming one. Choose one before exporting." });
       const est = s.estimand;
       if (est === "ITT" || est === "both") checks.push({ level: "info", msg: "ITT (assignment at each origin): the strategy is fixed at the origin — later switching or add-on is ignored (no deviation censoring). Switching attenuates this estimate toward the null by an amount the ITT estimate itself cannot tell you, so report how much switching occurred." });
       if (est === "PP" || est === "both") checks.push({ level: "info", msg: "Per-protocol: within each trial, censor at deviation and apply IPCW — fit the weights separately per arm, and list the predictors of deviation. Without the weights, censoring at deviation is itself a source of selection bias. Note that the arms here are different people, so the treatment weights and the censoring weights multiply; a cloned design needs only the censoring weights, because its two arms are the same person." });
@@ -702,7 +746,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // under an ITT contrast this design breaks it too, by the very mechanism
       // section 9 already describes: control patients start treatment as
       // follow-up proceeds, so the hazard ratio drifts toward the null.
-      if (s.effect === "HR" || s.effect === "both") checks.push({ level: "warn", msg: "Proportional hazards is not guaranteed here. This design does not fail in the way a cloned design does — there the same clones occupy both arms until the grace period ends. But under an intention-to-treat contrast the arms converge as control patients start treatment, so the hazard ratio drifts toward the null with follow-up time; a weighted marginal hazard ratio need not be proportional even when the conditional one is; and one pooled coefficient across trials with different amounts of remaining follow-up is an average of time-varying hazard ratios whose value moves with the data cut-off. Report an absolute contrast alongside it, and check proportionality rather than assuming it." });
+      if (s.effect === "HR" || s.effect === "both") checks.push({ level: "info", msg: "Proportional hazards is not guaranteed here. This design does not fail in the way a cloned design does — there the same clones occupy both arms until the grace period ends. But under an intention-to-treat contrast the arms converge as control patients start treatment, so the hazard ratio drifts toward the null with follow-up time; a weighted marginal hazard ratio need not be proportional even when the conditional one is; and one pooled coefficient across trials with different amounts of remaining follow-up is an average of time-varying hazard ratios whose value moves with the data cut-off. Report an absolute contrast alongside it, and check proportionality rather than assuming it." });
       if (mergeList(s.sensitivityPick, s.sensitivityCustom).some((x) => /I²|I2|heterogen/i.test(x))) checks.push({ level: "warn", msg: "A trial-stratified estimate with I² is planned. Nested trials share patients, so they are not independent studies and I² does not carry its usual meaning here. Report the per-trial estimates as a descriptive check on stability over calendar time rather than as a meta-analysis." });
       // Competing risks were mentioned nowhere on this page — no "competing",
       // no "Fine-Gray", no "cause-specific" — while the default follow-up rule
@@ -713,8 +757,14 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // an RMST difference computed that way is defined in a world where the
       // competing event has been removed. The page's own seeded example is
       // dementia in adults over 50, where death is the dominant competing event.
-      if (s.effect !== "HR") checks.push({ level: "warn", msg: "An absolute contrast is selected (survival / risk difference, or RMST). If death from a non-outcome cause is treated as ordinary censoring, one minus the Kaplan–Meier curve overstates the cumulative incidence, and a survival or RMST difference built the same way is a quantity defined in a world where that death cannot happen. Say whether the target is the cause-specific quantity or the real-world absolute risk, and if it is the latter, estimate it by a method that keeps the competing event in the denominator." });
-      else checks.push({ level: "info", msg: "Censoring at death from a non-outcome cause and fitting a Cox model estimates the CAUSE-SPECIFIC hazard ratio, which is a defensible primary analysis — but say so, because it is not the effect on the real-world absolute risk, and the accompanying absolute contrast must be computed consistently." });
+      // A whitelist, not a not-equal. `s.effect !== "HR"` was true of the empty
+      // string too, so a ?seed= link carrying effect:"" produced a document
+      // whose section 9 said "(not specified)" and whose top said "An absolute
+      // contrast is selected" — a positive claim about the field the same
+      // document declares unspecified. Never assert a fact from a select by
+      // ruling one value out.
+      if (["RD","RMST","RDRMST","both"].indexOf(s.effect) >= 0) checks.push({ level: "info", msg: "An absolute contrast is selected (survival / risk difference, or RMST). If death from a non-outcome cause is treated as ordinary censoring, one minus the Kaplan–Meier curve overstates the cumulative incidence, and a survival or RMST difference built the same way is a quantity defined in a world where that death cannot happen. Say whether the target is the cause-specific quantity or the real-world absolute risk, and if it is the latter, estimate it by a method that keeps the competing event in the denominator." });
+      else if (s.effect === "HR") checks.push({ level: "info", msg: "Censoring at death from a non-outcome cause and fitting a Cox model estimates the CAUSE-SPECIFIC hazard ratio, which is a defensible primary analysis — but say so, because it is not the effect on the real-world absolute risk, and the accompanying absolute contrast must be computed consistently." });
       checks.push({ level: "info", msg: "Uncertainty: the reference method is a bootstrap resampling patients, re-running trial construction and weighting inside each replicate (Keogh 2023). A robust variance clustered on patient is the cheaper alternative and was described by Danaei et al. (2013) as conservative. Model-based standard errors are wrong in either case." });
       return checks;
     };
@@ -895,7 +945,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
           "Target estimand: " + estPlain + ".\nReported as: " + effectText(s) + "." + staleFor("estimand") + staleFor("effect")],
         ["g. Identifying assumptions",
           "Exchangeability, positivity, and consistency within each nested trial.",
-          "Conditional exchangeability within each trial via " + or(s.confounding, "propensity-score methods at each origin") + ", with covariates re-measured at each origin (a patient in several trials has a different propensity score in each). Positivity and consistency are assumed within each trial." + (s.estimand === "PP" || s.estimand === "both" ? " Per-protocol contrasts censor at deviation and apply inverse-probability-of-censoring weights within each trial, which additionally assumes every predictor of deviation is measured." : "") + " Because a patient can appear in several trials, often with overlapping follow-up, the nested trials are not independent and the uncertainty must account for that (see h)."],
+          "Conditional exchangeability within each trial via " + or(s.confounding, "propensity-score methods at each origin") + ", with covariates re-measured at each origin (a patient in several trials has a different propensity score in each). Positivity and consistency are assumed within each trial." + (s.estimand === "PP" || s.estimand === "both" ? " Per-protocol contrasts censor at deviation and apply inverse-probability-of-censoring weights within each trial, which additionally assumes every predictor of deviation is measured." : "") + " Where the control arm is those not yet treated, a patient appears in several trials with overlapping follow-up, so the nested trials are not independent and the uncertainty must account for that (see h); where both arms initiate at the origin, each patient sits in one trial."],
         ["h. Data analysis plan",
           "An estimator that recovers the causal contrast under the identifying assumptions.",
           "Pooled logistic (or weighted Cox) regression across the stacked, trial-indexed dataset with terms for assigned treatment, follow-up time, and trial.\n95% CIs: reference method is a non-parametric bootstrap resampling PATIENTS, repeating trial construction, weight estimation and the outcome model in each replicate (Keogh 2023); a robust (sandwich) variance clustered on the patient is the cheaper alternative, described by Danaei et al. (2013) as conservative. Model-based standard errors are not used.\nPer-trial estimates are reported as a descriptive check, not as independent studies: the trials share patients, so I-squared and Cochran's Q do not carry their usual meaning.\nSubgroups: " + subg + ".\nSensitivity: " + sens + "." + (blockers(s).length ? "\nUNSETTLED AT EXPORT: " + blockers(s).join(" | ") : "")],
@@ -978,53 +1028,14 @@ ${REFS.map((r) => "- " + r).join("\n")}
       noteBlock(CAU_HEAD, cautions(s), "8A6100");
       window.PC.abstractDocx(window.docx, pcOf(s)).forEach((c) => children.push(c));
 
-      children.push(h1("1. Background and rationale"));
-      children.push(para("This study emulates a sequence of nested target trials of " + E + " versus " + C + ". A single-origin new-user design discards eligible person-time; the sequential design emulates one trial at every eligible origin, mitigating prevalent-user and selection bias (Hernán 2008; Danaei 2013; Gran 2010)."));
-
-      children.push(h1("2. Causal question (target trial)"));
-      children.push(para("Among " + or(s.population, "(population)") + ", what is the effect of " + E + " versus " + C + " on " + or(s.outcome, "(outcome)") + "?"));
-
-      children.push(h1("3. Design summary"));
-      children.push(labelTable([
-        ["Design", "Sequential (nested) trial emulation"],
-        ["Data source(s)", or(s.data, "-")],
-        ["Population", or(s.population, "-")],
-        ["Treatment", E],
-        ["Comparator", C],
-        ["Trial origins", or(s.interval, "monthly") + " (" + or(s.first, "start") + "–" + or(s.last, "end") + ")"],
-        ["New-user washout (before each origin)", daysTxt(s.washout)],
-        ["Eligibility / covariate look-back", covLbText(s)],
-        ["Follow-up per trial", daysTxt(s.futrial)],
-        ["Outcome", or(s.outcome, "-")],
-      ]));
-
-      // HARPER item 7.2 — the study design diagram. This was the one builder of
-      // the nine whose Word export carried no figure at all: the page draws two
-      // (within one trial, and the trials staggered along calendar time),
-      // captions them, and shipped neither, so `word/media` held the logo and
-      // nothing else. The picture alone does not satisfy the item either — an
-      // image-stripping extractor and a reviewer reading the .docx as text see
+      const figs = figSpecs(s);
+      // HARPER item 7.2 — the study design diagram. The picture alone does not
+      // satisfy the item: an image-stripping extractor and a reviewer reading the .docx as text see
       // nothing — so designDiagramDocx emits the picture, a numbered caption and
       // a written description together, and that text is what carries the item.
       // It never throws; on failure it returns a visible note instead of a
       // silently absent figure, and the download handler says which you got.
       lastFigNote = "";
-      const figs = [
-        { el: "diagram", cap: "Figure 1. Within one nested trial, anchored at its origin (day 0) — the windows measured before the origin, and the follow-up after it.", lines: [
-          "Time zero: each trial's origin. Eligibility, treatment assignment and the start of follow-up are all evaluated at that moment, which is what keeps them aligned.",
-          "New-user washout, before the origin: " + daysTxt(s.washout) + " with no prior exposure or comparator.",
-          "Covariate / eligibility look-back, before the origin: " + covLbText(s) + ".",
-          "Follow-up, after the origin: " + daysTxt(s.futrial) + " maximum per trial.",
-          "The windows move with the origin, so a patient ineligible at one origin may be eligible at a later one.",
-        ] },
-        { el: "diagram2", cap: "Figure 2. The same trial repeated at every origin — the nested trials staggered along calendar time.", lines: [
-          "One trial begins at each origin: " + or(s.interval, "monthly") + ", from " + or(s.first, "(first origin)") + " to " + or(s.last, "(last origin)") + ".",
-          "Each trial carries the same pre-origin windows and the same follow-up length as Figure 1, re-measured at its own origin.",
-          "A patient enters every trial for which they remain eligible, so the same person appears in several trials with overlapping follow-up.",
-          "Trials with later origins have less calendar time before the data end and are administratively censored earlier.",
-          "Schematic: the number of trials drawn is illustrative, not the number the date range implies.",
-        ] },
-      ];
       for (const f of figs) {
         const fig = await window.designDiagramFigure(document.getElementById(f.el), { caption: f.cap });
         // opts.lines is the supported way to supply the written description, but
@@ -1065,6 +1076,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       children.push(para("The target estimand is " + estPlain + ". We report " + effectText(s) + "."));
       children.push(para("The pooled estimate is not the effect in one population: with a single treatment coefficient across all trials it is an average of the origin-specific effects, weighted by how much information each trial contributes — and those weights are data-dependent, because later trials carry less remaining follow-up (Section 8). We report the per-trial estimates and their sizes so the average can be read for what it is."));
       if (s.estimand === "ITT" || s.estimand === "both") children.push(para("The intention-to-treat contrast here is a contrast of initiation strategies. If control-arm patients later start the index treatment, or treated patients stop, the ITT effect is attenuated toward the null by an amount the ITT estimate alone cannot reveal. We therefore report the observed switching and discontinuation over follow-up alongside it. Where the control arm is those not yet treated, a control who later initiates stays in the control arm of the trials they had already entered, for the whole of their follow-up — that is precisely what produces the attenuation. Their records are not censored at the moment they initiate; censoring them is the per-protocol analysis, not this one."));
+      if (s.effect === "HR" || s.effect === "both") children.push(para("Proportional hazards is not guaranteed here. This design does not fail in the way a cloned design does — there the same clones occupy both arms until the grace period ends. But under an intention-to-treat contrast the arms converge as control patients start treatment, so the hazard ratio drifts toward the null with follow-up time; a weighted marginal hazard ratio need not be proportional even when the conditional one is; and one pooled coefficient across trials with different amounts of remaining follow-up is an average of time-varying hazard ratios whose value moves with the data cut-off. Proportionality is therefore checked rather than assumed, and an absolute contrast is reported alongside."));
       if (s.estimand === "PP" || s.estimand === "both") children.push(para("The per-protocol contrast requires censoring patients when they stop following the strategy assigned at their origin. That censoring is informative — those who keep adhering differ from those who do not — so it is adjusted with inverse-probability-of-censoring weights, fitted separately per arm, and it assumes every predictor of deviation is measured. The censoring weights are the same machinery a clone-censor-weight analysis uses, but the cloning step is not: assignment here is determined at the origin, so the arms are different people, and the per-protocol estimator therefore needs the treatment weights AND the censoring weights together, where a cloned design needs only the latter. Note what this means for a control who later initiates: under this contrast their earlier control-arm records ARE censored at the moment they initiate, which is exactly the step the intention-to-treat contrast does not take."));
 
       children.push(h1("10. Statistical analysis"));
