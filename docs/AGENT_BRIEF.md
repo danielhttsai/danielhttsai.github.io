@@ -180,9 +180,9 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   (twenty-first run)** — see the section at the bottom of this file.
 - ~~The stale-`<select>` refusal path: capture, persistence, and reaching the
   exported document.~~ **Done 2026-08-23 (twenty-second run)** — all seven
-  capturing builders now do all three; see the section at the bottom of this
-  file for what is still open (`case-control` and `clone-censor-weight` capture
-  nothing, and the `"na"` verdict in the checker is untouched).
+  capturing builders now do all three; `case-control` and `clone-censor-weight`
+  still capture nothing. (The `"na"` verdict this item also named was done by
+  the twenty-third run, and finished on the checklist side by the twenty-sixth.)
 - **`PC.mountAmendments` is still called in only two of nine builders** — open
   since the third run, and examined in full by the twenty-fifth run, which
   deliberately did not do it and explains why in its section at the bottom.
@@ -198,13 +198,29 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   to put one in.
 - SCCS's Farrington event-dependent-exposure sensitivity item is ticked by default
   with no explanation or citation. Daniel said to leave it for now.
-- Weight diagnostics in RWE Studio cover IPTW only; SMR, overlap and
-  fine-stratification weights get no equivalent check.
-- No post-matching balance table (the SMD-after column is IPTW-weighted only).
+- ~~Weight diagnostics in RWE Studio cover IPTW only.~~ **Stale — checked
+  2026-08-23 (twenty-sixth run) and no longer true.** `wdiag()` is applied to
+  the SMR and overlap weights on their own (`rwe-studio.astro:1452`), each
+  estimate is gated on its own diagnostic, and matching and fine stratification
+  are correctly excluded *with the reason on screen* (`:3202` — they do not
+  weight; their diagnostic is how many patients survived, reported beside each
+  estimate). Do not re-derive this.
+- ~~No post-matching balance table (the SMD-after column is IPTW-weighted
+  only).~~ **Half stale — checked 2026-08-23 (twenty-sixth run).** The SMD-after
+  column now follows a scheme that was actually fitted, and when no weighted
+  estimator was selected the tool refuses the column and says so in both the R
+  output (`:1512`) and the panel (`:3174`). The table itself still is not built
+  — but that is now a visible, stated refusal rather than a silent gap, which is
+  this file's own standard. Building it would be a feature; treat it as one.
 - Nobody has ever opened an exported `.docx` in Microsoft Word — every claim about
   those files is what a parser saw. (2026-08-22: a real `.docx` was generated and
   its `word/document.xml` read, by routing the blocked CDN to an npm copy of the
   same library. Still nobody has opened one in Word.)
+- **In the Protocol Checker, `"present"` on a planned output is satisfied by a
+  promise rather than a shell** — the twenty-third run's own top-ranked open
+  item, still the best next target there, with a drafted one-sentence fix in its
+  section. It is a `worker.js` prompt edit, so it is **unverifiable from this
+  sandbox** and inert until Daniel deploys; weigh that before picking it.
 
 ### Found 2026-08-22, argued over by two reviewers, deliberately left
 
@@ -7108,3 +7124,211 @@ over.
      NOT the amendments log, NOT the numeric-role gate, NOT the checker,
      NOT the nine builders, NOT ITS / SCCS / case-crossover.
      If you are a concurrent run reading this, take something else. -->
+
+### Found 2026-08-23 by the OTHER twenty-sixth run — the Protocol Checker's Markdown export, where the model's words became the report's structure
+
+**Chosen by rotation** (the three runs before this took the builders, RWE Studio and
+the builders again; the checker had had nothing since the `na` run) **and from that
+run's own ranked open list.** A concurrent run claimed RWE Studio's ACNU
+propensity-score path on the same day — its marker is directly above — so there are
+two twenty-sixth runs and they do not overlap. Two reviewers on disjoint briefs against a frozen tree,
+then a third sent at this run's uncommitted diff — twice, because the first pass at
+the diff found two must-fixes and the fixes needed reviewing in their turn.
+
+#### The finding, in one sentence
+
+The screen escapes model text into HTML and the Word export gives every model string
+its own `TextRun`; the **Markdown** export concatenated it into a line-oriented format,
+so the AI wrote the report's structure and, once, its voice. Nothing errored. The
+`.docx` and the `.md` of the same run disagreed about how many verdicts the report
+contained.
+
+Worst observed, all reproduced by parsing the emitted file with micromark + GFM rather
+than by reading the string:
+
+- **A blank line inside `summary` ends the blockquote it is quoted in.** The rest became
+  an unattributed paragraph in the report's own voice, stating a rival total ("Overall
+  21 of the 23 HARPER elements are addressed") eight paragraphs under the tool's
+  computed 16 of 23 — defeating the exact guarantee the comment above that line exists
+  to make. `summary` is `required` by the worker's schema and is mentioned **nowhere**
+  in its prompt: no length, no format, no instruction. It is the one field with no
+  guard-rail at all.
+- **A closing ``` at column 0 OPENS a fence.** One `evidence` string carrying quoted
+  code buried **eighteen verdicts, two section headings and the framework citation**
+  inside a single code block, in a file that still looked complete. Row count in the
+  parsed report: 41 where it should have been 76.
+- A line beginning `- ` in `evidence` became a **sibling of the HARPER items** and
+  re-parented the real row's Suggestion under it. A line beginning `#` became a report
+  heading, a peer of "What this check could not do". A criterion with a newline forged
+  an `<h2>Exclusion</h2>` **directly above the tool's own contradicting "Exclusion: none
+  stated"** — the "complete, plausible, wrong row" species, one panel over.
+
+None of this needs a hostile document: `worker.js` tells the model to *"quote or closely
+paraphrase the part of the text that addresses the item"*, and protocols are full of
+headings and numbered lists.
+
+#### What shipped — `src/pages/tools/protocol-checker.astro` only
+
+1. **`mdText()`** — collapse every whitespace run to one space (after stripping U+FEFF),
+   applied at all ~13 model-derived interpolations in `downloadReport()`, plus
+   **`mdField(v, dash)`** for the six design fields, where the tool prints an em dash to
+   mean "the AI gave us nothing". **Collapse, not escape**, and the reason is the reason:
+   the screen and the `.docx` already collapse, so an escaper that preserved the model's
+   paragraphing would have been a *fourth* behaviour for one report. Verified: across 31
+   crafted responses on **both** frameworks, every exported report is `hr=1 pre=0
+   table=0` with no escaped summary, and every heading appearing anywhere in any of them
+   is either the report title or a real section of `harper.ts` / `target.ts`.
+2. **One suggestion rule for both panels** (`NO_SUGGESTION` / `suggestionText` /
+   `showSuggestion`). The planned-outputs panel's rule had been extracted by the
+   twenty-third run; the checklist's three copies were left behind, still spelled as a
+   not-equal blacklist, so they never learned about `na` — and the worker's prompt
+   *requires* a suggestion for every checklist item, carving out only `met`. Result, in
+   all three surfaces: "10. Reporting of adverse events — N/A" with "Suggestion: State
+   how adverse events will be handled" under it.
+3. **`evidenceText()` hoisted out of `renderDeliverables`** and applied once in
+   `reconcile`, so a checklist verdict the model returned with blank evidence says so
+   instead of exporting a red label and a bare instruction.
+4. **A caveat naming the checklist ids the model marked N/A.** Every other status that
+   leaves the score is already named by id; N/A left it as a bare count, and N/A is the
+   one verdict here whose basis the tool cannot inspect.
+5. **The dead `SCORED` constant deleted** — nothing read it, and it listed `na` as
+   scored while the live `assessable` excludes it. A landmine, not a bug.
+
+#### The reviewers' argument, and who was right
+
+The methodologist proposed demoting `na` → `missing` on protocol templates, on the
+snippet-corroborated reading that HARPER's own "n/a" is *content the author writes*
+(which should score **met**), while this tool's `na` deletes the row from the score.
+**The applied analyst refuted the prescription and the methodologist withdrew it**: the
+model's `na` cannot distinguish "the author wrote n/a" from "the author was silent", so
+demotion prints a false red for a claims study on HARPER item 10 — whose own hint says
+an n/a answer is correct there. It re-commits the twenty-third run's inversion. The
+diagnosis survived, the fix did not, and what shipped is the residue both agreed on:
+name the rows. **Do not re-open the demotion** without reading both arguments.
+
+They also disagreed about the fix for the export itself. The analyst argued a collapse
+was "over-broad and destructive" and wanted a line-leading-marker escaper; the
+methodologist argued for the collapse on three-surfaces-agree grounds. **The
+methodologist won**, and the analyst's own corrected rule is why: the escaper would have
+needed to handle blank lines, seven line-leading markers, HTML block starts and a
+per-context continuation prefix — while the collapse removes every vector by removing
+every line ending, in one expression, with nothing to get wrong.
+
+#### The reviewer sent at this run's own diff — now 9 for 9, and it took two passes, the second of which found a regression in the first pass's own fixes
+
+**It found that the fix left the run's number-one finding alive behind a one-character
+hole, under a comment asserting the hole was closed.** `mdText` was written
+`.replace(/\s*\r?\n\s*/g, " ")`. **CommonMark counts a lone CR as a line ending** — and
+a lone CR is what this tool's own `.docx`/PDF extraction produces, handed to a prompt
+that asks the model to quote the text back. On the built, "fixed" site an `evidence`
+string with CR paragraph marks still forged an `<h1>`, still opened a code fence, and
+still walked the AI's summary out of its blockquote. Now `/\s+/g`.
+
+It also found:
+
+- **The new caveat asserted a cause it had not caused.** "…which removed them from the
+  score's denominator — it is out of 1 rather than out of 23" is true only when N/A is
+  the *sole* reason rows left the score, which is exactly the state it was tested in.
+  Ordinarily rows also leave as Not assessed, so two N/A verdicts were credited with a
+  collapse that twenty omitted rows had done — **directly below the bullet naming those
+  twenty**, and contradicting the tool's own correct summary sentence. It now says what
+  N/A removed and points at the score line for the arithmetic.
+- **`mdText(v) || "—"` defeated the em-dash refusal for falsy non-strings**: `0` and
+  `false` printed as "0" and "false" in the Markdown where the screen and the `.docx`
+  both printed "—". A three-surface divergence *created* by the fix for three-surface
+  divergences. Now `mdField(v, dash)`.
+- **`mdField`'s first form inverted the very divergence it was written to remove.** A
+  `typeof v === "string"` gate sent *every* non-string to the em dash, not only the
+  falsy ones — so a `population` returned as `["Adults with T2D", "aged 40 or older"]`
+  exported as "Population: —", the tool asserting a refusal about a field the model had
+  filled, beside a screen reading "Adults with T2D,aged 40 or older". The test has to be
+  on the value's truthiness, not its type: `(v ? mdText(v) : "") || dash` is exact parity
+  with the `v || "—"` the other two surfaces already use. **Two successive fixes for one
+  three-surface divergence each created a new one, in opposite directions.**
+- **`\s+` turned a zero-width character into a visible one.** JS's `\s` includes U+FEFF,
+  so a quoted Japanese sentence exported with a word gap in a script that has none —
+  BOM debris being routine in `.docx`/PDF extraction, which is the text the model is
+  asked to quote back. U+FEFF is now stripped first. U+200C/U+200D are deliberately NOT
+  stripped: they are meaningful in Arabic, Indic and emoji sequences, and are not `\s`.
+- **Suppressing the suggestion on an N/A row deleted the reader's best evidence that the
+  N/A was wrong** — in the same commit as a caveat telling them to audit those rows. The
+  model marks HARPER item 3 (amendments) N/A on a v1.0 protocol and then writes "Add an
+  amendments table with version, date and rationale": its own words contradicting its own
+  verdict, and the evidence line on an N/A row is the model's justification *for* the
+  N/A, self-serving by construction. **So the text is no longer deleted, it is
+  relabelled** — `"The AI called this row N/A and still wrote:"`, on all six surfaces.
+  This file's own idiom (`unrec`, the `DELIV_NEVER_NA` demotion) is to keep the model's
+  words and relabel them, and a silent deletion is not a visible refusal.
+
+The generalisable lessons, both new costumes on old ones:
+
+- **A "nothing can" claim is a whitelist claim.** `\r?\n` is a not-equal against one
+  spelling of a line ending, and the comment above it said "nothing the AI writes can
+  create a row, a heading, a rule, a table or a code block". Same species as
+  `if (s.effect !== "HR")`. When you write an absolute in a comment, enumerate the
+  spellings the code actually matches.
+- **A sentence that reports a number must be true in every state that produces the
+  number, not in the state you drove.** The caveat was correct in both scenarios its
+  author tested and wrong in the ordinary one.
+
+#### Deliberately left, argued, not manufactured
+
+- **`"present"` in the worker's deliverables rubric is a promise, not a shell** — the
+  twenty-third run's own top-ranked open item, unchanged. Still the best next target in
+  the checker, and still unverifiable from this sandbox (no Gemini key; `worker.js`
+  deploys separately). Its drafted one-sentence fix is in that run's section.
+- **The seven deliverable descriptions are methodologically wrong in five places** —
+  unchanged, and the rename trap with `DELIVERABLE_NAMES` still applies.
+- **`skip` is still the un-validated twin of `skipOutputs`.**
+- **The tool quotes itself as "the AI's own words"**: a `DELIV_NEVER_NA`-demoted row
+  whose evidence was blank renders "…the AI's own words are kept here so you can judge
+  them — it said: The AI returned this verdict with no evidence…". Pre-existing (`ev`
+  was byte-identical before this run's hoist), one-line fix, out of this run's scope.
+- **`Suggestion: [object Object]` / `Evidence: a,b`** for non-string fields. Both
+  reviewers rated it adversarial (the worker's `responseSchema` types both `string`) and
+  `suggestionText`/`evidenceText` `String()` them exactly as the old code did.
+  Deliberately unchanged — the twenty-third run drove this and shipped `String()`.
+- **`normName` does NOT normalise `/` ↔ `-`.** A deliverable name re-typeset with a dash
+  *replacing the slash* ("Love plot - covariate balance") misses its canonical row and
+  becomes a labelled extra. **This falsifies the "normName is genuinely robust" entry in
+  the twenty-third run's do-not-re-derive list** — that entry drove dashes replacing
+  *dashes*, not dashes replacing the *slash*. Real, visible (labelled + caveated), left.
+- A deliverable with `name: ""` is still dropped with no caveat.
+
+#### Verified this run, and how
+
+- Everything driven in Chromium against a local `astro build` + a static server, with
+  the POST to the worker intercepted by `page.route` and fulfilled with crafted JSON —
+  the technique the twenty-third run documented, and it still works exactly as described.
+- **Every Markdown claim in this section is a parse, not an eyeball.** `micromark` +
+  `micromark-extension-gfm` install offline here (`npm i --no-save`); the harness is
+  `O-audit.mjs` — a structural census (headings, `<hr>`, `<pre>`, `<table>`, top-level
+  `<li>`, and whether anything escaped the AI-summary blockquote) run over the *same*
+  crafted response before and after, so any heading present in both is the tool's own.
+  **Use this: diffing the expression shows nothing; diffing the census shows everything.**
+- **31 crafted responses** driven end to end after the fix, across both frameworks: zero
+  page errors, zero run errors, `hr=1 pre=0 table=0` in every one, no escaped summary in
+  any, and no forged heading anywhere.
+- **A harness trap worth an hour to the next run:** `drive.mjs` leaves the framework radio
+  on HARPER, so a crafted response carrying `"framework":"target"` is **correctly refused
+  by the page** before `render()` runs — the report is empty and `runerror.txt` explains
+  why. A 27-run "all clean" battery had therefore exercised the TARGET path zero times,
+  which is the path where the N/A caveat's arithmetic had been most wrong. Move the radio
+  with `page.$eval` + a `change` event before clicking Check.
+- **Content preservation was measured, not assumed**: every model-supplied string in
+  three of the worst cases was checked to appear verbatim (whitespace-normalised) in the
+  exported `.md`. The only two omissions in the whole set were the two deliberate ones.
+- **Real `.docx` files** generated through the blocked-CDN route (`npm pack docx@8.5.0`
+  + `page.route`) and `word/document.xml` read, including the new N/A note paragraphs
+  and the new evidence sentences.
+- **All twelve tool pages** re-loaded with zero `pageerror` and `typeof window.PC ===
+  "object"` on all nine builders, before and after.
+- **The live site was not checked** — `danielhttsai.github.io` is still blocked from this
+  sandbox. Nobody has still opened one of these `.docx` files in Microsoft Word, and this
+  run's comment about how Word treats a line ending inside `<w:t>` is scoped to structure
+  for exactly that reason.
+- **No citation was added or changed.** The methodologist's HARPER readings (that it is a
+  pre-study template, and that its own guidance is to enter "n/a" in a section that does
+  not apply) are **snippet-corroborated only** — Crossref, PubMed, doi.org and the
+  publishers are all blocked here — and the second one is load-bearing for a fix that was
+  withdrawn, so nothing rests on it in shipped code.
