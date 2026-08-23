@@ -183,19 +183,14 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   capturing builders now do all three; `case-control` and `clone-censor-weight`
   still capture nothing. (The `"na"` verdict this item also named was done by
   the twenty-third run, and finished on the checklist side by the twenty-sixth.)
-- **`PC.mountAmendments` is still called in only two of nine builders** — open
-  since the third run, and examined in full by the twenty-fifth run, which
-  deliberately did not do it and explains why in its section at the bottom.
-  It is now **unblocked twice over**: the four builders that could not have
-  persisted what the user typed now can (twenty-fifth run), and `writeRows` no
-  longer rewrites a line the parser could not read (twenty-eighth run — until
-  that landed, mounting would have shipped a silent-data-destruction bug to all
-  nine, which is a sequencing constraint both of that run's reviewers agreed on).
-  Read the twenty-fifth run's section opening before starting, and note the
-  methodologist's argument that mounting fixes none of the defects that ship.
-  The twenty-eighth run's counter-argument: mounting is now the only thing that
-  lets a recipient *repair* a refused entry, which on seven builders they still
-  cannot do at all.
+- ~~**`PC.mountAmendments` is called in only two of nine builders** — open since
+  the third run.~~ **Done 2026-08-23 (twenty-ninth run)** — the longest-standing
+  item in this file. All nine now mount the editor and call `PC.syncAmendments`
+  in every reset, and all nine `pcOf` pass `amendments`. Do NOT re-derive the
+  twenty-fifth run's objection: it was right for its tree and was answered by the
+  refusal the twenty-eighth run added. See the twenty-ninth run's section at the
+  bottom for the four defects mounting would have shipped had it been done as
+  "the three documented lines", and for what its two reviewers disagreed about.
 - ~~**A raw `?seed=` payload bypasses the amendment log's pipe escaping
   entirely.**~~ **Done 2026-08-23 (twenty-eighth run)** — a stored line that does
   not hold exactly five unescaped-pipe-separated values is now refused rather
@@ -232,6 +227,43 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   **Do not re-propose an unconditional `|SMD| > 0.1` refusal without reading the
   measured blast radius in that section** — both reviewers recommended it and both
   were wrong.
+- **Five of the nine builders carry no version identity at all**, and the other
+  four default one the user never typed. `clone-censor-weight`, `sequential-trial`,
+  `interrupted-time-series`, `trend-in-trend` and `case-control` print only
+  `_Study protocol · … · drafted ${today}_`, where `today` is `new Date()` at
+  DOWNLOAD time — so the same protocol downloaded twice says it was drafted on
+  two different days, and a log recording "amended to v2.0 on 2026-06-01" sits
+  under "drafted 2026-08-23". `active-comparator-new-user`, `descriptive-analysis`,
+  `case-crossover` and `self-controlled-case-series` have a `name="version"` box
+  and print `orFb(s.version, "v0.1 draft · " + today)`, so an untouched box
+  asserts a version nobody chose above a table asserting another. This is the
+  twenty-ninth run's top-ranked leftover in this area. **It is a report, not a
+  request for a control**: adding a Version box to the five, or a reconciliation
+  check, is a feature and both of that run's reviewers said not to. The
+  in-scope half is the word "drafted", which is not what that date means.
+- **`applySeed` still drops an array seeded into a lone `<input>`.** The
+  twenty-ninth run fixed the `<textarea>` case (join the lines); a single-line
+  input receiving `["a","b"]` still silently keeps `"a"`. There is no honest
+  join for it, and no visible surface in `applySeed` to refuse into. Left.
+- **A `?seed=` link's leading/trailing whitespace does not survive a reload on
+  five builders.** `V()` trims the whole field, so a refused line's outer
+  whitespace is gone after one draft round trip on `clone-censor-weight`,
+  `sequential-trial`, `interrupted-time-series`, `trend-in-trend` and
+  `case-control`; the two FormData builders and the two mounted ones are
+  byte-stable. Measured. The exported cells are unaffected and the wording
+  ("reproduced exactly as it is stored") stays true — the storage was trimmed.
+  Recorded so nobody re-derives it as a freeze violation.
+- **`case-crossover` and `active-comparator-new-user` scroll horizontally at a
+  320px viewport** — `document.scrollWidth` 359 vs 320, from an `<svg>` in the
+  design diagram, nothing to do with any form control. Measured on the tree
+  before and after the twenty-ninth run's changes, identically. Invisible to the
+  390px assertion earlier runs used.
+- **Every keystroke in the amendment panel runs each builder's `render()`
+  twice** — `writeRows` dispatches a synthetic form-level `input` while the
+  panel input's native one has already bubbled to the same form. Measured: 2
+  events per keystroke, 13.6ms vs 7.2ms on ACNU. No re-entrancy, no loop, no
+  caret loss. Both reviewers agreed it is not worth changing. Do not "fix" it
+  without a reason.
 - **In the Protocol Checker, `"present"` on a planned output is satisfied by a
   promise rather than a shell** — the twenty-third run's own top-ranked open
   item, still the best next target there, with a drafted one-sentence fix in its
@@ -8269,6 +8301,266 @@ when the sender wrote five.
      immediately above for what shipped, the one live disagreement between the two
      reviewers (whether to strip Markdown fences before counting), and the three
      things this deliberately does not fix. -->
+
+### Found 2026-08-23 by a twenty-ninth run — the amendments-editor mounting item, end to end
+
+**The longest-standing open item in this file — "`PC.mountAmendments` is called
+in only two of nine builders", open since the third run and deliberately left by
+the twenty-fifth — is done.** All nine mount the editor, call `PC.syncAmendments`
+in every reset path, and pass `amendments` through `pcOf`.
+
+Two reviewers on disjoint briefs against a frozen tree (a methodologist and an
+applied analyst), each then sent at the other's list AND at this run's own
+committed diff. **That second pass paid for itself twice**: the analyst found a
+regression this run had introduced in its own fix, and the methodologist found
+that this run's headline sentence fix had corrected one clause and left its twin.
+
+#### Why the twenty-fifth run's refusal was right then and wrong now
+
+Its argument was that mounting "makes the tool more capable and no more honest",
+because all six of its findings reproduced on the two builders that already had
+the editor. That was true of its tree. What changed the answer is the refusal the
+twenty-eighth run added: a stored line that does not hold five values is now
+reproduced verbatim under a heading saying so, and when every line is like that
+the front matter states that **what this protocol's amendments were cannot be
+established from the entries as they stand**. `?seed=`, `?seed=paste` and a saved
+draft all write that field on all nine pages. So seven builders could print an
+unrepairable defect notice into a regulatory document — nothing to retype the
+entry into, nothing to delete it with, and the only removal on the page a "Clear
+all" that forgets the whole draft. **Do not re-open the twenty-fifth run's
+objection; it has been answered on its own terms.**
+
+#### Mounting is NOT "the three documented lines"
+
+Four defects would have shipped, seven times over, from following the recipe.
+All four were measured in Chromium by mounting the panel at runtime on the seven
+builders before any file was changed.
+
+- **"Clear all" did not clear the amendment log, if the next thing you touched
+  was the amendment log.** The panel's `model` is rebuilt from the field only in
+  `sync()`, and `sync()` runs on the form's `change` event — which no reset
+  fires, because every one of the nine assigns `.value` in script and `render()`
+  dispatches nothing. So after a reset the field was empty and the model still
+  held the deleted rows. One click on **"+ Add an amendment"** — which touches no
+  existing row — put the cleared amendment back in the field, in the saved draft
+  and in the exported protocol, under a sentence counting it as an amendment the
+  investigator had made. It survived a reload. **The two builders that already
+  called `PC.syncAmendments` after their reset were immune**, which is exactly
+  what step 3 is for and exactly why it is easy to skip. Step 3 is now marked
+  REQUIRED in the recipe, and `mountAmendments` carries a `stale()` guard on
+  every path that writes the model, so a builder that forgets it degrades
+  instead of fabricating.
+- **The refusal was invisible.** The panel is a `<details>` that ships closed,
+  with a summary reading "Amendments and updates · HARPER front matter" and
+  nothing else. A seeded unreadable entry painted its amber warning, its verbatim
+  line and its ✕ **behind a click on a collapsed section nobody has a reason to
+  expand**. The whole case for mounting is that a recipient can repair a refused
+  entry; they will not if nothing says there is one. The summary now carries a
+  count and `sync()` opens the panel when a refusal arrives — never on a
+  keystroke, so a panel the user closes stays closed.
+- **The Reason column and the delete button were painted outside the panel, on
+  the two builders that ship this editor today.** The row is a six-track grid
+  whose text tracks hold `<input>`s; a grid item's default `min-width: auto` is
+  its min-content width, so each input held its track open at ~177px and the
+  row's intrinsic width was a fixed **784px at every viewport**. At 1024, 1280
+  and 1440 the Reason box and the ✕ were painted past the panel's right edge and
+  under the preview `<aside>`, which comes later in DOM order and covers them; at
+  640-768 the page grew a horizontal scrollbar (829 vs 640). So the user could
+  fill four of HARPER's five columns and not reach the fifth — **every exported
+  amendment printed an em dash under Reason** — and could not delete a row at
+  all. `globals.css` has recorded this exact mechanism since the day it was found
+  on `select`; the rule was never extended to `input`.
+  - **Two earlier runs measured this row and cleared it.** Line 371 called it
+    "37/52/52px, cosmetic" — which would require the `min-width: 0` that was
+    absent. Line 1918 asserted "390px and 1024px: no horizontal overflow", which
+    is reproducible and **blind**: at 1024px the 362px of overflow lands inside
+    the viewport, on top of the preview, rather than past its edge. **A
+    page-level `document.scrollWidth` assertion cannot see this class of bug.**
+    Measure the ROW's `scrollWidth - clientWidth` and each control's rect against
+    the panel's rect, at 640/700/768/900/1024/1280/1440.
+  - The breakpoint was also the wrong instrument. What decides whether five
+    inputs and a button fit is the width of the PANEL, and the panel sits in the
+    form column of a two-column layout: 422px at a 1024px viewport, 852px at
+    900px where the layout collapses to one column. `sm:` therefore turned the
+    wide layout ON at 640px in a 550px column and OFF at 900px in an 852px one.
+    It is now a container query (`@container` on the rows container, `@[36rem]:`
+    on the row), which Tailwind 4 does extract from a class string inside an
+    inline `<script>` — verified in the built CSS, which is worth doing because
+    an unextracted class fails silently.
+- **A five-column row was never the desktop layout.** The form column is
+  422-550px on every desktop viewport this site has a layout for, so after the
+  container-query fix the wide row is reached only between roughly 700px and
+  900px. That is the right outcome for a 550px column and it means **the stacked
+  state is the normal one** — which the first version of the fix had not built
+  for: ten identical boxes in one column with no row number, no separator, and
+  placeholders that vanish the moment anything is typed into them, above a
+  550px-wide borderless delete button sitting 8px over the next amendment's date
+  box. Found by a reviewer sent at this run's own diff. Each box now carries a
+  visible caption (sr-only in the wide state, so what a screen reader announces
+  does not depend on the viewport), each row a heading and a border, and the ✕ is
+  right-aligned, bordered and labelled.
+
+#### What else shipped, none of it about the editor
+
+- **The tail certified what the table above it refutes.** `tailSections`'s
+  registration entry said, in all nine protocols, *"Amendments are
+  version-controlled and logged with date and rationale."* `amLog` admits a row
+  on ONE non-empty cell and both emitters print an empty cell as an em dash, so
+  filling in only "Amendment or update" exported
+  `| 1 | — | — | — | Washout window widened to 90 days | — |` under a sentence
+  certifying that the date and the reason were logged — reproduced in a real
+  `.md` and a real `word/document.xml`. In the all-refused case the same file
+  says both "cannot be established from the entries as they stand" and "logged
+  with date and rationale". The twenty-fifth run deliberately weakened the FRONT
+  MATTER so it "names the columns rather than promising every row has filled
+  them"; **the promise it removed was still being made two pages later, by a
+  section neither that run nor the next two ever opened.** The sentence is now
+  purely locative. "version-controlled" went too, one round later than it should
+  have — see the reviewer disagreements below.
+- **A hand-off link could drop half an amendment log and print a confident count
+  of the rest.** A payload may write a multi-line field as a JSON array of lines;
+  nothing joined them. On the five builders that route through `applySeed`, its
+  array branch indexes a list of ONE textarea, so line 2 was **dropped without a
+  word** and the protocol read "The amendment table below records 1 entry". On
+  the four that pass their own `writeForm`, the array reached `el.value` and
+  JavaScript's default array-to-string put a COMMA between two amendments, which
+  the parser then refused as one nine-value line — lossless and visible, but two
+  good amendments refused as one bad one. Joining with a newline is not a guess:
+  the storage format IS one record per line. Lone `<textarea>` only, and in
+  `restore()` as well as `applySeed`, because the four `writeForm` builders never
+  reach `applySeed`.
+- **The seed banner took the form's column.** `banner()` and `pastePanel()`
+  insert their notice as a sibling of the `<form>`, and the form is a child of a
+  `grid lg:grid-cols-[1fr_1fr]` — so the notice became a **grid item**. Measured
+  at 1280px on all nine: banner in column 1, form pushed into column 2, live
+  preview dropped to the next row; at 1024px the page overflowed by 61px.
+  Arriving from a colleague's link rearranged the page, on the one path such a
+  link always follows. `grid-column: 1 / -1` fixes both, and is ignored where the
+  parent is not a grid. **Verified pre-existing** by building the pre-run commit
+  in a separate worktree and measuring both.
+- **The refusal stub now spans the Word table's five data columns.** It was
+  written into the cell under "Version date", 1180 DXA ≈ 0.82 inch, with the
+  other four empty — an 88-character sentence wrapping down a date column.
+  Confirmed as `gridSpan=5` in a generated `word/document.xml`. The Markdown
+  keeps five cells; GFM cannot merge them.
+- **`version` is gone from the `pc` contract**, and from the two `pcOf` that
+  copied it. Its only consumer was deleted by the twenty-fifth run; the key
+  survived four runs, documented, implying that this component reconciles a
+  builder's version box against the log's Version-number column. It does not.
+- **`amRefuseLabel`** said "where this table has 5 columns" above a table with
+  SIX headed cells, because both emitters prepend a `No.`. It counts the values
+  on the line now, which is what the sender controls.
+
+#### What the two reviewers disagreed about, and who was right
+
+- **The ranking, and both were half right.** The analyst ranked the layout first;
+  the methodologist ranked the false tail sentence first and had missed the
+  layout entirely. On seeing it the methodologist conceded and put it right: the
+  layout **guaranteed** a blank Reason cell on every amendment anyone entered,
+  and the tail sentence then certified that the Reason had been logged. They are
+  one defect seen from two ends, and the mechanism outranks the sentence.
+- **The analyst's three findings were one.** It reported the resurrection, the
+  stale refused `<pre>` and the "+ Add" resurrection as three, and gave the
+  `<pre>` a different cause ("the reset loops only touch input/textarea/select").
+  The methodologist was right that this is a red herring: the editable rows are
+  equally stale after a reset, and the single cause is that nothing repaints.
+  Getting the cause wrong would have pointed at making the `<pre>` blankable
+  instead of at `syncAmendments`.
+- **Whether to add a count of empty cells to `amendmentIntro`** — proposed by
+  this run, argued down by the methodologist, and **it was right**. `—`, `-`,
+  `n/a`, `TBD` and a bare space are all non-empty, so every one would be counted
+  as a filled Reason: a reader told "1 of 3 entries has no reason recorded"
+  infers the other two have reasons. **A number that is silently wrong in the
+  direction that makes the document look more complete** is this file's own bug
+  class, and worse than no number. It is also redundant against em dashes
+  visible in the row itself, and it lands in the recipient's `.docx` rather than
+  in front of the author who could act on it. `amendmentIntro` has now been
+  rewritten twice and contested by four reviewers; leave it.
+- **The adverse-event sentence for descriptive designs — unresolved, and the one
+  live disagreement.** `tailSections`'s `ae` entry says "safety is addressed
+  through the pre-specified outcome analyses" and is the fourth shared string
+  that never got the `s.descriptive` branch the other three got. The
+  methodologist calls it design-level wrong in a study whose own limitations say
+  no causal contrast is estimated; the analyst calls it overstated — for a
+  drug-utilisation or occurrence study the sentence is right, and the defensible
+  complaint is only that "outcome" is the wrong noun when `pcOf` sets
+  `exposure: ""`. **Deliberately left unchanged.** A future run may take either
+  side with an argument; it should not take one silently.
+- **"HARPER conformance asserted above an all-refused log"** (methodologist) was
+  wrong, and the analyst's rebuttal is worth keeping: HARPER is a REPORTING
+  template, so a protocol that prints item 3 and honestly states that its stored
+  entries could not be read *is* following it. The version that would violate it
+  is the one that suppresses the refusal. Acting on this would push toward
+  hiding a refusal.
+- **Two Heading 1s in Word's navigation pane** ("Amendments and updates" and
+  "Registration and amendments") is not a defect — every section here is `h1()`.
+
+#### Deliberately left, argued, not manufactured
+
+- **The version-identity problem is the top leftover in this area** and is now an
+  open item at the top of this file. Both reviewers agreed the remedy — a Version
+  box on the five builders that lack one, or a reconciliation check — is a
+  feature. The in-scope half is the word "drafted", which is not what that date
+  means.
+- **A single-line `<input>` seeded with an array still silently keeps element 0.**
+  No honest join exists for it and `applySeed` has no visible surface to refuse
+  into.
+- **The panel's double `render()` per keystroke.** Both reviewers measured it and
+  both said leave it.
+- **A five-segment raw line is still undetectable**, exactly as the twenty-eighth
+  run recorded. Nothing here changes that. Do not report it as fixed.
+
+#### Verified this run, and how
+
+- Everything driven in headless Chromium against a local `astro build` + a static
+  server. Harness (not committed, `scratch/` is ignored): `r29-probe.mjs`
+  (scenarios `health`, `clearall`, `live`, `place`, `seed`, `persist`,
+  `resurrect`), `r29-native.mjs` and `r29-native2.mjs` (assertions against the
+  SHIPPED pages, with no runtime mounting), `r29-stack.mjs` (layout at eight
+  viewports), `r29-geom.mjs`, `r29-banner.mjs`, `r29-array.mjs`,
+  `r29-bannerall.mjs`, `r29-export.mjs` and `r29-cells.mjs` (real `.docx`, via
+  `npm pack docx@8.5.0` in `scratch/` and a Playwright route for the blocked CDN).
+- **All nine builders, editor mounted by the page rather than by the harness**:
+  five boxes paint; a typed row reaches all six columns of the preview and a real
+  `.docx`; it survives a reload with its date picker intact; its ✕ empties the log
+  and the document returns to the original-version sentence; "Clear all" empties
+  both field and panel; one "+ Add" afterwards does not resurrect the cleared row;
+  a seeded refusal opens the panel, badges the summary and is held byte-for-byte;
+  both reset buttons on the four builders that have two share one `doReset`.
+- **The seed banner's "Restore my previous draft" button, end to end** — one of
+  the twenty-eighth run's explicitly unverified items. The user's own amendment
+  comes back, the seeded log is gone, the panel repaints and closes. It works
+  because that button reloads.
+- **Layout at 320/375/700/900/1024/1280/1440/1920**: zero row overflow, zero
+  controls painted outside the panel, captions and row heading present in every
+  stacked state, delete button never a full-width strip. With three editable rows
+  and a refused entry mixed.
+- **Zero `pageerror` and `typeof window.PC === "object"` on all nine**, before
+  every commit. This caught a broken inline `<script>` mid-run that
+  `astro build` reported as a clean success — the trap this file documents,
+  hit and caught in the same hour.
+- **`confirm()` is the trap in this area.** Playwright auto-DISMISSES dialogs, so
+  every "Clear all" silently returns early and a probe reports that the reset
+  changed nothing. The first reproduction this run made was wrong for that
+  reason. `page.on("dialog", d => d.accept())` on every context.
+- **Blocked-resource console errors are not page errors.** Filter
+  `Failed to load resource` / `ERR_TUNNEL_CONNECTION_FAILED` before asserting
+  zero errors, or all nine builders fail a health check that is measuring the
+  sandbox proxy.
+- **The live site was not checked** — `danielhttsai.github.io` is blocked from
+  this sandbox. **Nobody has opened one of these `.docx` files in Microsoft
+  Word**; every Word claim here is what a `word/document.xml` parse saw, and the
+  `gridSpan=5` cell in particular is unverified as RENDERED.
+- **The `?seed=paste` clipboard branch was verified**, and this paragraph first
+  said the opposite. Reading `pastePanel`'s `write(obj)` suggested the paste
+  route bypassed the new array normalisation; it does not — `restore` passes its
+  own `write` wrapper, which normalises. Driven for real with
+  `grantPermissions(["clipboard-read","clipboard-write"])` and
+  `navigator.clipboard.writeText` from the same origin: both amendments arrive
+  and the document counts two, on `case-control`, `case-crossover` and
+  `descriptive-analysis`. This closes the twenty-eighth run's second explicitly
+  unverified item. **Recorded as a wrong turn on purpose**: the claim was drawn
+  from reading one call site, and one probe settled it.
 
 <!-- CLAIM 2026-08-23 (twenty-ninth run): the amendments-editor mounting item —
      PC.mountAmendments / PC.syncAmendments on the seven builders that lack it
