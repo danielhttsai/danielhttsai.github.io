@@ -244,15 +244,100 @@ const SENSITIVITY = [
     const or = (s, d) => (s && s.length ? s : d);
     const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+    // A saved draft or a ?seed= link can carry a value one of these <select>s
+    // does not offer — a renamed option, a link from an older version of this
+    // page, someone else's builder. `el.value = v` then leaves selectedIndex at
+    // -1, the select shows blank, and a select with no selection contributes
+    // NOTHING to the form, so readForm's `|| "monthly"` / `|| "poisson"` fill in
+    // a choice the draft never made and the protocol asserts it as the user's.
+    // Four selects here, so a stale draft could silently rewrite the time unit,
+    // the model, the seasonality and the inference all at once, with a checks
+    // panel that then reported the substitutions as facts ("No seasonality
+    // adjustment with monthly data" for a draft that said neither).
+    //
+    // The record has to travel IN the saved draft under a reserved key: render()
+    // runs immediately after restore and writes the substituted state back over
+    // the draft, so a variable-only record survives exactly one page load and
+    // the user's original values are gone with it. And it must be dismissible,
+    // because re-picking the option a select is already showing fires no
+    // `change` event, leaving a blocker the user has no way to answer.
+    const STALE_KEY = "__staleSelects";
+    const SELECTS = [...form.querySelectorAll("select")].map((el) => ({
+      name: el.name,
+      label: (el.closest("label") ? (el.closest("label").querySelector("span") || {}).textContent : "") || el.name,
+      options: [...el.options].map((o) => o.value),
+      fallback: (([...el.options].find((o) => o.defaultSelected) || el.options[0] || {}).value) || "",
+    }));
+    let staleSelects = [];
+    const noteStale = (obj) => {
+      if (!obj || typeof obj !== "object") return;
+      SELECTS.forEach((sel) => {
+        const v = obj[sel.name];
+        if (v == null || v === "") return;
+        if (sel.options.indexOf(String(v)) < 0 && !staleSelects.some((x) => x.name === sel.name)) {
+          staleSelects.push({ name: sel.name, label: String(sel.label).trim(), saved: String(v), used: sel.fallback });
+        }
+      });
+    };
+    // Two renderings, because this goes to two audiences. On screen it must say
+    // what to press; in the exported protocol there is no button to press, and
+    // an instruction to press one reads as a defect in the document.
+    const staleMsg = (x) =>
+      "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + x.used + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
+    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + x.used + "”” to confirm it.");
+    const staleMsgsDoc = () => staleSelects.map(staleMsg);
+
     const readForm = () => ({
       title: V("title"), data: V("data"), population: V("population"), outcome: V("outcome"), intervention: V("intervention"),
       interruptDate: V("interruptDate"), unit: V("unit") || "monthly", lag: V("lag"),
-      prePoints: V("prePoints") || "24", postPoints: V("postPoints") || "24", denom: V("denom"),
+      // Raw, deliberately. These used to arrive here as `V("prePoints") || "24"`,
+      // so an emptied box exported a protocol asserting 24 points the user never
+      // chose — and the "only N points" warning went quiet at the same moment,
+      // because 24 clears the ≥ 8 bar. What the box holds is read once, below.
+      prePoints: V("prePoints"), postPoints: V("postPoints"), denom: V("denom"),
       model: V("model") || "poisson", seasonality: V("seasonality") || "none", autocorr: V("autocorr") || "none",
       controlled: CH("controlled"), controlSeries: V("controlSeries"),
       subgroupsPick: MV("subgroupsPick"), subgroupsCustom: V("subgroupsCustom"), sensitivityPick: MV("sensitivityPick"), sensitivityCustom: V("sensitivityCustom"),
     });
 
+    // ONE reading of a period count, shared by the protocol text, the diagram,
+    // the consistency checks and both exports, so they cannot tell three
+    // different stories about the same box. `<input type="number">` accepts
+    // "1e3" and "24.5" as valid — nothing on screen objects to either — and
+    // `parseInt` then reads them as 1 and 24. A count nobody can read is not a
+    // count of 24 and not a count of 1; it is unreadable, and this says so.
+    // "1e3" IS a number and reads as 1000, matching how the other builders read
+    // their day counts; a fractional number of periods is refused, because half
+    // an interval is not a thing the design can have.
+    const readPts = (raw) => {
+      const t = String(raw == null ? "" : raw).trim();
+      if (!t) return { raw: t, n: null, state: "blank" };
+      const v = Number(t);
+      if (!isFinite(v) || !Number.isInteger(v) || v < 0) return { raw: t, n: null, state: "bad" };
+      return { raw: t, n: v, state: "ok" };
+    };
+    const ptsText = (p) => p.state === "ok" ? String(p.n)
+      : p.state === "blank" ? "(not specified)"
+      : "(not specified — “" + p.raw + "” could not be read as a whole number of periods)";
+    const prePts = (s) => readPts(s.prePoints);
+    const postPts = (s) => readPts(s.postPoints);
+
+    // The design matrix's coding, stated in the protocol rather than left on
+    // screen. §6 calls the level-change coefficient "the immediate step at the
+    // interruption", which is true ONLY under this coding: with the
+    // post-intervention counter starting at 1 instead of 0, the step at the
+    // first affected period is the level coefficient PLUS the slope
+    // coefficient. That is the error the corrigendum to the tutorial this
+    // protocol cites exists because of, and it is common enough to have its own
+    // methods paper. A protocol that names "change in level" as an estimand
+    // without saying how time-since-interruption is coded is not reproducible,
+    // and this sentence used to live only in the consistency panel — the one
+    // surface that never reached the exported document.
+    const CODING_NOTE = "Under this coding the change-in-level coefficient is the immediate step at the interruption itself and the change in slope accrues from the following period; under the alternative coding, in which the counter starts at 1, the same coefficient is not the immediate step, so the two parameterisations are not interchangeable and the coefficients from one must not be read as the other's (Lopez Bernal 2017 corrigendum; Xiao 2021).";
+    // "every 6 months" is written as a phrase, not an adjective, so every
+    // sentence that used the raw value read "aggregated into equal every 6
+    // months intervals". One map, used everywhere a unit modifies a noun.
+    const unitPhrase = (u) => (u === "every 6 months" ? "six-monthly" : (u || "monthly"));
     const modelText = (m) => m === "linear"
       ? "segmented linear (ordinary least squares) regression on the continuous outcome"
       : "segmented Poisson regression (with a negative-binomial alternative if overdispersed) on the aggregated rate/count, using a log link and a log-population / person-time offset";
@@ -288,8 +373,10 @@ const SENSITIVITY = [
 
     // ── Custom ITS diagram: pre/post fitted segments, interruption line, counterfactual ──
     function renderScheme(s) {
-      const pre = Math.max(2, Math.min(36, parseInt(s.prePoints) || 24));
-      const post = Math.max(2, Math.min(36, parseInt(s.postPoints) || 24));
+      const pp = prePts(s), qp = postPts(s);
+      const DRAW_DEFAULT = 24;
+      const pre = Math.max(2, Math.min(36, pp.state === "ok" && pp.n > 0 ? pp.n : DRAW_DEFAULT));
+      const post = Math.max(2, Math.min(36, qp.state === "ok" && qp.n > 0 ? qp.n : DRAW_DEFAULT));
       const N = pre + post;
       const W = 860, H = 300, plotL = 64, plotR = W - 20, plotT = 34, plotB = H - 46;
       const xF = (u) => plotL + u * (plotR - plotL);
@@ -341,10 +428,16 @@ const SENSITIVITY = [
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-0.5" style="border-top:2px dashed #f59e0b"></span>Counterfactual (expected without the intervention)</span>' +
         '<span class="inline-flex items-center gap-1.5"><span class="inline-block w-3 h-3" style="border-left:2px dashed #0f766e"></span>Interruption</span>';
       // The drawing clamps at 36 points per segment; say so rather than letting the
-      // caption quote a number the picture is not showing.
-      const clamped = (parseInt(s.prePoints) > 36 || parseInt(s.postPoints) > 36);
+      // caption quote a number the picture is not showing. This used to be
+      // `parseInt(s.prePoints) > 36`, which is 1 > 36 for "1e3" — so at exactly
+      // the input the disclosure was written for, the caption confidently
+      // quoted 1000 points over a picture of two and said nothing.
+      const clamped = (pp.state === "ok" && pp.n > 36) || (qp.state === "ok" && qp.n > 36);
+      const unread = pp.state !== "ok" || qp.state !== "ok" || pp.n === 0 || qp.n === 0;
       document.getElementById("dcap").textContent =
-        "Segmented regression fits the pre-intervention trend (" + s.prePoints + " " + s.unit + " point(s)) and projects it forward as the counterfactual; the post-intervention segment (" + s.postPoints + " point(s)) is contrasted against it to estimate the immediate level change and the change in slope" + (s.controlled ? ", differenced against the control series" : "") + ". Drag the ○ handles to change the pre / post point counts. Schematic — the shapes are illustrative, not your data" + (clamped ? ", and the drawing shows at most 36 points per segment (" + pre + " before, " + post + " after)" : "") + ".";
+        "Segmented regression fits the pre-intervention trend (" + ptsText(pp) + " " + unitPhrase(s.unit) + " point(s)) and projects it forward as the counterfactual; the post-intervention segment (" + ptsText(qp) + " point(s)) is contrasted against it to estimate the immediate level change and the change in slope" + (s.controlled ? ", differenced against the control series" : "") + ". Drag the ○ handles to change the pre / post point counts. Schematic — the shapes are illustrative, not your data" +
+        (clamped ? ", and the drawing shows at most 36 points per segment (" + pre + " before, " + post + " after)" : "") +
+        (unread ? ". The drawing falls back to an illustrative " + pre + " / " + post + " points because at least one of the two boxes is empty, zero, or holds something that is not a whole number of periods — it is NOT showing your series" : "") + ".";
 
       // ── Drag-to-edit (frozen px/point so the drag stays linear) ──
       const svgXof = (clientX) => { const el = diag.querySelector("svg"); if (!el || !el.getScreenCTM) return null; const pt = el.createSVGPoint(); pt.x = clientX; pt.y = 0; const ctm = el.getScreenCTM(); if (!ctm) return null; return pt.matrixTransform(ctm.inverse()).x; };
@@ -387,15 +480,30 @@ const SENSITIVITY = [
     // What is still blank. A protocol that reads as finished while its defining
     // elements are placeholders is worse than one that says so, so the gap list
     // travels into the preview, the Markdown and the Word file alike.
-    const missing = (s) => [
-      [!s.interruptDate, "the interruption date — the design has no pre/post segments without it"],
-      [!s.population, "the population"],
-      [!s.outcome, "the outcome"],
-      [!s.intervention, "the intervention / policy"],
-      [!s.data, "the data source"],
-      [s.model === "poisson" && !s.denom, "the denominator / offset for the rate model"],
-      [s.controlled && !s.controlSeries, "the control series (controlled ITS is ticked but no comparison series is named)"],
-    ].filter((x) => x[0]).map((x) => x[1]);
+    const missing = (s) => {
+      const pp = prePts(s), qp = postPts(s);
+      // A segment count of zero is not a short series, it is a missing half of
+      // the design: with no pre-intervention points there is no trend to
+      // extrapolate, so there is no counterfactual and nothing to contrast
+      // against. It used to export as "0 pre-intervention points" under a
+      // document with no incomplete banner at all.
+      const seg = (p, which, why) =>
+        p.state === "blank" ? "the number of " + which + "-intervention points"
+        : p.state === "bad" ? "the number of " + which + "-intervention points (“" + p.raw + "” is not a whole number of periods)"
+        : p.n === 0 ? "the number of " + which + "-intervention points (0 was entered, and " + why + ")"
+        : "";
+      return [
+        [!s.interruptDate, "the interruption date — the design has no pre/post segments without it"],
+        [!s.population, "the population"],
+        [!s.outcome, "the outcome"],
+        [!s.intervention, "the intervention / policy"],
+        [!s.data, "the data source"],
+        [!!seg(pp, "pre", "a trend has to be estimated before it can be extrapolated"), seg(pp, "pre", "a trend has to be estimated before it can be extrapolated")],
+        [!!seg(qp, "post", "there is nothing after the interruption to contrast against the counterfactual"), seg(qp, "post", "there is nothing after the interruption to contrast against the counterfactual")],
+        [s.model === "poisson" && !s.denom, "the denominator / offset for the rate model"],
+        [s.controlled && !s.controlSeries, "the control series (controlled ITS is ticked but no comparison series is named)"],
+      ].filter((x) => x[0]).map((x) => x[1]);
+    };
     const missingMd = (s) => {
       const m = missing(s);
       return m.length ? "> **This draft is incomplete.** Still to be specified: " + m.join("; ") + ".\n\n" : "";
@@ -415,16 +523,16 @@ This study uses an **interrupted time series (ITS)** design to evaluate whether 
 
 *In plain terms:* ${I} took effect on a known date. We take the way ${O} was already trending before that date, draw that trend forward as what would have happened anyway, and measure how far the observed outcome departs from it.
 
-*Precisely:* the outcome is aggregated into equal ${s.unit} intervals and regressed on time, an interruption indicator, and time-since-interruption. Their coefficients separate the **baseline trend**, the **change in level** (the immediate step at the interruption) and the **change in slope** (how the trend bends afterwards). These answer different questions and can point in opposite directions — an intervention can cause a sharp one-off fall that then drifts back up — so both are reported (Wagner 2002; Lopez Bernal 2017).${s.controlled ? " A **control series** that shares the secular environment but is not exposed to the intervention is added, so the estimate becomes the *difference* in level and slope changes and any co-intervention affecting both series cancels (Lopez Bernal 2018)." : " Without a control series, every departure from the extrapolated pre-trend is attributed to the intervention, including anything else that happened at the same time."}
+*Precisely:* the outcome is aggregated into equal ${unitPhrase(s.unit)} intervals and regressed on time, an interruption indicator, and time-since-interruption. Their coefficients separate the **baseline trend**, the **change in level** (the immediate step at the interruption) and the **change in slope** (how the trend bends afterwards). These answer different questions and can point in opposite directions — an intervention can cause a sharp one-off fall that then drifts back up — so both are reported (Wagner 2002; Lopez Bernal 2017).${s.controlled ? " A **control series** that shares the secular environment but is not exposed to the intervention is added, so the estimate becomes the *difference* in level and slope changes and any co-intervention affecting both series cancels (Lopez Bernal 2018)." : " Without a control series, every departure from the extrapolated pre-trend is attributed to the intervention, including anything else that happened at the same time."}
 
 ## 2. Question
 Among **${P}**, did **${I}** (interrupted at **${D}**) change the level and/or slope of **${O}**?
 
 ## 3. Study design
-A ${s.controlled ? "**controlled** " : "single-group "}**interrupted time series** analysed by segmented regression, using observational data from **${or(s.data, "(data source)")}**. Time unit: **${s.unit}**. Series length: **${s.prePoints}** pre-intervention and **${s.postPoints}** post-intervention points.
+A ${s.controlled ? "**controlled** " : "single-group "}**interrupted time series** analysed by segmented regression, using observational data from **${or(s.data, "(data source)")}**. Time unit: **${s.unit}**. Series length: **${ptsText(prePts(s))}** pre-intervention and **${ptsText(postPts(s))}** post-intervention points.
 
 ## 4. Time series construction
-The outcome is aggregated per **${s.unit}** interval across the study window (${s.prePoints} pre + ${s.postPoints} post points).${s.model === "poisson" ? ` The denominator / offset is: ${or(s.denom, "(person-time / eligible population; entered as a log offset)")}.` : ""} Each interval is indexed by a continuous **time** variable; an interruption indicator marks intervals from **${D}** onward; and a **time-since-interruption** variable captures the post-intervention slope.${s.lag ? ` A transition / phase-in period is handled as: ${s.lag}.` : ""}
+The outcome is aggregated per **${unitPhrase(s.unit)}** interval across the study window (${ptsText(prePts(s))} pre + ${ptsText(postPts(s))} post points).${s.model === "poisson" ? ` The denominator / offset is: ${or(s.denom, "(person-time / eligible population; entered as a log offset)")}.` : ""} Each interval is indexed by a continuous **time** variable; an interruption indicator marks intervals from **${D}** onward; and a **time-since-interruption** variable is **coded 0 at the first affected period** and counts up from there. ${CODING_NOTE}${s.lag ? ` A transition / phase-in period is handled as: ${s.lag}.` : ""}
 
 ## 5. Intervention and interruption
 - **Intervention / policy:** ${I}
@@ -462,14 +570,18 @@ ${window.PC.tailMd(pcOf(s))}
 `;
     };
 
-    const computeChecks = (s) => {
+    const computeChecks = (s, forDoc) => {
       const checks = [];
-      const pre = parseInt(s.prePoints) || 0, post = parseInt(s.postPoints) || 0;
+      const pp = prePts(s), qp = postPts(s);
       const miss = missing(s);
+      (forDoc ? staleMsgsDoc() : staleMsgs()).forEach((m) => checks.push({ level: "error", msg: m }));
       if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft below is printed with placeholders so you can see its shape — it is not a finished protocol." });
       if (!s.interruptDate) checks.push({ level: "error", msg: "Set the interruption date — the whole design hinges on when the intervention took effect; it defines the pre/post segments." });
-      if (pre < 8) checks.push({ level: "warn", msg: "Only " + pre + " pre-intervention points — segmented regression needs a well-estimated baseline trend; aim for ≥ 8 (ideally ≥ 12) points before the interruption." });
-      if (post < 8) checks.push({ level: "warn", msg: "Only " + post + " post-intervention points — the slope change is hard to detect with few post points; aim for ≥ 8 (ideally ≥ 12)." });
+      // Only judge the length of a series whose length could be read. "Only 1
+      // pre-intervention points" for a box reading 1e3 is a third answer to a
+      // question the protocol and the diagram were already answering differently.
+      if (pp.state === "ok" && pp.n > 0 && pp.n < 8) checks.push({ level: "warn", msg: "Only " + pp.n + " pre-intervention points — segmented regression needs a well-estimated baseline trend; aim for ≥ 8 (ideally ≥ 12) points before the interruption." });
+      if (qp.state === "ok" && qp.n > 0 && qp.n < 8) checks.push({ level: "warn", msg: "Only " + qp.n + " post-intervention points — the slope change is hard to detect with few post points; aim for ≥ 8 (ideally ≥ 12)." });
       if ((s.unit === "monthly" || s.unit === "quarterly" || s.unit === "weekly") && s.seasonality === "none")
         checks.push({ level: "warn", msg: "No seasonality adjustment with " + s.unit + " data — seasonal outcomes can bias the level/slope estimates. Add harmonic or calendar-period terms, or justify that the outcome is non-seasonal." });
       if (s.autocorr === "none") checks.push({ level: "warn", msg: "No autocorrelation handling — serial correlation between adjacent time points inflates precision. Check Durbin–Watson / ACF-PACF and use Newey–West, Prais–Winsten, or ARIMA errors if present." });
@@ -501,35 +613,86 @@ ${window.PC.tailMd(pcOf(s))}
       }
       // Never swallow a render failure silently: a blank checks panel that looks
       // like "no issues" is exactly the failure mode this page is meant to avoid.
-      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); }
+      try { window.renderChecks(document.getElementById("checks"), computeChecks(s)); mountKeepButton(); }
       catch (err) {
         console.error("[ITS] consistency checks failed to render", err);
         const el = document.getElementById("checks");
         if (el) el.innerHTML = '<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">The consistency checks could not be rendered, so this panel is showing nothing rather than showing "no issues". Details are in the browser console.</div>';
       }
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (err) { console.warn("[ITS] could not save draft", err); }
+      // The stale-select record rides along in the draft under a reserved key.
+      // Without that, this very line — which runs on the first render, before
+      // the user has touched anything — overwrites the draft with the values we
+      // substituted, and the draft the user actually saved is unrecoverable.
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign({}, s, staleSelects.length ? { [STALE_KEY]: staleSelects } : {}))); } catch (err) { console.warn("[ITS] could not save draft", err); }
     };
+
+    // Re-picking the option a <select> is already showing fires no `change`
+    // event, so a user who wants the value it was left at has no way to answer
+    // a blocker that names it. Give them one.
+    function mountKeepButton() {
+      const host = document.getElementById("checks");
+      if (!host || !staleSelects.length) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mt-2 rounded-lg border border-brand-700 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50";
+      b.textContent = staleSelects.length === 1 ? "Keep “" + staleSelects[0].used + "”" : "Keep all " + staleSelects.length + " substituted choices";
+      b.addEventListener("click", () => { staleSelects = []; render(); });
+      host.appendChild(b);
+    }
 
     (() => {
       try {
         // A ?seed= link wins over the saved draft; PC.restore falls back to
         // localStorage on its own and tells the user which one it used.
+        // noteStale runs on the incoming object in BOTH paths, before anything
+        // is written to the form and before the first render saves over it.
         const seeded = (window.PC && PC.restore)
-          ? PC.restore(form, STORAGE_KEY, (s) => PC.applySeed(form, s)) === "seed"
+          ? PC.restore(form, STORAGE_KEY, (s) => { noteStale(s); PC.applySeed(form, s); }) === "seed"
           : false;
         const saved = seeded ? null : JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-        if (saved) for (const k in saved) {
-          const els = form.elements[k]; if (!els) continue;
-          const val = saved[k];
-          if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
-          else if (els.type === "checkbox") els.checked = !!val;
-          else els.value = val;
+        if (saved) {
+          noteStale(saved);
+          // A record carried over from an earlier load of this same draft, kept
+          // unless the user has since answered it.
+          if (Array.isArray(saved[STALE_KEY])) saved[STALE_KEY].forEach((x) => {
+            if (x && x.name && !staleSelects.some((y) => y.name === x.name)) staleSelects.push(x);
+          });
+          for (const k in saved) {
+            if (k === STALE_KEY) continue;
+            const els = form.elements[k]; if (!els) continue;
+            const val = saved[k];
+            if (Array.isArray(val)) form.querySelectorAll('[name="' + k + '"]').forEach((n) => { n.checked = val.includes(n.value); });
+            else if (els.type === "checkbox") els.checked = !!val;
+            else els.value = val;
+          }
         }
-      } catch {}
+        // Leave each blanked select showing the choice the protocol will
+        // actually describe, rather than showing nothing, now that the blocker
+        // above says which choice that is and where it came from. "Has the user
+        // answered this yet?" cannot be asked as "does the select hold a valid
+        // value", because after the first load it holds the value WE
+        // substituted; the record survives while the select still shows exactly
+        // that, and is dropped the moment it shows anything else.
+        staleSelects = staleSelects.filter((x) => {
+          const el = form.elements[x.name];
+          if (!el) return false;
+          if (el.selectedIndex >= 0 && el.value && el.value !== x.used) return false;
+          el.value = x.used;
+          return true;
+        });
+      } catch (e) { console.error("[ITS] restore failed", e); }
       render();
     })();
     form.addEventListener("input", render);
-    form.addEventListener("change", render);
+    // Cleared per control, on the control the user actually touched. Clearing
+    // the whole list on any change would dismiss a blocker the user has not
+    // seen; leaving it uncleared makes a blocker nobody can dismiss, which is
+    // what teaches people to ignore the panel.
+    form.addEventListener("change", (e) => {
+      const n = e.target && e.target.name;
+      if (n && staleSelects.some((x) => x.name === n)) staleSelects = staleSelects.filter((x) => x.name !== n);
+      render();
+    });
 
     const slugify = () => (readForm().title || "its-protocol").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "its-protocol";
     const fname = (ext) => slugify() + "-" + new Date().toISOString().slice(0, 10) + "." + ext;
@@ -551,9 +714,16 @@ ${window.PC.tailMd(pcOf(s))}
     document.querySelector("[data-action='reset']").addEventListener("click", () => {
       if (!confirm("Clear every field and forget the saved draft?")) return;
       localStorage.removeItem(STORAGE_KEY);
+      // The substitution record goes with the draft that caused it. Left
+      // behind, it would keep blocking a form that no longer holds any of the
+      // values it describes.
+      staleSelects = [];
       form.querySelectorAll("input, textarea, select").forEach((el) => {
         if (el.type === "checkbox" || el.type === "radio") el.checked = false;
-        else if (el.tagName === "SELECT") el.selectedIndex = 0;
+        // The option the markup marks selected, not whichever happens to be
+        // first: `selectedIndex = 0` silently moves any select whose authored
+        // default is not its first option.
+        else if (el.tagName === "SELECT") { const d = [...el.options].find((o) => o.defaultSelected); el.value = d ? d.value : (el.options[0] || {}).value || ""; }
         // Blanking a numeric field while readForm() silently substitutes a default
         // makes the protocol assert a number the form is not showing. Put the
         // markup default back instead.
@@ -600,7 +770,7 @@ ${window.PC.tailMd(pcOf(s))}
       children.push(h1("1. Background and rationale"));
       children.push(para("This study uses an interrupted time series (ITS) design to evaluate whether " + I + " changed the level and/or slope of " + O + " in " + P + "."));
       children.push(para("In plain terms: " + I + " took effect on a known date. We take the way " + O + " was already trending before that date, draw that trend forward as what would have happened anyway, and measure how far the observed outcome departs from it."));
-      children.push(para("Precisely: the outcome is aggregated into equal " + s.unit + " intervals and regressed on time, an interruption indicator, and time-since-interruption. Their coefficients separate the baseline trend, the change in level (the immediate step at the interruption) and the change in slope (how the trend bends afterwards). These answer different questions and can point in opposite directions, so both are reported (Wagner 2002; Lopez Bernal 2017)." + (s.controlled ? " A control series that shares the secular environment but is not exposed to the intervention is added, so the estimate becomes the difference in level and slope changes and any co-intervention affecting both series cancels (Lopez Bernal 2018)." : " Without a control series, every departure from the extrapolated pre-trend is attributed to the intervention, including anything else that happened at the same time.")));
+      children.push(para("Precisely: the outcome is aggregated into equal " + unitPhrase(s.unit) + " intervals and regressed on time, an interruption indicator, and time-since-interruption. Their coefficients separate the baseline trend, the change in level (the immediate step at the interruption) and the change in slope (how the trend bends afterwards). These answer different questions and can point in opposite directions, so both are reported (Wagner 2002; Lopez Bernal 2017)." + (s.controlled ? " A control series that shares the secular environment but is not exposed to the intervention is added, so the estimate becomes the difference in level and slope changes and any co-intervention affecting both series cancels (Lopez Bernal 2018)." : " Without a control series, every departure from the extrapolated pre-trend is attributed to the intervention, including anything else that happened at the same time.")));
 
       children.push(h1("2. Question"));
       children.push(para("Among " + P + ", did " + I + " (interrupted at " + Dt + ") change the level and/or slope of " + O + "?"));
@@ -614,7 +784,7 @@ ${window.PC.tailMd(pcOf(s))}
         ["Intervention / policy", I],
         ["Interruption date", Dt],
         ["Time unit", s.unit],
-        ["Pre / post points", s.prePoints + " / " + s.postPoints],
+        ["Pre / post points", ptsText(prePts(s)) + " / " + ptsText(postPts(s))],
         ["Regression model", s.model === "linear" ? "Segmented linear (OLS)" : "Segmented Poisson / negative-binomial"],
         ["Seasonality", ({ none: "None", harmonic: "Harmonic (Fourier) terms", month: "Calendar-month / quarter dummies" })[s.seasonality] || "None"],
         ["Autocorrelation", ({ none: "Durbin–Watson / ACF check", newey: "Newey–West (HAC) SE", prais: "Prais–Winsten", arima: "ARIMA errors" })[s.autocorr] || "-"],
@@ -638,10 +808,10 @@ ${window.PC.tailMd(pcOf(s))}
       // without it the figure reaches a text-only reader as a caption with
       // nothing under it, and that text is what carries HARPER 7.2.
       const __figLines = [
-        "Time axis: " + s.unit + " intervals of calendar time (this design is not anchored to a person-level day 0).",
-        "Pre-intervention segment: " + s.prePoints + " " + s.unit + " point(s) before the interruption; the trend fitted here is extrapolated forward as the counterfactual.",
+        "Time axis: " + unitPhrase(s.unit) + " intervals of calendar time (this design is not anchored to a person-level day 0).",
+        "Pre-intervention segment: " + ptsText(prePts(s)) + " " + unitPhrase(s.unit) + " point(s) before the interruption; the trend fitted here is extrapolated forward as the counterfactual.",
         "Interruption: " + Dt + (I ? " — " + I : "") + (s.lag ? " (transition / phase-in: " + s.lag + ")" : ""),
-        "Post-intervention segment: " + s.postPoints + " " + s.unit + " point(s) from the interruption onward.",
+        "Post-intervention segment: " + ptsText(postPts(s)) + " " + unitPhrase(s.unit) + " point(s) from the interruption onward.",
         "Estimated at the interruption: the change in level (immediate step) and the change in slope (trend).",
       ].concat(s.controlled ? ["Control series: " + or(s.controlSeries, "(a comparison series unaffected by the intervention)") + " — same calendar periods, differenced against the intervention series."] : []);
       const figParas = window.designDiagramDocx(D, fig, { font: FONT, caption: __cap, lines: __figLines });
@@ -649,7 +819,11 @@ ${window.PC.tailMd(pcOf(s))}
       if (!figParas.placed) lastFigNote = " Exported WITHOUT the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.";
 
       children.push(h1("4. Time series construction"));
-      children.push(para("The outcome is aggregated per " + s.unit + " interval (" + s.prePoints + " pre + " + s.postPoints + " post points)." + (s.model === "poisson" ? " Denominator / offset: " + or(s.denom, "(person-time / eligible population, entered as a log offset).") : "") + " Each interval is indexed by a continuous time variable; an interruption indicator marks intervals from " + Dt + " onward; and a time-since-interruption variable captures the post-intervention slope." + (s.lag ? " Transition / phase-in: " + s.lag + "." : "")));
+      // The full stop used to live INSIDE the or() fallback, so a supplied
+      // denominator ran two sentences together ("…person-months Each interval
+      // is indexed…") in the Word file while the Markdown, which puts it
+      // outside, read correctly. Two exports of one section, differing.
+      children.push(para("The outcome is aggregated per " + unitPhrase(s.unit) + " interval (" + ptsText(prePts(s)) + " pre + " + ptsText(postPts(s)) + " post points)." + (s.model === "poisson" ? " Denominator / offset: " + or(s.denom, "(person-time / eligible population, entered as a log offset)") + "." : "") + " Each interval is indexed by a continuous time variable; an interruption indicator marks intervals from " + Dt + " onward; and a time-since-interruption variable is coded 0 at the first affected period and counts up from there. " + CODING_NOTE + (s.lag ? " Transition / phase-in: " + s.lag + "." : "")));
 
       children.push(h1("5. Model specification"));
       children.push(para("The outcome is modelled with " + modelText(s.model) + ". The segmented model estimates the baseline level and pre-intervention slope, the change in level (step at the interruption), and the change in slope (post minus pre). " + seasonText(s.seasonality) + ". " + autocorrText(s.autocorr) + "." + (s.controlled ? " A control series (" + or(s.controlSeries, "a comparison series unaffected by the intervention") + ") is included with group-by-segment interactions, so the difference in level and slope changes is the primary estimate." : "")));
