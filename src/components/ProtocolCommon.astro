@@ -61,7 +61,14 @@
 // Storage format: one line per amendment in the single field "amendments",
 // pipe-delimited in HARPER's own column order —
 //   version date | version number | section of protocol | amendment | reason
-// Only the first four pipes split, so a reason may contain "|".
+// A cell may contain a "|" if it is written "\|"; a "\" is written "\\".
+// A line must hold exactly FIVE such values. Anything else — a bare pipe inside
+// a cell, a missing column, a Markdown-style leading pipe, a wrapped line — is
+// ambiguous, and a line the parser cannot read in five columns is reproduced
+// verbatim in the exported protocol under a heading saying so, rather than being
+// split into columns that may not be the ones intended. Anything writing this
+// field from outside the editor (a ?seed= link, a hand-off payload) should emit
+// five escaped values per line, or expect a visible refusal.
 ---
 
 <script is:inline>
@@ -239,13 +246,22 @@
        "amendments", pipe-delimited in that same order — the idiom the builders
        already use for their period strips and look-back windows, so their
        existing readForm / localStorage / ?seed= paths carry it with no change.
-       A pipe typed into any cell survives, because it is escaped on the way
+       A pipe TYPED INTO THE EDITOR survives, because it is escaped on the way
        into the field and unescaped on the way out. Only the trailing Reason
        column used to be protected, so a pipe in one of the first four — "7 | 8"
        in Section of protocol, meaning sections 7 and 8, is the obvious one —
        shifted every later cell one column left. The exported HARPER amendment
        table then read "Section: 7", "Amendment: 8", and the description of what
-       changed appeared under Reason: a complete, plausible, wrong row. */
+       changed appeared under Reason: a complete, plausible, wrong row.
+
+       That escaping covers exactly one of the four ways text reaches this
+       field. A `?seed=` link, a saved draft and a `?seed=paste` payload all
+       write it raw, and the editor that does the escaping is mounted on two of
+       nine builders. So the wrong row above was still reachable, verbatim, on
+       every builder — and the parser cannot repair it, because nothing in the
+       stored text distinguishes "a cell containing a pipe" from "an extra
+       column". A line the parser cannot read in five columns is therefore
+       refused rather than split: see amLog. */
     const AM_FIELD = "amendments";
     const AM_COLS = ["Version date", "Version number", "Section of protocol", "Amendment or update", "Reason"];
 
@@ -277,7 +293,7 @@
     // Split on pipes that are not escaped. Drafts written before this change
     // contain bare pipes and still split on them, which is the behaviour they
     // already had; anything typed from now on round-trips intact.
-    function amSplit(line) {
+    function amSegments(line) {
       var out = [], cur = "", i = 0;
       while (i < line.length) {
         var ch = line.charAt(i);
@@ -286,7 +302,13 @@
         cur += ch; i += 1;
       }
       out.push(cur);
-      // Five columns; anything beyond the fifth belongs to Reason.
+      return out;
+    }
+    function amSplit(line) {
+      var out = amSegments(line);
+      // Five columns; anything beyond the fifth belongs to Reason. Only called
+      // on lines that HAVE five segments — see amLog — so neither the padding
+      // below nor the overflow join fires on anything the tool prints.
       var cells = [];
       for (var j = 0; j < 4; j++) cells.push(amUnesc(out[j] === undefined ? "" : out[j]).trim());
       cells.push(amUnesc(out.slice(4).join("|")).trim());
@@ -310,13 +332,62 @@
       }
     }
 
-    function amendmentRows(s) {
+    /* Which stored lines this tool is entitled to print as a five-column row.
+
+       `writeRows` joins exactly five cells with " | ", each through `amEsc`, so
+       EVERY line the editor writes has exactly five unescaped-pipe segments —
+       blank cells included, because a blank cell still contributes its
+       separators. A line with any other segment count therefore did not come
+       from THIS editor. Almost always it arrived raw, from a `?seed=` link, a
+       saved draft or a pasted payload, none of which is escaped: `amEsc` is
+       called in exactly one place, inside the editor, which two of nine builders
+       mount. The one other source is a draft written before the escaping landed
+       (2026-08-23), which stored bare pipes — and such a line is ambiguous in
+       exactly the same way, so refusing it is right for the same reason.
+
+       For such a line the tool cannot know which value belongs in which column,
+       and until now it guessed. Six segments is the case the block comment above
+       claims to have fixed and had not: "… | 7 | 8 | Sections 7 and 8 harmonised
+       | Reviewer comment", where the sender meant Section = "7 | 8", exported as
+       Section 7, Amendment 8, with the description of the change filed under
+       Reason — a complete, plausible, wrong row that the Markdown and the Word
+       file agreed on. Fewer than five is the same defect pointed the other way:
+       omit the version number and every later value shifts one column left, and
+       a newline inside a cell splits one amendment into fragments of three and
+       one segments, the continuation prose landing under Version date. A
+       Markdown-style leading pipe shifts the whole row right and reports the
+       Version date as blank.
+
+       So parse the lines it can, reproduce the rest verbatim, and say which is
+       which. The one thing this cannot see is a five-segment RAW line — a sender
+       who wrote five values, one of them containing a pipe, is byte-identical to
+       an editor row. Nothing here validates a row's content, and no wording
+       below claims it does.
+
+       Numbering is by position in the whole log, so a refused entry keeps its
+       place: the table shows rows 1 and 3 and the refusal block names entry 2.
+       Renumbering the survivors 1, 2 would destroy the only ordering information
+       a refused entry has left, and the numbers in an amendment table are how
+       amendments get cited. */
+    function amLog(s) {
       var raw = (s && s.amendments != null) ? s.amendments : fromForm(AM_FIELD);
-      return String(raw || "").split(/\r?\n/).map(function (line) {
-        if (!line.trim()) return null;
-        var cells = amSplit(line);
-        return cells.some(function (c) { return c; }) ? cells : null;
-      }).filter(Boolean);
+      var out = [];
+      String(raw == null ? "" : raw).split(/\r?\n/).forEach(function (line) {
+        if (!line.trim()) return;
+        if (amSegments(line).length === AM_COLS.length) {
+          var cells = amSplit(line);
+          // A row of nothing but separators is not an entry, and never was.
+          if (!cells.some(function (c) { return c; })) return;
+          out.push({ ok: true, cells: cells, line: line, values: AM_COLS.length });
+        } else {
+          out.push({ ok: false, cells: null, line: line, values: amSegments(line).length });
+        }
+      });
+      out.forEach(function (e, i) { e.no = i + 1; });
+      return out;
+    }
+    function amendmentRows(s) {
+      return amLog(s).filter(function (e) { return e.ok; }).map(function (e) { return e.cells; });
     }
 
     /* Two claims live here and only one of them is the tool's to make.
@@ -345,27 +416,121 @@
        a stock page load with no link and no draft involved, and on two of those
        four (ACNU and descriptive-analysis) there is no amendments editor with
        which to make it true. It was also pure duplication: every builder with a
-       version field already prints it in the document's own header block. */
-    function amendmentIntro(s, rows) {
-      if (!rows.length) {
+       version field already prints it in the document's own header block.
+
+       The clause "; a cell the author left blank is shown as an em dash" is
+       gone, and it is the cheapest correct change in this whole area. One glyph
+       carried three states: the author left the cell blank, the parser
+       manufactured the cell by padding a short line, and the author typed an em
+       dash — ordinarily meaning "not applicable". The sentence asserted the
+       first of the three, unconditionally, and the third is byte-identical to
+       the first in storage, so no parser work can rescue it. Refusing short
+       lines (see amLog) removes the second state; deleting eleven words removes
+       a false claim about a person from the remaining two. No legend replaces
+       it, because every legend anyone proposed is false in the third state too. */
+    var amPlural = function (n, one, many) { return n + " " + (n === 1 ? one : many); };
+    function amendmentIntro(s, log) {
+      var ok = log.filter(function (e) { return e.ok; }).length;
+      var bad = log.length - ok;
+      var cols = "the date of the change, the version it produced, the section of the protocol " +
+        "affected, what changed, and the reason for the change";
+      if (!log.length) {
         return "This is the original version of the protocol; no amendments have been made. " +
           "Any later change is recorded here as a numbered amendment with its date, the version it produced, " +
           "the section of the protocol affected, what changed, and the reason for the change.";
       }
-      return "The amendment table below records " + rows.length + (rows.length === 1 ? " entry" : " entries") +
-        ". Its columns are the date of the change, the version it produced, the section of the protocol " +
-        "affected, what changed, and the reason for the change; a cell the author left blank is shown as an em dash.";
+      /* Zero readable rows and some refused ones must NOT fall through to the
+         empty branch. That branch says "no amendments have been made", which
+         would convert a log the tool could not read into an affirmative denial
+         that any amendment exists — strictly worse than the bug being fixed. */
+      if (!ok) {
+        return "This protocol's amendment log is not empty, but " +
+          (bad === 1 ? "its one entry is not" : "none of its " + bad + " entries is") +
+          " in the five-column form this table requires, so no table is shown. " +
+          (bad === 1 ? "It is" : "They are") + " reproduced below exactly as stored, because splitting " +
+          (bad === 1 ? "it" : "them") + " into columns would have produced a specific date, version and section " +
+          "that may not be the ones intended. What this protocol's amendments were cannot be established " +
+          "from the entries as they stand.";
+      }
+      if (!bad) {
+        return "The amendment table below records " + amPlural(ok, "entry", "entries") +
+          ". Its columns are " + cols + ".";
+      }
+      return "The amendment table below has a numbered row for each of the " + log.length +
+        " entries in this protocol's amendment log. Its columns are " + cols + ". " +
+        amPlural(bad, "entry", "entries") + " did not arrive in that five-column form: " +
+        (bad === 1 ? "its row carries a placeholder" : "their rows carry a placeholder") +
+        " instead of columns, and the " + (bad === 1 ? "entry is" : "entries are") +
+        " reproduced beneath the table exactly as stored, because splitting " +
+        (bad === 1 ? "it" : "them") + " into columns would have produced a specific date, version and " +
+        "section that may not be the ones intended.";
+    }
+
+    /* The lead for the refusal block, shared by both exports so they cannot
+       drift. It names the three things that actually cause a refusal, because a
+       refusal the sender can act on is not a guess — and the Markdown-table
+       leading pipe is the likeliest of the three by some distance. */
+    var AM_REFUSE_HEAD = "Entries that could not be read as five columns";
+    /* One sentence, both exports, so they cannot drift — which is also why the
+       advice is spelled out in words. Writing the escape as \| would be correct
+       in the stored field and wrong on the page: a Markdown reader renders \|
+       as a bare pipe, so the instruction would print as "write it as |". */
+    var AM_REFUSE_LEAD = "Each line below is reproduced exactly as it is stored. " +
+      "If an entry was copied from a Markdown table, remove the \"|\" at the start and end of the line; " +
+      "if a cell is meant to contain a \"|\", put a backslash in front of it; " +
+      "if an entry runs over more than one line, put it on one line.";
+    var amRefuseLabel = function (e) {
+      return "Entry " + e.no + " — " + amPlural(e.values, "value", "values") +
+        ", where this table has " + AM_COLS.length + " columns:";
+    };
+    /* A refused entry still occupies a numbered row in the table, and this is
+       not decoration. Amendment tables get lifted out of the protocol — into a
+       submission package, a change-control form, a reviewer's summary — and a
+       block printed beneath the table does not travel with it. Without a stub
+       row a three-entry log with one refusal becomes a two-entry table the
+       moment anyone selects it, and a missing amendment is not obviously safer
+       than a mis-columned one. The stub asserts nothing about any column: the
+       four cells after the notice are genuinely empty, not em dashes. */
+    var amStubCells = function (e) {
+      return ["Entry " + e.no + " could not be read as five columns; it is reproduced in full beneath this table",
+        "", "", "", ""];
+    };
+
+    /* A refused line is reproduced VERBATIM, so it cannot go in a code span:
+       one backtick in the sender's text would end the span and the rest would
+       be read as Markdown. A fence longer than the longest backtick run in the
+       content is the only construct that holds arbitrary text. */
+    function mdFence(text) {
+      var longest = 0;
+      String(text).replace(/`+/g, function (m) { longest = Math.max(longest, m.length); return m; });
+      var f = new Array(Math.max(3, longest + 1) + 1).join("`");
+      return f + "\n" + text + "\n" + f;
     }
 
     function amendmentsMd(s) {
-      var rows = amendmentRows(s);
-      var out = "## Amendments and updates\n\n" + amendmentIntro(s, rows);
-      if (!rows.length) return out + "\n";
+      var log = amLog(s);
+      var out = "## Amendments and updates\n\n" + amendmentIntro(s, log);
+      if (!log.length) return out + "\n";
       // mdCell escapes the backslash as well as the pipe — see its comment for
       // why the pipe alone is not a smaller version of the fix.
       var esc = function (c) { return mdCell(c || "—"); };
-      out += "\n\n| No. | " + AM_COLS.join(" | ") + " |\n|---|" + AM_COLS.map(function () { return "---"; }).join("|") + "|\n";
-      rows.forEach(function (r, i) { out += "| " + (i + 1) + " | " + r.map(esc).join(" | ") + " |\n"; });
+      // ONE pass over ONE ordered list. Two loops — readable rows, then the
+      // refused lines appended — would silently re-order the log and renumber
+      // the survivors, which is a new wrong-document defect in the shape of the
+      // one being fixed. `e.no` is the position in the log, so the table shows
+      // gaps where an entry was refused.
+      if (log.some(function (e) { return e.ok; })) {
+        out += "\n\n| No. | " + AM_COLS.join(" | ") + " |\n|---|" + AM_COLS.map(function () { return "---"; }).join("|") + "|\n";
+        log.forEach(function (e) {
+          var cells = e.ok ? e.cells.map(esc) : amStubCells(e).map(mdCell);
+          out += "| " + e.no + " | " + cells.join(" | ") + " |\n";
+        });
+      }
+      var bad = log.filter(function (e) { return !e.ok; });
+      if (bad.length) {
+        out += "\n**" + AM_REFUSE_HEAD + "**\n\n" + AM_REFUSE_LEAD + "\n";
+        bad.forEach(function (e) { out += "\n" + amRefuseLabel(e) + "\n\n" + mdFence(e.line) + "\n"; });
+      }
       return out;
     }
 
@@ -465,10 +630,25 @@
          nothing into. The field remains the single source of truth for EXPORT;
          the model is the single source of truth for what is on SCREEN, and
          `sync` is the one place the model is rebuilt from the field. */
+      /* An entry is either a five-cell ROW the editor may edit, or a RAW line
+         the parser refused. Before this distinction existed the model held only
+         rows, so `sync` ran the misparse into five boxes and the next
+         `writeRows` — any keystroke, any delete, or one click on "+ Add", which
+         touches no existing row — wrote that misparse back over the sender's
+         text, into the field and into the saved draft. Reproduced: a seeded
+         "… | 7 | 8 | Sections 7 and 8 harmonised | Reviewer comment" came back
+         after a reload with the pipe between 7 and 8 promoted to a hard column
+         boundary. Before the click the sender's intent was still recoverable
+         from the draft; after it, it was gone. A raw entry carries its line and
+         is re-emitted byte-for-byte, so nothing the tool could not read is
+         rewritten by the tool. */
       var model = [];
+      var isRaw = function (e) { return e && e.raw !== undefined; };
 
       var readRows = function () {
-        return String(field.value || "").split(/\r?\n/).filter(function (l) { return l.trim(); }).map(amSplit);
+        return amLog({ amendments: field.value }).map(function (e) {
+          return e.ok ? e.cells : { raw: e.line, values: e.values, no: e.no };
+        });
       };
 
       // Can an <input type="date"> actually display this string? Anything else
@@ -481,10 +661,16 @@
         return probe.value === raw;
       };
       var writeRows = function (rows) {
-        // Drop rows the user left entirely blank, so an accidental "+ Add"
-        // never becomes an empty amendment in the exported protocol.
-        var text = rows.filter(function (r) { return r.some(function (c) { return c.trim(); }); })
-          .map(function (r) { return r.map(function (c) { return amEsc(String(c).replace(/\r?\n/g, " ").trim()); }).join(" | "); }).join("\n");
+        // One map over one ordered list, so a refused line keeps its place among
+        // the rows. Drop rows the user left entirely blank, so an accidental
+        // "+ Add" never becomes an empty amendment in the exported protocol — a
+        // raw entry is never blank and is never dropped.
+        var text = rows.filter(function (r) {
+          return isRaw(r) || r.some(function (c) { return c.trim(); });
+        }).map(function (r) {
+          return isRaw(r) ? r.raw
+            : r.map(function (c) { return amEsc(String(c).replace(/\r?\n/g, " ").trim()); }).join(" | ");
+        }).join("\n");
         field.value = text;
         lastWritten = text;
         form.dispatchEvent(new Event("input", { bubbles: true }));
@@ -498,21 +684,36 @@
          supposed to remove, pointed the other way. */
       var paintNotes = function (rows) {
         noteEl.innerHTML = "";
-        var willExport = rows.filter(function (r) {
+        var refused = rows.filter(isRaw);
+        var editable = rows.filter(function (r) { return !isRaw(r); });
+        var willExport = refused.length + editable.filter(function (r) {
           return r.some(function (c) { return String(c == null ? "" : c).trim(); });
         }).length;
+        if (refused.length) {
+          // Say the same thing the document says, so the panel and the exported
+          // protocol cannot disagree about how many entries were understood.
+          var ref = document.createElement("p");
+          ref.className = "text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded px-3 py-2";
+          ref.textContent = (refused.length === 1
+            ? "One entry could not be read as five columns, so it is not shown in the boxes above"
+            : refused.length + " entries could not be read as five columns, so they are not shown in the boxes above")
+            + ". The protocol reproduces " + (refused.length === 1 ? "it" : "them")
+            + " exactly as stored, under a heading saying so, rather than guessing which value belongs in which column. "
+            + "Retype " + (refused.length === 1 ? "it" : "each of them") + " into a new row and remove the original.";
+          noteEl.appendChild(ref);
+        }
         if (!willExport) {
           var none = document.createElement("p");
           none.className = "text-xs text-slate-500 italic";
           // This branch is only reached when EVERY row on screen is empty, so
           // the count of rows is the count of empty ones.
-          none.textContent = rows.length === 0
+          none.textContent = editable.length === 0
             ? "No amendments — the protocol will state that this is the original version."
-            : (rows.length === 1 ? "This row is still empty" : "These " + rows.length + " rows are still empty")
+            : (editable.length === 1 ? "This row is still empty" : "These " + editable.length + " rows are still empty")
               + ", so the protocol states that this is the original version until you fill something in.";
           noteEl.appendChild(none);
         }
-        var unshowable = rows.filter(function (r) {
+        var unshowable = editable.filter(function (r) {
           return !dateShowable(String(r[0] == null ? "" : r[0]));
         }).length;
         if (unshowable) {
@@ -528,6 +729,34 @@
       var paint = function (rows) {
         rowsEl.innerHTML = "";
         rows.forEach(function (r, i) {
+          if (isRaw(r)) {
+            /* Shown, not editable. Five boxes would be a claim about which value
+               belongs in which column, and the refusal exists precisely because
+               the tool cannot make that claim. The line is on screen verbatim so
+               the user can retype it, and the ✕ removes it once they have. */
+            var bad = document.createElement("div");
+            bad.className = "rounded border border-amber-300 bg-amber-50 px-3 py-2 flex items-start gap-2";
+            var txt = document.createElement("div");
+            txt.className = "flex-1 min-w-0";
+            var lbl = document.createElement("p");
+            lbl.className = "text-xs text-amber-900 font-semibold";
+            lbl.textContent = amPlural(r.values, "value", "values") + ", where a row has " + AM_COLS.length +
+              " columns — reproduced in the protocol exactly as stored:";
+            var pre = document.createElement("pre");
+            pre.className = "text-xs font-mono text-amber-900 whitespace-pre-wrap break-words mt-1";
+            pre.textContent = r.raw;
+            txt.appendChild(lbl); txt.appendChild(pre);
+            bad.appendChild(txt);
+            var rm = document.createElement("button");
+            rm.type = "button";
+            rm.className = "text-xs text-slate-400 hover:text-rose-600 px-2 py-1.5";
+            rm.textContent = "✕";
+            rm.setAttribute("aria-label", "Remove the entry that could not be read, " + (i + 1));
+            rm.addEventListener("click", function () { rows.splice(i, 1); writeRows(rows); paint(rows); });
+            bad.appendChild(rm);
+            rowsEl.appendChild(bad);
+            return;
+          }
           var row = document.createElement("div");
           row.className = "grid gap-1.5 sm:grid-cols-[8rem_6rem_1fr_1.4fr_1.4fr_auto] items-start";
           AM_COLS.forEach(function (label, j) {
@@ -650,13 +879,29 @@
     }
     function amendmentsDocx(D, s) {
       const k = docxKit(D);
-      const rows = amendmentRows(s);
-      const out = [k.h1("Amendments and updates"), k.p([k.text(amendmentIntro(s, rows))])];
-      if (!rows.length) return out;
+      const log = amLog(s);
+      const out = [k.h1("Amendments and updates"), k.p([k.text(amendmentIntro(s, log))])];
+      if (!log.length) return out;
       const W = [560, 1180, 1180, 1560, 2400, 2146];
-      const header = new D.TableRow({ tableHeader: true, children: ["No."].concat(AM_COLS).map((c, i) => k.headCell(c, W[i])) });
-      const body = rows.map((r, i) => new D.TableRow({ children: [String(i + 1)].concat(r.map((c) => c || "—")).map((c, j) => k.cell(c, W[j])) }));
-      out.push(new D.Table({ width: { size: 9026, type: D.WidthType.DXA }, columnWidths: W, rows: [header].concat(body) }));
+      // Same one-pass rule and the same numbering as amendmentsMd, so the Word
+      // file and the Markdown cannot disagree about which entry is which.
+      if (log.some((e) => e.ok)) {
+        const header = new D.TableRow({ tableHeader: true, children: ["No."].concat(AM_COLS).map((c, i) => k.headCell(c, W[i])) });
+        const body = log.map((e) => new D.TableRow({
+          children: [String(e.no)].concat(e.ok ? e.cells.map((c) => c || "—") : amStubCells(e)).map((c, j) => k.cell(c, W[j])),
+        }));
+        out.push(new D.Table({ width: { size: 9026, type: D.WidthType.DXA }, columnWidths: W, rows: [header].concat(body) }));
+      }
+      const bad = log.filter((e) => !e.ok);
+      if (bad.length) {
+        out.push(k.p([k.text(AM_REFUSE_HEAD, { bold: true })]));
+        out.push(k.p([k.text(AM_REFUSE_LEAD)]));
+        bad.forEach((e) => {
+          out.push(k.p([k.text(amRefuseLabel(e), { bold: true })]));
+          // Monospaced, so a reader can see the delimiters they need to fix.
+          out.push(k.p([k.text(e.line, { font: "Courier New" })]));
+        });
+      }
       return out;
     }
     function abstractDocx(D, s) {
