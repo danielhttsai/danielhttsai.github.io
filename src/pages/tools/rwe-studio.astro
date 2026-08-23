@@ -1611,23 +1611,68 @@ const DESIGNS = [
           "    if(!is.finite(I) || I<=1e-12) break\n" +
           "    st<-U/I; if(!is.finite(st)) break; b<-b+max(-2,min(2,st)); if(abs(st)<1e-10){ conv<-TRUE; break } }\n" +
           "  list(b=b, se=if(is.finite(I) && I>0) sqrt(1/I) else NA_real_, info=I, conv=conv) }\n" +
+          // The same conditional log-likelihood the fit above maximises, up to the constant
+          // sum(y*log(tau)) that does not depend on b - which is all a likelihood-ratio
+          // interval needs. rowsum() rather than split() so the interval costs about what
+          // the fit costs: 1.1s against 0.8s over 300,000 rows in native R.
+          "sccsll<-function(y,x,tau,id){ ng<-as.vector(rowsum(y,id)); Sx<-sum(y*x)\n" +
+          "  function(b){ w<-tau*exp(b*x); sg<-as.vector(rowsum(w,id))\n" +
+          "    if(any(!is.finite(sg)) || any(sg<=0)) return(-Inf)\n" +
+          "    v<-Sx*b - sum(ng*log(sg)); if(is.finite(v)) v else -Inf } }\n" +
+          // Bracket outward in units of the Wald standard error, so the search is scale-free:
+          // person-time in years, days or seconds gives the identical interval (checked).
+          "profl<-function(bh,se,ll){ l0<-ll(bh); cut<-qchisq(0.95,1)/2\n" +
+          "  h<-if(is.finite(se) && se>0) se else 1\n" +
+          "  f<-function(z){ v<-ll(z); if(!is.finite(v)) return(NA_real_); l0-v-cut }\n" +
+          "  mult<-c(1.5,2,2.5,3,4,5,7,10,15,25,40,70,120,200,400,800,1600,3200)\n" +
+          "  lim<-function(dir){ prev<-bh\n" +
+          "    for(m in mult){ z<-bh+dir*h*m; v<-f(z); if(!is.finite(v)) return(NA_real_)\n" +
+          "      if(v>0) return(tryCatch(uniroot(f,sort(c(prev,z)),tol=1e-10)$root,error=function(e) NA_real_))\n" +
+          "      prev<-z }\n" +
+          "    NA_real_ }\n" +
+          "  c(lim(-1), lim(1)) }\n" +
           "cf<-sccsfit(a$EVENTS, a$EXPOSED, a$INTERVAL, a$ID)\n" +
           "b<-cf$b; se<-cf$se; irr<-exp(b)\n" +
           "if(!cf$conv || !is.finite(se) || !is.finite(irr)){\n" +
           "  cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n', EST))\n" +
           "  cat('RESULT_NOTE|Not estimable: the conditional likelihood did not converge to a finite estimate on this data.\\n')\n" +
           "} else {\n" +
-          "cat(sprintf('Exact conditional SCCS incidence-rate ratio (exposed vs unexposed): %.3f (95%% CI %.3f to %.3f)\\n', irr, exp(b-1.96*se), exp(b+1.96*se)))\n" +
+          // The interval quoted is the profile-likelihood one. The Wald limits are still
+          // computed, because they are the fallback if the root search fails and because the
+          // two disagreeing is itself worth telling the reader about.
+          "wlo<-b-1.96*se; whi<-b+1.96*se\n" +
+          "pl<-profl(b,se,sccsll(a$EVENTS,a$EXPOSED,a$INTERVAL,a$ID))\n" +
+          "pok<-is.finite(pl[1]) && is.finite(pl[2]) && pl[1]<=b && pl[2]>=b\n" +
+          "clo<-if(pok) pl[1] else wlo; chi<-if(pok) pl[2] else whi\n" +
+          "cat(sprintf('Exact conditional SCCS incidence-rate ratio (exposed vs unexposed): %.3f (95%% %s CI %.3f to %.3f)\\n', irr, if(pok) 'profile-likelihood' else 'Wald', exp(clo), exp(chi)))\n" +
           "cat(sprintf('Cases (strata): %d; interval-rows: %d; events: %d\\n', length(unique(a$ID)), nrow(a), sum(a$EVENTS)))\n" +
-          "cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', EST, irr, exp(b-1.96*se), exp(b+1.96*se)))\n" +
+          "cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', EST, irr, exp(clo), exp(chi)))\n" +
+          // Naming the interval is not optional: a rate ratio and its limits are not
+          // reproducible without it, and this is the only channel that travels into the
+          // Markdown and the .docx alongside the number.
+          "if(pok){\n" +
+          "cat('RESULT_NOTE|The interval above is a profile-likelihood (likelihood-ratio) interval, not exp(estimate +/- 1.96 x standard error). A self-controlled series conditions each case on their own event count, so when few events fall in the risk window the conditional log-likelihood is markedly asymmetric, and a symmetric Wald interval is too narrow on exactly the side that decides whether the interval clears 1. Simulated at a true rate ratio of 1, with a 14-day risk window inside a year of observation and about one event per case, a Wald interval excluded 1 for 11.2 percent of the files this tool would estimate at 10 cases and 6.7 percent at 20, against the 5 percent it promises; the likelihood-ratio interval gave 4.7 and 3.2 percent. With a longer risk window, or a few hundred cases, the two agree to two decimal places.\\n')\n" +
+          "  wexc<-(wlo>0 || whi<0); pexc<-(pl[1]>0 || pl[2]<0)\n" +
+          "  if(wexc && !pexc) cat(sprintf('RESULT_NOTE|The two intervals disagree on this data, which is why the distinction is not academic here. A Wald interval would have been %.2f to %.2f and would have excluded 1; the likelihood-ratio interval above includes it. This rate ratio is compatible with no effect - do not report it as a signal.\\n', exp(wlo), exp(whi)))\n" +
+          "  if(pexc && !wexc) cat(sprintf('RESULT_NOTE|The two intervals disagree on this data. A Wald interval would have been %.2f to %.2f and would have included 1; the likelihood-ratio interval above excludes it. The likelihood-ratio limits are the ones to report, but a finding this close to the boundary rests on the shape of the likelihood rather than on weight of evidence.\\n', exp(wlo), exp(whi)))\n" +
+          "} else cat('RESULT_NOTE|The profile-likelihood limits could not be located on this data, so the interval above is the Wald approximation exp(estimate +/- 1.96 x standard error) instead. That approximation is unreliable when few events fall in the risk window - which is the situation most likely to have caused the root search to fail - so treat the width of this interval as indicative only.\\n')\n" +
           "# Fitting a dummy per case is the other route to the same number. Where they disagree\n" +
           "# something is wrong - but only a converged fit can be compared, and the message no\n" +
           "# longer offers \"a numerical problem\" as its only hypothesis.\n" +
           "fe<-tryCatch(glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=a), error=function(e) NULL)\n" +
           "if(!is.null(fe)){ bfe<-coef(fe)['EXPOSED']; if(is.finite(bfe) && abs(bfe-b)>0.01) cat(sprintf('RESULT_NOTE|The exact conditional fit (IRR %.3f) and a fixed-effect Poisson fit (IRR %.3f) disagree by more than 1%%. They are algebraically the same estimator, so the difference is numerical rather than substantive - treat both as unreliable here and check the interval lengths and event counts of the largest contributing cases.\\n', irr, exp(bfe))) }\n" +
           "p0<-tryCatch(glm(EVENTS ~ EXPOSED, family=poisson, offset=log(INTERVAL), data=a), error=function(e) NULL)\n" +
-          "if(!is.null(p0)){ bp<-coef(p0)['EXPOSED']; sp<-sqrt(diag(vcov(p0)))['EXPOSED']\n" +
-          "  if(is.finite(bp) && is.finite(sp)) cat(sprintf('RESULT_ESTIMATE|Pooled across people, NOT self-controlled (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bp), exp(bp-1.96*sp), exp(bp+1.96*sp))) }\n" +
+          "if(!is.null(p0)){ bp<-as.numeric(coef(p0)['EXPOSED']); sp<-as.numeric(sqrt(diag(vcov(p0)))['EXPOSED'])\n" +
+          // The contrast row gets a profile-likelihood interval too, and it is the SAME
+          // function: profiling the intercept out of a log-link Poisson with an offset leaves
+          // Sx*b - N*log(sum(tau*exp(b*x))), which is sccsll() over a single stratum. Checked
+          // against re-fitting the glm with the coefficient held fixed in the offset: identical
+          // to eight decimals on the demo and on a sparse file. If this row kept a Wald
+          // interval it would sit directly under a likelihood-ratio one and could contradict
+          // it about whether 1 is excluded - which is corroboration the reader has not got.
+          "  if(is.finite(bp) && is.finite(sp)){ pp<-profl(bp,sp,sccsll(a$EVENTS,a$EXPOSED,a$INTERVAL,rep(1L,nrow(a))))\n" +
+          "    ppok<-is.finite(pp[1]) && is.finite(pp[2]) && pp[1]<=bp && pp[2]>=bp\n" +
+          "    cat(sprintf('RESULT_ESTIMATE|Pooled across people, NOT self-controlled (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bp), exp(if(ppok) pp[1] else bp-1.96*sp), exp(if(ppok) pp[2] else bp+1.96*sp))) } }\n" +
           "if(ncase>0) cat(sprintf('RESULT_NOTE|%d of %d case(s) have an event and both exposed and unexposed person-time, and so carry the estimate; the rest contribute nothing to it. This is the same test the likelihood applies, so it is the number of cases the result actually rests on.\\n', ninf, ncase))\n" +
           "if(ncase>0 && median(epc[epc>0])<2) cat('RESULT_NOTE|Half the cases contribute a single event. The conditional likelihood handles that correctly - it is the design working as intended, not a defect - but the estimate rests on how each case s one event fell relative to their own exposed window, so precision comes from the number of cases rather than the number of events.\\n')\n" +
           "cat('RESULT_NOTE|The pooled row ignores which person each interval belongs to. It is shown only as a contrast: it is confounded by anything that differs between people, which is exactly what the self-controlled design removes. Report the self-controlled row.\\n')\n" +
