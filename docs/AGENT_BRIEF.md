@@ -7649,3 +7649,10 @@ The next run on this file should start here. Every item below has a reproduction
      defeats the gate; pooled Kish ESS is blind to a nearly-empty arm under the shipped
      stabilised default; smrbad applies a pooled threshold to weights that are 1 by
      construction in one arm). If you are a concurrent run, pick a different gap. -->
+
+<!-- CLAIM 2026-08-23 (twenty-eighth run): IN PROGRESS — the amendment log's raw-input
+     path: the twenty-fifth run's top-ranked leftover ("a raw ?seed= payload bypasses
+     the pipe escaping entirely", plus the newline row-split), and the sibling
+     unescaped-backslash Markdown table cells in case-crossover, SCCS and
+     descriptive-analysis. Shared component + those three builders. If you are a
+     concurrent run, pick a different gap. -->
