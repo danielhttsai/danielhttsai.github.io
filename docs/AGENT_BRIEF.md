@@ -8573,7 +8573,8 @@ builders before any file was changed.
      NOT the checker, NOT RWE Studio, NOT the protocol-generator hub.
      If you are a concurrent run reading this, take something else. -->
 
-<!-- CLAIM 2026-08-23 (thirtieth run): the Protocol Checker's planned-outputs
+<!-- DONE 2026-08-23 (thirtieth run) — claim retired, see the section above.
+     CLAIM WAS: the Protocol Checker's planned-outputs
      (deliverables) path in src/pages/tools/protocol-checker.astro — the
      DELIVERABLE_NAMES reconciliation, DELIV_ALIASES / DELIV_NEVER_NA, the
      caveat sentences the panel pushes, and the three surfaces those rows reach
@@ -8583,3 +8584,218 @@ builders before any file was changed.
      un-validated twin of skipOutputs.
      NOT RWE Studio, NOT the nine builders, NOT the protocol-generator hub.
      If you are a concurrent run reading this, take something else. -->
+
+### Found 2026-08-23 by a thirtieth run — the Protocol Checker's planned-outputs path
+
+Five consecutive runs had worked the nine builders and the amendments editor.
+This one rotated to `src/pages/tools/protocol-checker.astro` and took the
+planned-outputs (deliverables) panel end to end: the name reconciliation, the
+`DELIV_NEVER_NA` demotion, every caveat sentence the panel pushes, and the
+three surfaces those rows reach. Two reviewers on disjoint briefs (a
+methodologist on the statistics and the truth of the sentences; an applied
+analyst on the mechanics and the exports), then both sent back at this run's
+own committed diff.
+
+**That second pass is the single most valuable thing in this run's process and
+it is now 3 for 3 across runs. Both reviewers independently led with the same
+regression this run had introduced.** Keep doing it, and keep the briefs
+disjoint — neither reviewer's first-round list overlapped the other's by more
+than one finding.
+
+#### The headline: `normName` has now been cleared by three reviewers and was wrong every time
+
+The seven planned outputs are matched by name. Two earlier reviews cleared that
+matcher; both drove a dash that had replaced a **dash** ("Kaplan–Meier" with an
+en dash), which it has always folded. Neither drove a dash replacing the
+**slash**, a dropped parenthetical, or a plural — and each of those cost the row
+its verdict twice over: the canonical row printed "The AI returned no verdict
+for this planned output", the same answer reappeared at the bottom as something
+the AI had "volunteered … not on the list it was asked about", and a caveat
+counted the tool's own miss against the model. "Forest plot" and "Forest-plot"
+in one answer printed Present and Absent four rows apart, which is the exact
+shape the duplicate rule exists to prevent — it only ever guarded names that had
+already matched.
+
+**Worst of all, it walked past a safety rule.** `DELIV_NEVER_NA` matches on the
+canonical name, so `"Primary results table"` without `"(shell)"` kept its `na`,
+as a volunteered extra, in a document whose own definition paragraph says three
+inches above that this row can never be N/A.
+
+**If you test a name matcher, test the separator and the SHAPE of the name, not
+the characters inside one word.** That is the lesson, and it is cheap: this run
+found six live variants in twenty minutes.
+
+#### What shipped
+
+Three commits, all in `protocol-checker.astro` except the second.
+
+- **`normName` now NFKC-normalises, strips invisible characters, folds space /
+  hyphen / slash into one separator, and trims leading and trailing separators.**
+  All lossless: two names differing only by these are the same name to every
+  reader of both. Verified the seven strict keys stay distinct, with a runtime
+  caveat that fires if a future rename breaks that.
+- **A second, deliberately LOSSY `looseName`** — trailing parenthetical and a
+  plural — tried only where the strict key found nothing. Every row it matches
+  is named in a caveat AND carries an inline marker on the row itself in all
+  three surfaces ("matched to this row by this tool — the AI wrote …"). An
+  exact match always wins: strict matching finishes for every entry before the
+  lossy key is tried.
+- **An entry with no usable name is no longer dropped.** `if (!d || !d.name)
+  continue` discarded a verdict, its evidence and its suggestion silently while
+  the row it was about said the AI had returned nothing and the caveat counted
+  it as a check that never answered. `reconcile` meets the same shape on the
+  checklist side and reports it — two panels, one standard.
+- **The demotion no longer quotes this tool as the AI.** `evidence` had already
+  been through `evidenceText`, so a blank-evidence `na` exported "the AI's own
+  words are kept here so you can judge them — it said: The AI returned this
+  verdict with no evidence…". No words were kept, ours were attributed to the
+  model, and the model was made to narrate its own silence.
+- **Duplicate volunteered rows** are de-duplicated with a caveat naming the
+  dropped spelling; the **tally** says what it counts ("Over the 7 standard
+  outputs, not the 9 volunteered below").
+- **`pc.skip` is validated the way `pc.skipOutputs` already was**
+  (`ProtocolCommon.astro`, so all nine builders). `skip: ["ethic"]` — one
+  keystroke — silently omitted nothing, so the shared "Human subjects…" section
+  stood beside the builder's own ethics paragraph and the protocol carried the
+  section TWICE. `skip: "ethics"` worked only by the accident that
+  `String.prototype.includes` exists, with substring semantics. `skip: 5` or
+  `skip: {…}` threw out of `tailSections` and killed the whole export. The valid
+  keys are derived from the section list itself, which is the drift
+  `skipOutputs`'s hand-written `OUTPUT_KEYS` is one edit away from. All four
+  builders that use `skip` pass a correct array, so the notice fires on none of
+  them today.
+
+#### What the two reviewers disagreed about, and who was right
+
+- **The analyst overturned the methodologist's "checked and clean" entry
+  outright, and this is the run's sharpest moment.** The methodologist listed
+  "`normName` correctly folds U+2010–U+2015 and U+2212, so 'Kaplan–Meier' with
+  an en dash matches; no phantom volunteered row" under *things I expected to be
+  broken and are not*. The analyst then demonstrated eight name variants that
+  each produced the double-listing. Both were describing the same function and
+  only one had tested the axis that mattered. **A "checked and clean" entry is
+  only as good as the axis it was tested on — say which axis, in the entry.**
+- **The same fact, opposite verdicts.** The methodologist filed "extras are
+  excluded from the tally, never '8 of the 7'" as *working correctly*; the
+  analyst filed the identical mechanism as a defect, because the tally is
+  unlabelled and the only sentence reconciling it lives two cards up. Both were
+  right about the mechanism. The analyst was right about the consequence.
+- **On this run's own diff they converged**, which is why the regression is
+  certain rather than plausible. They differed on remedy: the analyst wanted the
+  colliding entry routed to `extras` (what it had been before), the methodologist
+  wanted a dedicated caveat naming what was nearly done. **Both shipped** — they
+  are complementary, not alternatives, and neither alone is honest.
+- **The methodologist's least-confident finding was accepted anyway.** It argued
+  that "every design has … assumptions worth probing" is true of every empirical
+  claim ever made and therefore no longer explains why *these two* rows are barred
+  from N/A when the Love plot is not. It flagged this as a judgement rather than
+  a demonstrable falsehood. It is right, and naming the class (measurement
+  assumptions — outcome and denominator misclassification) costs one clause.
+
+#### Deliberately left, argued, not manufactured
+
+- **The seven deliverable descriptions in `worker.js:96-102`, now ITEMISED.**
+  The twenty-sixth run recorded "methodologically wrong in five places" without
+  saying which. They are, with what each should say:
+  - `:100` **"Cumulative incidence / Kaplan-Meier curve"** conflates two
+    non-equivalent estimators. 1−KM estimates the CIF only without competing
+    risks; with them it overestimates risk and Aalen–Johansen is required. A
+    protocol planning 1−KM for a cardiovascular outcome in an elderly cohort is
+    scored Present. (Snippet-corroborated via WebSearch by two independent
+    searches; Crossref/PubMed blocked.)
+  - `:99` **"Primary results table (shell) — effect estimates (HR/RR/RD/IRR)
+    with 95% CIs, events, and person-time"** is a person-level rate-denominator
+    template asserted as universal. Wrong for ITS (level and slope change, no
+    person-time), case-crossover and case-control (discordant sets / sampled
+    controls), and descriptive (no effect estimate at all). This repo's own
+    `interrupted-time-series.astro:544` deletes the shared results bullet for
+    exactly this reason.
+  - `:102` **"Sensitivity-analysis outputs — negative-control outcomes, E-value,
+    or quantitative bias analysis"** lists only unmeasured-confounding
+    diagnostics and omits the ordinary meaning (varying exposure and outcome
+    definitions, grace period, ITT vs as-treated, PS specification) — which
+    HARPER item 7.5 **in the same prompt** asks for. A protocol with a complete
+    Table 11 and no E-value can be met on 7.5 and absent on the deliverable.
+  - `:96` **"(CONSORT-style)"** is the wrong reporting guideline; the
+    observational analogue is STROBE (RECORD/RECORD-PE for routine data).
+    Snippet-corroborated.
+  - `:98` **"Love plot"** restricts covariate balance to PS methods, leaving
+    disease-risk scores, entropy balancing, standardisation and g-computation in
+    a gap the `na` rubric then treats as structural.
+  - `:97` **"ideally with standardized mean differences"** — in a PS-adjusted
+    study the SMD is required, not ideal, and the table must be in the analytic
+    (matched/weighted) sample.
+  **Not shipped because a prompt edit is unverifiable from this sandbox and
+  inert until Daniel redeploys the worker.** Weigh that before picking it up;
+  but the list above is now specific enough to act on in one sitting when it is
+  reachable. Note the coupling: the page now says a descriptive design has
+  measurement assumptions worth probing, and the prompt still names two
+  exemplars that are undefined without a causal contrast, so `:102` is the one
+  to do first.
+- **The worker asks for a "brief refinement or confirmation" on every `present`
+  row and the page never prints it.** `NO_SUGGESTION` contains `"present"`, and
+  the comment justifying that says "None of the five is something the author can
+  act on" — true of `na`/`unassessed`/`notscored`, false of `present` by the
+  worker's own prompt. Printing it is a new line on three surfaces, so it is a
+  feature; the honest alternative is to stop asking for it. Left.
+- **Non-string `evidence` / `suggestion` still render as `[object Object]` and
+  `a,b`.** Re-derived by this run's analyst; the twenty-sixth run drove this and
+  explicitly decided to keep `String()`. That decision stands. A non-string
+  **name** was NOT covered by it and is now an unusable-name case — it used to
+  reach the panel as a planned output titled "[object Object]".
+- **Markdown emphasis injection in a volunteered name.** `mdText` collapses
+  whitespace but does not escape `**`, so a name like ``Forest plot** — _Present_
+  · **x`` can render a second, contradictory verdict in the report's own
+  typography — a surface where the `.md` alone shows something the screen does
+  not. **Not verified** (the analyst's probe did not complete) and adversarial-
+  only. The twenty-sixth run chose "collapse rather than escape" deliberately for
+  *structure*; inline emphasis is a different axis it may not have weighed.
+- **A zero-width space REPLACING a space still glues two words** ("Forest␈plot" →
+  `forestplot`). Measured. Deleting invisibles and folding them to a separator
+  are opposite guesses, and deletion is right for a soft hyphen inside a word,
+  which is commoner. Do not "fix" one without breaking the other.
+- **`normName` does not fold "and" ↔ "/"**, so "Love plot and covariate balance"
+  is still a volunteered extra. Left as a bigger semantic leap than the
+  separator fold.
+
+#### Verified this run, and how
+
+- Everything driven in headless Chromium against a local `astro build` + a
+  static server, with the POST to the worker intercepted by `page.route` and
+  fulfilled with crafted JSON. Harness in `scratch/` (gitignored):
+  `orch/battery.mjs` (22 named scenarios), `orch/exports.mjs` (real `.md` and
+  real `.docx`), `orch/health.mjs`, `orch/skip.mjs`, `orch/skipdocx.mjs`.
+- **22 crafted responses, zero page errors in any**, covering: both demotion
+  branches, six name-paraphrase classes, loose collisions in both array orders,
+  five nameless shapes, duplicate canonical and duplicate volunteered rows, nine
+  volunteered extras, an unrecognised status, and a missing `deliverables` field.
+- **A real `.md` and a real `word/document.xml`** carrying every new path — the
+  guessed-row marker, the loose-collision caveat, the bare-value caveat, the
+  rewritten definition paragraph and the preserved suggestion. Both reviewers
+  independently confirmed screen / Markdown / Word agree row-for-row.
+- **`pc.skip` through `window.PC.tailMd` on the built page**, seven shapes: the
+  valid array still omits its section with no notice, absent `skip` still returns
+  all nine sections, and each of the five broken shapes returns ten sections with
+  the notice and none throws. The notice confirmed in the Word path through
+  `window.PC.tailDocx` with the real `docx` library loaded via `addScriptTag`.
+- **All twelve tool pages, zero `pageerror`, `typeof window.PC === "object"` on
+  all nine builders**, before each of the three commits.
+- **`node_modules` broke mid-run exactly as the fifteenth run documented** —
+  `ERR_MODULE_NOT_FOUND` on `package-manager-detector` after a reviewer ran
+  `npm i --no-save`. `rm -rf node_modules && npm i --no-package-lock --no-audit
+  --fund=false` fixed it in seconds. `git diff package.json` was clean. **If two
+  agents share a tree, expect this; check `package.json` before you stage.**
+- **The live site was not checked** — `danielhttsai.github.io` is still blocked
+  from this sandbox. **Nobody has still opened one of these `.docx` files in
+  Microsoft Word.**
+- **No citation was added or changed.** The two methodological claims recorded
+  above (Aalen–Johansen vs 1−KM; STROBE vs CONSORT) are corroborated by search
+  snippets only and are recorded as leads for a worker edit, not asserted in
+  shipped code.
+
+<!-- CLAIM 2026-08-23 (thirty-first run, unclaimed): nothing is claimed. The
+     best-argued next targets are (a) the worker.js deliverables rubric,
+     itemised above — needs the worker to be reachable; (b) the Protocol
+     Checker's `"present"`-satisfied-by-a-promise item, also worker-side;
+     (c) the RWE Studio ITS inference path, last worked by the fifth run and
+     the oldest untouched surface in the tree. -->
