@@ -611,6 +611,7 @@ const SENSITIVITY = [
 
     // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
     const pcOf = (s) => ({
+      amendments: s.amendments,
       design: "sequential (nested) trial emulation",
       tte: true,
       population: or(s.population, "(population)"),
@@ -998,6 +999,10 @@ ${REFS.map((r) => "- " + r).join("\n")}
           return true;
         });
       } catch (e) { console.error("[st] restore failed", e); }
+      // HARPER item 3. Mounted after the restore paths have written the field,
+      // and OUTSIDE their catch, so a throw in the restore cannot remove the
+      // panel with nothing on screen to say it is gone.
+      if (window.PC && PC.mountAmendments) PC.mountAmendments(form);
       render();
     })();
     form.addEventListener("input", render);
@@ -1124,6 +1129,10 @@ ${REFS.map((r) => "- " + r).join("\n")}
         else if (el.tagName === "SELECT") { const d = SELECTS.find((x) => x.name === el.name); el.value = d ? d.fallback : (el.options[0] || {}).value || ""; }
         else el.value = "";
       });
+      // The reset blanks the hidden amendments field by assigning .value, which
+      // fires no event, so the editor has to be told: without this it goes on
+      // showing rows the reset has deleted.
+      if (window.PC && PC.syncAmendments) PC.syncAmendments(form);
       render();
       setMsg("Cleared. Every number is now blank — the protocol says “(not specified)” rather than assuming a default.");
     });

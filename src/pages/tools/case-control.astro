@@ -429,6 +429,7 @@ const SENSITIVITY = [
     };
 
     const pcOf = (s) => ({
+      amendments: s.amendments,
       design: (isMatched(s) ? "matched " : "") + "case-control study",
       tte: false,
       population: or(s.population, "(source population)"),
@@ -682,6 +683,10 @@ ${window.PC.tailMd(pcOf(s))}
           else els.value = val;
         }
       } catch {}
+      // HARPER item 3. Mounted after the restore paths have written the field,
+      // and OUTSIDE their catch, so a throw in the restore cannot remove the
+      // panel with nothing on screen to say it is gone.
+      if (window.PC && PC.mountAmendments) PC.mountAmendments(form);
       render();
     })();
     form.addEventListener("input", render);
@@ -715,6 +720,10 @@ ${window.PC.tailMd(pcOf(s))}
         // form still printed "90-day window"). Put the markup default back.
         else el.value = el.getAttribute("value") || "";
       });
+      // The reset blanks the hidden amendments field by assigning .value, which
+      // fires no event, so the editor has to be told: without this it goes on
+      // showing rows the reset has deleted.
+      if (window.PC && PC.syncAmendments) PC.syncAmendments(form);
       render();
       setMsg("Cleared.");
     });

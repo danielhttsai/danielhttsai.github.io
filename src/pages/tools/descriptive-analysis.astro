@@ -1214,6 +1214,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         return what + byStrata + ", with " + ci + ", and " + pool;
       };
       const pcOf = (s) => ({
+        amendments: s.amendments,
         design: "multi-national descriptive study",
         tte: false,
         descriptive: true,
@@ -1823,6 +1824,10 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
       auditSelectMaps();
       const timelineTa = form.querySelector('[name="timeline"]');
       if (timelineTa && !timelineTa.value) timelineTa.value = TIMELINE_PRESETS["12-month"];
+      // HARPER item 3. Mounted after the restore paths have written the field,
+      // and OUTSIDE their catch, so a throw in the restore cannot remove the
+      // panel with nothing on screen to say it is gone.
+      if (window.PC && PC.mountAmendments) PC.mountAmendments(form);
       render();
       form.addEventListener("input", render);
       form.addEventListener("change", render);
@@ -1887,6 +1892,10 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
           // strictly worse than it was for the previous protocol.
           else el.value = el.defaultValue;
         });
+        // The reset blanks the hidden amendments field by assigning .value,
+        // which fires no event, so the editor has to be told: without this it
+        // goes on showing rows the reset has deleted.
+        if (window.PC && PC.syncAmendments) PC.syncAmendments(form);
         render();
         setMsg("Cleared.");
       };

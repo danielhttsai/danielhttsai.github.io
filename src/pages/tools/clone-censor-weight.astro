@@ -647,6 +647,10 @@ Comedications | 180</textarea>
 
     // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
     const pcOf = (s) => ({
+      // The state the builder read, not the live DOM — see PC's integration
+      // note. Without it the log is fetched by document.querySelector("form"),
+      // which is right today only because this page has exactly one <form>.
+      amendments: s.amendments,
       design: "clone-censor-weight target-trial emulation",
       tte: true,
       population: or(s.population, "(population)"),
@@ -876,6 +880,10 @@ ${REFS.map((r) => "- " + r).join("\n")}
           else els.value = val;
         }
       } catch (e) { console.error("[ccw] restore failed", e); }
+      // HARPER item 3. Mounted after the restore paths have written the field,
+      // and OUTSIDE their catch, so a throw in the restore cannot remove the
+      // panel with nothing on screen to say it is gone.
+      if (window.PC && PC.mountAmendments) PC.mountAmendments(form);
       render();
     })();
     form.addEventListener("input", render);
@@ -990,6 +998,10 @@ ${REFS.map((r) => "- " + r).join("\n")}
         else if (el.tagName === "SELECT") el.selectedIndex = 0;
         else el.value = "";
       });
+      // The reset blanks the hidden amendments field by assigning .value, which
+      // fires no event, so the editor has to be told: without this it goes on
+      // showing rows the reset has deleted.
+      if (window.PC && PC.syncAmendments) PC.syncAmendments(form);
       render();
       setMsg("Cleared. Every number is now blank — the protocol says “(not specified)” rather than assuming a default.");
     });
