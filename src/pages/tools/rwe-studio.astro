@@ -1582,6 +1582,13 @@ const DESIGNS = [
           "# Counts print as integers when they are integers. %.4g turns 12345 into 1.234e+04 and\n" +
           "# makes 99999 and 100000 the same number, which is no way to report a count.\n" +
           "fmn<-function(z) if(!is.finite(z)) 'NA' else if(abs(z-round(z))<1e-9) sprintf('%.0f',z) else sprintf('%.2f',z)\n" +
+          // A rate ratio is not a quantity two fixed decimals can carry. %.2f prints a
+          // strongly protective effect and BOTH its limits as 0.00 - a point estimate of
+          // exactly zero with a zero-width interval, in the cell the reader copies - and at
+          // ordinary magnitudes it still rounds a lower limit of 0.00568 to 0.01, an error of
+          // 76% in a published limit. Above 0.1 nothing changes; below it, three significant
+          // figures.
+          "fmr<-function(z) if(!is.finite(z)) 'NA' else if(z>=0.1) sprintf('%.2f',z) else sprintf('%.3g',z)\n" +
           "# Nothing is printed until the fit has been checked. But a defect in a handful of rows\n" +
           "# sets those CASES aside and says so - it does not refuse the other nine hundred. Only\n" +
           "# a condition that destroys the estimand for everybody refuses outright.\n" +
@@ -1701,7 +1708,7 @@ const DESIGNS = [
           "    ppok<-is.finite(pp[1]) && is.finite(pp[2]) && pp[1]<=bp && pp[2]>=bp } }\n" +
           "cat(sprintf('Exact conditional SCCS incidence-rate ratio (exposed vs unexposed): %.3f (95%% %s CI %.3f to %.3f)\\n', irr, if(pok) 'profile-likelihood' else 'Wald', exp(clo), exp(chi)))\n" +
           "cat(sprintf('Cases (strata): %d; interval-rows: %d; events: %d\\n', length(unique(a$ID)), nrow(a), sum(a$EVENTS)))\n" +
-          "cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', EST, irr, exp(clo), exp(chi)))\n" +
+          "cat(sprintf('RESULT_ESTIMATE|%s|%s (95%% CI %s-%s)\\n', EST, fmr(irr), fmr(exp(clo)), fmr(exp(chi))))\n" +
           // Naming the interval is not optional: a rate ratio and its limits are not
           // reproducible without it, and this is the only channel that travels into the
           // Markdown and the .docx alongside the number.
@@ -1710,7 +1717,7 @@ const DESIGNS = [
           // there. Read cold off the rendered panel, "The interval above" was singular
           // above a two-row table in which both intervals had moved.
           "  lead<-if(pgot && ppok) 'Both intervals in the table above are profile-likelihood (likelihood-ratio) intervals, not exp(estimate +/- 1.96 x standard error)' else 'The interval on the self-controlled row above is a profile-likelihood (likelihood-ratio) interval, not exp(estimate +/- 1.96 x standard error)'\n" +
-          "  cat('RESULT_NOTE|',lead,'. A self-controlled series conditions each case on their own event count, so when few events fall in the risk window the conditional log-likelihood is markedly asymmetric, and a symmetric Wald interval is too narrow on exactly the side that decides whether the interval clears 1. Simulated at a true rate ratio of 1, with a 14-day risk window inside a year of observation and about one event per case, a Wald interval excluded 1 for 11.2 percent of the files this tool would estimate at 10 cases and 6.7 percent at 20, against the 5 percent it promises; the likelihood-ratio interval gave 4.7 and 3.2 percent. The gap between the two narrows as cases accumulate and as the risk window lengthens, but it does not close: even at a thousand cases they still disagree about whether the interval clears 1 for roughly one file in a hundred, which is why this tool says so on any run where they do.\\n',sep='')\n" +
+          "  cat('RESULT_NOTE|',lead,'. A self-controlled series conditions each case on their own event count, so when few events fall in the risk window the conditional log-likelihood is markedly asymmetric, and a symmetric Wald interval is too narrow on exactly the side that decides whether the interval clears 1. A worked example you can check: ten cases with one event each, two of those events falling in a 14-day risk window against 351 days of control time, give a rate ratio of 6.27 whose Wald interval is 1.33 to 29.52 and excludes 1, and whose likelihood-ratio interval is 0.95 to 25.02 and does not. The gap between the two narrows as cases accumulate and as the risk window lengthens, but it does not close, which is why this tool says so on any run where they disagree.\\n',sep='')\n" +
           "  wexc<-(wlo>0 || whi<0); pexc<-(pl[1]>0 || pl[2]<0)\n" +
           "  if(wexc && !pexc) cat(sprintf('RESULT_NOTE|The two kinds of interval disagree on this data, which is why the distinction is not academic here. On the self-controlled row a Wald interval would have been %.2f to %.2f and would have excluded 1; the likelihood-ratio interval shown includes it. This rate ratio is compatible with no effect - do not report it as a signal.\\n', exp(wlo), exp(whi)))\n" +
           "  if(pexc && !wexc) cat(sprintf('RESULT_NOTE|The two kinds of interval disagree on this data. On the self-controlled row a Wald interval would have been %.2f to %.2f and would have included 1; the likelihood-ratio interval shown excludes it. The likelihood-ratio limits are the ones to report, but a finding this close to the boundary rests on the shape of the likelihood rather than on weight of evidence.\\n', exp(wlo), exp(whi)))\n" +
@@ -1721,7 +1728,7 @@ const DESIGNS = [
           "# longer offers \"a numerical problem\" as its only hypothesis.\n" +
           "fe<-tryCatch(glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=a), error=function(e) NULL)\n" +
           "if(!is.null(fe)){ bfe<-coef(fe)['EXPOSED']; if(is.finite(bfe) && abs(bfe-b)>0.01) cat(sprintf('RESULT_NOTE|The exact conditional fit (IRR %.3f) and a fixed-effect Poisson fit (IRR %.3f) disagree by more than 1%%. They are algebraically the same estimator, so the difference is numerical rather than substantive - treat both as unreliable here and check the interval lengths and event counts of the largest contributing cases.\\n', irr, exp(bfe))) }\n" +
-          "if(pgot) cat(sprintf('RESULT_ESTIMATE|Pooled across people, NOT self-controlled (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bp), exp(if(ppok) pp[1] else bp-1.96*sp), exp(if(ppok) pp[2] else bp+1.96*sp)))\n" +
+          "if(pgot) cat(sprintf('RESULT_ESTIMATE|Pooled across people, NOT self-controlled (contrast only)|%s (95%% CI %s-%s)\\n', fmr(exp(bp)), fmr(exp(if(ppok) pp[1] else bp-1.96*sp)), fmr(exp(if(ppok) pp[2] else bp+1.96*sp))))\n" +
           "if(ncase>0) cat(sprintf('RESULT_NOTE|%d of %d case(s) have an event and both exposed and unexposed person-time, and so carry the estimate; the rest contribute nothing to it. This is the same test the likelihood applies, so it is the number of cases the result actually rests on.\\n', ninf, ncase))\n" +
           "if(ncase>0 && median(epc[epc>0])<2) cat('RESULT_NOTE|Half the cases contribute a single event. The conditional likelihood handles that correctly - it is the design working as intended, not a defect - but the estimate rests on how each case s one event fell relative to their own exposed window, so precision comes from the number of cases rather than the number of events.\\n')\n" +
           // Guarded on the row existing. It was unconditional, so a run where the pooled
