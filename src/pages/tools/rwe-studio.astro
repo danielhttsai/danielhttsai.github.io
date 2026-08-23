@@ -1143,7 +1143,17 @@ const DESIGNS = [
           const age = Math.round((56 + 5 * sv + (rand() + rand() + rand() - 1.5) * 9) * 10) / 10;
           const lhr = DEMO.sevLHR[sv] + DEMO.smokeLHR * (smoker === "Y") + DEMO.stepLHR * post + Math.log(DEMO.trueHR) * nd;
           const t = -Math.log(rand() || 1e-9) / (DEMO.baseRate * Math.exp(lhr));
-          const ev = t <= 365 ? 1 : 0, fu = Math.round(Math.min(t, 365) * 10) / 10;
+          // The exponential draw is strictly positive; rounding it to a tenth of a day
+          // is not. One draw in six hundred lands below 0.05 days and comes back as an
+          // event at ZERO days of follow-up — arithmetically impossible, and rightly
+          // refused by the TIME rule in NUM_RULES. That one row stopped this demo, the
+          // page's teaching centre, from being analysable as a cohort at all: the
+          // mapping never validated, step 4 never appeared, and none of the three
+          // hazard ratios its caption advertises could be reached. Round to the same
+          // grain, but never below it. With that single row repaired the caption's
+          // numbers come back exactly — 565 analysed, crude 1.04, IPTW 0.70, 2:1
+          // matching 0.77 — which is how we know the floor perturbs nothing else.
+          const ev = t <= 365 ? 1 : 0, fu = Math.max(0.1, Math.round(Math.min(t, 365) * 10) / 10);
           const idx = yr + "-" + String(mo).padStart(2, "0") + "-15";
           rows.push({
             patient_id: "D" + String(10000 + i),
