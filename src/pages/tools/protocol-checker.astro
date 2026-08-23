@@ -123,6 +123,23 @@ const fwList = Object.values(FRAMEWORKS);
 
         <!-- Results -->
         <div id="results" class="hidden space-y-6">
+          <!-- A finished report used to survive any change to the input that
+               produced it: edit the text, swap the file, or move the framework
+               radio and the score, the verdicts and both download buttons stayed
+               exactly as they were, with nothing on screen to say so. This bar
+               sits at the top of the results card — a few dozen pixels above the
+               download buttons, which is where the user actually is — and names
+               what changed. The report is NOT hidden: it is a real report of a
+               real run, and hiding it reads as data loss. -->
+          <div id="stalebar" class="hidden rounded-2xl border border-amber-400 bg-amber-50 p-5">
+            <h2 class="text-base font-bold text-amber-900">⚠ This report no longer matches the input above</h2>
+            <ul id="stalereasons" class="mt-2 space-y-1 text-sm text-amber-900 leading-relaxed"></ul>
+            <p class="mt-2 text-xs text-amber-800 leading-relaxed">
+              Nothing below has been re-checked, and both download buttons still export <strong>this</strong> report — the file will say so.
+              Press <strong>Check protocol</strong> again to score what is in the input now.
+            </p>
+          </div>
+
           <!-- TARGET suggestion (shown after a HARPER run on an emulation) -->
           <div id="tte" class="hidden rounded-2xl border border-brand-300 bg-brand-50 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -161,8 +178,16 @@ const fwList = Object.values(FRAMEWORKS);
               <em>Partial</em> = the topic is raised but a key element (usually an operational definition, code list, or window) is missing.
               <em>Missing</em> = no trace in the text. <em>N/A</em> = the item cannot apply to this kind of document.
               <em>Not assessed</em> = the AI returned no usable verdict, so nothing is claimed either way.
-              Both N/A and Not assessed are excluded from the score, so the denominator is smaller than the checklist.
+              <em>Not scored</em> = the AI did answer, but the row is a heading for sub-items counted separately, so counting it too would count the same content twice.
+              All three of N/A, Not assessed and Not scored are excluded from the score, so the denominator <em>can</em> be smaller than the checklist —
+              the sentence beside the score says when it is, and by how much.
             </p>
+            <!-- Filled from the framework registry in render(). The score's
+                 denominator is this tool's own row count, and the page used to
+                 call that count "this checklist's 31 TARGET items" — a false
+                 statement about a 21-item published guideline, carried verbatim
+                 into both exported reports. -->
+            <p id="rowsnote" class="mt-2 text-xs text-slate-500 leading-relaxed"></p>
             <p id="notascore" class="mt-2 text-xs text-slate-500 leading-relaxed">
               <strong class="text-slate-600">Neither HARPER nor TARGET defines a conformance score.</strong> This ratio is this tool's own summary of the
               item-level verdicts below; the guidelines are checklists, not scales, and a percentage is not what either was written to produce.
@@ -170,7 +195,7 @@ const fwList = Object.values(FRAMEWORKS);
             </p>
             <p id="onesample" class="mt-2 text-xs text-slate-500 leading-relaxed">
               <strong class="text-slate-600">This score is one sample, not a measurement.</strong> The same protocol, submitted four times unchanged,
-              scored 19, 20, 21 and 22 of 23 in our own testing — the model is not deterministic. Treat a one- or two-item difference as noise,
+              scored 19, 20, 21 and 22 of the 23 HARPER items in our own testing — the model is not deterministic. Treat a one- or two-item difference as noise,
               read the per-item evidence rather than the total, and re-run if a verdict surprises you.
             </p>
             <!-- Everything the run could NOT do is listed here rather than folded
@@ -247,7 +272,7 @@ const fwList = Object.values(FRAMEWORKS);
       // The three paragraphs that frame what the score is and is not. Read out of
       // the page itself so an export can never carry a different wording than the
       // one on screen — or, as it did, carry none of it.
-      const frameText = () => ["howtoread", "notascore", "onesample"].map((id) => {
+      const frameText = () => ["howtoread", "rowsnote", "notascore", "onesample"].map((id) => {
         const el = $(id);
         return el ? el.textContent.replace(/\s+/g, " ").trim() : "";
       }).filter(Boolean);
@@ -255,6 +280,7 @@ const fwList = Object.values(FRAMEWORKS);
       const schemeEl = $("scheme"), designGrid = $("designgrid"), timelineEl = $("timeline"), timelineNote = $("timelinenote"), legendEl = $("legend"), criteriaEl = $("criteria");
       const delivEl = $("deliverables"), delivTallyEl = $("delivtally"), delivListEl = $("delivlist");
       const tteEl = $("tte"), tteReason = $("ttereason"), alsoTargetBtn = $("alsotarget");
+      const staleBar = $("stalebar"), staleReasonsEl = $("stalereasons");
       // `loadedNotes` carries everything the extractor could NOT read, so it can
       // be shown next to the score instead of quietly disappearing.
       let loadedText = "", loadedName = "", loadedNotes = [], lastReport = null;
@@ -263,6 +289,18 @@ const fwList = Object.values(FRAMEWORKS);
       // — over the newer one. Seen live: a success message and a failure message
       // from two different files on screen at the same time.
       let fileSeq = 0;
+      // Reading a file did not disable "Check protocol". `loadedText` is only
+      // assigned once a read SUCCEEDS, so while the second upload was being
+      // read the chip named the new file and `getInputText()` still returned
+      // the old one: the page said "Checking against HARPER…" for a document it
+      // was not sending, and settled into a chip naming one protocol above a
+      // report on another. The button is held for the duration of any read.
+      let readsPending = 0;
+      function setReadPending(delta) {
+        readsPending = Math.max(0, readsPending + delta);
+        checkBtn.disabled = readsPending > 0;
+        checkBtn.title = readsPending > 0 ? "Waiting for the uploaded file to finish being read" : "";
+      }
 
       const setStatus = (msg, isErr) => { statusEl.textContent = msg || ""; statusEl.className = "text-sm " + (isErr ? "text-red-600" : "text-slate-500"); };
       const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -453,6 +491,11 @@ const fwList = Object.values(FRAMEWORKS);
         if (!f) return;
         const seq = ++fileSeq;
         const stale = () => seq !== fileSeq;
+        setReadPending(1);
+        // Drop the previous file HERE, not on success. While this read is in
+        // flight the tool holds no file: it must not be able to fall back on
+        // the one the user has just replaced.
+        loadedText = ""; loadedName = ""; loadedNotes = [];
         // Say which STEP is running, not just "Reading…". A stalled CDN fetch
         // for a reader this page has not needed before is indistinguishable
         // from a slow file otherwise, and the user is left watching a word.
@@ -494,6 +537,7 @@ const fwList = Object.values(FRAMEWORKS);
           drop.classList.remove("hidden");
           fileErr.textContent = (e && e.message) ? e.message : String(e); fileErr.classList.remove("hidden");
         } finally {
+          setReadPending(-1);
           // Always clear the input's value, even for a superseded read. If it
           // keeps the old filename, re-picking that same file fires no `change`
           // event at all and the page simply does nothing — which looks exactly
@@ -555,6 +599,14 @@ const fwList = Object.values(FRAMEWORKS);
         const msgs = [];
         if (loadedText && pasted) {
           msgs.push("Both a file and pasted text are present. The uploaded file (" + escapeHtml(loadedName) + ") will be checked; the pasted text will be ignored. Remove the file to check the pasted text instead.");
+        } else if (!loadedText && pasted) {
+          // "Paste the text instead" is a collapsed <details>. Text left in it
+          // is invisible once closed, and the note above fires only when a file
+          // is ALSO present — so after an upload failed or was removed, the
+          // page showed an empty drop zone, a red error, and nothing at all to
+          // say that an older protocol was still queued and would be checked.
+          msgs.push("There is no file loaded, so the text pasted under “or paste the text instead” (" +
+            pasted.length.toLocaleString() + " characters) is what will be checked. Open that section to see it, or use Clear to start again.");
         }
         const text = getInputText();
         if (text.length > MAX_CHARS) {
@@ -564,8 +616,85 @@ const fwList = Object.values(FRAMEWORKS);
         }
         inputNoteEl.innerHTML = msgs.map((m) => "<span>⚠ " + m + "</span>").join("<br>");
         inputNoteEl.classList.toggle("hidden", !msgs.length);
+        refreshStaleness();
       }
       textEl.addEventListener("input", refreshInputNote);
+
+      // ── Is the report on screen still a report on what is in the input? ──
+      // Nothing used to tie the two together. `lastReport` was set on a run and
+      // cleared only by "Clear", so editing the pasted text, swapping the file
+      // or moving the framework radio left a finished report — score, verdicts,
+      // and two live download buttons — describing a document the user had
+      // already replaced. The exported .docx even carried today's date.
+      //
+      // What the report is a report ON is stamped from the text the request was
+      // actually built from, captured in `runCheck` BEFORE the 10-20 second
+      // round trip — never re-read at render time. A user who edits the box
+      // while the model is thinking would
+      // otherwise have the new text stamped onto a report of the old one, and
+      // the staleness check would certify the very mismatch it exists to catch.
+      //
+      // `notes` and `date` are captured here for the same reason. Both used to
+      // be read at the far end of the round trip — `loadedNotes` inside
+      // `render()`, the date inside the download handlers — and both are global
+      // state the user can move in the meantime. Uploading a file while the
+      // model is thinking pushed THAT file's caveats ("2 embedded images were
+      // found and could NOT be read") into a report on pasted text that had no
+      // images; removing a file during the wait deleted the caveats of the
+      // document actually being scored, so a report on a .docx with three
+      // unreadable figures exported with no "What this check could not do"
+      // section at all. A run's caveats belong to that run.
+      const sourceLabel = () => (loadedName ? "“" + loadedName + "”" : "the pasted text");
+      const stampSource = (fwKey, text) => ({
+        text, name: loadedName, label: sourceLabel(), fwKey,
+        notes: loadedNotes.slice(),
+        date: new Date().toISOString().slice(0, 10),
+      });
+
+      // Returns the reasons the report no longer describes the input — empty
+      // when it still does. Used by the on-screen bar AND by both exporters, so
+      // a file downloaded while stale cannot leave the browser without saying so.
+      //
+      // Each reason carries two wordings. A downloaded .docx is read somewhere
+      // else, by someone who never saw this page, possibly months later: it has
+      // no "above" to point at and no "now" to be true in. `screen` talks about
+      // the controls; `file` states what had happened by the time the file was
+      // written. Same computation, two registers.
+      function staleReasons() {
+        const s = lastReport && lastReport.source;
+        if (!s) return [];
+        const out = [];
+        const now = getInputText();
+        if (now !== s.text) {
+          if (!now) out.push({
+            screen: "This report was generated from " + s.label + "; there is now nothing in the input to check.",
+            file: "The input this report was generated from (" + s.label + ") had been removed from the tool before this file was downloaded.",
+          });
+          else if (sourceLabel() === s.label) out.push({
+            screen: "This report was generated from " + s.label + ", which has been changed since it ran.",
+            file: "The input this report was generated from (" + s.label + ") had been edited in the tool before this file was downloaded.",
+          });
+          else out.push({
+            screen: "This report was generated from " + s.label + "; the input is now " + sourceLabel() + ".",
+            file: "This report was generated from " + s.label + ", but a different input (" + sourceLabel() + ") had been loaded into the tool before this file was downloaded.",
+          });
+        }
+        if (getFramework() !== s.fwKey) out.push({
+          screen: "This report scores your protocol against " + fwOf(s.fwKey).name + ". The picker above now says " +
+            fwOf(getFramework()).name + ", which has not been run on this document.",
+          file: "This is a " + fwOf(s.fwKey).name + " report. The framework picker had been moved to " + fwOf(getFramework()).name +
+            " before this file was downloaded, and " + fwOf(getFramework()).name + " was never run on this document.",
+        });
+        return out;
+      }
+
+      function refreshStaleness() {
+        if (!staleBar) return;
+        const reasons = staleReasons();
+        staleReasonsEl.innerHTML = reasons.map((r) =>
+          '<li class="flex gap-1.5"><span class="shrink-0">•</span><span>' + escapeHtml(r.screen) + "</span></li>").join("");
+        staleBar.classList.toggle("hidden", !reasons.length);
+      }
 
       // ── Rendering ──
       const STATUS_META = {
@@ -579,8 +708,21 @@ const fwList = Object.values(FRAMEWORKS);
         // author — TARGET item 7 is skipped by the model routinely, because it
         // is the parent of 7a-7h.
         unassessed: { label: "Not assessed", dot: "bg-slate-300", chip: "bg-white text-slate-500 border-slate-300 border-dashed", bar: "bg-slate-200", edge: "border-slate-300" },
+        // A THIRD thing, and it must not be folded into either of the two above.
+        // "Missing" is a claim about the protocol; "Not assessed" is a claim
+        // about the AI ("returned no usable verdict"); this is a claim about
+        // this tool — the AI answered, and the answer was deliberately left out
+        // of the score because the row is a heading for rows counted separately.
+        // Putting it under "Not assessed" would make the legend's definition of
+        // that word false, which is the same conflation that once aliased
+        // "unclear" to "partial".
+        notscored: { label: "Not scored", dot: "bg-slate-300", chip: "bg-slate-50 text-slate-500 border-slate-300 border-dotted", bar: "bg-slate-200", edge: "border-slate-300" },
       };
       const SCORED = ["met", "partial", "missing", "na"];
+      // Every bucket, in the order the tally and the bar show them. `total` must
+      // stay equal to the checklist's own size, so anything added here must be
+      // counted there too.
+      const ALL_STATUSES = ["met", "partial", "missing", "na", "unassessed", "notscored"];
 
       // The model is asked for a fixed vocabulary but is not bound to it. Anything
       // outside the vocabulary must NOT be silently coerced into a verdict.
@@ -876,6 +1018,21 @@ const fwList = Object.values(FRAMEWORKS);
         return rows;
       }
 
+      // Which rows are headings for other rows. Derived from the ids themselves,
+      // so it cannot drift from the checklist: a child extends its parent's id
+      // with a letter (7 → 7a) or a further dotted level — never with another
+      // digit, or HARPER item 1 would adopt item 10.
+      function parentRows(fw) {
+        const ids = [];
+        for (const sec of fw.checklist) for (const it of sec.items) ids.push(it.id);
+        const out = [];
+        for (const p of ids) {
+          const kids = ids.filter((c) => c !== p && c.indexOf(p) === 0 && /^[a-z.]/i.test(c.slice(p.length)));
+          if (kids.length) out.push([p, kids]);
+        }
+        return out;
+      }
+
       // Match the model's verdicts back onto the checklist. Anything that does
       // not match is reported, never dropped and never guessed at.
       function reconcile(fw, rawItems) {
@@ -897,6 +1054,28 @@ const fwList = Object.values(FRAMEWORKS);
           }
           byId.set(id, { status: st, evidence: v.evidence, suggestion: v.suggestion });
         }
+        // A heading row is the conjunction of the rows beneath it: TARGET item 7
+        // is "Describe how each target-trial component is emulated (elements a-h
+        // below)". Scoring it as a PEER of 7a-7h counts the same content nine
+        // times — nine of TARGET's 31 rows for one published item — and lets the
+        // card render "7 … Missing" directly above eight consecutive "Met"
+        // chips. The model usually omits the parent (see the note on
+        // STATUS_META.unassessed), which by luck produces the right denominator;
+        // when it does answer, the score silently inflates. Do deliberately what
+        // that lucky branch does by accident, but only where the sub-rows were
+        // actually judged — a parent answered alone is the only verdict there is.
+        const doubled = [];
+        for (const [pid, kids] of parentRows(fw)) {
+          const p = byId.get(pid);
+          if (!p || p.status === "unassessed") continue;
+          const judged = kids.filter((k) => byId.has(k) && byId.get(k).status !== "unassessed");
+          if (!judged.length) continue;
+          doubled.push(pid);
+          byId.set(pid, { status: "notscored", suggestion: "",
+            evidence: "This item is the heading for " + (kids.length === 1 ? kids[0] : kids[0] + "–" + kids[kids.length - 1]) +
+              ", " + judged.length + " of which " + (judged.length === 1 ? "was" : "were") + " judged separately below. Scoring it as well would count the same content twice, so it is left out of the score and the sub-items carry the verdict. The AI's own answer for it was “" + String(p.status) + "”." });
+        }
+
         const omitted = [];
         for (const sec of fw.checklist) for (const it of sec.items) {
           if (!byId.has(it.id)) {
@@ -904,7 +1083,7 @@ const fwList = Object.values(FRAMEWORKS);
             byId.set(it.id, { status: "unassessed", evidence: "The AI returned no verdict for this item. That is a gap in this check, not a finding about your protocol — read the item and judge it yourself.", suggestion: "" });
           }
         }
-        return { byId, unmatched, badStatus, duplicates, omitted, undecided };
+        return { byId, unmatched, badStatus, duplicates, omitted, undecided, doubled };
       }
 
       function showRunError(msg) {
@@ -914,7 +1093,7 @@ const fwList = Object.values(FRAMEWORKS);
         runErrEl.scrollIntoView({ behavior: "smooth", block: "start" });
       }
 
-      function render(data, requestedFramework) {
+      function render(data, requestedFramework, stamp) {
         const caveats = [];
         if (!data || !Array.isArray(data.items) || !data.items.length) {
           showRunError("The AI returned an answer with no item verdicts in it, so there is nothing to score. Please try again — and if it keeps happening, the model is probably struggling with this document's length or formatting.");
@@ -925,8 +1104,8 @@ const fwList = Object.values(FRAMEWORKS);
           return;
         }
         const fw = fwOf(data.framework || requestedFramework);
-        const { byId, unmatched, badStatus, duplicates, omitted, undecided } = reconcile(fw, data.items);
-        const counts = { met: 0, partial: 0, missing: 0, na: 0, unassessed: 0 };
+        const { byId, unmatched, badStatus, duplicates, omitted, undecided, doubled } = reconcile(fw, data.items);
+        const counts = { met: 0, partial: 0, missing: 0, na: 0, unassessed: 0, notscored: 0 };
 
         itemsEl.innerHTML = "";
         for (const sec of fw.checklist) {
@@ -950,14 +1129,15 @@ const fwList = Object.values(FRAMEWORKS);
               // is useful — on an item the author still has work to do on.
               (it.hint && v.status !== "met" ? '<p class="mt-1 text-xs text-slate-500 leading-relaxed"><span class="font-semibold text-slate-400">What this asks for:</span> ' + escapeHtml(it.hint) + '</p>' : '') +
               (v.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(v.evidence) + '</p>' : '') +
-              (v.suggestion && v.status !== "met" && v.status !== "unassessed" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(v.suggestion) + '</p>' : '');
+              (v.suggestion && v.status !== "met" && v.status !== "unassessed" && v.status !== "notscored" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(v.suggestion) + '</p>' : '');
             ol.appendChild(li);
           }
           block.appendChild(ol);
           itemsEl.appendChild(block);
         }
 
-        const total = SCORED.reduce((a, k) => a + counts[k], 0) + counts.unassessed;
+        // Every bucket, so `total` stays the checklist's own size.
+        const total = ALL_STATUSES.reduce((a, k) => a + counts[k], 0);
         const assessable = counts.met + counts.partial + counts.missing;
         confHead.textContent = fw.name + " conformance";
         // The denominator is not the checklist — N/A and Not assessed are taken
@@ -969,9 +1149,13 @@ const fwList = Object.values(FRAMEWORKS);
         const dropParts = [];
         if (counts.na) dropParts.push(counts.na + (counts.na === 1 ? " was" : " were") + " judged not applicable");
         if (counts.unassessed) dropParts.push(counts.unassessed + (counts.unassessed === 1 ? " was" : " were") + " not assessed");
+        if (counts.notscored) dropParts.push(counts.notscored + (counts.notscored === 1 ? " is a heading whose" : " are headings whose") + " sub-items are scored separately");
+        // "Of this checklist's 31 TARGET items" asserted that a 21-item published
+        // guideline has 31 items. The rows are this tool's, so say so.
         summaryEl.textContent = counts.met + " of " + assessable + " assessable items met." +
-          (dropParts.length ? " Of this checklist's " + total + " " + fw.name + " items, " + dropParts.join(" and ") +
+          (dropParts.length ? " Of the " + total + " rows this tool scores for " + fw.name + ", " + dropParts.join(" and ") +
             " — excluded from that count, so it is out of " + assessable + " and not out of " + total + "." : "");
+        $("rowsnote").textContent = fw.rowsNote || "";
         // The model's own words, quoted and attributed, never merged into the
         // sentence above: it is free text, nothing validates it, and it commonly
         // states a total of its own that contradicts the computed one.
@@ -979,9 +1163,9 @@ const fwList = Object.values(FRAMEWORKS);
           ? '<span class="font-semibold text-slate-500">The AI\'s own summary, quoted unchecked — any count or claim in it is the model\'s, not this tool\'s:</span> “' + escapeHtml(data.summary) + "”"
           : "";
         aiSummaryEl.classList.toggle("hidden", !data.summary);
-        barEl.innerHTML = ["met", "partial", "missing", "na", "unassessed"].map((k) =>
+        barEl.innerHTML = ALL_STATUSES.map((k) =>
           counts[k] ? '<div class="' + STATUS_META[k].bar + '" style="width:' + (counts[k] / (total || 1) * 100).toFixed(2) + '%"></div>' : "").join("");
-        tallyEl.innerHTML = ["met", "partial", "missing", "na", "unassessed"].map((k) => counts[k] ? chip(k, counts[k]) : "").join("");
+        tallyEl.innerHTML = ALL_STATUSES.map((k) => counts[k] ? chip(k, counts[k]) : "").join("");
         citeEl.textContent = fw.name + ": " + fw.citation;
 
         // ── Everything this run could not do, said out loud ──
@@ -990,10 +1174,15 @@ const fwList = Object.values(FRAMEWORKS);
         }
         if (omitted.length) caveats.push("The AI returned no verdict for " + omitted.length + " item(s) (" + omitted.join(", ") + "). They are marked “Not assessed” and excluded from the score — judge them yourself.");
         if (badStatus.length) caveats.push("The AI returned an unrecognised verdict for " + badStatus.length + " item(s) (" + badStatus.join("; ") + "). They are marked “Not assessed”.");
+        if (doubled.length) caveats.push("The AI returned a verdict for " +
+          (doubled.length === 1 ? "item " + doubled[0] + ", which is a heading for sub-items" : "items " + doubled.join(", ") + ", which are headings for sub-items") +
+          " judged separately below. Counting a heading alongside its own sub-items would score the same content twice, so " +
+          (doubled.length === 1 ? "it was" : "they were") + " marked “Not scored” and left out of the score; the sub-items carry the verdict.");
         if (undecided.length) caveats.push("The AI answered that it could not tell for " + undecided.length + " item(s) (" + undecided.join(", ") + "). That is a statement about this check, not a finding about your protocol, so those items are marked “Not assessed” and excluded from the score — read the item and judge it yourself.");
         if (unmatched.length) caveats.push("The AI returned " + unmatched.length + " verdict(s) for item id(s) that are not in the " + fw.name + " checklist (" + unmatched.slice(0, 8).join(", ") + (unmatched.length > 8 ? ", …" : "") + "). They were ignored.");
         if (duplicates.length) caveats.push("The AI returned more than one verdict for item(s) " + [...new Set(duplicates)].join(", ") + "; only the first was used.");
-        for (const n of loadedNotes) caveats.push(n);
+        // From the run record, never the live global: see stampSource.
+        for (const n of (stamp ? stamp.notes : loadedNotes)) caveats.push(n);
         if (fw.kind === "reporting guideline") {
           caveats.push(fw.name + " is a reporting guideline for a completed study. If you are checking a protocol, the results and discussion items describe what you will have to report later — a verdict of “met” there means the protocol says it plans to, not that it has been done.");
         }
@@ -1012,7 +1201,18 @@ const fwList = Object.values(FRAMEWORKS);
           tteEl.classList.add("hidden");
         }
 
-        lastReport = { data, counts, fw, byId, caveats, delivRows, scheme };
+        // `source` records what this report is a report ON — the exact text, the
+        // file it came from, and the framework it was scored against — so the
+        // page can tell the reader when the input has moved on, and so both
+        // exports can name the document instead of being one of several
+        // identically-titled files dated today.
+        lastReport = { data, counts, fw, byId, caveats, delivRows, scheme, source: stamp || stampSource(fw.key, getInputText()) };
+        refreshStaleness();
+        // A failed Word download's red message used to outlive its report: it
+        // was hidden only on the next click of the button that raised it, so a
+        // brand-new run on a different protocol rendered underneath a stale
+        // "the Word file could not be built".
+        $("dlerr").classList.add("hidden");
         runErrEl.classList.add("hidden");
         resultsEl.classList.remove("hidden");
         resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1049,24 +1249,64 @@ const fwList = Object.values(FRAMEWORKS);
         // fails — it reads as the answer to the question just asked.
         resultsEl.classList.add("hidden");
         runErrEl.classList.add("hidden");
+        // Captured now, from the text this request is built from.
+        const stamp = stampSource(framework, text);
         checkBtn.disabled = true; setStatus("Checking against " + fwOf(framework).name + " — this can take 10–20 seconds…");
-        try { const data = await postCheck(text, framework); setStatus(""); render(data, framework); }
+        try { const data = await postCheck(text, framework); setStatus(""); render(data, framework, stamp); }
         catch (e) {
           setStatus("", false);
           showRunError((e && e.message ? e.message : "Something went wrong.") +
             " (Checked against " + fwOf(framework).name + ".)");
         }
-        finally { checkBtn.disabled = false; }
+        // A file read that started during the request still owns the button.
+        finally { checkBtn.disabled = readsPending > 0; }
       }
+
+      // Both reports used to name no document at all: two protocols checked on
+      // the same day produced two files called "HARPER-report-2026-08-23.docx"
+      // whose contents were also indistinguishable. The source is stamped into
+      // the file and into its name.
+      const fileSlug = (s) => String(s || "").replace(/\.[^.]+$/, "").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+      const reportStem = (fw, src, date) => fw.name + "-report-" + (fileSlug(src && src.name) || "pasted-text") + "-" + date;
+      // What this report is a report on, in one line at the top of both exports.
+      // Two things it must not overstate. A .docx or .pdf was not "checked" —
+      // a lossy text extraction of it was, which is what `loadedNotes` spends
+      // its life enumerating. And the character count is the length of the
+      // document, not of what reached the model: the worker cuts at MAX_CHARS,
+      // so a 143,220-character protocol would otherwise open its report with a
+      // bold line implying all of it was assessed when 58% never left the page.
+      const sourceLine = (src) => {
+        if (!src) return "Checked: text pasted into the tool.";
+        const what = src.name ? "text extracted from " + src.name : "text pasted into the tool";
+        const n = src.text.length;
+        return "Checked: " + what + " — " + n.toLocaleString() + " characters" +
+          (n > MAX_CHARS ? ", of which only the first " + MAX_CHARS.toLocaleString() +
+            " were sent to the AI; the rest was not assessed" : "") + ".";
+      };
 
       function downloadReport() {
         if (!lastReport) return;
-        const { data, counts, fw, byId, caveats, delivRows, scheme } = lastReport;
-        const date = new Date().toISOString().slice(0, 10);
-        let md = "![Population Health Data Center](" + LOGO_ABS + ")\n\n# " + fw.name + " conformance report\n\n_Population Health Data Center · generated " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
+        const { data, counts, fw, byId, caveats, delivRows, scheme, source } = lastReport;
+        // The date the check RAN, not the date the button was pressed. A report
+        // left on screen overnight and saved the next morning used to be dated
+        // the next morning.
+        const date = (source && source.date) || new Date().toISOString().slice(0, 10);
+        let md = "![Population Health Data Center](" + LOGO_ABS + ")\n\n# " + fw.name + " conformance report\n\n_Population Health Data Center · checked " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
+        md += "**" + sourceLine(source) + "**\n\n";
+        // A report can be downloaded after the input it describes has been
+        // changed. It is still a real report of a real run, so it is not
+        // withheld — but it must not leave the browser looking like a report on
+        // whatever the user has in the tool now.
+        const stale = staleReasons();
+        if (stale.length) {
+          md += "> ### ⚠ This report was already out of date when it was downloaded\n>\n";
+          for (const r of stale) md += "> - " + r.file + "\n";
+          md += ">\n> It was **not** re-run. Every verdict below describes the input named above and nothing else.\n\n";
+        }
         md += "**Tally:** " + counts.met + " met · " + counts.partial + " partial · " + counts.missing + " missing" +
           (counts.na ? " · " + counts.na + " N/A" : "") +
           (counts.unassessed ? " · " + counts.unassessed + " NOT ASSESSED" : "") +
+          (counts.notscored ? " · " + counts.notscored + " NOT SCORED" : "") +
           " (" + counts.met + " of " + (counts.met + counts.partial + counts.missing) + " assessable items met)\n\n";
         md += summaryEl.textContent + "\n\n";
         // The frame the reader saw around the number travels with the number.
@@ -1128,14 +1368,14 @@ const fwList = Object.values(FRAMEWORKS);
             const v = byId.get(it.id);
             md += "- **" + it.id + ". " + it.label + "** — _" + STATUS_META[v.status].label + "_\n";
             if (v.evidence) md += "  - Evidence: " + v.evidence + "\n";
-            if (v.suggestion && v.status !== "met" && v.status !== "unassessed") md += "  - Suggestion: " + v.suggestion + "\n";
+            if (v.suggestion && v.status !== "met" && v.status !== "unassessed" && v.status !== "notscored") md += "  - Suggestion: " + v.suggestion + "\n";
           }
           md += "\n";
         }
         md += "---\n\n" + fw.name + ": " + fw.citation + " " + fw.url + "\n";
         const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
         const a = document.createElement("a");
-        a.href = url; a.download = fw.name + "-report-" + date + ".md";
+        a.href = url; a.download = reportStem(fw, source, date) + ".md";
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
@@ -1161,20 +1401,29 @@ const fwList = Object.values(FRAMEWORKS);
         try {
           await loadScript(DOCX);
           const D = window.docx;
-          const { data, counts, fw, byId, caveats, delivRows, scheme } = lastReport;
-          const date = new Date().toISOString().slice(0, 10);
+          const { data, counts, fw, byId, caveats, delivRows, scheme, source } = lastReport;
+          const date = (source && source.date) || new Date().toISOString().slice(0, 10);
           const FONT = "Calibri";
           const logo = await loadLogo();
           const text = (t, o = {}) => new D.TextRun({ text: String(t == null ? "" : t), font: FONT, size: 20, ...o });
           const para = (runs, o = {}) => new D.Paragraph({ children: Array.isArray(runs) ? runs : [runs], spacing: { before: 40, after: 40, ...(o.spacing || {}) }, ...o });
           const h1 = (t) => new D.Paragraph({ heading: D.HeadingLevel.HEADING_1, spacing: { before: 220, after: 80 }, children: [text(t, { bold: true, size: 26, color: "21443E" })] });
           const h2 = (t) => new D.Paragraph({ spacing: { before: 140, after: 40 }, children: [text(t, { bold: true, size: 21 })] });
-          const STCOL = { met: "16A34A", partial: "D97706", missing: "DC2626", na: "64748B", unassessed: "94A3B8", present: "16A34A", absent: "DC2626" };
+          const STCOL = { met: "16A34A", partial: "D97706", missing: "DC2626", na: "64748B", unassessed: "94A3B8", notscored: "94A3B8", present: "16A34A", absent: "DC2626" };
 
           const children = [];
           if (logo) children.push(new D.Paragraph({ spacing: { after: 120 }, children: [new D.ImageRun({ data: logo, transformation: { width: 210, height: 51 } })] }));
           children.push(para([text(fw.name + " conformance report", { bold: true, size: 32 })], { spacing: { after: 40 } }));
-          children.push(para([text("Population Health Data Center · generated " + date + " · AI-assisted self-check (Google Gemini) — not a substitute for peer review.", { italics: true, color: "777777", size: 16 })], { spacing: { after: 160 } }));
+          children.push(para([text("Population Health Data Center · checked " + date + " · AI-assisted self-check (Google Gemini) — not a substitute for peer review.", { italics: true, color: "777777", size: 16 })], { spacing: { after: 60 } }));
+          children.push(para([text(sourceLine(source), { bold: true, size: 18 })], { spacing: { after: 160 } }));
+          // Same refusal to mislead as the Markdown export: the report is not
+          // withheld once the input has moved on, but it says so in the file.
+          const staleW = staleReasons();
+          if (staleW.length) {
+            children.push(para([text("⚠ This report was already out of date when it was downloaded.", { bold: true, color: "8A5A00" })], { spacing: { before: 60 } }));
+            for (const r of staleW) children.push(para([text("•  " + r.file, { color: "8A5A00", size: 18 })]));
+            children.push(para([text("It was not re-run. Every verdict below describes the input named above and nothing else.", { color: "8A5A00", size: 18, italics: true })], { spacing: { after: 140 } }));
+          }
 
           children.push(para([
             text("Tally: ", { bold: true }),
@@ -1183,6 +1432,7 @@ const fwList = Object.values(FRAMEWORKS);
             text(counts.missing + " missing", { color: STCOL.missing, bold: true }),
             ...(counts.na ? [text(" · " + counts.na + " N/A", { color: STCOL.na })] : []),
             ...(counts.unassessed ? [text(" · " + counts.unassessed + " NOT ASSESSED", { color: STCOL.unassessed, bold: true })] : []),
+            ...(counts.notscored ? [text(" · " + counts.notscored + " NOT SCORED", { color: STCOL.notscored, bold: true })] : []),
             text("  —  " + counts.met + " of " + (counts.met + counts.partial + counts.missing) + " assessable items met."),
           ], { spacing: { after: 80 } }));
           children.push(para([text(summaryEl.textContent)], { spacing: { after: 80 } }));
@@ -1255,7 +1505,7 @@ const fwList = Object.values(FRAMEWORKS);
               const lab = STATUS_META[v.status].label;
               children.push(para([text(it.id + ". " + it.label + "  ", { bold: true }), text("[" + lab + "]", { color: STCOL[v.status] || STCOL.unassessed, bold: true })]));
               if (v.evidence) children.push(para([text("Evidence: " + v.evidence, { size: 18, color: "555555" })]));
-              if (v.suggestion && v.status !== "met" && v.status !== "unassessed") children.push(para([text("Suggestion: " + v.suggestion, { size: 18, color: "555555" })]));
+              if (v.suggestion && v.status !== "met" && v.status !== "unassessed" && v.status !== "notscored") children.push(para([text("Suggestion: " + v.suggestion, { size: 18, color: "555555" })]));
             }
           }
           children.push(para([text(fw.name + ": " + fw.citation + " " + fw.url, { italics: true, size: 16, color: "777777" })], { spacing: { before: 300 } }));
@@ -1269,7 +1519,7 @@ const fwList = Object.values(FRAMEWORKS);
           const blob = await D.Packer.toBlob(doc);
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
-          a.href = url; a.download = fw.name + "-report-" + date + ".docx";
+          a.href = url; a.download = reportStem(fw, source, date) + ".docx";
           document.body.appendChild(a); a.click(); a.remove();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
           setStatus("");
@@ -1303,7 +1553,13 @@ const fwList = Object.values(FRAMEWORKS);
             escapeHtml(fw.name) + ' asks for results you have not produced yet. Check a protocol against ' +
             escapeHtml(FRAMEWORKS[DEFAULT_FRAMEWORK].name) + ' instead.</span>');
       }
-      document.querySelectorAll('input[name="framework"]').forEach((r) => r.addEventListener("change", refreshFrameworkNote));
+      // Moving the picker used to change nothing but this note: the results card
+      // below went on reading "HARPER conformance", and the download button went
+      // on producing a HARPER file, while the picker said TARGET.
+      document.querySelectorAll('input[name="framework"]').forEach((r) => r.addEventListener("change", () => {
+        refreshFrameworkNote();
+        refreshStaleness();
+      }));
       refreshFrameworkNote();
 
       checkBtn.addEventListener("click", () => runCheck(getFramework()));
@@ -1318,6 +1574,7 @@ const fwList = Object.values(FRAMEWORKS);
         resetFileInput();
         textEl.value = ""; lastReport = null;
         fileErr.classList.add("hidden");
+        $("dlerr").classList.add("hidden");
         resultsEl.classList.add("hidden"); runErrEl.classList.add("hidden"); tteEl.classList.add("hidden");
         refreshInputNote(); setStatus("");
       });

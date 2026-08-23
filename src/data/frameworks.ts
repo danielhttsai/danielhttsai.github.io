@@ -15,6 +15,12 @@ export interface Framework {
   checklist: TargetSection[];
   citation: string;
   url: string;
+  /** How the rows this tool scores relate to the published guideline. The
+   *  checker's denominator is its own row count, and the page used to call that
+   *  count "this checklist's N TARGET items" — a false statement about a
+   *  published guideline, carried verbatim into the Word and Markdown reports.
+   *  Shown beside the score and exported with it. */
+  rowsNote: string;
 }
 
 export const FRAMEWORKS: Record<string, Framework> = {
@@ -26,6 +32,9 @@ export const FRAMEWORKS: Record<string, Framework> = {
     checklist: HARPER_CHECKLIST,
     citation: HARPER_CITATION,
     url: HARPER_URL,
+    rowsNote:
+      "HARPER is a protocol template rather than a numbered checklist. The 23 rows scored here " +
+      "follow the template's own item numbering.",
   },
   target: {
     key: "target",
@@ -35,6 +44,10 @@ export const FRAMEWORKS: Record<string, Framework> = {
     checklist: TARGET_CHECKLIST,
     citation: TARGET_CITATION,
     url: TARGET_URL,
+    rowsNote:
+      "TARGET is published as a 21-item checklist. This page lists 31 rows because items 1 and 7 " +
+      "are expanded into their sub-elements (1a-1c and 7a-7h) and each is judged separately, so the " +
+      "count below is this tool's sub-division and not a fraction of the published statement.",
   },
 };
 
