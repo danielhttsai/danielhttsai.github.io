@@ -306,6 +306,7 @@ const SENSITIVITY = [
       label: (el.closest("label") ? (el.closest("label").querySelector("span") || {}).textContent : "") || el.name,
       options: [...el.options].map((o) => o.value),
       fallback: (([...el.options].find((o) => o.defaultSelected) || el.options[0] || {}).value) || "",
+      texts: [...el.options].map((o) => String(o.text).trim()),
     }));
     let staleSelects = [];
     const noteStale = (obj) => {
@@ -322,15 +323,30 @@ const SENSITIVITY = [
     // estimator ("logistic-regression approximation") because it appears
     // neither in Ji et al 2017 nor in the TrendInTrend package, and a user
     // whose draft named it deserves to be told that rather than a generic note.
+    // The words the box is showing, read live from the markup, rather than the
+    // raw option value. A refusal that says the field "has been set to
+    // 'RDRMST'" — or asks the user to press Keep "none" — is asking somebody to
+    // confirm a choice in a vocabulary this page never shows them, and with two
+    // stale selects it printed the same word ("none") for two different
+    // modelling decisions. The SAVED half stays raw, deliberately: there is no
+    // label for an option the page no longer has.
+    // The button and the sentence quote the same words, and both are capped:
+    // an option text runs to sixty characters and a button is not a paragraph.
+    const shortText = (t, n) => (String(t).length > n ? String(t).slice(0, n - 1) + "…" : String(t));
+    const usedText = (x) => {
+      const sel = SELECTS.find((y) => y.name === x.name);
+      const i = sel ? sel.options.indexOf(String(x.used)) : -1;
+      return (sel && i >= 0 && sel.texts[i]) || x.used;
+    };
     const staleMsg = (x) => x.name === "estimator"
       ? "Your saved draft selected the estimator “" + clip(x.saved, 80) + "”, and this page no longer offers it. It described a logistic-regression approximation that appears neither in Ji et al (2017) nor in the TrendInTrend package, so it was removed rather than left asserting a method that cannot be cited. The Estimator field has been set to the trend-in-trend maximum-likelihood estimator and this protocol describes THAT — a different analysis from the one your draft named."
       : x.saved === ""
-        ? "“" + clip(x.label, 60) + "” was restored with no value at all — the draft or link it came from left it blank. The field has been set to “" + clip(x.used, 60) + "” and this protocol describes THAT, which is a choice nobody made."
-        : "“" + clip(x.label, 60) + "” was saved as “" + clip(x.saved, 80) + "”, and this page does not offer that choice. The field has been set to “" + clip(x.used, 60) + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
+        ? "“" + clip(x.label, 60) + "” was restored with no value at all — the draft or link it came from left it blank. The field has been set to “" + clip(usedText(x), 60) + "” and this protocol describes THAT, which is a choice nobody made."
+        : "“" + clip(x.label, 60) + "” was saved as “" + clip(x.saved, 80) + "”, and this page does not offer that choice. The field has been set to “" + clip(usedText(x), 60) + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
     // Two renderings, for two audiences. On screen it must say what to press;
     // in the exported protocol there is no button to press, and an instruction
     // to press one reads as a defect in the document.
-    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + x.used + "”” to confirm it.");
+    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + shortText(usedText(x), 44) + "”” to confirm it.");
     const staleMsgsDoc = () => staleSelects.map(staleMsg);
 
     // Raw, deliberately. These used to arrive as `V("nperiods") || "10"`, so
@@ -681,7 +697,7 @@ ${window.PC.tailMd(pcOf(s))}
       const b = document.createElement("button");
       b.type = "button";
       b.className = "mt-2 rounded-lg border border-brand-700 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50";
-      b.textContent = staleSelects.length === 1 ? "Keep “" + staleSelects[0].used + "”" : "Keep all " + staleSelects.length + " substituted choices";
+      b.textContent = staleSelects.length === 1 ? "Keep “" + shortText(usedText(staleSelects[0]), 44) + "”" : "Keep all " + staleSelects.length + " substituted choices";
       b.addEventListener("click", () => { staleSelects = []; render(); });
       host.appendChild(b);
     }

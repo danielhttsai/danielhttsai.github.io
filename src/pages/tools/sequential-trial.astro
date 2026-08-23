@@ -306,6 +306,7 @@ const SENSITIVITY = [
       label: (el.closest("label") ? (el.closest("label").querySelector("span") || {}).textContent : "") || el.name,
       options: [...el.options].map((o) => o.value),
       fallback: (([...el.options].find((o) => o.defaultSelected) || el.options[0] || {}).value) || "",
+      texts: [...el.options].map((o) => String(o.text).trim()),
     }));
     let staleSelects = [];
     const noteStale = (obj) => {
@@ -323,9 +324,24 @@ const SENSITIVITY = [
     // button to press, and an instruction to press one reads as a defect in the
     // document. The substance — what was saved, what was substituted, and that
     // the protocol describes the substitute — is identical in both.
+    // The words the box is showing, read live from the markup, rather than the
+    // raw option value. A refusal that says the field "has been set to
+    // 'RDRMST'" — or asks the user to press Keep "none" — is asking somebody to
+    // confirm a choice in a vocabulary this page never shows them, and with two
+    // stale selects it printed the same word ("none") for two different
+    // modelling decisions. The SAVED half stays raw, deliberately: there is no
+    // label for an option the page no longer has.
+    // The button and the sentence quote the same words, and both are capped:
+    // an option text runs to sixty characters and a button is not a paragraph.
+    const shortText = (t, n) => (String(t).length > n ? String(t).slice(0, n - 1) + "…" : String(t));
+    const usedText = (x) => {
+      const sel = SELECTS.find((y) => y.name === x.name);
+      const i = sel ? sel.options.indexOf(String(x.used)) : -1;
+      return (sel && i >= 0 && sel.texts[i]) || x.used;
+    };
     const staleMsg = (x) =>
-      "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + x.used + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
-    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + x.used + "”” to confirm it.");
+      "“" + x.label + "” was saved as “" + x.saved + "”, and this page does not offer that choice. The field has been set to “" + usedText(x) + "” and this protocol describes THAT — a different specification from the one the saved draft named.";
+    const staleMsgs = () => staleSelects.map((x) => staleMsg(x) + " Pick the option you want, or press “Keep “" + shortText(usedText(x), 44) + "”” to confirm it.");
     const staleMsgsDoc = () => staleSelects.map(staleMsg);
     // Free text the user typed is followed by more of our prose. Without this the
     // exported Word ran the two together ("…or 5 years Maximum follow-up per trial…");
@@ -874,7 +890,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       const b = document.createElement("button");
       b.type = "button";
       b.className = "mt-2 rounded-lg border border-brand-700 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50";
-      b.textContent = staleSelects.length === 1 ? "Keep “" + staleSelects[0].used + "”" : "Keep all " + staleSelects.length + " substituted choices";
+      b.textContent = staleSelects.length === 1 ? "Keep “" + shortText(usedText(staleSelects[0]), 44) + "”" : "Keep all " + staleSelects.length + " substituted choices";
       b.addEventListener("click", () => { staleSelects = []; render(); });
       host.appendChild(b);
     }
