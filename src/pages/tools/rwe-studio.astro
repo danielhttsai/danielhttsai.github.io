@@ -1464,9 +1464,50 @@ const DESIGNS = [
           r += "wdiag<-function(w){ e<-sum(w)^2/sum(w^2); k<-max(1,ceiling(0.01*length(w))); c(e, 100*e/length(w), max(w), 100*sum(sort(w,decreasing=TRUE)[1:k])/sum(w)) }\n";
           r += "dU<-wdiag(wU); dS<-wdiag(wS); dF<-wdiag(wI)\n";
           r += "essPct<-dF[2]; maxw<-dF[3]; top1<-dF[4]\n";
-          // Refusal is now the last resort, not the first: stabilisation and
-          // truncation are both on the table before anything is withheld.
-          r += "unstable<-(essPct<10) || (top1>25)\n";
+          // The standardised differences are defined here rather than beside the
+          // balance table, because the release decision below now reads them. One
+          // implementation feeds the gate AND the table, so the two cannot drift.
+          r += "wsmd<-function(x,g,w){ ok<-!is.na(x); a<-g&ok; b<-(!g)&ok; if(sum(a)<1||sum(b)<1) return(NA_real_); m1<-weighted.mean(x[a],w[a]); m0<-weighted.mean(x[b],w[b]); v1<-sum(w[a]*(x[a]-m1)^2)/sum(w[a]); v0<-sum(w[b]*(x[b]-m0)^2)/sum(w[b]); (m1-m0)/sqrt((v1+v0)/2) }\n";
+          // Yang & Dalton (2012) multinomial standardised difference: a categorical
+          // variable needs the Mahalanobis form, not the continuous one.
+          r += "smdcat<-function(f,g,w){ lv<-levels(f); k<-length(lv); if(k<2) return(NA_real_); pr<-function(idx){ ww<-w[idx]; s<-sum(ww); vapply(lv,function(l) sum(ww[f[idx]==l])/s, 0) }; p1<-pr(g); p0<-pr(!g); if(k==2) return((p1[2]-p0[2])/sqrt((p1[2]*(1-p1[2])+p0[2]*(1-p0[2]))/2)); i<-2:k; mk<-function(p){ pv<-as.numeric(p[i]); m<-diag(pv*(1-pv), nrow=length(pv)); for(a in seq_along(pv)) for(b in seq_along(pv)) if(a!=b) m[a,b]<- -pv[a]*pv[b]; m }; S<-(mk(p1)+mk(p0))/2; dv<-as.numeric(p1[i]-p0[i]); tryCatch(as.numeric(sqrt(t(dv)%*%solve(S)%*%dv)), error=function(e) NA_real_) }\n";
+          r += "smdvec<-function(w) vapply(seq_along(covs), function(i) if(covkind[i]=='factor') smdcat(d[[covs[i]]],tr,w) else wsmd(d[[covs[i]]],tr,w), 0)\n";
+          r += "mxof<-function(v) if(all(!is.finite(v))) NA_real_ else max(abs(v[is.finite(v)]))\n";
+          // Refusal is the last resort, not the first: stabilisation and truncation
+          // are both on the table before anything is withheld.
+          //
+          // But the stability rule reads the weights AFTER truncation, and truncation
+          // caps weights by construction — it always raises the effective sample size
+          // and always lowers the top-1% share. So the control the refusal box itself
+          // points at could switch the refusal off without changing anything the
+          // refusal was about. Executed on the "should not be analysed" demo, whose
+          // true hazard ratio is exactly 1.00: no truncation -> withheld; 1/99 ->
+          // 1.12 (0.85-1.49) released; 5/95 -> 1.47 (1.18-1.84) released, excluding
+          // the null in the harmful direction.
+          //
+          // What truncation cannot fake is balance, which is what weighting is FOR.
+          // Across the same three runs the largest |SMD| went 0.178 -> 0.903 -> 1.424
+          // against a crude 2.183: the one configuration whose weights did the job was
+          // the one being refused. So truncation may still rescue an estimate — the
+          // door the design comment above deliberately left open stays open — but only
+          // if the truncated weights still balance the covariates they were fitted on.
+          // Be aware how narrow that door is in practice: over 264 simulated cohorts
+          // whose untruncated weights failed the stability rule, NOT ONE had a
+          // truncation that both passed it and left every |SMD| under 0.1.
+          r += "d0<-if(wtmode=='unstab') dU else dS\n";
+          r += "unstable0<-(d0[2]<10) || (d0[4]>25)\n";
+          r += "unstableW<-(essPct<10) || (top1>25)\n";
+          r += "smdI<-smdvec(wI); mxI<-mxof(smdI)\n";
+          // The same figure on the untruncated weights, so the panel can say whether
+          // truncation is what unbalanced the arms rather than telling the reader to
+          // add covariates that are already in the model.
+          r += "mx0<-if(ntrunc>0) mxof(smdvec(w0)) else mxI\n";
+          // Only when truncation is what turned the stability rule off. If the
+          // untruncated weights already passed, truncation is hiding nothing and the
+          // balance figure is reported without gating on it, as before.
+          r += "truncmask<-(ntrunc>0) && unstable0 && !unstableW\n";
+          r += "balfail<-truncmask && is.finite(mxI) && mxI>0.1\n";
+          r += "unstable<-unstableW || balfail\n";
           r += "rescuable<-unstable && truncmode=='none'\n";
           // Every weighting estimator has to be judged on ITS OWN weights. wdiag()
           // used to be applied to the IPTW weights alone, so an SMR-weighted hazard
@@ -1497,7 +1538,7 @@ const DESIGNS = [
           r += "bi<-function(v) tabulate(pmin(20,pmax(1,ceiling(v*20))),nbins=20)\n";
           r += "cat('PSHIST|',paste(bi(psT),collapse=','),'|',paste(bi(psC),collapse=','),'\\n',sep='')\n";
           r += "fmw<-function(v) paste(sprintf('%.1f',v),collapse=',')\n";
-          r += "cat('PSDIAG|nT=',sum(tr),'|nC=',sum(!tr),'|csLo=',sprintf('%.4f',csLo),'|csHi=',sprintf('%.4f',csHi),'|outT=',outT,'|outC=',outC,'|dU=',fmw(dU),'|dS=',fmw(dS),'|dF=',fmw(dF),'|wtmode=',wtmode,'|trunc=',trunclab,'|ntrunc=',ntrunc,'|minps=',sprintf('%.4f',min(ps)),'|maxps=',sprintf('%.4f',max(ps)),'|ntrim=',ntrim,'|trim=',trimlab,'|unstable=',if(unstable) 1 else 0,'|rescuable=',if(rescuable) 1 else 0,'\\n',sep='')\n";
+          r += "cat('PSDIAG|nT=',sum(tr),'|nC=',sum(!tr),'|csLo=',sprintf('%.4f',csLo),'|csHi=',sprintf('%.4f',csHi),'|outT=',outT,'|outC=',outC,'|dU=',fmw(dU),'|dS=',fmw(dS),'|dF=',fmw(dF),'|wtmode=',wtmode,'|trunc=',trunclab,'|ntrunc=',ntrunc,'|minps=',sprintf('%.4f',min(ps)),'|maxps=',sprintf('%.4f',max(ps)),'|ntrim=',ntrim,'|trim=',trimlab,'|unstable=',if(unstable) 1 else 0,'|rescuable=',if(rescuable) 1 else 0,'|unstable0=',if(unstable0) 1 else 0,'|balfail=',if(balfail) 1 else 0,'|mxI=',if(is.finite(mxI)) sprintf('%.3f',mxI) else 'NA','|mx0=',if(is.finite(mx0)) sprintf('%.3f',mx0) else 'NA','\\n',sep='')\n";
           // One line per weighting scheme the user actually asked for. Field 4 is
           // whether the scheme failed its own stability rule; field 5 is whether
           // failing it withholds the estimate (true for the inverse-probability
@@ -1510,10 +1551,6 @@ const DESIGNS = [
           if (dropped.length) r += "cat(" + qraw("RESULT_NOTE|" + dropped.length + " ticked covariate(s) were left out of the model: " + dropped.map((x) => PIPE_SAFE(x.src) + " — " + x.why).join("; ") + ".") + ",'\\n',sep='')\n";
           const folded = covInfo.filter((c) => c.collapsed);
           if (folded.length) r += "cat(" + qraw("RESULT_NOTE|Rare categories were folded into 'other' before modelling: " + folded.map((c) => PIPE_SAFE(c.src) + " (" + c.rare.length + " of " + c.levels + " levels, each with fewer than " + COV_MIN_PER_LEVEL + " rows)").join("; ") + ".") + ",'\\n',sep='')\n";
-          r += "wsmd<-function(x,g,w){ ok<-!is.na(x); a<-g&ok; b<-(!g)&ok; if(sum(a)<1||sum(b)<1) return(NA_real_); m1<-weighted.mean(x[a],w[a]); m0<-weighted.mean(x[b],w[b]); v1<-sum(w[a]*(x[a]-m1)^2)/sum(w[a]); v0<-sum(w[b]*(x[b]-m0)^2)/sum(w[b]); (m1-m0)/sqrt((v1+v0)/2) }\n";
-          // Yang & Dalton (2012) multinomial standardised difference: a categorical
-          // variable needs the Mahalanobis form, not the continuous one.
-          r += "smdcat<-function(f,g,w){ lv<-levels(f); k<-length(lv); if(k<2) return(NA_real_); pr<-function(idx){ ww<-w[idx]; s<-sum(ww); vapply(lv,function(l) sum(ww[f[idx]==l])/s, 0) }; p1<-pr(g); p0<-pr(!g); if(k==2) return((p1[2]-p0[2])/sqrt((p1[2]*(1-p1[2])+p0[2]*(1-p0[2]))/2)); i<-2:k; mk<-function(p){ pv<-as.numeric(p[i]); m<-diag(pv*(1-pv), nrow=length(pv)); for(a in seq_along(pv)) for(b in seq_along(pv)) if(a!=b) m[a,b]<- -pv[a]*pv[b]; m }; S<-(mk(p1)+mk(p0))/2; dv<-as.numeric(p1[i]-p0[i]); tryCatch(as.numeric(sqrt(t(dv)%*%solve(S)%*%dv)), error=function(e) NA_real_) }\n";
           // Balance BEFORE and AFTER weighting. The before column alone tells a
           // reviewer nothing about whether the model fixed anything.
           // The "after" column has to be weighted by a scheme that was actually
@@ -1552,19 +1589,19 @@ const DESIGNS = [
           // common-support restriction. So "exact by construction" is asserted only
           // where it is exactly true, and the trimmed case gets its own sentence.
           r += "balovl<-(!is.null(wBAL) && ballab=='overlap weighting'); balexact<-(balovl && ntrim==0)\n";
-          r += "smd1<-rep(NA_real_,length(covs)); smd2<-rep(NA_real_,length(covs))\n";
+          // Both columns come from the same smdvec() the gate above used, so the
+          // number that withholds an estimate and the number printed beside it are
+          // the same number by construction rather than by two loops agreeing.
+          r += "smd1<-smdvec(rep(1,n)); smd2<-if(is.null(wBAL)) rep(NA_real_,length(covs)) else smdvec(wBAL)\n";
           r += "f3<-function(x) if(!is.finite(x)) '-' else sprintf('%.3f',x)\n";
           r += "cat('TABLE1|Characteristic|Comparator (n=',sum(!tr),')|Exposure (n=',sum(tr),')|SMD|',if(is.null(wBAL)) 'SMD after weighting (none fitted)' else paste0('SMD after ',ballab,if(balexact) ' (exact by construction)' else ''),'\\n',sep='')\n";
-          r += "for(i in seq_along(covs)){ cc<-covs[i]; lab<-covsrc[i]\n" +
+          r += "for(i in seq_along(covs)){ cc<-covs[i]; lab<-covsrc[i]; s1<-smd1[i]; s2<-smd2[i]\n" +
                "  if(covkind[i]=='factor'){ f<-d[[cc]]; lv<-levels(f)\n" +
-               "    s1<-smdcat(f,tr,rep(1,n)); s2<-if(is.null(wBAL)) NA_real_ else smdcat(f,tr,wBAL); smd1[i]<-s1; smd2[i]<-s2\n" +
                "    cat(sprintf('TABLE1|%s, n (%%)|||%s|%s\\n', lab, f3(s1), f3(s2)))\n" +
                "    for(l in lv){ a<-sum(f[!tr]==l); b<-sum(f[tr]==l); cat(sprintf('TABLE1|  %s|%d (%.1f%%)|%d (%.1f%%)||\\n', sq(l), a, 100*a/sum(!tr), b, 100*b/sum(tr))) }\n" +
                "  } else { x<-d[[cc]]\n" +
-               "    s1<-wsmd(x,tr,rep(1,n)); s2<-if(is.null(wBAL)) NA_real_ else wsmd(x,tr,wBAL); smd1[i]<-s1; smd2[i]<-s2\n" +
                "    if(covkind[i]=='binary'){ a<-sum(x[!tr]==1,na.rm=TRUE); b<-sum(x[tr]==1,na.rm=TRUE); cat(sprintf('TABLE1|%s, n (%%)|%d (%.1f%%)|%d (%.1f%%)|%s|%s\\n', lab, a, 100*a/sum(!tr), b, 100*b/sum(tr), f3(s1), f3(s2)))\n" +
                "    } else cat(sprintf('TABLE1|%s, mean (SD)|%.2f (%.2f)|%.2f (%.2f)|%s|%s\\n', lab, mean(x[!tr],na.rm=TRUE), sd(x[!tr],na.rm=TRUE), mean(x[tr],na.rm=TRUE), sd(x[tr],na.rm=TRUE), f3(s1), f3(s2))) } }\ncat('\\n')\n";
-          r += "mxof<-function(v) if(all(!is.finite(v))) NA_real_ else max(abs(v[is.finite(v)]))\n";
           r += "mx1<-mxof(smd1); mx2<-mxof(smd2)\n";
           r += "cat('PSBAL|mx1=',f3(mx1),'|mx2=',f3(mx2),'|nbad=',sum(abs(smd2)>0.1,na.rm=TRUE),'|ncov=',length(covs),'|wlab=',ballab,'|exact=',if(balexact) 1 else 0,'\\n',sep='')\n";
           // The panel is not the only place this number is read: the Markdown and Word
@@ -1618,8 +1655,15 @@ const DESIGNS = [
           // An IPTW estimate built on collapsed weights is not a weak estimate, it
           // is an arbitrary one: a handful of subjects carry the answer. Refuse it
           // and say which diagnostic failed, rather than print a confident number.
-          if (M.indexOf("iptw") >= 0) r += "  if(unstable){ cat(sprintf('RESULT_ESTIMATE|IPTW%s - %s HR|withheld - weights unstable\\n',eb(' (ATE)'),est)) } else { hrT<-fitw(t,e,wI,all, paste0('IPTW',eb(' (ATE)'),if(wtmode=='stab') ', stabilised' else ', unstabilised', if(ntrunc>0) paste0(', truncated at the ',trunclab) else '',' - ',est,' HR'))\n" +
-            "    if(ntrunc>0){ hr0<-fitw(t,e,w0,all,'',TRUE); if(is.finite(hr0) && is.finite(hrT)) cat(sprintf('RESULT_NOTE|Truncation moved the %s IPTW hazard ratio from %.3f (untruncated) to %.3f, by capping %d weight(s) at the %s. Truncation buys precision by accepting a little bias - the capped patients are no longer counted at their full weight - so report the untruncated estimate alongside it.\\n', est, hr0, hrT, ntrunc, trunclab)) } }\n";
+          if (M.indexOf("iptw") >= 0) r += "  if(unstable){ cat(sprintf('RESULT_ESTIMATE|IPTW%s - %s HR|%s\\n',eb(' (ATE)'),est,if(balfail) sprintf('withheld - truncation hid the instability without balancing (largest |SMD| %.3f)',mxI) else 'withheld - weights unstable')) } else { hrT<-fitw(t,e,wI,all, paste0('IPTW',eb(' (ATE)'),if(wtmode=='stab') ', stabilised' else ', unstabilised', if(ntrunc>0) paste0(', truncated at the ',trunclab) else '',' - ',est,' HR'))\n" +
+            // "Truncation buys precision by accepting a little bias" was a claim about
+            // a magnitude the tool had just computed and could see was false: on the
+            // no-overlap demo the sentence printed above a move from 0.807 to 1.473,
+            // 83% and across the null. And "report the untruncated estimate alongside
+            // it" named the estimate the tool refuses to print as a row, which it then
+            // printed inline to three decimals. Report the movement, and say which of
+            // the two the tool is prepared to stand behind.
+            "    if(ntrunc>0){ hr0<-fitw(t,e,w0,all,'',TRUE); if(is.finite(hr0) && is.finite(hrT)) cat(sprintf('RESULT_NOTE|Truncation moved the %s IPTW hazard ratio from %.3f (untruncated) to %.3f, a %.1f%% change, by capping %d weight(s) at the %s. %s\\n', est, hr0, hrT, 100*abs(hrT-hr0)/hr0, ntrunc, trunclab, if(unstable0) 'The untruncated weights failed the stability rule, so the untruncated figure is not one to report alongside this one - it is the estimate this tool would have refused. What truncation bought was arithmetic; the balance figure below is what says whether it cost anything.' else 'Truncation trades a little bias for precision - the capped patients are no longer counted at their full weight. The untruncated weights passed the stability rule here, so both figures are reportable and the pair is worth showing.')) } }\n";
           // SMR weights are 1 for the treated and the treatment odds for everyone
           // else: unbounded above, and just as capable of collapsing onto a handful
           // of comparators as the IPTW weights. Same rule, same refusal.
@@ -3282,10 +3326,34 @@ const DESIGNS = [
         '<td class="py-1.5 pr-3 font-semibold text-slate-900 whitespace-nowrap">' + esc(value) + "</td>" +
         '<td class="py-1.5 text-[11px] text-slate-600">' + meaning + "</td></tr>";
       const rows = [];
+      // When truncation is what turned the stability rule off, these three rows are
+      // the numbers truncation guarantees rather than facts about the data: a
+      // comfortable effective sample, a tidy top-1% share and a small maximum weight
+      // are what capping weights produces on any data at all. Left alone they printed
+      // three green dots and the word "Comfortable" directly under a heading reading
+      // "estimate withheld". They are shown — they are still true of the weights that
+      // were used — but they are amber and they name what they are.
+      const balMasked = dg.balfail === "1";
+      const d0 = (dg.wtmode === "unstab" ? dU : dS);
+      const preTrunc = d0.length === 4 && isFinite(d0[1])
+        ? "Before truncation it was " + d0[1].toFixed(0) + "% of the cohort, with the heaviest 1% holding " + d0[3].toFixed(0) + "%."
+        : "";
       // One block per scheme, each judged on its own numbers.
       schemes.forEach((s) => {
         const ess = s.z[0], essPct = s.z[1], maxw = s.z[2], top1 = s.z[3];
         const soft = !s.gated;                                  // overlap: reported, never used to withhold
+        const masked = balMasked && /^IPTW/.test(s.label);
+        if (masked) {
+          rows.push('<tr class="border-t-2 border-slate-200"><td colspan="3" class="pt-2 pb-1 text-[11px] uppercase tracking-widest font-semibold text-rose-700">' +
+            esc(s.label) + " weights · estimate withheld</td></tr>");
+          rows.push(row(null, "Effective sample size", (isFinite(ess) ? ess.toFixed(0) : "—") + " of " + (nT + nC) + " (" + essPct.toFixed(0) + "%)",
+            "<strong>This is what truncation guarantees, not what the data supports.</strong> Capping the weights raises the effective sample size on any data at all. " + preTrunc));
+          rows.push(row(null, "Weight concentration", "top 1% of patients hold " + top1.toFixed(1) + "% of the weight",
+            "Also a property of the cap rather than of the cohort — no weight can exceed the percentile it was capped at, so no small group can hold a large share of them."));
+          rows.push(row(null, "Largest single weight", maxw.toFixed(1) + "×",
+            "This is the cap itself. Untruncated, the largest weight was " + (isFinite(d0[2]) ? d0[2].toFixed(1) + "×" : "larger") + "."));
+          return;
+        }
         rows.push('<tr class="border-t-2 border-slate-200"><td colspan="3" class="pt-2 pb-1 text-[11px] uppercase tracking-widest font-semibold ' +
           (s.bad && s.gated ? "text-rose-700" : "text-slate-500") + '">' + esc(s.label) + " weights" +
           (s.bad && s.gated ? " · estimate withheld" : "") + "</td></tr>");
@@ -3323,6 +3391,15 @@ const DESIGNS = [
         // the identity weakens rather than vanishing. Those runs read normally, with
         // one sentence saying the number is not the independent check it looks like.
         const overlapish = /^overlap/i.test(balW);
+        // "add the unbalanced covariates to the model" is the wrong instruction when
+        // the covariate is already in the model and truncation is what unbalanced it:
+        // measured on the no-overlap demo, largest |SMD| 0.178 untruncated, 0.903 at
+        // the 1/99 percentile, 1.424 at the 5/95. Name the cause the numbers support.
+        const mx0 = parseFloat(dg.mx0), truncated = /^IPTW/i.test(balW) && num("ntrunc") > 0;
+        const truncBlame = truncated && isFinite(mx0) && mx2 > mx0 + 0.05
+          ? "and truncation is what unbalanced them: with the weights untruncated the largest was " + mx0.toFixed(3) +
+            ". Capping weights buys a tidy weight profile by throwing away the very patients the propensity score was up-weighting to make the arms comparable. Set truncation back to <em>no restriction</em> and read the stability figures underneath"
+          : "add the unbalanced covariates to the model, or use matching";
         if (exact) {
           rows.push(row(null, "Balance after " + balW, "largest |SMD| " + mx2.toFixed(3) + " · exact by construction",
             "<strong>This one is not evidence.</strong> With a propensity score fitted by logistic regression, overlap weights balance every covariate <em>in that model</em> exactly, so this cell reads 0.000 on any data at all — including data where the two arms barely meet. Before weighting the largest was " + before +
@@ -3331,9 +3408,14 @@ const DESIGNS = [
         } else rows.push(row(overlapish ? (mx2 > 0.1 ? false : null) : (mx2 <= 0.1 ? true : (mx2 <= 0.25 ? null : false)),
           "Balance after " + balW, "largest |SMD| " + mx2.toFixed(3) + (nbad ? " · " + nbad + " covariate(s) > 0.1" : ""),
           "Standardised differences below 0.10 are the usual bar for saying the arms are comparable on a covariate. Before weighting the largest was " + before +
-          ". " + (mx2 > 0.1 ? "<strong>Weighting has not balanced everything</strong> — add the unbalanced covariates to the model, or use matching." : (overlapish ? "" : "Weighting did its job.")) +
+          ". " + (mx2 > 0.1 ? "<strong>Weighting has not balanced everything</strong> — " + truncBlame + "." : (overlapish ? "" : "Weighting did its job.")) +
           (overlapish ? " <strong>Overlap weights make this column near-vacuous</strong>: they balance the propensity model's own covariates exactly on the cohort that model was fitted to, and this figure is computed after the restriction you applied, on scores fitted before it. It is a weakened form of that identity, not an independent check." : "") +
-          (balHeld ? " <strong>Note that this is balance under weights whose estimate was withheld above</strong> — balanced covariates do not rescue weights a few patients dominate." : "")));
+          // That closing sentence is about the ordinary refusal, where the covariates
+          // came out balanced and a few patients still held the weight. Under the
+          // truncation-masked refusal both halves of it are false — the covariates are
+          // NOT balanced and the top 1% hold 2.5% — and it was being appended anyway,
+          // directly after a sentence saying the opposite.
+          (balHeld && !balMasked ? " <strong>Note that this is balance under weights whose estimate was withheld above</strong> — balanced covariates do not rescue weights a few patients dominate." : "")));
       } else if (bal && !balW) {
         rows.push(row(null, "Balance after weighting", "not computed",
           "No weighted estimator was selected, so there is no weighted balance column — the standardised differences in Table 1 are before adjustment. Balance after matching or after fine stratification is a separate table this tool does not build."));
@@ -3373,6 +3455,23 @@ const DESIGNS = [
         const essPct = s.z[1], top1 = s.z[3];
         const isIptw = /^IPTW/.test(s.label);
         const others = schemes.filter((x) => x !== s && !(x.bad && x.gated)).map((x) => x.label);
+        // The truncation-masked refusal has to explain itself in its own terms. Its
+        // numbers are the OPPOSITE of the ordinary one's — a comfortable effective
+        // sample and a tidy top-1% share are exactly why it fired — so quoting them
+        // as the reason, which the branch below does, would read as a contradiction
+        // of the three green rows in the table underneath.
+        const balMask = isIptw && dg.balfail === "1";
+        if (balMask) {
+          h += '<div class="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900"><strong>The ' + esc(s.label) + ' estimate was not reported.</strong> ' +
+            "Before truncation these weights failed the stability test; truncation at the " + esc(dg.trunc) + " capped " + num("ntrunc") + " of them and the test now passes. " +
+            "<strong>That is arithmetic, not evidence:</strong> capping the weights raises the effective sample size and lowers the top-1% share by construction, whatever the data. " +
+            "What it cannot do is balance the arms — and here it has not: the largest standardised difference under the truncated weights is <strong>" + esc(dg.mxI) + "</strong>, against " +
+            (bal && isFinite(parseFloat(bal.mx1)) ? parseFloat(bal.mx1).toFixed(3) + " with no weighting at all" : "the unweighted figure in Table 1") +
+            ", and 0.10 is the usual bar for calling two arms comparable. Weighting that leaves the confounder imbalanced has not removed the confounding, so the hazard ratio it produces would be a confounded one with a healthy weight profile beside it. " +
+            "<span class='block mt-1'>Truncation is still allowed to rescue an estimate here — it is released as soon as the truncated weights balance. Set truncation back to <em>no restriction</em> to see the stability figures the data really implies, and treat the overlap verdict above as the problem to solve.</span>" +
+            (others.length ? " " + esc(others.join(" and ")) + " passed the same test and " + (others.length > 1 ? "are" : "is") + " still shown." : "") + "</div>";
+          return;
+        }
         h += '<div class="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900"><strong>The ' + esc(s.label) + ' estimate was not reported.</strong> ' +
           (essPct < 10 ? "The effective sample size fell to " + essPct.toFixed(0) + "% of the cohort. " : "") + (top1 > 25 ? "The heaviest 1% of patients hold " + top1.toFixed(0) + "% of the weight. " : "") +
           "A weighted hazard ratio here would be an artefact of a few patients rather than an effect. " +
