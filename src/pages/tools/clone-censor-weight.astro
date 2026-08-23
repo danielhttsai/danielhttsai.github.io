@@ -133,7 +133,7 @@ const SENSITIVITY = [
               ))}
             </div>
             <textarea name="ipcwReasonsCustom" rows="1" class="mt-2 w-full rounded-lg border border-slate-300 p-2 text-xs" placeholder="Custom censoring events (one per line)"></textarea>
-            <p class="mt-1 text-[11px] text-slate-400">Weights are estimated <strong>separately for each arm</strong>, because the two arms need not deviate on the same schedule. Which arm's model is time-fixed and which is time-varying depends on how you have written the strategies, not on which one you typed first: a strategy that can only be broken by missing a deadline has a single deviation time, one that can be broken by an action at any moment has many — and <strong>both</strong> of yours may be of the second kind, since discontinuation, switch and add-on are all continuing requirements.</p>
+            <p class="mt-1 text-[11px] text-slate-400">Weights are estimated <strong>separately for each arm</strong>, because the two arms need not deviate on the same schedule. Which arm's model is time-fixed and which is time-varying depends on how you have written the strategies, not on which one you typed first: a strategy that can only be broken by missing a deadline has a single deviation time, while one that can be broken by an action at any moment has many — and <strong>both</strong> of yours may be of the second kind, since discontinuation, switch and add-on are all continuing requirements.</p>
           </div>
           <label class="block"><span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Inclusion look-back (days)</span>
             <input type="number" name="incllookback" value="365" min="0" step="1" class="mt-1 w-32 rounded-lg border border-slate-300 p-2 text-sm" /></label>
@@ -231,7 +231,7 @@ Comedications | 180</textarea>
 
     <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-lg font-bold text-slate-900">Study design diagram</h2>
-      <p class="mt-1 text-xs text-slate-500">Time zero, the grace period, the ascertainment windows before it, and follow-up. The figure is one timeline: it marks where cloning happens, it does not draw the two arms separately. <strong>Drag the ● handles</strong> to adjust the covariate look-back, grace, and follow-up — the fields above update automatically.</p>
+      <p class="mt-1 text-xs text-slate-500">Time zero, the grace period, the ascertainment windows that precede time zero, and follow-up. The figure is one timeline: it marks where cloning happens, but it does not draw the two arms separately. <strong>Drag the ● handles</strong> to adjust the covariate look-back, grace, and follow-up — the fields above update automatically.</p>
       <div class="mt-4 overflow-x-auto"><div id="diagram"></div></div>
       <div id="dlegend" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600"></div>
     </div>
@@ -466,14 +466,14 @@ Comedications | 180</textarea>
         : "State how the competing risk of death is handled: a cause-specific Cox model and a Fine-Gray sub-distribution model answer different questions, and the choice must match the estimand (Young 2020). ") +
       "The difference between this estimate and the clone-censor-weight estimate must not be read as the amount of immortal-time bias removed. The two differ in the estimand, in the alignment of time zero, in how confounding is addressed, in the analytic population and in the treatment of competing events, so their difference cannot be attributed to any one of them.";
 
-    const censorText = (s) => or(s.censor, "(NOT YET SPECIFIED — state, for each arm separately, when a clone's data first become incompatible with its assigned strategy. The two arms are not symmetric, so a single rule will not serve for both.)");
+    const censorText = (s) => or(s.censor, "(NOT YET SPECIFIED — state, for each arm separately, when a clone's data first become incompatible with its assigned strategy. The two arms need not deviate on the same schedule, so one rule may not serve for both.)");
     const followupText = (s) => or(s.followup, "(NOT YET SPECIFIED — state when follow-up ends: the outcome, death, disenrolment, the end of the study period, or the maximum follow-up above, whichever comes first.)");
 
     const truncText = (s) => {
       const ticked = (s.sensitivityPick || []).some((x) => /truncat/i.test(x));
       if (ticked) return "Truncation at the 1st/99th percentiles is examined as a pre-specified sensitivity analysis, listed among the sensitivity analyses below; the primary analysis uses untruncated weights.";
       const written = String(s.sensitivityCustom || "").split(/\r?\n/).some((x) => /truncat/i.test(x));
-      if (written) return "A weight-truncation analysis appears among the sensitivity analyses you wrote. State there whether it is applied to the primary analysis or examined only as a sensitivity analysis — this tool will not decide that from the wording.";
+      if (written) return "A weight-truncation analysis appears among the sensitivity analyses listed below. Whether it is applied to the primary analysis or examined only as a sensitivity analysis is not recorded here: the wording alone does not settle it, and it must be stated there.";
       return "Truncation is not applied in the primary analysis; if the weight distribution proves extreme, a truncated-weight analysis will be added as a documented amendment.";
     };
 
@@ -486,12 +486,18 @@ Comedications | 180</textarea>
        weights — and the page says exactly that, correctly, in its own cloning
        section ("UNTIL a patient acts"). The conclusion was never in doubt; the
        reason given for it was. What is true by construction is that the curves
-       START together, so the hazard ratio is pinned at 1 at time zero and can
-       only move as uptake accumulates — which is a stronger argument against
-       proportional hazards than the false one it replaces. */
+       START together, so the contrast begins at no difference and can only
+       emerge as the arms separate — a stronger argument against proportional
+       hazards than the false one it replaces.
+
+       Two traps this string fell into on its first draft. It must NOT claim a
+       stretch in which the effect is null by construction: the risk sets
+       coincide at time zero and nowhere after it, so that is the same error in
+       softer clothing. And it must NOT carry its own heading, because the
+       checks panel prefixes one and printed the title twice. */
     const HR_CAVEAT =
-      "Caveat on the hazard ratio. At time zero the two arms are identical by construction, because cloning places every patient in both; they separate only as patients act and clones are censored. " +
-      "The hazard ratio is therefore 1 at the start of follow-up and time-varying thereafter: proportional hazards is violated by design, and any single hazard ratio averages a stretch in which the effect is null by construction with later stretches in which it is not, over a risk set whose composition is changing. " +
+      "At time zero the two arms contain the same patients, because cloning places every patient in both; they separate only as patients act and clones are censored. " +
+      "The contrast therefore begins at no difference and emerges over follow-up: proportional hazards is violated by design, and a single summary hazard ratio depends on how much follow-up it is taken over, across a risk set whose composition is changing. " +
       "Maringe et al. (2020) advise against analysing cloned data with a simple Cox model, and against reading the hazard ratio causally. " +
       "The hazard ratio is also non-collapsible: it does not average over individuals the way an absolute contrast does, so it is not comparable with a marginal risk difference or risk ratio even when both are computed from the same weighted curves. " +
       "The absolute contrast \u2014 the difference in survival at the end of follow-up, or in restricted mean survival time \u2014 is the interpretable measure here.";
@@ -522,10 +528,10 @@ Comedications | 180</textarea>
        here, and it is not needed for the structural claim. */
     const DEVIATION_SCHEDULE =
       "The two arms need not deviate on the same schedule, and the difference decides the form of each arm's censoring model. Apply the test to each strategy separately. " +
-      "A strategy that can be violated only by an action's absence at a deadline — \u201Cinitiate within the grace period\u201D, \u201Cdiscontinue within the grace period\u201D — cannot be shown to have been violated until that deadline arrives, so a clone leaves that arm at a single time, the end of the grace period, and a time-fixed model for the probability of reaching the deadline still adhering is sufficient. " +
+      "A strategy that can be violated only by an action's absence at a deadline — \u201Cinitiate within the grace period\u201D, \u201Cdiscontinue within the grace period\u201D — cannot be shown to have been violated until that deadline arrives, so a clone leaves that arm at a single time, the end of the grace period, and a time-fixed model for whether the required action had occurred by that deadline is sufficient. " +
       "A strategy that can be violated by an action occurring at any moment — \u201Cdo not initiate during the grace period\u201D, \u201Cremain on treatment\u201D, \u201Cstay below the target dose\u201D — is violated at a time that varies, so that arm needs a censoring model fitted over follow-up. A strategy carrying both a deadline and a continuing requirement is of the second kind. " +
-      "Both of your strategies may be of the second kind: three of the censoring events this builder offers \u2014 discontinuation, switch and add-on \u2014 are continuing requirements. " +
-      "This tool cannot tell which of strategy A and strategy B is which, because both are free text, so state for each strategy which form applies in the deviation rule above. A weight model is fitted separately for each arm in every case.";
+      "Both strategies may be of the second kind: discontinuation, switch and add-on are continuing requirements, and any of them may be among the censoring events this study weights for. " +
+      "Which strategy falls on which side is not settled by the order in which the two are stated, so the deviation rule above states, for each strategy separately, which form applies. A weight model is fitted separately for each arm in every case.";
 
     /* The identifying assumptions, in one string for the three documents that
        state them, because they had drifted into three wordings of one claim and
@@ -546,7 +552,7 @@ Comedications | 180</textarea>
        of them happen throughout follow-up, which the same section says when it
        states that the weights are cumulative over follow-up. */
     const ASSUMPTIONS =
-      "Identifying assumptions carried by the weights (Maringe 2020): (i) every predictor of deviation from the assigned strategy is measured and included; (ii) the weight models are correctly specified; (iii) positivity — at every time at which a clone can still be artificially censored, and for every covariate history, the probability of continuing to follow the assigned strategy is greater than zero in each arm, so that no covariate pattern makes deviation from either strategy a certainty; and (iv) consistency. " +
+      "(i) every predictor of deviation from the assigned strategy is measured and included; (ii) the weight models are correctly specified; (iii) positivity — at every time at which a clone can still be artificially censored, and for every covariate history, the probability of continuing to follow the assigned strategy is greater than zero in each arm, so that no covariate pattern makes deviation from either strategy a certainty; and (iv) consistency. " +
       "Positivity is required wherever a strategy imposes a requirement: throughout follow-up where either strategy requires sustained use, not only within the grace period. " +
       "Assumption (i) is not testable. Assumption (iii) fails at either end — a grace period long enough that some covariate pattern is certain to have acted before the deadline destroys positivity for the strategy that requires abstention, while one short enough that some pattern is certain not to have acted destroys it for the strategy that requires the action — so lengthening the grace period trades one arm's positivity against the other's. We inspect the weight distribution for extreme values as a diagnostic.";
 
@@ -555,8 +561,14 @@ Comedications | 180</textarea>
        identically zero at time zero however broken the weights are, because
        cloning puts every patient in both arms — the page says so itself in the
        cloning section. It has to name the time it is evaluated at. */
-    const BALANCE =
-      "We report the distribution of the weights (mean, range, and extreme percentiles) and the weighted standardised mean differences between arms at the end of the grace period, once artificial censoring has occurred — a between-arm comparison at time zero is uninformative here, because cloning makes the arms identical by construction, so it is zero whatever the weights do. We confirm that the weights remove the imbalance artificial censoring creates before the primary analysis is run.";
+    const balanceText = (s) => {
+      const g = numDays(s.grace);
+      const when = Number.isFinite(g) && g > 0
+        ? "at the end of the grace period (day " + g + ")"
+        : "at the first time by which artificial censoring can have occurred";
+      return "We report the distribution of the weights (mean, range, and extreme percentiles) and the weighted standardised mean differences between arms " + when +
+        ", and again at the end of follow-up wherever a strategy imposes a continuing requirement. A between-arm comparison at time zero is uninformative here: cloning makes the arms identical by construction, so it is zero whatever the weights do. We confirm that the weights remove the imbalance artificial censoring creates before the primary analysis is run.";
+    };
 
     /* ── Refusals that travel ──────────────────────────────────────────────
        The consistency-check panel is on screen only. It was the sole place
@@ -585,7 +597,7 @@ Comedications | 180</textarea>
       else if (blank(s.grace)) out.push(
         "No grace period is specified. In a clone-censor-weight design the strategies are defined by what happens over the grace period, so until a length is set there is no window in which a patient’s data are compatible with both strategies, and nothing for cloning to buy. The protocol prints “(not specified)” wherever the length would have appeared; no length is assumed.");
       else if (g <= 0) out.push(
-        "The grace period is 0 days. The two strategies are then distinguishable at time zero itself, which is the situation this design exists to avoid — an active-comparator new-user cohort is the right design for that, not cloning. Cloning also stops doing any work: exactly one of each patient’s two clones is censored at time zero and the other contributes its whole follow-up, so no patient contributes person-time to both arms and the analysis reduces to comparing the patients who acted at time zero with those who did not.");
+        "The grace period is 0 days. The two strategies are then distinguishable at time zero itself, which is the situation this design exists to avoid — an active-comparator new-user cohort is the right design for that, not cloning. Cloning also stops doing any work: each patient’s clones are resolved at time zero — the clone whose strategy the patient’s own behaviour at time zero contradicts is censored immediately, and both are censored if that behaviour matches neither strategy — so no patient contributes person-time to both arms, and what is left is a comparison between the patients who acted at time zero and those who did not.");
 
       if (!fuOK && !blank(s.fudays)) out.push(
         "Maximum follow-up reads “" + s.fudays + "”, which cannot be read as a whole number of days of 0 or more, so the length of follow-up is not set.");
@@ -594,7 +606,7 @@ Comedications | 180</textarea>
       else if (fu <= 0) out.push(
         "Maximum follow-up is 0 days, so this protocol specifies a study in which no patient is observed for any time at all. No outcome can occur, and every quantity defined at the end of follow-up — the survival difference, the RMST difference, the risk ratio — is identically zero or undefined by construction.");
       else if (gOK && g > 0 && g >= fu) out.push(
-        "The grace period (" + g + " d) is at least as long as the maximum follow-up (" + fu + " d). No clone can then be censored for missing the deadline inside the observed follow-up, so the strategy defined by that deadline is never actually enforced: its arm is the whole cohort under no intervention, and the contrast is between the whole cohort and a weighted subset of itself rather than between two strategies. This does not produce a null result — it produces a confident and badly confounded one. Shorten the grace period or lengthen follow-up.");
+        "The grace period (" + g + " d) is at least as long as the maximum follow-up (" + fu + " d). No clone can then be censored for missing the deadline inside the observed follow-up, so the strategy defined by that deadline is never enforced: its arm is thinned only by whatever continuing requirements the censoring events impose, and the contrast is between a strategy that was never tested and a weighted subset of the same cohort rather than between two strategies. This does not produce a null result — it produces a confident and badly confounded one. Shorten the grace period or lengthen follow-up.");
 
       if (usesRMST(s.effect) && !(fuOK && fu > 0)) out.push(
         "Restricted mean survival time is the area under the survival curve up to a horizon τ, so it has no value until τ is fixed — and τ must be pre-specified rather than chosen after seeing the curves. Set the maximum follow-up.");
@@ -649,7 +661,7 @@ Comedications | 180</textarea>
       // identical columns — the cloning section says so itself. Commissioning
       // it as a shell table without saying that invites an analyst to present
       // a comparison that cannot show anything.
-      groupBy: "strategy at time zero — identical across arms by construction, since cloning places every patient in both; the informative version is the weighted comparison after artificial censoring has occurred",
+      groupBy: "strategy (identical across arms at time zero by construction, since cloning places every patient in both)",
       limitations: "Artificial censoring is informative and adjusted with inverse-probability-of-censoring weights, which assume that every predictor of deviation is measured, that the weight models are correctly specified, and that no covariate pattern makes deviation from either strategy a certainty at any time at which a clone can still be artificially censored — throughout follow-up wherever a strategy requires sustained use, not only within the grace period (Maringe 2020). Cloning removes confounding of the assigned strategy at time zero, but only the observed covariates enter the weight models, so residual confounding of adherence remains possible.",
       // These are shell tables and figures — what the analysis will produce —
       // so they must follow the effect measure actually chosen. This list was
@@ -719,22 +731,22 @@ ${censorText(s)}
 ${DEVIATION_SCHEDULE}
 
 ## 8. Inverse-probability-of-censoring weights (IPCW)
-Artificial censoring is informative: the clones that remain uncensored in an arm are exactly those whose treatment behaviour matched it, and that behaviour is associated with prognosis. Each clone therefore receives a **stabilised inverse-probability-of-censoring weight**: at each time, the ratio of its estimated probability of remaining uncensored given only the assigned strategy to its estimated probability of remaining uncensored given the strategy *and* the measured covariate history, cumulated over follow-up. The clones still in the risk set then stand in for those removed, and the arms stay comparable through the grace period (Maringe 2020). The inverse of the probability of remaining uncensored, on its own, is the **unstabilised** weight; stabilising replaces its numerator, which holds the mean of the weights near 1 and is what makes the weight distribution reported below a usable diagnostic. Censoring is modelled over follow-up time using baseline covariates measured over their look-back windows (**${rowsText(s.covlist)}**), with inclusion criteria assessed over ${daysTxt(s.incllookback)} and exclusions (${rowsText(s.excllist)}), together with time-varying predictors:
+Artificial censoring is informative: the clones that remain uncensored in an arm are exactly those whose treatment behaviour matched it, and that behaviour is associated with prognosis. Each clone therefore receives a **stabilised inverse-probability-of-censoring weight**: at each time, the ratio of its estimated probability of remaining uncensored given only the assigned strategy to its estimated probability of remaining uncensored given the strategy *and* the measured covariate history, cumulated over follow-up. The clones still in the risk set then stand in for those removed, and the arms stay comparable through the grace period (Maringe 2020). The inverse of the probability of remaining uncensored, on its own, is the **unstabilised** weight; stabilising replaces its numerator, and that is what holds the mean of the weights near 1 and makes the weight distribution reported below a usable diagnostic. Censoring is modelled over follow-up time using baseline covariates measured over their look-back windows (**${rowsText(s.covlist)}**), with inclusion criteria assessed over ${daysTxt(s.incllookback)} and exclusions (${rowsText(s.excllist)}), together with time-varying predictors:
 
 ${(s.ipcw || "(list the baseline and time-varying predictors of deviation — e.g. age, sex, comorbidity and bleeding-risk scores, disease severity, concomitant therapy, and post-baseline events)").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => "- " + l).join("\n") || "- (covariates)"}
 
 **A separate weight model is fitted for each arm** (Section 7). The events treated as informative censoring and weighted by IPCW (each mapping to the assigned strategy) are: ${mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).join("; ") || "(none selected — the artificial censoring created by cloning would then be left unadjusted)"}.
 
-Weights are cumulative over follow-up. ${BALANCE} ${truncText(s)}
+Weights are cumulative over follow-up. ${balanceText(s)} ${truncText(s)}
 
-${ASSUMPTIONS}
+**Identifying assumptions carried by the weights** (Maringe 2020): ${ASSUMPTIONS}
 
 ## 9. Follow-up and outcome
 ${stop(followupText(s))} Maximum follow-up per patient: **${daysTxt(s.fudays)}** from time zero. Outcome: **${or(s.outcome, "(outcome)")}**.
 
 ## 10. Estimand and effect measure
 The primary estimand is the **per-protocol effect** — what would have happened had every patient received and adhered to the assigned strategy. For comparison we also report the effect estimated by ${COMPARISON_SHORT}. We report ${effectText(s)}, with 95% confidence intervals from a **non-parametric bootstrap**.
-${usesHR(s.effect) ? "\n> " + HR_CAVEAT + "\n" : ""}
+${usesHR(s.effect) ? "\n> **Caveat on the hazard ratio.** " + HR_CAVEAT + "\n" : ""}
 ## 11. Statistical analysis
 **Primary — clone-censor-weight (per-protocol):**
 1. Clone the eligible cohort into the strategy arms and apply the censoring rule.
@@ -902,7 +914,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
           "Primary estimand: the per-protocol effect via clone-censor-weight; " + effectText(s) + ". The effect estimated by " + COMPARISON_SHORT + " is reported for comparison."],
         ["g. Identifying assumptions",
           "Exchangeability, positivity, and consistency; and — because artificial censoring is informative — no unmeasured predictors of deviation.",
-          "Baseline exchangeability of the assigned strategy holds by construction, because cloning assigns every patient to every arm. The informative censoring introduced at deviation is addressed with stabilised inverse-probability-of-censoring weights fitted SEPARATELY per arm (the arms need not deviate on the same schedule), over: " + or(s.ipcw, "(covariates)") + ". Censoring events weighted (each mapped to the assigned strategy): " + ipcwReasons + ".\n" + ASSUMPTIONS + "\n" + BALANCE],
+          "Baseline exchangeability of the assigned strategy holds by construction, because cloning assigns every patient to every arm. The informative censoring introduced at deviation is addressed with stabilised inverse-probability-of-censoring weights fitted SEPARATELY per arm (the arms need not deviate on the same schedule), over: " + or(s.ipcw, "(covariates)") + ". Censoring events weighted (each mapped to the assigned strategy): " + ipcwReasons + ".\nAssumptions carried by the weights (Maringe 2020): " + ASSUMPTIONS + "\n" + balanceText(s)],
         ["h. Data analysis plan",
           "An estimator that recovers the per-protocol effect under the identifying assumptions.",
           "Weighted survival / cumulative-incidence curves per arm (weighted Kaplan-Meier, or a weighted pooled logistic regression for the discrete-time hazard with the assigned strategy, follow-up time, its quadratic term, and a strategy x time interaction), contrasted for the effect measure.\n95% CIs by non-parametric bootstrap resampling PATIENTS and re-running cloning, censoring and weighting in each replicate; model-based standard errors are not used, because cloning inflates the apparent number of events (Maringe 2020).\nSubgroups: " + subg + ".\nSensitivity: " + sens + "."],
@@ -1033,18 +1045,18 @@ ${REFS.map((r) => "- " + r).join("\n")}
       children.push(para(DEVIATION_SCHEDULE));
 
       children.push(h1("6. Inverse-probability-of-censoring weights (IPCW)"));
-      children.push(para("Artificial censoring is informative: the clones that remain uncensored in an arm are those whose treatment behaviour matched it, and that behaviour is associated with prognosis. Each clone therefore receives a stabilised inverse-probability-of-censoring weight: at each time, the ratio of its estimated probability of remaining uncensored given only the assigned strategy to its estimated probability of remaining uncensored given the strategy AND the measured covariate history, cumulated over follow-up. The clones still in the risk set then stand in for those removed, and the arms stay comparable through the grace period (Maringe 2020). The inverse of the probability of remaining uncensored, on its own, is the UNSTABILISED weight; stabilising replaces its numerator, which holds the mean of the weights near 1 and is what makes the weight distribution reported below a usable diagnostic. Censoring is modelled using baseline covariates over their look-back windows (" + rowsText(s.covlist) + "); inclusion assessed over " + daysTxt(s.incllookback) + "; exclusions: " + rowsText(s.excllist) + "; plus time-varying predictors:"));
+      children.push(para("Artificial censoring is informative: the clones that remain uncensored in an arm are those whose treatment behaviour matched it, and that behaviour is associated with prognosis. Each clone therefore receives a stabilised inverse-probability-of-censoring weight: at each time, the ratio of its estimated probability of remaining uncensored given only the assigned strategy to its estimated probability of remaining uncensored given the strategy AND the measured covariate history, cumulated over follow-up. The clones still in the risk set then stand in for those removed, and the arms stay comparable through the grace period (Maringe 2020). The inverse of the probability of remaining uncensored, on its own, is the UNSTABILISED weight; stabilising replaces its numerator, and that is what holds the mean of the weights near 1 and makes the weight distribution reported below a usable diagnostic. Censoring is modelled using baseline covariates over their look-back windows (" + rowsText(s.covlist) + "); inclusion assessed over " + daysTxt(s.incllookback) + "; exclusions: " + rowsText(s.excllist) + "; plus time-varying predictors:"));
       (ipcwLines.length ? ipcwLines : ["(list the predictors of deviation)"]).forEach((l) => children.push(bullet(l)));
       children.push(para("A separate weight model is fitted for each arm (Section 5). Events weighted by IPCW (each mapping to the assigned strategy): " + (mergeList(s.ipcwReasonsPick, s.ipcwReasonsCustom).join("; ") || "(none selected — the artificial censoring created by cloning would then be left unadjusted)") + "."));
-      children.push(para(BALANCE + " " + truncText(s)));
-      children.push(para(ASSUMPTIONS));
+      children.push(para(balanceText(s) + " " + truncText(s)));
+      children.push(para("Identifying assumptions carried by the weights (Maringe 2020): " + ASSUMPTIONS));
 
       children.push(h1("7. Follow-up and outcome"));
       children.push(para(stop(followupText(s)) + " Maximum follow-up per patient: " + daysTxt(s.fudays) + " from time zero. Outcome: " + or(s.outcome, "(outcome)") + "."));
 
       children.push(h1("8. Estimand and effect measure"));
       children.push(para("Primary estimand: the per-protocol effect — what would have happened had every patient received and adhered to the assigned strategy. The effect estimated by " + COMPARISON_SHORT + " is reported for comparison. We report " + effectText(s) + ", with 95% CIs from a non-parametric bootstrap."));
-      if (usesHR(s.effect)) children.push(para(HR_CAVEAT));
+      if (usesHR(s.effect)) children.push(para("Caveat on the hazard ratio. " + HR_CAVEAT));
 
       children.push(h1("9. Statistical analysis"));
       children.push(para("Primary — clone-censor-weight (per-protocol):"));
