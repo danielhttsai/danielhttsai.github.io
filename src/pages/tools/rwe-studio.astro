@@ -1504,9 +1504,29 @@ const DESIGNS = [
           r += pick(M.indexOf("overlap") >= 0, ["wOVL", "TRUE"], "overlap weighting");
           r += pick(M.indexOf("iptw") >= 0, ["wI", "TRUE"], "IPTW");
           r += pick(M.indexOf("smrw") >= 0, ["wSMR", "TRUE"], "SMR weighting");
+          // One of the five schemes above cannot fail this column. With a propensity
+          // score fitted by logistic regression, overlap weights balance every
+          // covariate IN that model exactly — a theorem, not a result (Li, Morgan &
+          // Zaslavsky, J Am Stat Assoc 2018;113:390-400). Executed here: on a cohort
+          // whose unweighted |SMD| is 1.01 the overlap-weighted value is 0.000000 for
+          // continuous, binary and factor covariates alike, and 4.5e-10 through the
+          // multinomial form, while IPTW gives 0.016-0.073 on the same data. So the
+          // column read "largest |SMD| 0.000 … Weighting did its job" with a green
+          // tick — and the pick chain above makes overlap the balance scheme exactly
+          // when IPTW and SMR were unticked or withheld, i.e. on the WORST data the
+          // tool ever sees. The one reassuring cell in that panel was the only one
+          // that could not have come out otherwise. It is flagged from here so the
+          // panel, the Table 1 header and the exported report all say so.
+          // The identity is a property of the sample the propensity model was FITTED
+          // to. Restricting or trimming happens after that fit and keeps the original
+          // scores, so it degrades continuously: measured on the no-overlap demo,
+          // 0.000 untrimmed, 0.000 after a 2% percentile trim, 0.055 after a 31%
+          // common-support restriction. So "exact by construction" is asserted only
+          // where it is exactly true, and the trimmed case gets its own sentence.
+          r += "balovl<-(!is.null(wBAL) && ballab=='overlap weighting'); balexact<-(balovl && ntrim==0)\n";
           r += "smd1<-rep(NA_real_,length(covs)); smd2<-rep(NA_real_,length(covs))\n";
           r += "f3<-function(x) if(!is.finite(x)) '-' else sprintf('%.3f',x)\n";
-          r += "cat('TABLE1|Characteristic|Comparator (n=',sum(!tr),')|Exposure (n=',sum(tr),')|SMD|',if(is.null(wBAL)) 'SMD after weighting (none fitted)' else paste0('SMD after ',ballab),'\\n',sep='')\n";
+          r += "cat('TABLE1|Characteristic|Comparator (n=',sum(!tr),')|Exposure (n=',sum(tr),')|SMD|',if(is.null(wBAL)) 'SMD after weighting (none fitted)' else paste0('SMD after ',ballab,if(balexact) ' (exact by construction)' else ''),'\\n',sep='')\n";
           r += "for(i in seq_along(covs)){ cc<-covs[i]; lab<-covsrc[i]\n" +
                "  if(covkind[i]=='factor'){ f<-d[[cc]]; lv<-levels(f)\n" +
                "    s1<-smdcat(f,tr,rep(1,n)); s2<-if(is.null(wBAL)) NA_real_ else smdcat(f,tr,wBAL); smd1[i]<-s1; smd2[i]<-s2\n" +
@@ -1518,7 +1538,12 @@ const DESIGNS = [
                "    } else cat(sprintf('TABLE1|%s, mean (SD)|%.2f (%.2f)|%.2f (%.2f)|%s|%s\\n', lab, mean(x[!tr],na.rm=TRUE), sd(x[!tr],na.rm=TRUE), mean(x[tr],na.rm=TRUE), sd(x[tr],na.rm=TRUE), f3(s1), f3(s2))) } }\ncat('\\n')\n";
           r += "mxof<-function(v) if(all(!is.finite(v))) NA_real_ else max(abs(v[is.finite(v)]))\n";
           r += "mx1<-mxof(smd1); mx2<-mxof(smd2)\n";
-          r += "cat('PSBAL|mx1=',f3(mx1),'|mx2=',f3(mx2),'|nbad=',sum(abs(smd2)>0.1,na.rm=TRUE),'|ncov=',length(covs),'|wlab=',ballab,'\\n',sep='')\n";
+          r += "cat('PSBAL|mx1=',f3(mx1),'|mx2=',f3(mx2),'|nbad=',sum(abs(smd2)>0.1,na.rm=TRUE),'|ncov=',length(covs),'|wlab=',ballab,'|exact=',if(balexact) 1 else 0,'\\n',sep='')\n";
+          // The panel is not the only place this number is read: the Markdown and Word
+          // reports carry the Table 1 and the notes, and nothing else in them would
+          // say that the column is an identity. So the caveat travels as a note.
+          r += "if(balexact) cat('RESULT_NOTE|The \"SMD after overlap weighting\" column above is zero by construction rather than by evidence. With a propensity score fitted by logistic regression, overlap weights balance every covariate in that model exactly (Li, Morgan and Zaslavsky, J Am Stat Assoc 2018;113:390-400), so this column reads 0.000 on any data at all - including data where the two arms barely meet. It cannot tell you whether this comparison is sound. Judge overlap weighting on its effective sample size and on the common-support figure, and on covariates that were NOT in the propensity model.\\n')\n";
+          r += "if(balovl && !balexact) cat('RESULT_NOTE|Read the \"SMD after overlap weighting\" column with care. Overlap weights balance every covariate in the propensity model exactly on the cohort that model was fitted to (Li, Morgan and Zaslavsky, J Am Stat Assoc 2018;113:390-400). This column is computed after the restriction applied to this run, on propensity scores fitted before it, so it is a weakened form of that identity rather than an independent check of it. Judge overlap weighting on its effective sample size and on the common-support figure as well.\\n')\n";
           if (!balSch) r += "cat('RESULT_NOTE|No weighted estimator was selected, so there is no weighted balance column: the standardised differences shown are before any adjustment. Balance after matching or after fine stratification is a separate table this tool does not build - check it in your own analysis before reporting the matched estimate.\\n')\n";
           r += "ET<-list(); EE<-list(); ET[['ITT']]<-d$TIME; EE[['ITT']]<-d$EVENT\n";
           if (E.indexOf("PP") >= 0) r += "if('DISC' %in% names(d)){ disc<-ifelse(is.na(d$DISC), Inf, as.numeric(d$DISC)); ET[['PP']]<-pmin(d$TIME, disc); EE[['PP']]<-d$EVENT*(d$TIME<=disc) }\n";
@@ -3174,10 +3199,27 @@ const DESIGNS = [
       if (bal && isFinite(mx2) && balW) {
         const nbad = parseInt(bal.nbad);
         const balHeld = withheld.some((s) => s.label.toLowerCase().indexOf(balW.toLowerCase()) === 0);
-        rows.push(row(mx2 <= 0.1 ? true : (mx2 <= 0.25 ? null : false),
+        const before = isFinite(parseFloat(bal.mx1)) ? parseFloat(bal.mx1).toFixed(3) : "—";
+        // Overlap weights balance the propensity model's own covariates exactly, so
+        // this cell is an arithmetic identity and never evidence. It must not carry a
+        // green tick, and it must not say "Weighting did its job" — that sentence was
+        // reached precisely when IPTW and SMR had been withheld, i.e. when the data
+        // was at its worst. Amber, and say what the number is.
+        const exact = bal.exact === "1";
+        // Trimming happens after the propensity fit and keeps the original scores, so
+        // the identity weakens rather than vanishing. Those runs read normally, with
+        // one sentence saying the number is not the independent check it looks like.
+        const overlapish = /^overlap/i.test(balW);
+        if (exact) {
+          rows.push(row(null, "Balance after " + balW, "largest |SMD| " + mx2.toFixed(3) + " · exact by construction",
+            "<strong>This one is not evidence.</strong> With a propensity score fitted by logistic regression, overlap weights balance every covariate <em>in that model</em> exactly, so this cell reads 0.000 on any data at all — including data where the two arms barely meet. Before weighting the largest was " + before +
+            ". Judge this scheme on its effective sample size above and on the common-support verdict, and on covariates that were <em>not</em> in the propensity model." +
+            (mx2 > 0.0005 ? " <strong>It has not come out at 0.000 here</strong>, so something has perturbed the identity — read the value shown as the real balance figure it is." : "")));
+        } else rows.push(row(overlapish ? (mx2 > 0.1 ? false : null) : (mx2 <= 0.1 ? true : (mx2 <= 0.25 ? null : false)),
           "Balance after " + balW, "largest |SMD| " + mx2.toFixed(3) + (nbad ? " · " + nbad + " covariate(s) > 0.1" : ""),
-          "Standardised differences below 0.10 are the usual bar for saying the arms are comparable on a covariate. Before weighting the largest was " + (isFinite(parseFloat(bal.mx1)) ? parseFloat(bal.mx1).toFixed(3) : "—") +
-          ". " + (mx2 > 0.1 ? "<strong>Weighting has not balanced everything</strong> — add the unbalanced covariates to the model, or use matching." : "Weighting did its job.") +
+          "Standardised differences below 0.10 are the usual bar for saying the arms are comparable on a covariate. Before weighting the largest was " + before +
+          ". " + (mx2 > 0.1 ? "<strong>Weighting has not balanced everything</strong> — add the unbalanced covariates to the model, or use matching." : (overlapish ? "" : "Weighting did its job.")) +
+          (overlapish ? " <strong>Overlap weights make this column near-vacuous</strong>: they balance the propensity model's own covariates exactly on the cohort that model was fitted to, and this figure is computed after the restriction you applied, on scores fitted before it. It is a weakened form of that identity, not an independent check." : "") +
           (balHeld ? " <strong>Note that this is balance under weights whose estimate was withheld above</strong> — balanced covariates do not rescue weights a few patients dominate." : "")));
       } else if (bal && !balW) {
         rows.push(row(null, "Balance after weighting", "not computed",
