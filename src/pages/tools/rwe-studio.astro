@@ -345,9 +345,10 @@ const DESIGNS = [
         <label class="flex items-center gap-2"><input type="checkbox" id="c_trim" checked /> Trim leading/trailing whitespace</label>
         <label class="flex items-center gap-2"><input type="checkbox" id="c_std" checked /> Standardise coded flags (0/1, Y/N, 有/無…) to 0/1 for the mapped roles</label>
         <label class="flex items-center gap-2"><input type="checkbox" id="c_dates" checked /> Normalise date columns to YYYY-MM-DD (using the day-first answer above)</label>
-        <label class="flex items-center gap-2"><input type="checkbox" id="c_dedupe" checked /> Drop exact duplicate rows</label>
+        <label id="c_dedupe_l" class="flex items-center gap-2"><input type="checkbox" id="c_dedupe" checked /> Drop exact duplicate rows</label>
         <label class="flex items-center gap-2"><input type="checkbox" id="c_dropmiss" checked /> Drop rows missing a required mapped variable</label>
       </div>
+      <p id="dedupenote" class="mt-2 hidden text-[11px] text-amber-700"></p>
 
       <div id="dupwrap" class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1994,6 +1995,7 @@ const DESIGNS = [
       $("itsopts").classList.toggle("hidden", getDesign() !== "its");
       renderCovs(spec);
       try { renderDupUI(); } catch (e) {}
+      try { renderDedupeUI(); } catch (e) {}
       validateMap();
     }
     function detectIdCol() {
@@ -2004,6 +2006,19 @@ const DESIGNS = [
       if (byType) return byType.name;
       const byName = DATA.columns.find((c) => /(^|_)id$|patient|subject|pid|caseid/i.test(c));
       return byName || "";
+    }
+    // The same rule the duplicate-ID resolver below already follows, applied to the
+    // exact-duplicate-ROW dropper: only a one-row-per-person cohort can have one.
+    const dedupeAllowed = () => { const s = SPEC[getDesign()]; return !!(s && s.onePerPerson) && $("c_dedupe").checked; };
+    function renderDedupeUI() {
+      const spec = SPEC[getDesign()], onePer = !!(spec && spec.onePerPerson);
+      const box = $("c_dedupe"), lab = $("c_dedupe_l"), note = $("dedupenote");
+      if (!box || !lab || !note) return;
+      box.disabled = !onePer;
+      lab.classList.toggle("opacity-45", !onePer);
+      note.classList.toggle("hidden", onePer || !spec);
+      if (!onePer && spec) note.textContent = "\u201CDrop exact duplicate rows\u201D is switched off for " + (spec.label || "this design") +
+        ": here a row is a unit of person-time or a window, so two identical rows are two real records that add up, not a duplicate. Removing one would silently halve a denominator and move the estimate.";
     }
     function renderDupUI() {
       const spec = SPEC[getDesign()];
@@ -2270,7 +2285,18 @@ const DESIGNS = [
         if (!isNaN(n)) r[c] = n;
       }));
       const before = rows.length;
-      if ($("c_dedupe").checked) { const seen = new Set(); rows = rows.filter((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) return false; seen.add(k); return true; }); }
+      // A row is only ever a "duplicate" where each person is meant to appear once —
+      // the ACNU cohort. In a self-controlled series a row IS a unit of person-time and
+      // in a case-crossover it is a window, so two identical rows are two real records
+      // that add; dropping one halves a denominator. An interrupted time series
+      // aggregates rows into periods, so an identical row there is another event in the
+      // same period. None of the three carries a unique key, so the tool cannot tell an
+      // accidental repeat from a legitimate one and must not guess. renderDupUI already
+      // applies exactly this rule to duplicate IDs — it was never applied to the more
+      // destructive control beside it, which is checked by default.
+      let keptDup = 0;
+      if (dedupeAllowed()) { const seen = new Set(); rows = rows.filter((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) return false; seen.add(k); return true; }); }
+      else { const seen = new Set(); rows.forEach((r) => { const k = DATA.columns.map((c) => String(r[c] == null ? "" : r[c])).join("|"); if (seen.has(k)) keptDup++; else seen.add(k); }); }
       // Duplicate patients/cases — ACNU (one-row-per-person cohort) only.
       const dupId = $("dup_id").value, dupStrat = $("dup_strategy").value;
       if (spec.onePerPerson && dupId && dupStrat !== "all") {
@@ -2292,7 +2318,8 @@ const DESIGNS = [
       }
       if ($("c_dropmiss").checked) { const req = spec.roles.filter((r) => r.req).map((r) => roleCol[r.k]).filter(Boolean).concat(spec.covariates ? COVS : []); rows = rows.filter((r) => req.every((c) => r[c] != null && String(r[c]).trim() !== "")); }
       MASTER = rows;
-      $("cleaninfo").textContent = "Master file: " + rows.length + " rows (from " + before + "; " + (before - rows.length) + " removed).";
+      $("cleaninfo").textContent = "Master file: " + rows.length + " rows (from " + before + "; " + (before - rows.length) + " removed)." +
+        (keptDup ? " " + keptDup + " row(s) are identical to an earlier row and were KEPT — in this design that is repeated person-time, not a duplicate." : "");
       $("anacard").classList.remove("hidden"); $("expcard").classList.remove("hidden");
     }
 
