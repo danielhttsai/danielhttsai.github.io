@@ -6540,10 +6540,302 @@ under-flagging costs them the analysis.
 And give scratch files a per-role prefix: three agents wrote into one scratch
 directory this run and nothing collided only because every file was prefixed.
 
-<!-- CLAIM 2026-08-23 (twenty-fourth run): RWE Studio's numeric-role gate —
-     NUM_RULES / numTrouble / the decimal-comma guard / buildMaster's numeric
-     coercion / opts() ignoring role.types, in src/pages/tools/rwe-studio.astro.
-     The question is what reaches a numeric role on the ITS and ACNU paths,
-     where NUM_RULES has no entry at all. NOT the checker, NOT the builders,
-     NOT the SCCS Wald-vs-profile interval.
-     If you are a concurrent run reading this, take something else. -->
+
+### Found 2026-08-23 by a twenty-fourth run — RWE Studio's numeric-role gate
+
+**Chosen by rotation**: the three runs before this one took the builders twice and
+the checker once, and RWE Studio had had nothing since the SCCS pass. Two reviewers
+on disjoint briefs against a frozen tree, then made to argue with each other, then
+a third sent at this run's own uncommitted diff.
+
+#### What the defect was
+
+`numTrouble()` iterated `spec.roles.filter(r => NUM_RULES[r.k] && MAP[r.k])`, and
+`NUM_RULES` held two entries — `INTERVAL` and `EVENTS`, both SCCS roles — while
+`NUM_ROLES` lists six. **The decimal-comma refusal sat inside that loop**, so on
+the ITS and ACNU paths the whole function body never ran. The refusal itself has
+been right since the eighteenth run wrote it; it was wired to the wrong thing.
+
+Driven end to end: a de-DE ITS export reported "Mapping complete ✓" and built a
+master file holding `125` where the sheet said `0,125` and `10.5755` where it said
+`10.575,5` — a modelled rate ~10⁶ too large. `RAWTXT` **already held the evidence**
+at that moment (`commaExamples` computes it for every column at ingest). Nothing
+read it.
+
+Measured consequences elsewhere on the same entry point, by re-implementing the
+estimators in Python (no R in this sandbox):
+
+- **ACNU `TIME`, the sharpest.** A comma correlated with treatment arm — two linked
+  data sources recording tenths of a day and whole days — took the hazard ratio
+  from **1.4473 (1.113–1.882) to 0.2002 (0.137–0.293)**. Cox is invariant to a
+  *monotone* transform of time; this one is not monotone, so it re-ranks the risk
+  sets. Direction reversed, both intervals tight, nothing on screen different.
+- **A ticked covariate.** Mixed comma (Excel "General" dropping trailing zeros):
+  max ΔPS **0.679**, and the SMD *falls* from 1.115 to 0.419 — the balance table
+  under-reports the imbalance by 2.7×.
+- **ITS `DENOM`, linear branch.** Scaling `N` by *k* scales the coefficient **and**
+  its standard error by 1/k, so the t-statistic is invariant to 6 dp (−8.839635 at
+  k = 1, 10, 1000). Nothing rescues it. In the **Poisson** branch the same comma is
+  exactly invariant (log offset; only the intercept moves by ln k).
+- **`DISC`.** A comma scaling it up makes `pmin(TIME, disc)` a no-op, so the
+  per-protocol row becomes the ITT row (127 → 224 events against an ITT of 227) and
+  reads as "adherence made no difference".
+
+#### What shipped
+
+`src/pages/tools/rwe-studio.astro`, three commits.
+
+- **The comma check is no longer a per-role rule.** It runs over every mapped
+  `NUM_ROLES` role and every ticked covariate that `classifyCov` reads as a number.
+  Range rules stay per-role, and **two roles correctly have none**: `YCOUNT` is
+  "Event count, rate, or level" and a negative or fractional value there *selects
+  the linear branch* rather than being an error; `DENOM` because R drops a
+  non-positive denominator **per period, after aggregation**, so a rule on raw rows
+  would refuse a file whose zero-denominator patient rows aggregate to a positive
+  period total.
+- **`commaExamples` decides per COLUMN, not per cell.** A cell often cannot say
+  which convention it is under (`1,234` is 1234 in Chicago and 1.234 in Berlin);
+  the column can. One unambiguous witness settles it, and the ambiguous `1,250` in
+  that column is then read as decimal too. A column proving both conventions is
+  refused under its own wording.
+- **`TIME` and `DISC` gain rules; `INTERVAL` and `TIME` are pair-aware** —
+  `n < 0 || (n <= 0 && paired-count > 0)`.
+- `profileColumn`'s range no longer prints `min Infinity · max -Infinity` for a
+  text-coded binary (`Math.min()` of an empty list) beside a green "✓ clean" — a
+  string `#dldict` was writing into the shareable data dictionary.
+
+#### The three arguments that changed the code — this is the part worth copying
+
+1. **Reviewer A reversed a fix the other two were converging on.** `INTERVAL`'s
+   shipped rule was `!(n > 0)`, refusing *every* zero-length interval. The R it
+   exists to pre-empt does not: `badrow` catches a negative interval and an event
+   inside a zero-length one, but a zero-length interval carrying **no** events is
+   counted into `ndrop0`, dropped, and reported as "they carry no information
+   either way". One such row in eighty-one blocked a file R would have analysed.
+   Reviewer B had proposed copying that prose onto `TIME`, which would have
+   propagated it. **The guard was stricter than the thing it guards.** Worth asking
+   of every new guard: what does the layer below already do with this input?
+2. **Neither reviewer's comma fix was right alone.** B proposed routing
+   both-predicate matches to the refuse bucket — but `COMMA_DECIMAL`'s first
+   alternative matches *every* single-group Western number, so that refuses
+   `1,234`. The orchestrator's counter (reject a leading-zero first group) is safe
+   but only catches values **below 1**: B then built `1,250 … 8,000` and drove it
+   silently through. The column-level decision, which A and B reached
+   independently, is what handles both. **A rule that is undecidable per item is
+   often decidable per group — look one level up before accepting "genuinely
+   ambiguous".**
+3. **A rejected rule.** B also proposed "a bare value under 1000 settles the column
+   grouped". Unsound — a German column writes 875 as `875` too — and it errs by
+   *silencing* the guard, which is the dangerous direction. Not adopted.
+
+#### The diff reviewer found six more, two of them regressions this run introduced
+
+The twenty-third run's lesson held again, and harder: **the ten scenarios this run
+had already driven all happened to miss both regressions.**
+
+- **`DEC_ONLY` was enumerated by hand and left out `1234,567`** (four or more
+  integer digits, exactly three decimals). The old per-cell code always refused
+  those; the new code read the column as grouping. Person-time of 1000.1 days
+  analysed as 1,000,100 — *worse than the code being replaced*. Fixed by
+  **deriving** `DEC_ONLY`/`GRP_ONLY` from `COMMA_DECIMAL`/`COMMA_GROUPED` instead:
+  a value matching one predicate and not the other can only be read one way by
+  construction, with a hand-written rule only for the overlap. **If you find
+  yourself re-enumerating the cases another predicate already covers, derive
+  instead — the enumeration will be incomplete.**
+- **`toBin` was applied to the paired `EVENTS` value**, on the reasoning that "the
+  roles that pair here are the 0/1 ones". `INTERVAL` pairs with `EVENTS`, a
+  **count**. And `yesMap` is keyed by value across the whole file with no column
+  scoping, so **one unrelated column coded 1/2 teaches `toBin` that "2" means 0** —
+  and two events inside a zero-length interval read as no events. A file that
+  blocked before the diff passed after it. `yesMap`'s global scope is worth
+  remembering: it is a file-wide vocabulary, not a per-column one.
+- Three **false refusals** the diff introduced: a factor covariate (`site` =
+  "Boston, MA") is never handed to `Number()` at all, so the check must apply only
+  to covariates `classifyCov` reads as numeric; `DISC` is optional and R reads a
+  blank as "never discontinued" (`ifelse(is.na(DISC), Inf, ...)`), so the shared
+  blank branch is now for required roles only; and **`COVS` is never pruned** when
+  a role is mapped onto an already-ticked column, so the panel blamed "a baseline
+  covariate" with no checkbox on screen and — because `validateMap` tests
+  `numTrouble` before `binTrouble` — *replaced* the accurate 0/1-role message.
+- Two screen defects: the contradictory-column refusal printed the generic wording,
+  which reads "this tool reads 1,234 as a grouped whole number" directly under a
+  list naming 1,234 as unreadable; and examples were joined with `", "` while being
+  values that contain commas, so two site names read as four.
+- **`commaExamples` scanned each column twice**, doubling ingest cost on a large
+  file with nothing on screen to explain the pause (2.3s vs 1.0s on 200,000 × 30,
+  main thread). One pass now.
+
+#### Verified this run, and how
+
+- **Zero silent regressions, proved not sampled.** 644 comma-bearing strings, each
+  placed **alone** in a column so no witness can help it, graded through the real
+  `commaExamples` on both trees. Every value the old code refused is still refused;
+  fifteen it passed are now caught. Reuse `scratchpad/ORCH_exhaust.js` — this is the
+  right shape of test for any change to these predicates.
+- Ten scenarios plus the diff reviewer's seven counter-cases driven in Chromium on
+  both trees. Four silent holes closed (ITS de-DE, ACNU negative follow-up, ACNU
+  zero follow-up carrying an event, comma'd covariate), one false refusal removed
+  (SCCS zero interval with zero events), one new catch (contradictory column, green
+  before), and the correct behaviours preserved (US grouped `10,575`, clean ACNU,
+  text covariate, optional blank `DISC`, SCCS negative and event-in-zero).
+- Seventeen tool pages reload with zero `pageerror` and `typeof window.PC ===
+  "object"` on all nine builders.
+- Performance measured as median of five: **1.25s against a baseline of 0.87s** on
+  200,000 × 30. The residual 1.4× is the price of classifying every comma-bearing
+  cell instead of skipping grouped ones. Not recovered.
+- **Nothing downstream of WebR was executed** — its CDN is blocked, so the R never
+  runs. Every claim about estimator behaviour above is from a Python
+  re-implementation, not from this tool's own R. **`Rscript` is NOT installed in
+  this sandbox** (nor numpy/scipy); the brief previously implied otherwise.
+- **The live site was not checked** — still blocked. Nobody has still opened an
+  exported `.docx` in Word.
+
+#### A correction to this file, measured
+
+The comment at `numTrouble` used to say SheetJS resolves `"14,0"` to `140` "while
+parsing, so by the time any code here runs the cell is a number" — offered as the
+reason a `DATA.rows` check is a no-op **on XLSX**. Driven with the same value in
+three containers, it is the other way round:
+
+| input | `DATA.rows[0]` | `RAWTXT` |
+|---|---|---|
+| `.csv` | `305` (comma gone) | populated |
+| `.xlsx`, text cells | `"30,5"` (comma survives) | populated |
+| `.xlsx`, real number + de-DE display format | `30.5` (correct) | **empty** |
+
+The eighteenth run's *fix* was right and its stated *reason* was inverted. The
+operative conclusion is unchanged and now stronger: **build on `RAWTXT`, never on
+`DATA.rows`** — it is the only source covering both broken containers, and it
+correctly stays empty for a well-formed numeric XLSX, so a correct file is not
+falsely refused.
+
+#### Open, examined this run, deliberately left — ranked
+
+- **The ITS family choice fires on a CLEAN file, which nothing else on this list
+  does.** `counts <- all(abs(a$Y-round(a$Y))<1e-8) && all(a$Y>=0)` then
+  `fam <- ... if(counts) 'poisson' else 'linear'` (`:2030-2031`). Integer-ness is
+  not count-ness. A correctly-parsed **integer rate per 100,000** — the commonest
+  way an ITS outcome is reported in this field — gets a count likelihood it never
+  asked for, a **rate-ratio estimand in place of the absolute one**, and an SE of
+  `1/sqrt(sum Y)` computed from the units the number happens to be written in
+  (measured 2.24× too small, exactly `sqrt(215/43)`). Reviewer A asked for this to
+  be recorded as *"fires on a clean file"* so it is not triaged alongside the parse
+  bugs, and scheduled ahead of everything below. **This is the best next target in
+  RWE Studio.** It changes what the tool estimates, so it wants its own run and its
+  own review.
+- **The comma is one entry point, not the bug.** Shipping this closed the *comma*
+  route into `TIME`, `DENOM`, `DISC` and the covariates — it did not close the
+  class. A `TIME` column mixing months and days across two sources re-ranks the
+  risk sets with no comma anywhere; a `DENOM` in thousands vs units, or a
+  per-100,000/per-1,000 mix-up mid-series, reproduces the linear-branch result
+  exactly. **Do not read the fix as retiring those findings.**
+- **An all-ambiguous comma column is still read as grouping, silently.** Every
+  value one group of exactly three digits, no witness either way (`1,250 … 8,000`).
+  Genuinely undecidable per column — that column is character-identical to an
+  ordinary US grouped one — so refusing it would refuse real US files. The honest
+  fix is a **non-blocking** notice in the profile table, which needs `RAWTXT` at
+  profile-render time. **Ordering trap, measured:** `rebuildFromSheet` calls
+  `setData` (which builds `DATA.profile` **and clears `RAWTXT`**) and only then
+  computes `RAWTXT`, so `profileColumn` has never seen it — instrumented, `RAWTXT`
+  was empty on all four calls. Recomputing `DATA.profile` and re-calling `render()`
+  at the end of that `try` is enough; `render()` is idempotent. Consider whether an
+  `info`-level flag is loud enough, and whether it is noise on ordinary US files —
+  that is a judgement for Daniel.
+- **`profileColumn`'s range still prints the comma-mangled number.** `30,5` shows
+  as `min 305 · max 3355` under a green "✓ clean" — the last place a human could
+  catch the mangling by eye. Same `RAWTXT` ordering problem; fix it with the item
+  above.
+- **`tableFromAOA:559` has the prototype bug one layer up.** `seen = {}` keyed by
+  header text, so a column named `constructor` becomes **`constructor_NaN`** and
+  `__proto__` becomes `__proto___[object Object]` — and that mangled name reaches
+  the dropdowns, the data dictionary and the exported master CSV header. Confirmed
+  by upload. `commaCols` and `RAWTXT` are `Object.create(null)` now; this one is
+  pre-existing and was left because it is not this diff's, but it is the same
+  species the checker's `DELIV_ALIASES` needed fixing for.
+- **`opts()` still offers every column for every role** while `suggestCol` enforces
+  `role.types` and its comment says why. Both reviewers confirmed it independently;
+  the eighteenth run flagged it as "a one-line change, **but global and not checked
+  against the other three designs**", and that judgement still stands. Mapping
+  SCCS's case ID to a *date* column gives 2.45 (2.26–2.65) from a true IRR of 1.00.
+- **Two buttons write different files under one filename.** `:1206` (`#dlmaster`,
+  in the Step-2 profile card) exports `DATA.rows` — the raw upload, pre-clean,
+  pre-mapping, with mixed date formats — while `:3282` (`#dlmaster2`) exports
+  `MASTER`. Both name it `<dataset>-master.csv`, so downloading both silently
+  overwrites one with the other. Driven: 24 lines vs 22, different content.
+- **The page's logging claim at `:343` is false.** "Apply the fixes you want; each
+  is logged and re-emitted into the exported R script." **None of the five Step-4
+  checkboxes is recorded in any export** — turning them all off produces a
+  byte-identical script — and no export says which column filled which role.
+  Worse, `analysisCSV()` renames columns to role keys for WebR but **neither
+  download button exports that file**, so the exported script `stop()`s on the
+  exported master immediately. This is what makes every parsing defect unauditable
+  after the fact, and it contradicts `:400` ("The R script is exactly what ran").
+- **`DISC` permits `n === 0`**, giving `pmin(TIME,0) = 0` — a subject with zero
+  person-time in the per-protocol arm, unflagged. ARGUED, not driven.
+- **ACNU has no R-side `okrow`.** A `TIME = 0` row is dropped nowhere, so it still
+  enters `n`, the `N = %d; exposure = %d` line, Table 1's denominators, the
+  propensity model, the ESS and max-weight diagnostics, the trimming quantiles and
+  the SMDs — contributing nothing to the estimate while inflating the cohort it is
+  reported as describing. Reviewer A's recommendation: drop `TIME <= 0` before the
+  propensity model with a `RESULT_NOTE`, the pattern ACNU already uses at `:1341`.
+  **Not shipped because it cannot be executed here** (no WebR, no `Rscript`), and
+  an unverifiable change to the analysis path of the most-used design is exactly
+  what this file says not to ship.
+- **`:2024`'s period-drop message is a bare `cat()`, not `RESULT_NOTE|`**, so a
+  drop that removes whole periods is less visible than ACNU's row drop. One-word
+  change, not made — same unverifiability.
+- Everything on the eighteenth run's SCCS list is unchanged: the recurrent-event
+  interval, `WebrEngine.astro:33` possibly discarding every R warning, `%.2f` on
+  the case-crossover and ACNU estimate rows.
+
+#### Citations
+
+No citation was added or changed in shipped code. Corroborated **by WebSearch
+snippets only** (Crossref, PubMed, doi.org and the publishers are all blocked —
+this is not verification against a record): Wagner AK, Soumerai SB, Zhang F,
+Ross-Degnan D, *J Clin Pharm Ther* 2002;27(4):299–309, doi
+10.1046/j.1365-2710.2002.00430.x, whose convention (time-since-intervention = 0 at
+the first affected period) is the one `:1993` implements; Yang & Dalton, SAS Global
+Forum 2012, paper 335-2012 (`:1428`); Stürmer et al., *Am J Epidemiol*
+2005;162(3):279–89 (`:1500`).
+
+One to record precisely rather than as "needs checking": **Lunt M, Glynn RJ,
+Rothman KJ, Avorn J, Stürmer T, *Propensity score calibration in the absence of
+surrogacy*, Am J Epidemiol 2012;175(12):1294–1302** is corroborated on author list,
+title, journal, year, volume, issue and pages. The **pin-cite at `:1517` — "Lunt
+2012, Table 2 footnote g" — and the formula attributed to it are NOT corroborated**;
+snippets do not reach table footnotes. Full text at
+`pmc.ncbi.nlm.nih.gov/articles/PMC3491974/`, blocked here, trivial for a human.
+
+#### Checked and found sound — do not re-derive
+
+- **`EVENTS`' rule is correct.** The conditional likelihood conditions on each
+  case's total event count, so a fractional count has no meaning in it, and R's own
+  `nfrac` agrees. Guard and analysis do not disagree here.
+- **The ITS denominator aggregation** (`dmode='auto'` → `'first'` when constant
+  within a period) is right, and the comment explaining why summing a repeated
+  population figure leaks `log(rows per period)` into the offset is right.
+- **Non-positive/missing denominators are dropped before `npre`/`npost` and before
+  `a$Y/a$N`** — correct ordering.
+- **Uniform rescaling is exactly invariant** for: ACNU `TIME` in Cox (HR and SE
+  bit-identical), a covariate in the PS (ΔPS 5.6e-16; only Table 1's mean/SD is
+  wrong), and ITS `DENOM` in the Poisson branch. Only the **non-uniform** case
+  moves the estimate — which is the ordinary case, since the number of decimal
+  places varies row to row.
+- **Quasi-Poisson accidentally rescues a uniform comma in ITS `YCOUNT`**: Pearson
+  dispersion scales by exactly *k* and quasi-Poisson SEs are exactly
+  scale-invariant, so for `k·disp₀ > 1.5` the interval is restored. Reviewer A
+  raised this against his own case and declined to claim the stronger version: on a
+  flat series the mixed-comma path **widened** intervals rather than manufacturing
+  significance. The ITS damage is a distorted point estimate plus a substituted
+  estimand, not a false narrow interval.
+- **`p = NaN` from an unmapped pair is unreachable** — `EVENTS` and `EVENT` are
+  both `req: true`, and `numTrouble` short-circuits to `[]` while anything required
+  is missing.
+- **`esc()` covers every interpolated value** in the new `innerHTML`; no injection
+  via column name or cell value.
+- **`normName`, the duplicate-role guard, `binTrouble`, `suggestCol`'s
+  conservatism, `renderDedupeUI`'s preference memory, the harmonic-constancy guard
+  and the cycle-length guard** were all driven and are all correct.
+- **Ordinary US grouped data is untouched**, including `1,234` alone, `12,345,678`,
+  `1,23,456`, `1,234.56`, and a column mixing `1,234` with `10.5`.
