@@ -19,9 +19,15 @@
 
 import type { TargetSection } from "./target";
 
+// The published title, as it appears in the record and in this file's own header
+// comment above. The user-facing string used to read "…Enhance Reproducibility
+// (HARPER): a good practices report…", which inserts an acronym the title does
+// not contain and drops the clause that says what the template is FOR — so a
+// reader searching the printed citation verbatim would not find the paper.
 export const HARPER_CITATION =
   "Wang SV, Pottegård A, Crown W, et al. HARmonized Protocol Template to Enhance " +
-  "Reproducibility (HARPER): a good practices report of a joint ISPE/ISPOR task force. " +
+  "Reproducibility of hypothesis evaluating real-world evidence studies on treatment effects: " +
+  "a good practices report of a joint ISPE/ISPOR task force. " +
   "Pharmacoepidemiol Drug Saf 2023; PMID 36215113.";
 
 export const HARPER_URL = "https://drugepi.gitlab-pages.partners.org/harper/";
