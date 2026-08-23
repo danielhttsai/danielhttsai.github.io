@@ -176,6 +176,12 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
 
 ## Known open items
 
+- **CLAIMED 2026-08-23 ~11:00 UTC by a twenty-first run: the duplicated
+  planned-analytical-outputs list** (`defaultOutputs` in `ProtocolCommon.astro`
+  vs. every builder's own `plannedOutputs`) — the item the twentieth run named
+  "the sharpest well-scoped work left" at the bottom of this file. If you are
+  starting after that timestamp, pick something else; if this marker is more
+  than a few hours old with no follow-up commit, assume the run died and take it.
 - SCCS's Farrington event-dependent-exposure sensitivity item is ticked by default
   with no explanation or citation. Daniel said to leave it for now.
 - Weight diagnostics in RWE Studio cover IPTW only; SMR, overlap and
