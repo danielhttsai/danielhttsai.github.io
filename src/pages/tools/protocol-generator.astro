@@ -7,36 +7,62 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 // carries the methodological detail underneath it. Nothing is hidden — the
 // layering is by reading order and weight, so a beginner can stop after the
 // question and an expert can skip straight to the grid.
+//
+// Every question has more than one answer, so a route must name the answer it
+// belongs to. A bare list of designs under a two-answer question is a positive
+// claim with its condition stripped off: it reads as true whichever way the
+// reader answered, and for three of these six questions it was then false for
+// half of them. `routes` therefore carries `{ if, to }`, and a branch that
+// leads nowhere says so in `note` rather than being left off the page.
 const questions = [
   {
     q: "Do you have an active comparator — another drug, not 'nobody'?",
     a: "That means a drug used for the same indication, at the same point in the treatment pathway, with no a-priori link to your outcome. If one exists, a cohort design is available and is usually the better choice: people who get drug A and people who get drug B are far more alike than people who get a drug and people who get nothing, so confounding by indication is much smaller to begin with. If no such comparator exists, you are pushed towards a self-controlled or calendar-time design.",
-    to: ["ACNU", "CCW", "ST"],
+    routes: [
+      { if: "If yes", to: ["ACNU", "CCW", "ST"] },
+      { if: "If no", to: ["SCCS", "CCO", "ITS", "TIT"] },
+    ],
   },
   {
     q: "Can you tell the two strategies apart on day one?",
     a: "If your strategies are 'start within 90 days', 'stay on treatment', or 'treat to target', then on day one nobody has yet declared which arm they are in. Sorting patients by what they later did credits one arm with follow-up during which they could not yet have had the event — immortal time — and that alone can manufacture a protective effect. Cloning every patient into both strategies, or emulating a fresh trial at each eligible date, is what prevents it.",
-    to: ["CCW", "ST"],
+    routes: [
+      { if: "If yes — each arm is declared at time zero", to: ["ACNU"] },
+      { if: "If no — they only diverge later", to: ["CCW", "ST"] },
+    ],
   },
   {
     q: "Is the exposure short-lived and the outcome sudden?",
     a: "A transient exposure plus an acute, datable onset is what makes a self-controlled design work: exposed and unexposed time both exist within the same person, so the comparison can be made inside them. Choose SCCS if you can lay out each case's whole observation period as exposed and unexposed person-time; choose case-crossover if you can only look back a short way from the event.",
-    to: ["SCCS", "CCO"],
+    routes: [
+      { if: "If yes, and you can lay out the whole observation period", to: ["SCCS"] },
+      { if: "If yes, but you can only look back a short way", to: ["CCO"] },
+      { if: "If no", to: [], note: "no self-controlled design applies — questions 1, 5 and 6 are the ones that route you." },
+    ],
   },
   {
     q: "Is the confounding you are worried about fixed, or does it change over time?",
     a: "Genetics, lifelong habits, stable frailty — self-controlled designs remove all of these by construction, and trend-in-trend removes them through the trend contrast, in both cases without your ever having to measure them. That is a genuinely strong property. It does not extend to time-varying confounding: ageing, season, worsening disease and calendar trends in prescribing all survive, and must still be modelled explicitly.",
-    to: ["SCCS", "CCO", "TIT"],
+    routes: [
+      { if: "If it is fixed", to: ["SCCS", "CCO", "TIT"] },
+      { if: "If it changes over time", to: ["ACNU", "CCW", "ST"], note: "and you must have measured it — none of these removes a time-varying confounder you did not record." },
+    ],
   },
   {
     q: "Was there a date — or a gradual change over the years?",
     a: "A policy, reimbursement or label change with a clear start date makes interrupted time series available: the outcome's own pre-intervention trend, extrapolated forward, becomes the counterfactual. If uptake was gradual rather than a step, there is no date to interrupt at, and trend-in-trend uses the gradient of uptake instead.",
-    to: ["ITS", "TIT"],
+    routes: [
+      { if: "If there was a date", to: ["ITS"] },
+      { if: "If uptake was gradual", to: ["TIT"] },
+    ],
   },
   {
     q: "Is the outcome rare — or are you not really comparing anything?",
-    a: "For a rare outcome, following an entire cohort spends most of its effort on people who never have the event; sampling controls from the source population instead is far more efficient for the same precision. And if what you want is a rate, a trend or a utilisation pattern rather than an effect, that is a descriptive analysis — legitimate and often the most useful output, provided it is not written up as though it were causal.",
-    to: ["CC", "DA"],
+    a: "These are two separate questions that happen to point the same way. For a rare outcome, following an entire cohort spends most of its effort on people who never have the event; sampling controls from the source population instead is far more efficient for the same precision. And if what you want is a rate, a trend or a utilisation pattern rather than an effect, that is a descriptive analysis — legitimate and often the most useful output, provided it is not written up as though it were causal.",
+    routes: [
+      { if: "If the outcome is rare", to: ["CC"], note: "though a rare outcome with a good active comparator is often still a cohort study, with case-control sampling inside it for efficiency." },
+      { if: "If you are not comparing treatments", to: ["DA"] },
+    ],
   },
 ];
 
@@ -202,8 +228,24 @@ const byFamily = families.map((f) => ({
   items: designs.filter((d) => d.family === f.id),
 }));
 
+// One map, derived from the cards themselves, so a chip can never name a design
+// the page does not define — the failure this codebase keeps finding is a
+// hand-kept lookup drifting away from the list it was copied from. Build-time,
+// so a typo fails `astro build` rather than shipping a chip that scrolls nowhere.
+const titleOf = Object.fromEntries(designs.map((d) => [d.short, d.title]));
+for (const q of questions) {
+  for (const r of q.routes) {
+    for (const s of r.to) {
+      if (!titleOf[s]) throw new Error(`protocol-generator: route "${r.if}" of "${q.q}" names "${s}", which is not one of the ${designs.length} designs.`);
+    }
+  }
+}
+
 const studioShorts = designs.filter((d) => d.studio).map((d) => d.short);
-const studioDesigns = studioShorts.slice(0, -1).join(", ") + " and " + studioShorts[studioShorts.length - 1];
+const studioDesigns =
+  studioShorts.length > 1
+    ? studioShorts.slice(0, -1).join(", ") + " and " + studioShorts[studioShorts.length - 1]
+    : studioShorts[0] ?? "no designs yet";
 ---
 
 <BaseLayout
@@ -236,7 +278,7 @@ const studioDesigns = studioShorts.slice(0, -1).join(", ") + " and " + studioSho
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 space-y-12">
     <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools`}>← All RWE tools</a>
 
-    <div id="choosing" class="scroll-mt-6">
+    <div id="choosing" class="scroll-mt-24">
       <h2 class="text-2xl font-bold text-slate-900">Which design does my question need?</h2>
 
       <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6">
@@ -247,8 +289,9 @@ const studioDesigns = studioShorts.slice(0, -1).join(", ") + " and " + studioSho
           statistical ones — people already taking the drug get counted as new starters, follow-up during which an
           event could not yet have been recorded gets credited to one arm, or two groups turn out to differ by how
           sick they were rather than by the drug. Each design below arranges the data so that one particular error
-          cannot happen, and pays for it with an assumption you then have to defend. The six questions narrow nine
-          designs down to one or two.
+          cannot happen, and pays for it with an assumption you then have to defend. The six questions below narrow
+          the nine designs to the few worth considering — often more than one, and the questions can point different
+          ways, which is a real finding about your question rather than a fault in theirs.
         </p>
       </div>
 
@@ -265,13 +308,18 @@ const studioDesigns = studioShorts.slice(0, -1).join(", ") + " and " + studioSho
               <div class="min-w-0 flex-1">
                 <p class="font-semibold text-slate-900">{q.q}</p>
                 <p class="mt-1.5 text-sm text-slate-600 leading-relaxed">{q.a}</p>
-                <p class="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span class="text-[11px] uppercase tracking-widest text-slate-400 font-semibold mr-1">Points to</span>
-                  {q.to.map((s) => (
-                    <a href={`#${s}`}
-                       class="inline-block rounded-full border border-brand-200 bg-brand-50 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-brand-700 hover:bg-brand-100 transition">{s}</a>
+                <div class="mt-3 space-y-1.5">
+                  {q.routes.map((r) => (
+                    <p class="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+                      <span class="text-[11px] font-semibold text-slate-500">{r.if} →</span>
+                      {r.to.map((s) => (
+                        <a href={`#${s}`} title={titleOf[s]} aria-label={titleOf[s]}
+                           class="inline-block rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-bold tracking-wide text-brand-700 hover:bg-brand-100 transition">{s}</a>
+                      ))}
+                      {r.note && <span class="text-[11px] text-slate-500 italic leading-relaxed">{r.note}</span>}
+                    </p>
                   ))}
-                </p>
+                </div>
               </div>
             </div>
           </li>
@@ -290,7 +338,7 @@ const studioDesigns = studioShorts.slice(0, -1).join(", ") + " and " + studioSho
       </p>
     </div>
 
-    <div id="designs" class="scroll-mt-6 space-y-12">
+    <div id="designs" class="scroll-mt-24 space-y-12">
       {byFamily.map((f) => (
         <div>
           <h2 class="text-2xl font-bold text-slate-900">{f.name}</h2>
@@ -300,7 +348,7 @@ const studioDesigns = studioShorts.slice(0, -1).join(", ") + " and " + studioSho
           <div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {f.items.map((d) => (
               <div id={d.short}
-                   class="scroll-mt-6 flex flex-col border border-slate-200 rounded-2xl p-6 bg-white hover:shadow-md hover:border-brand-400 transition">
+                   class="scroll-mt-24 flex flex-col border border-slate-200 rounded-2xl p-6 bg-white hover:shadow-md hover:border-brand-400 transition">
                 <div class="flex items-center justify-between gap-2">
                   <p class="text-[10px] uppercase tracking-[0.2em] text-brand-700 font-bold">{d.short}</p>
                   {d.studio && (
