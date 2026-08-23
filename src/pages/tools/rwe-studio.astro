@@ -1489,11 +1489,17 @@ const DESIGNS = [
           // Across the same three runs the largest |SMD| went 0.178 -> 0.903 -> 1.424
           // against a crude 2.183: the one configuration whose weights did the job was
           // the one being refused. Over 264 simulated cohorts whose untruncated weights
-          // failed the stability rule, NOT ONE had a truncation that both passed it and
-          // left every |SMD| under 0.1 — so the "rescue" the design comment left room
-          // for does not appear to exist, and truncation is no longer allowed to move
-          // this verdict at all. It still changes the estimate; it no longer changes
-          // whether the estimate is released.
+          // failed the pooled stability rule, not one had a truncation that both passed
+          // it and left every |SMD| under 0.1. That search was NOT exhaustive and a
+          // counter-example has since turned up: on the no-overlap demo restricted to
+          // common support, truncating at the 1/99 percentile moves the largest |SMD|
+          // from 0.566 to 0.080. It is still refused, and rightly — the comparator arm
+          // it rests on is worth 14 effective patients of 250, one of them weighted
+          // 165x, and that cell returns 0.72 (0.52-1.01) where the truth is 1.00. Which
+          // is the point: a truncated weight profile that looks balanced is not evidence
+          // that the cohort carried the information. So truncation is not allowed to
+          // move this verdict at all. It still changes the estimate; it no longer
+          // changes whether the estimate is released.
           //
           // ── Which weight vector the rule is read on ──
           // Stabilising multiplies each ARM's weights by a constant, and Kish's
