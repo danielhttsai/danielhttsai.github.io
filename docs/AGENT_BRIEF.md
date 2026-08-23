@@ -3494,6 +3494,80 @@ never inferred.
   Recorded because it is the counter-example to the run's own instinct: **a
   reviewer's suspicion is a lead, and leads lose about as often as they win.**
 
+#### Round two: the reviewer was pointed at this run's own commits
+
+**Six for six.** A third reviewer was given only this run's diff and told to
+break it, and every one of its six findings was damage this run had done — the
+sharpest one contradicting the commit message directly. **It is now 6/6 across
+six runs. Treat this as a required step, not an optional one.**
+
+- ~~**The drag handle was the fifth consumer, and the reader never reached
+  it.**~~ The commit opened by claiming "ONE reader for both counts, because
+  four surfaces consume them" and named `1e3` as the motivating case — while
+  leaving `parseInt(form.elements.nperiods.value) || 10` in the drag handler.
+  With `1e3` in the box (prose and caption both reading 1000, figure showing its
+  24-period clamp) one nudge set the field to **4**. With the box blank — the
+  state the diff exists to make loud — a nudge produced **9**, the removed
+  default of 10 handed back through the drag path. **When you write "one reader
+  now", grep the whole file for the old expression before you believe it.**
+- ~~**The substitution record was trusted on the way back in.**~~ Its `used`
+  value is assigned to `form.elements[x.name]` and nothing checked the name
+  belonged to a `<select>`, so a record naming a text input overwrote that field
+  and the autosave destroyed the user's value a second later — the exact damage
+  the mechanism prevents, generalised to every field, with a nonsense blocker
+  about a free-text box printed alongside. Reachable only by hand-written
+  localStorage (`?seed=` is closed — the seeded branch never reads the reserved
+  key), so it is hardening rather than a live attack. Note the second-order bug
+  in the first fix: capping the array **before** the validity filter let junk
+  entries at the front push a legitimate record off the end.
+- ~~**Markdown markup in a string that feeds the Word file.**~~ The new
+  study-size paragraph was written with backticks around `ttpower()` etc, but
+  `pcOf()` feeds **both** exports, so three backtick pairs printed as literal
+  characters in the `.docx`. The ProtocolCommon paragraph it replaced contained
+  no markup. **Anything set in `pcOf()` is plain text; only `buildMarkdown` may
+  carry Markdown.**
+- ~~**`numText` printed exponential notation.**~~ `Number.isInteger(1e21)` is
+  true and `String(1e21)` is `"1e+21"`, so ≥2^53 came back out as
+  "**1e+21** periods" — the exact notation the reader was built to keep out of
+  the protocol. `Number.isSafeInteger` is the right guard and also guarantees
+  no exponent in the output.
+- ~~**`-0`**~~ slipped past `v < 0` and was reported as "zero periods" rather
+  than as negative.
+- ~~**Grammar in text that now travels.**~~ "in every 6 months periods", "is 1
+  periods", "Only 1 calendar periods", "1 CPE strata", double parentheses from
+  wrapping an already-parenthesised refusal, and an ellipsis `sent()` did not
+  treat as terminal punctuation so it appended a fifth dot. **Once check
+  messages travel into a document, their grammar is the document's grammar.**
+
+Also worth recording: **the reviewer independently re-verified every factual
+claim the diff introduced** — `ttpower`/`ttdetect` exist with the argument list
+the paragraph describes, Ertefaie 2018's finding is stated in the right
+direction, the "not identifiable **or weakly identified**" rewording matches the
+package documentation, and the bootstrap-coverage caveat is accurate. It
+attacked Markdown injection through `?seed=` with newlines and fenced blocks and
+**could not forge structure**: `<input>` value sanitisation drops CR/LF before
+`V()` sees them, and `oneLine`/`clip` flatten whatever survives.
+
+#### A harness note that cost this run twenty minutes
+
+Playwright's `mouse.move`/`down`/`up` **silently fails to drive this page's drag
+handle** — the handle sits ~3000 px down the page and the first synthetic drag
+on a fresh page never registers, even for a plain valid value, so a naive test
+reports "no change" and looks like a product bug. Dispatch real `PointerEvent`s
+instead, with an explicit `pointerId`, from inside `page.evaluate`:
+
+```js
+const h = document.querySelector('.tit-handle'); const r = h.getBoundingClientRect();
+const mk = (t, x) => new PointerEvent(t, { pointerId: 1, pointerType: 'mouse', bubbles: true, clientX: x, clientY: r.y + r.height/2 });
+h.dispatchEvent(mk('pointerdown', r.x + r.width/2));
+document.dispatchEvent(mk('pointermove', r.x + r.width/2 - 100));
+document.dispatchEvent(mk('pointerup',   r.x + r.width/2 - 100));
+```
+
+That exercises the real handler and is how the drag fix above was confirmed.
+The eleventh run's reviewer and this run's applied analyst both reported the
+drag as "works but I could not measure it" — this is why.
+
 #### Open, examined this run, deliberately left
 
 - **The homogeneity assumption** (above). Needs Ji 2017 §Methods. Also absent:
@@ -3522,10 +3596,10 @@ never inferred.
   paper's condition. Left as a defensible simplification for a chooser card;
   the builder states it precisely. Only the CPE definition was wrong enough to
   change.
-- **The drag handle's px-per-period accuracy is unverified.** The handle sits
-  ~2800-4400 px down the page and Playwright clamps mouse coordinates to the
-  viewport, so displacement could not be measured. Scroll the diagram into view
-  and assert against `pxPer = (plotR - plotL) / (np - 1)`.
+- **The drag handle's px-per-period accuracy is still unverified**, though the
+  handle is now confirmed to work and to start from the drawn count (see the
+  harness note above for how to drive it). Nobody has checked that one period of
+  drag equals `pxPer = (plotR - plotL) / (np - 1)` pixels.
 - **Ertefaie 2018's PMID (29337845) was never observed in a snippet** — every
   other field of all four references was. Unverified, not wrong.
 - **`impliedPeriods` deliberately checks only the unambiguous case** (both ends
