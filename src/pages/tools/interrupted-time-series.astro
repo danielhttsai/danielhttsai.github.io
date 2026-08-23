@@ -486,7 +486,37 @@ const SENSITIVITY = [
         + (s.controlled ? " With a control series, power depends further on how closely the two series track each other before the interruption." : "")
         + " Power is therefore established by simulation from a pre-intervention series of the same length and variability, at the level and slope changes considered clinically important, rather than from an event-count formula (Zhang 2011 for the segmented linear case; Liu 2020 for count outcomes). Feasibility is confirmed before the analysis is executed: that the outcome"
         + (s.model === "poisson" ? " and its denominator" : "") + " can be aggregated into every period of the window, and that no period is missing — a gap closed up rather than left as a gap turns a per-period coefficient into a per-observed-row coefficient.",
-      plannedOutputs: ["Observed series with the fitted pre/post segments and the extrapolated counterfactual (the core ITS figure).", "Level-change and slope-change estimates with 95% CIs."],
+      // All three shared bullets go, for the same reason the studySize
+      // paragraph above exists: they are written for a person-level cohort and
+      // this design has none. The unit of analysis is a calendar period. There
+      // is no index date — section 3 of this protocol says so in as many words
+      // ("this design is not anchored to a person-level day 0") — so a
+      // "source population → analytic cohort" attrition diagram cannot be
+      // drawn, and "baseline characteristics of a period" is not a defined
+      // object. The results bullet is worse than redundant: it commissions
+      // "THE effect estimate", singular, in a design whose own section 2 says
+      // the level change and the slope change answer different questions, can
+      // point in opposite directions, and that reporting one of the two
+      // describes the study wrongly. What replaces them is what an ITS
+      // actually has to show, and both replacements are structural claims
+      // about the design rather than borrowed reporting convention.
+      skipOutputs: ["flow", "table1", "results"],
+      // Conditional on s.controlled, because everything else in this pcOf
+      // already is: with a control series the primary estimate is the
+      // DIFFERENCE in the level and slope changes (see `analysis` above), and
+      // this list used to commission the single-series coefficients and a
+      // one-series figure regardless — a protocol whose abstract and whose
+      // outputs section named different primary quantities.
+      plannedOutputs: [
+        "Observed series with the fitted pre/post segments and the extrapolated counterfactual"
+          + (s.controlled ? ", with the control series and its own fitted segments on the same axes" : "")
+          + " (the core ITS figure).",
+        s.controlled
+          ? "Level-change and slope-change estimates with 95% CIs for each series, and the difference in each between the intervention and control series — the primary estimate."
+          : "Level-change and slope-change estimates with 95% CIs, reported together: neither one on its own describes the interruption.",
+        "Per-period table of the numerator count and the denominator used for each point in the series, including the periods removed by the phase-in window. A step in the denominator at the interruption produces a level change with no change in anything clinical, and this table is the only place it would show.",
+        "Composition of the population contributing to each period, on the same time axis as the outcome. An ITS is confounded by whoever arrived or left when the intervention did, and that is visible as drift across the series rather than as a difference between two blocks.",
+      ],
     });
 
     // ── Custom ITS diagram: pre/post fitted segments, interruption line, counterfactual ──
