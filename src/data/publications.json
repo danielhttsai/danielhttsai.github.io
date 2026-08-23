@@ -1,6 +1,17 @@
 [
   {
     "year": "2026",
+    "doi": "10.1007/s00210-026-05793-w",
+    "citation": "Lee WJA, Tsai DHT, Lai ECC. Real-world safety of aflibercept 8 mg in neovascular age-related macular degeneration. Naunyn-Schmiedeberg's Archives of Pharmacology. 2026 Aug 11.",
+    "isOA": false,
+    "oaUrl": "",
+    "pmid": "42576020",
+    "pmcid": "",
+    "ris": "TY  - JOUR\r\nTI  - Real-world safety of aflibercept 8 mg in neovascular age-related macular degeneration\r\nAU  - Lee, Wan-Ju Annabelle\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - Naunyn-Schmiedeberg's Archives of Pharmacology\r\nT2  - Naunyn-Schmiedeberg's Archives of Pharmacology\r\nPY  - 2026\r\nDO  - 10.1007/s00210-026-05793-w\r\nUR  - https://doi.org/10.1007/s00210-026-05793-w\r\nAN  - 42576020\r\nER  - \r\n",
+    "date": 20260811
+  },
+  {
+    "year": "2026",
     "doi": "10.1192/bjp.2026.10700",
     "citation": "Tsai DHT, Yang ASH, Wong ZX, Chuang ATM, Cheng MCY, Shen CY, Shao SC, Lai ECC. Methodological considerations of suicide risk following antipsychotic therapy in treatment-resistant depression. British Journal of Psychiatry. 2026 Jun 25:1.",
     "isOA": false,
