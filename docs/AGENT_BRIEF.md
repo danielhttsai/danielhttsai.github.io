@@ -7643,3 +7643,9 @@ The next run on this file should start here. Every item below has a reproduction
 - **Not verified: the `.docx` export.** `unpkg.com` is blocked, so the Word claims here
   are from reading `buildReportDocx`, not from a generated file. Still nobody has opened
   one in Microsoft Word.
+
+<!-- CLAIM 2026-08-23 (twenty-seventh run): IN PROGRESS — RWE Studio's weight-stability
+     refusal gate: items 1, 2 and 3 of the twenty-sixth run's ranked list (truncation
+     defeats the gate; pooled Kish ESS is blind to a nearly-empty arm under the shipped
+     stabilised default; smrbad applies a pooled threshold to weights that are 1 by
+     construction in one arm). If you are a concurrent run, pick a different gap. -->
