@@ -4231,3 +4231,253 @@ render the strings and read them; do not read the diff.**
   not derived from the run record.
 - **`PC.mountAmendments` is still never called in seven of nine builders.**
   Unchanged since the third run.
+
+### Found 2026-08-23 by a seventeenth run — RWE Studio's SCCS and case-crossover
+
+**Read the first item below before you plan anything.** This run collided with
+another one and roughly half its work was thrown away.
+
+#### THE PROCESS FINDING: two runs took the same target at the same time
+
+This run started from `521e7e9`, read the brief, saw RWE Studio last worked 12
+runs earlier and its SCCS / case-crossover paths never reviewed, and took them.
+**So did another run, concurrently.** While this one was verifying, `36441e4`
+and `6f6f32b` landed on `main` doing substantially the same job: `conv` flag on
+`sccsfit`, "Not estimable" refusals, zero-event people counted separately,
+hazard-windows-per-case, and its own assumption notes ("What this tool does not
+fit" / "What this tool cannot check").
+
+The local commit was rebased away and re-authored as **only what the other run
+did not cover**. Nothing of theirs was rewritten or reverted.
+
+**If these runs fire on a schedule, they are not mutually exclusive, and two
+concurrent runs will pick the same rotation gap, because the brief is
+deterministic about what the gap is.** Mitigations for whoever cares: fetch
+`origin/main` *immediately before choosing a target*, not just before pushing,
+and re-check it after the reviewers report; or push a cheap claim marker first.
+This run lost maybe 40% of its output to the collision.
+
+#### Environment: unchanged, plus one correction to a technique
+
+- Everything the fourth and fifth runs recorded still holds: R 4.3.3 +
+  `survival` installs in ~90s, WebR's CDN is 403 so drive `buildMaster()` /
+  `analysisCSV()` / `buildScript()` from `page.evaluate` and run the R with
+  `Rscript`, `npm i --no-package-lock` for deps, `git push origin HEAD:main`
+  because the session starts detached, Crossref/PubMed/live site all blocked.
+- **The clone is still shallow (50 commits) and `git log -- <path>` still
+  lies.** The brief remains the authority on coverage.
+- **A correction worth having: do not test visibility with
+  `classList.contains("hidden")`.** This run nearly filed a false finding that
+  the export's `Design:` line could disagree with its estimates. It cannot —
+  the design radio clears everything at `:2564`. The probe read the class on
+  `#anaresults`, which is `false`, because the `hidden` class sits on the
+  **parent** `#anacard`. Playwright's `locator.isVisible()` reports it
+  correctly. **Check visibility, never a class list, in a file that hides by
+  ancestor.**
+
+#### Checked and clean — do not re-derive
+
+- **Both estimators are algebraically correct.** Re-implemented from scratch
+  rather than read. SCCS `sccsfit` against an independently written multinomial
+  conditional MLE and a fixed-effect Poisson: 2.991 / 2.991141 / 2.991175, SEs
+  identical to five figures. Case-crossover `clogit` against a hand-written 1:M
+  conditional likelihood: 2.551750 / 2.551837. **Nobody should touch that
+  arithmetic.** (`scratchpad/indep_sccs.R`, `indep_cco.R`; a reviewer got the
+  same to ten significant figures independently.)
+- **The hard-coded `1.96` is CORRECT for both designs, and the fifth run's ITS
+  finding does not transfer.** The conditional Poisson and both `glm` contrasts
+  have known dispersion, so R itself uses `qnorm`; `clogit`'s interval comes
+  from `summary(fit)$conf.int` and is not hard-coded at all. Simulated under the
+  null at 10/15/20/30/50/100/300 cases: the Wald interval **over**-covers in
+  small samples (rejection 2.3-4.3% against a nominal 5%). One caveat to carry:
+  over-coverage under the null does not certify the interval away from it.
+- **`buildCco`'s arithmetic comment is true.** `q = (OR*p)/(1-p+OR*p)` gives a
+  conditional OR of exactly 2.5000 at all three usage tiers.
+- **Every number quoted in `SCCS_STORY` and `CCO_STORY` is what the tool
+  prints**, and the tier arithmetic ("about 28x") checks out.
+- **A pipe in an ID or a data value cannot reach a pipe-delimited output line**
+  in these two designs — the scripts print only counts, and `analysisCSV`
+  renames every column to its role key. Safe, but by accident, not construction.
+- **`invalidateMaster()` was attacked and held.** No re-entrancy (there is not a
+  single `dispatchEvent` in the file), inert during demo load / `ingest` /
+  `renderMap` / design switching because of its early return, and ACNU and ITS
+  both still work. Changing `its_cut` after a build deliberately does *not*
+  invalidate — `itsOpts()` is read live at `buildScript` time.
+- **No new guard refuses legitimate data.** Executed against recurrent events
+  (8 per case), a single case, two cases, IDs with spaces and unicode
+  (`"李 明 #0"`, `"O'Brien, P #2"`), leading-zero IDs, fractional-year
+  person-time, counts x100000, 1:1 and 2:3 matching, 500 cases with two hazard
+  windows each.
+
+#### Fixed this run (only the half the other run did not cover)
+
+All executed in Chromium against a local build with real R, before and after.
+Both demos still reproduce their advertised numbers to the digit.
+
+- ~~**The master file was a snapshot nothing invalidated.**~~ `buildMaster`
+  bakes the mapping, the cleaning ticks and — through `toBin` — the "which value
+  means yes" vocabulary into `MASTER`, and `runanalysis` rebuilds only when
+  `MASTER` is null. The vocabulary lives in a *different card* from the Build
+  button, so flipping which value of a flag means yes after building kept
+  shipping the old encoding: the case-crossover reported **2.55 where the answer
+  just asked for was 0.39** — a protective drug reported as harmful, across the
+  null, with nothing on screen different between the two states. Every cleaning
+  tick had the same hole. `invalidateMaster()` now also hides `#expcard`,
+  because every download button falls back to rebuilding from a null `MASTER`
+  and would have shipped an R script describing a cleaning step alongside an
+  empty data file.
+- ~~**`read.csv` type-guessed an all-numeric case ID to a number.**~~ Leading
+  zeros dropped, low-order digits lost past 2^53, distinct patients merged into
+  one stratum. It does not add noise — it slides the self-controlled estimate
+  monotonically into the confounded pooled estimate printed on the line below:
+  **363 strata 2.991, 182: 3.300, 91: 3.355, one: 3.461, against a pooled row of
+  3.46.** At full collapse the design's own contrast row IS the headline.
+  `colClasses=c(ID='character')` on both designs; verified that leading-zero IDs
+  now give 2.99 with 363 cases where they previously gave 3.30 with 182.
+- ~~**The numeric roles had no pre-run guard at all.**~~ `binTrouble` has policed
+  the 0/1 roles since the fourth run; `INTERVAL` and `EVENTS` went to R
+  unchecked, and `chknum` only refuses a column with NO numeric values. The
+  stratum skip inside `sccsfit` tests each case's **total** weight, so a few
+  negative rows outweighed by positive ones never trigger it: **five negative
+  intervals in 907 rows returned 2.831 (2.39-3.35) against a truth of 3.0** —
+  fully formed, plausible, flagged by nothing. `numTrouble()` refuses on screen,
+  by column name, with examples, before the master file can be built; R
+  re-checks the same conditions.
+- ~~**Two roles could resolve to one column**~~ — answered with a green tick, and
+  the case-crossover then printed an odds ratio of 2,615,842,843.
+- ~~**`LAST` was assigned only on success**~~, so after a failed run the screen
+  correctly hid its results while the download buttons stayed live and emitted
+  the previous run's estimates.
+- ~~**The design suggester recommended a case-crossover on the outcome
+  alone.**~~ Ticking only "outcome is acute" set the radio to `cco`, whose
+  defining premise is a *transient* exposure — the box the user had just
+  declined — and the `why` string named only the outcome, so the condition that
+  made the claim false was exactly what was missing. Maclure 1991 (AJE
+  133(2):144-153, PMID 1985444) confirmed by search snippet this run; the brief
+  had recorded it as never separately searched.
+
+#### The two demonstrations that justified the assumption notes
+
+Both runs added assumption text; these are the executed reasons it was needed,
+and they are worth keeping because they quantify the damage:
+
+- An SCCS file with a rising baseline hazard and the drug started once the
+  patient deteriorates — **true IRR exactly 1.00** — reported **2.07
+  (1.84-2.33)** and closed by telling the reader to report that row. Control
+  condition (same rising hazard, exposure window moved to the middle of
+  follow-up) correctly returns 1.00 (0.87-1.16), which is the rigging check.
+  `SPEC.sccs` has `covariates: false` and four role slots, so there is no way to
+  enter an age or calendar term — the crudest possible SCCS is the only one
+  fittable.
+- A case-crossover file with rising uptake — **true OR exactly 1.00** —
+  reported **1.70 (1.47-1.97)**. The unmatched contrast row is *also* elevated
+  (1.52), which is arithmetically expected under a genuine trend, so a reader
+  using it as a sanity check is reassured rather than warned.
+- **The mechanism that hid the one warning that existed**: `CCO_STORY` contains
+  a correct paragraph about exposure-trend bias, but `#demonote` is its only
+  carrier and `ingest()` at `:871` hides it on **any** real upload. The single
+  warning in the tool was visible only to people running fabricated data.
+
+#### What the reviewers disagreed about, and who was right
+
+Two reviewers on disjoint briefs (statistics/prose vs adversarial input), then
+each sent at the other's list, then a third at this run's own diff.
+
+- **Six defects were found INDEPENDENTLY by both reviewers from non-overlapping
+  briefs**, and each reviewer's own top finding was invisible to the other's.
+  **Keep the disjoint split — that is four runs in a row.**
+- **The methodologist stopped a fix that would have broken valid data.** The
+  analyst wanted `stop()` when any stratum lacks exactly one hazard window. A
+  case-crossover legitimately has more than one under **recurrent events**, and
+  `clogit` handles a k:m stratum correctly — so that refusal would reject a
+  valid design. It is a `RESULT_NOTE` reporting the distribution instead.
+- **The methodologist conceded the analyst's worst string outranked its own**,
+  and the reasoning is the keeper: `1.00 (95% CI NA-NA)` is self-flagging and
+  cannot be copied into a paper; **`1.00 (95% CI 1.00-1.00)` is a point estimate
+  of exactly no effect with infinite precision — the one wrong output a reader
+  trusts MORE than a right one.**
+- **The analyst corrected the methodologist's mechanism.** The SCCS pooled row
+  is not "fitted on a different set of rows" — both fits get all of `d`; the
+  asymmetry is entirely `if(ni==0) next` inside `sccsfit`. And the *direction*
+  varies (one reviewer measured the contrast moving 3.46→4.02, the other
+  3.46→2.94), so state the defect, never the direction.
+- **The analyst scoped two of the methodologist's findings correctly**: they
+  fire only with "Drop rows missing a required mapped variable" **unticked**,
+  which ships checked.
+- **The analyst refuted its own finding**, which is worth recording: European
+  decimals do NOT bite the case-crossover, because that design has no numeric
+  role and `toBin("3,5")` → `NaN` → refused on screen. Immunity by poverty, not
+  by design — the same structural fact (no time column) is why exposure-trend
+  bias is undetectable there.
+- **A free detector nobody has built yet**: when the self-controlled and pooled
+  estimates coincide, the stratification has collapsed. It catches ID merging,
+  ID truncation and whole-cohort export at once. **Do not implement it naively —
+  a round-two reviewer showed it fires necessarily on a one-case file, where the
+  two estimators are mathematically identical, and on any small file with no
+  between-person confounding. Gate it on `ncase >= 3` at minimum.**
+
+#### Round two: the reviewer was pointed at this run's own diff
+
+**Nine for nine. It has never come back empty. Its sharpest finding was again a
+regression the diff itself introduced.**
+
+The suggester fix added a `cco` branch guarded by `ck("s_acute") && ck("s_transient")`
+— **the identical predicate to the `sccs` branch above it**, which therefore
+matched first. The new branch was dead code, so the "fix" did not restore the
+case-crossover to the recommender: it **removed the design from the recommender
+entirely** while adding a branch that looked like it restored it. All 16 tick
+combinations were probed and none yielded `cco`. Shipped fix: delete the dead
+branch, let acute-alone fall through with a message naming what is missing.
+**When you add a branch, prove it is reachable — probe every input combination.**
+
+Two more of its findings were fixed: `mapmsg` appended only `nt[0].fix` to the
+end of the whole list, so with two bad columns the reader saw the event-count
+remedy attached to the sentence about their person-time column and the
+person-time remedy never appeared; and `numTrouble` skipped blanks while R
+refuses them, so with the drop-missing box unticked the user got a green
+"Mapping complete ✓" and then a hard R stop at the end of the run — the exact
+outcome the guard exists to prevent.
+
+**And the orchestrator found a defect in its own prose by dumping the notes as
+RENDERED text and reading them cold** — two strings said "the count **above**",
+but `buildReport` emits notes *before* Table 1 (confirmed in Markdown, in the
+packed `.docx` XML, and on screen). That is the brief's own recorded species,
+committed while fixing it elsewhere. **The lesson is now four runs old: render
+the strings and read them; do not read the diff.**
+
+#### Deliberately not done, with reasons
+
+- **A `sp<10` guard on the SCCS pooled contrast row.** The case-crossover twin
+  already bounds its standard error (`su<10`); the SCCS pooled row checks only
+  `is.finite`. A quasi-separated Poisson stops at a large coefficient with an
+  enormous but finite SE, and the row **would** print
+  `3323303039256.25 (95% CI 0.00-Inf)` — executed directly against `glm`. It was
+  written, then **reverted**: in the shipped pipeline the whole pooled block sits
+  inside the branch that only runs when the headline is estimable, and the
+  pooled fit separates only when every event falls in one exposure category,
+  which makes the conditional fit separate too. **The branch is unreachable and
+  shipping it would have been unverifiable churn.** If anyone later makes the
+  pooled row print independently of the headline, this guard becomes necessary.
+- **Findings 2-7 and 11-13 of the round-two review were against this run's own
+  R rewrite, which was DISCARDED in favour of the other run's.** They may or may
+  not apply to what shipped and were not re-checked against it. Worth a pass:
+  the CCO unmatched row vanishing silently while its explanatory note still
+  prints; `Events per case, median` printed `%.0f` (rounds 1.5 to 2) while the
+  note tests `< 2` on the raw value, so the table can say 2 above a sentence
+  saying half the cases contribute one event; and "N of M case(s) carry the
+  estimate" printing in runs whose only estimate row says "not estimable".
+- **European decimals are still live for SCCS** (`Number("3,5".replace(/,/g,""))`
+  = 35 → IRR 3.58 against a truth of 3.0). `numTrouble` was the natural place to
+  catch it and copied the lossy parse instead. Inherited, not introduced, and
+  recorded by the fourth run too — but now there is a guard that should own it.
+- **None of the hard `stop()` refusals are exportable.** They land in `#routput`,
+  the black debug `<pre>`, and `LAST` is nulled, so the Markdown and `.docx` say
+  nothing. Consistent with the pre-existing `chk01`/`chknum` behaviour, so not a
+  regression — but a refusal the reader cannot forward is half a refusal.
+- **Neither demo can exercise its own counting bugs.** `buildSccs` drops every
+  zero-event person, so the case-count label is *accidentally* correct on the
+  demo; `buildCco` gives every case exactly one hazard window, so the
+  discordance count is *accidentally* equal to the truth. Every count on this
+  page was validated only against inputs constructed so that all of them happen
+  to be right — which is why these survived sixteen runs. A second demo per
+  design is a feature, so it is Daniel's call.
