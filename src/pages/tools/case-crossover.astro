@@ -910,7 +910,7 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       };
       const CHK_ICON = { stop: "⛔", warn: "⚠", info: "ℹ" };
       const checksMd = (G, s) => {
-        const notes = checksOf(G, s);
+        const notes = checksOf(G, s, true);
         if (!notes.length) return "_The builder's automatic checks on the window scheme, the design variant and the sensitivity list found nothing to raise against this draft. They are pattern checks over the fields on the form; they cannot tell you the design is right for your question._";
         return "**Checks the builder raises against this draft**\n\n" + notes.map((n) => "- " + CHK_ICON[n.lvl] + " **" + n.t + ".** " + n.d).join("\n");
       };
@@ -1197,12 +1197,28 @@ _Drafted with the AsPEN case-crossover builder (${today})._
       // dispensed medicines", so a protocol exported with bidirectional
       // referents selected carried section 7 naming them with no trace of the
       // objection. A check nobody outside the browser can see is not a check.
-      const checksOf = (G, s) => {
+      // forDoc, because this list goes to two audiences. On screen a blocker
+      // must say what to press; in the exported protocol there is nothing to
+      // press, and "Choose the option you want, or confirm the one it was left
+      // at" printed INSIDE a Word file reads as a defect in the document. Only
+      // the stale-select note has a screen-only tail; every other note here is
+      // already written to be true in both places. ITS, sequential-trial,
+      // trend-in-trend and SCCS make the same split.
+      const checksOf = (G, s, forDoc) => {
         const notes = [];
         // Named here because the value is gone by the time an export runs: an
         // unmatched select contributes no FormData entry at all.
         const SELECT_LABEL = { ccoVariant: "the case-crossover variant", nControls: "the number of control windows", metaMethod: "the meta-analysis method", arch: "the architecture" };
-        for (const st of staleSelects) notes.push({ lvl: "stop", dismiss: st.name, t: "A saved value was not one of the choices offered", d: 'This draft was restored with ' + (SELECT_LABEL[st.name] || st.name) + ' saved as "' + st.want + '", which this form no longer offers. It has been left at "' + st.label + '", and that is what the exported protocol says. Choose the option you want, or confirm the one it was left at.' });
+        // The empty string gets its own branch: no form ever offered "", so
+        // "which this form no longer offers" is not a true sentence about a
+        // blank — and a draft or link that left the control blank is the
+        // likeliest way this note fires at all.
+        for (const st of staleSelects) notes.push({ lvl: "stop", dismiss: st.name, t: "A saved value was not one of the choices offered",
+          d: 'This draft was restored with ' + (SELECT_LABEL[st.name] || st.name) + (String(st.want) === ""
+              ? ' carrying no value at all — the draft or link it came from left it blank.'
+              : ' saved as "' + st.want + '", which this form no longer offers.')
+            + ' It has been left at "' + st.label + '", and that is what the exported protocol says — a specification nobody chose.'
+            + (forDoc ? '' : ' Choose the option you want, or confirm the one it was left at.') });
         if (s.ccoVariant === "standard" || !s.ccoVariant) notes.push({ lvl: "warn", t: "No correction for exposure-time trend", d: "The standard (Maclure) variant compares a recent hazard window with older control windows, so any within-person drift in the probability of being on the drug is read as an effect. If the exposure is one whose use changes with worsening prognosis, choose a different case-crossover variant — time-stratified, or case-case-time-control — or state in the protocol why a trend is implausible here." });
         if (s.ccoVariant === "symmetric") notes.push({ lvl: "warn", t: "Bidirectional sampling assumes the event does not change later exposure", d: "Control windows drawn from after the event require exposure in that period to be unaffected by having had the event. For dispensed medicines that is usually false — an MI changes what is prescribed the next day. Bidirectional referents are standard for environmental exposures, not for drugs." });
         // The window calculator lays out one scheme: evenly spaced referent
@@ -1388,7 +1404,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
           "9": "Self-matched design removes fixed confounders. Exposure-time-trend bias addressed by the referent-window scheme" + (isCctc ? " and the case-case-time-control correction" : "") + "; further sensitivity analyses:\n" + bul(sens),
           "12": "Conditional logistic regression for the odds ratio, matching each case's hazard window to their referent window(s)" + (isCctc ? "; the control (future-case) crossover OR is divided out (CCTC)" : "") + ". Site-specific ORs pooled by " + metaTxt + " meta-analysis (report I², τ²). Subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
           "17": "Pre-specified subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
-          "19": "The case-crossover design controls time-invariant confounding but is susceptible to exposure-time-trend bias if exposure prevalence changes over time (mitigated by referent selection / the CCTC variant); it assumes transient exposure and abrupt outcome onset, and that hazard and referent windows are non-overlapping eligible person-time; outcome misclassification is possible. " + ESTIMAND_LIMIT + (() => { const n = checksOf(GG, s); return n.length ? " Checks the builder raises against the current draft, stated in full in the protocol's design-assumptions section: " + n.map((x) => CHK_ICON[x.lvl] + " " + x.t).join("; ") + "." : ""; })(),
+          "19": "The case-crossover design controls time-invariant confounding but is susceptible to exposure-time-trend bias if exposure prevalence changes over time (mitigated by referent selection / the CCTC variant); it assumes transient exposure and abrupt outcome onset, and that hazard and referent windows are non-overlapping eligible person-time; outcome misclassification is possible. " + ESTIMAND_LIMIT + (() => { const n = checksOf(GG, s, true); return n.length ? " Checks the builder raises against the current draft, stated in full in the protocol's design-assumptions section: " + n.map((x) => CHK_ICON[x.lvl] + " " + x.t).join("; ") + "." : ""; })(),
           "21": "Results generalise to the source populations of the contributing AsPEN databases: " + sitesPlain + ".",
         };
       };
@@ -1548,7 +1564,7 @@ _Drafted with the AsPEN case-crossover builder (${today})._
           children.push(p([text("Why it matters. ", { italics: true }), text(a.precise)]));
           children.push(p([text("What we do about it. ", { italics: true }), text(a.check + " [" + a.cite + "]")]));
         });
-        const chkNotes = checksOf(G, s);
+        const chkNotes = checksOf(G, s, true);
         if (chkNotes.length) {
           children.push(h2("Checks the builder raises against this draft"));
           chkNotes.forEach((n) => children.push(bullet(CHK_ICON[n.lvl] + " " + n.t + ". " + n.d)));
