@@ -20,14 +20,14 @@ const questions = [
     a: "That means a drug used for the same indication, at the same point in the treatment pathway, with no a-priori link to your outcome. If one exists, a cohort design is available and is usually the better choice: people who get drug A and people who get drug B are far more alike than people who get a drug and people who get nothing, so confounding by indication is much smaller to begin with. If no such comparator exists, you are pushed towards a self-controlled or calendar-time design.",
     routes: [
       { if: "If yes", to: ["ACNU", "CCW", "ST"] },
-      { if: "If no", to: ["SCCS", "CCO", "ITS", "TIT"] },
+      { if: "If no", to: ["SCCS", "CCO", "ITS", "TIT"], note: "and question 6 still applies — a rare outcome or a purely descriptive aim does not need a comparator either." },
     ],
   },
   {
     q: "Can you tell the two strategies apart on day one?",
     a: "If your strategies are 'start within 90 days', 'stay on treatment', or 'treat to target', then on day one nobody has yet declared which arm they are in. Sorting patients by what they later did credits one arm with follow-up during which they could not yet have had the event — immortal time — and that alone can manufacture a protective effect. Cloning every patient into both strategies, or emulating a fresh trial at each eligible date, is what prevents it.",
     routes: [
-      { if: "If yes — each arm is declared at time zero", to: ["ACNU"] },
+      { if: "If yes — each arm is declared at time zero", to: [], note: "this question does not narrow anything on its own: an ordinary new-user cohort is available, but only if question 1 found you a comparator." },
       { if: "If no — they only diverge later", to: ["CCW", "ST"] },
     ],
   },
@@ -37,7 +37,7 @@ const questions = [
     routes: [
       { if: "If yes, and you can lay out the whole observation period", to: ["SCCS"] },
       { if: "If yes, but you can only look back a short way", to: ["CCO"] },
-      { if: "If no", to: [], note: "no self-controlled design applies — questions 1, 5 and 6 are the ones that route you." },
+      { if: "If no", to: [], note: "no self-controlled design applies — the other questions are the ones that route you." },
     ],
   },
   {
@@ -45,7 +45,7 @@ const questions = [
     a: "Genetics, lifelong habits, stable frailty — self-controlled designs remove all of these by construction, and trend-in-trend removes them through the trend contrast, in both cases without your ever having to measure them. That is a genuinely strong property. It does not extend to time-varying confounding: ageing, season, worsening disease and calendar trends in prescribing all survive, and must still be modelled explicitly.",
     routes: [
       { if: "If it is fixed", to: ["SCCS", "CCO", "TIT"] },
-      { if: "If it changes over time", to: ["ACNU", "CCW", "ST"], note: "and you must have measured it — none of these removes a time-varying confounder you did not record." },
+      { if: "If it changes over time", to: ["ACNU", "CCW", "ST"], note: "and you must have measured it — none of these removes a time-varying confounder you did not record. Where the confounder is itself affected by earlier treatment, a baseline propensity score is not enough and a g-method is needed." },
     ],
   },
   {
@@ -121,8 +121,8 @@ const designs = [
     title: "Clone-Censor-Weight",
     plain: "The strategies differ only in what happens after treatment starts, so everyone is counted in both — then dropped when they stop matching.",
     when: "Use when the strategies cannot be distinguished at time zero: grace periods ('start within X days'), sustained use, or treat-to-target. Each patient is cloned into every strategy at time zero, censored when their data stop matching the assigned strategy, and reweighted by inverse-probability-of-censoring weights to recover the per-protocol effect.",
-    assumes: "Exchangeability, positivity and consistency — plus, because the artificial censoring is informative by design, no unmeasured predictors of deviation. During the grace period the arms contain the same people, so their hazards are equal by construction and proportional hazards is violated by design: Maringe et al. advise against reading a Cox hazard ratio causally here, and the interpretable contrast is an absolute one — a difference in survival at the end of follow-up, or in restricted mean survival time.",
-    fails: "The grace period is zero — the strategies are then already distinguishable at time zero, which is the situation cloning exists to avoid: every clone deviates immediately, no person-time is shared between the arms, and an active-comparator new-user cohort is the design you want instead. It also fails if the grace period swallows most of the follow-up, or if deviation is driven by something you never measured, in which case the weights cannot repair it.",
+    assumes: "Exchangeability, positivity and consistency — plus, because the artificial censoring is informative by design, no unmeasured predictors of deviation. It also requires you to give up the hazard ratio: during the grace period the arms contain the same people, so their hazards are equal by construction and proportional hazards is violated by design, and Maringe et al. advise reporting an absolute contrast — a difference in survival at the end of follow-up, or in restricted mean survival time — rather than reading a Cox hazard ratio causally.",
+    fails: "The grace period is zero — the strategies are then already distinguishable at time zero, which is the situation cloning exists to avoid: each patient's two clones split at once, no person-time is shared between the arms, and an active-comparator new-user cohort is the design you want instead. It also fails if the grace period swallows most of the follow-up, or if deviation is driven by something you never measured, in which case the weights cannot repair it.",
     example: "Statin vs no statin within 90 days of MI (90-day grace period)",
     cite: "Maringe C, Benitez Majano S, Exarchakou A, et al. Int J Epidemiol 2020;49:1719–1729.",
     doi: "10.1093/ije/dyaa057",
@@ -134,7 +134,7 @@ const designs = [
     title: "Sequential Trial Emulation",
     plain: "Run the same small trial again and again — once at every date a patient becomes eligible — then pool the results.",
     when: "Use when eligibility is time-varying and a single index date discards everyone who qualifies later. Patients who remain eligible can enter several nested trials, so no eligible person-time is wasted, and the prevalent-user problem is handled trial by trial.",
-    assumes: "Exchangeability, positivity and consistency within each nested trial — the last two assessed trial by trial, not only in the pooled data. Whether a patient can appear in more than one trial depends on which version you are running, and the two are different studies: if the control arm is those not yet treated, a patient enters a trial at every origin until they initiate, the trials are not independent samples, and the uncertainty must account for the re-use; if both arms initiate at the origin, each patient sits in one trial and it does not arise. That is an analysis requirement rather than an identifying assumption, and the builder will not guess which you mean.",
+    assumes: "Exchangeability, positivity and consistency within each nested trial — the last two assessed trial by trial, not only in the pooled data. Whether a patient can appear in more than one trial depends on which version you are running, and the two are different studies: if the control arm is those not yet treated, a patient enters a trial at every origin until they initiate, the trials are not independent samples, and the uncertainty must account for the re-use; if both arms initiate at the origin, each patient sits in one trial and it does not arise. The correction for re-use is an analysis requirement rather than an identifying assumption, and the builder will not guess which version you mean.",
     fails: "Eligibility does not actually vary over time, so every patient has one possible origin and the design collapses back to a single-origin new-user study; positivity fails within trial, because at some origins there are too few initiators for the propensity score to have support; or the confounders are themselves affected by earlier treatment, in which case a baseline propensity score fitted at each origin is not enough and a g-method is needed.",
     example: "Benzodiazepine vs no use in pregnancy, a trial at each gestational week",
     cite: "Hernán MA, Alonso A, Logan R, et al. Epidemiology 2008;19:766–779.",
@@ -148,7 +148,7 @@ const designs = [
     studio: true,
     plain: "Only people who had the event; compare their risk during exposed and unexposed stretches of their own lives.",
     when: "Use for transient exposures and acute outcomes, especially where cases are far easier to identify than the source population. Each case's observation period is split into exposed and unexposed person-time and the incidence-rate ratio is estimated within the person, so all time-invariant between-person confounding disappears.",
-    assumes: "The event does not alter the probability of subsequent exposure, and does not end observation; repeat events within a person are independent, which fails for clustered outcomes such as recurrent falls or repeat admissions for one episode and makes the intervals too narrow; and time-varying confounders such as age and season are modelled explicitly. A pre-exposure window is conventionally separated out and its incidence-rate ratio reported as a parameter in its own right — a raised one is a finding about confounding by indication, not a nuisance to be absorbed.",
+    assumes: "The event does not alter the probability of subsequent exposure, and does not end observation; repeat events within a person are independent, which fails for clustered outcomes such as recurrent falls or repeat admissions for one episode and makes the confidence intervals too narrow — restrict to the first event per person, or justify independence explicitly; and time-varying confounders such as age and season are modelled explicitly. A pre-exposure window is conventionally separated out and its incidence-rate ratio reported as a parameter in its own right — a raised one is a finding about confounding by indication, not a nuisance to be absorbed.",
     fails: "The outcome is fatal or otherwise censors follow-up; the event itself changes prescribing (event-dependent exposure — e.g. the drug is stopped after the event); or the exposure is chronic and continuous, leaving no unexposed person-time to contrast.",
     example: "Antipsychotic dispensing and risk of falls in older adults",
     cite: "Petersen I, Douglas I, Whitaker H. BMJ 2016;354:i4515.",
@@ -189,7 +189,7 @@ const designs = [
     studio: true,
     plain: "Something changed on a known date — did the outcome jump, or bend away from where it was already heading?",
     when: "Use for a population-level intervention or policy with a clear date. Segmented regression separates an immediate change in level from a change in slope, using the extrapolated pre-intervention trend as the counterfactual. A control series turns it into a controlled ITS.",
-    assumes: "The pre-intervention trend would have continued unchanged had the intervention not happened; there are enough points either side to estimate that trend (this tool asks for at least 8 before the interruption and prefers 12 — its own rule of thumb, not a threshold from the paper cited below); and seasonality and autocorrelation are handled rather than ignored.",
+    assumes: "The pre-intervention trend would have continued unchanged had the intervention not happened; there are enough points either side to estimate that trend (the ITS template asks for at least 8 on each side of the interruption, ideally 12 — a conventional minimum, not a threshold from the tutorial cited below); and seasonality and autocorrelation are handled rather than ignored.",
     fails: "A co-intervention or secular change coincides with the interruption — a control series differences that out. Too few pre-period points, or unmodelled seasonality, and the level and slope estimates are not trustworthy even when they look clean.",
     example: "Effect of a 2019 reimbursement policy on monthly SGLT2-inhibitor initiation rates",
     cite: "Lopez Bernal J, Cummins S, Gasparrini A. Int J Epidemiol 2017;46:348–355.",
@@ -290,14 +290,14 @@ const studioDesigns =
           event could not yet have been recorded gets credited to one arm, or two groups turn out to differ by how
           sick they were rather than by the drug. Each design below arranges the data so that one particular error
           cannot happen, and pays for it with an assumption you then have to defend. The six questions below narrow
-          the nine designs to the few worth considering — often more than one. When two of them point different ways,
-          that is a real feature of your research question rather than a defect in these six.
+          the nine designs to the few worth considering. They are <strong>not a decision tree</strong>: more than one
+          design is often defensible, and when two questions point different ways that is a real feature of your
+          research question rather than a defect in these six.
         </p>
       </div>
 
       <p class="mt-5 text-sm text-slate-600 max-w-3xl leading-relaxed">
-        These are not a decision tree. More than one design is often defensible, and a good protocol names the design
-        it did <em>not</em> choose and says why.
+        A good protocol names the design it did <em>not</em> choose, and says why.
       </p>
 
       <ol class="mt-5 space-y-3">
@@ -308,12 +308,12 @@ const studioDesigns =
               <div class="min-w-0 flex-1">
                 <p class="font-semibold text-slate-900">{q.q}</p>
                 <p class="mt-1.5 text-sm text-slate-600 leading-relaxed">{q.a}</p>
-                <div class="mt-3 space-y-1.5">
+                <div class="mt-3 space-y-3">
                   {q.routes.map((r) => (
                     <p class="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
                       <span class="text-[11px] font-semibold text-slate-500">{r.if} →</span>
                       {r.to.map((s) => (
-                        <a href={`#${s}`} title={titleOf[s]} aria-label={titleOf[s]}
+                        <a href={`#${s}`} title={titleOf[s]} aria-label={`${s} — ${titleOf[s]}`}
                            class="inline-block rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-bold tracking-wide text-brand-700 hover:bg-brand-100 transition">{s}</a>
                       ))}
                       {r.note && <span class="text-[11px] text-slate-500 italic leading-relaxed">{r.note}</span>}
@@ -332,7 +332,8 @@ const studioDesigns =
         does not make the two interchangeable: SCCS uses the whole observation period, so it is unusable if the event
         changes later exposure, while a case-crossover looking only backwards never samples post-event exposure and is
         untouched by it — the bidirectional referent offered as a sensitivity analysis gives that immunity up. What
-        breaks the case-crossover instead is a trend in exposure prevalence. The cohort designs handle time-varying
+        breaks the case-crossover is a trend in exposure prevalence, and chronic exposure or insidious onset breaks it
+        outright. The cohort designs handle time-varying
         confounding, but only for what you actually measured. Choose on the assumption you can defend, not on the
         estimate you would prefer — and pre-specify the analysis that would show you were wrong.
       </p>

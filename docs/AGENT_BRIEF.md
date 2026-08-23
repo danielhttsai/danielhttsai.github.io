@@ -3819,16 +3819,74 @@ All executed in Chromium against a local build, before and after.
 
 #### Round two: the reviewer was pointed at this run's own commits
 
-A third reviewer was launched against this run's diff, per the standing rule
-(6/6 across six runs). **It had not reported when this section was written and
-the run's time was up** — so unlike the previous six runs, this diff has NOT
-been through an independent adversarial pass. Treat the two commits above as
-reviewed by their authors only, and if you are the next run, **reading this
-diff adversarially is the cheapest high-value thing available to you.**
+**Seven for seven.** A third reviewer was given only this run's diff and told to
+break it, and it returned thirteen findings, of which the top three were
+executed damage this run had done. It is now 7/7 across seven runs. **This is a
+required step.** It reported late — after the brief's first draft had already
+recorded that it had not — so if yours is slow, wait for it.
 
-The orchestrator did attack its own diff and found three defects, all in prose
-it had itself introduced, all by **reading the rendered card text rather than
-the source diff**:
+**Its sharpest finding contradicted the commit message directly, for the third
+run running.** `bad7f3e`'s message opens by describing the drug-versus-nothing
+reader being routed to the ACNU card whose own *Breaks when* refutes the route.
+The diff fixed that on Q1 and **recreated it on Q2**: the new "If yes — each arm
+is declared at time zero → ACNU" branch, which the diff itself invented, catches
+the same reader one question later, because "take drug X" versus "take nothing"
+*is* distinguishable on day one. Q1's "If no" and Q2's "If yes" contradicted
+each other four inches apart. Q2's yes-branch is now a note saying the question
+does not narrow anything on its own. **When you add a branch to fix a misroute,
+walk your own worked example through every other question before you believe it.**
+
+Two more executed findings in the same diff:
+
+- **The `aria-label` added to make chips decodable broke WCAG 2.5.3 Label in
+  Name (Level A).** `aria-label="Self-Controlled Case Series"` on a link whose
+  visible text is `SCCS` *replaces* the accessible name, so a voice-control user
+  saying "click SCCS" matches nothing, and a screen-reader user never hears the
+  code they then have to recognise on the card. The `title` attribute alone
+  already gave the intended benefit. Now `aria-label={`${s} — ${titleOf[s]}`}`.
+  **An accessibility affordance added without checking the spec made the page
+  less accessible than before the diff.**
+- **The new Q3 no-branch note said "questions 1, 5 and 6 are the ones that route
+  you"** — Q2 and Q4 also route, and the note rendered directly above Q4. A
+  reader taking it literally skips the two questions that would send them to a
+  cohort design. This is the same species the commit set out to kill, committed
+  in the sentence written to kill it.
+
+Also fixed from its list: the Q4 time-varying note claimed measurement was
+sufficient, contradicting ST's and ACNU's own cards (only CCW's IPCW is a
+g-method) — the g-method clause is now there; the commit message claimed it had
+addressed the "not a decision tree" retraction's placement when it had only
+rewritten the *promise*, leaving the concession stated **twice** in two
+registers (now merged into the box); CCW's `assumes` held a known structural
+*violation* of proportional hazards rather than an assumption (reframed as a
+requirement); **"every clone deviates immediately" is false** — exactly one of
+each patient's two clones deviates, the other contributes full follow-up, and
+this run had copied the sentence verbatim from `clone-censor-weight.astro:501`,
+**so that builder line is wrong too and is still live**; Q1's "If no" was an
+enumerated claim silently omitting CC and DA; SCCS said "the intervals" where
+the builder says *confidence* intervals, on a card whose surrounding text uses
+"interval" to mean person-time, and condemned its own worked example
+(recurrent falls) without the builder's one-clause remedy; a dangling "That" in
+the ST card; and at 390px the 6px inter-route gap against a 4px wrap gap made a
+wrapped chip line read as a third, unlabelled route.
+
+**A citation correction this run got wrong and round two caught.** The ITS
+threshold was relabelled "this tool's own rule of thumb" on the strength of a
+reviewer finding no attribution — but **Penfold RB, Zhang F. Acad Pediatr
+2013;13(6 Suppl):S38-S44, doi:10.1016/j.acap.2013.08.002 is already in the ITS
+builder's own bibliography** (`interrupted-time-series.astro:436`), which is
+exactly the source the ≥ 8 traces to. The hub was telling the reader a number
+was homemade while the page it links to cites its source. It now says
+"a conventional minimum, not a threshold from the tutorial cited below" and no
+new citation was asserted. **The builder also warns at ≥ 8 on *both* sides; the
+hub's parenthetical said only "before the interruption" inside a clause opening
+"there are enough points either side".** Lesson: "unattributed" is a claim about
+the whole repo, and this repo is 3,800 lines of brief and 21,000 lines of tool —
+grep before you assert an absence.
+
+The orchestrator had separately attacked its own diff and found three defects,
+all in prose it had itself introduced, all by **reading the rendered card text
+rather than the source diff**:
 
 - An em-dash aside inserted into case-crossover's `assumes` **replaced the comma
   that separated the first list item**, so the list ran on: "...prevalence — ...
@@ -3842,3 +3900,25 @@ diff.** All three were invisible in the diff and obvious on the page. This is
 the same species as the fourteenth run's grammar findings, and it is now clear
 that any run editing these long prose strings should dump the rendered
 `when`/`assumes`/`fails` for every card it touched and read them cold.
+
+Round two also **verified the diff's own claims and confirmed most of them**,
+which is worth recording because it is the counterweight to the list above: the
+65px header measurement, `scroll-mt-24` landing every anchor 31px clear, the
+chip tap size, `titleOf` being genuinely one derived map, the build guard
+actually exiting 1 on a planted typo, no overflow at 390/1280, all nine designs
+reachable, the Maringe/PH addition being faithful to `clone-censor-weight.astro`,
+the SCCS independence assumption being genuinely the builder's fourth, and the
+bidirectional-referent point being genuinely in `case-crossover.astro`. It also
+independently confirmed via snippet that Lopez Bernal 2017 sets *no* fixed
+minimum, which is what made the Penfold & Zhang correction above possible.
+
+Two further gaps it named in the guard, left deliberately: it validates
+route → design exists, but **not** that `short` values are unique (a duplicate
+would silently collapse `titleOf` and duplicate an anchor id) and **not** that
+every design is reachable from some route. All nine are unique and reachable
+today, verified. Cheap to add if a future run touches this.
+
+**Open, and this run's clearest hand-off: the ITS builder still states
+"aim for ≥ 8 (ideally ≥ 12)" unattributed on both its warnings, while Penfold &
+Zhang sits in its own bibliography.** One-line fix, not done here because the
+ITS builder was the thirteenth run's scope and this run's was the hub.
