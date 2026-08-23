@@ -1030,7 +1030,14 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // code set, and the metric tables embed those same strings again. Pipes
       // are escaped on the way into a cell — same rule the amendments log and
       // RWE Studio's Table 1 already follow.
-      const td = (v) => String(v ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+      //
+      // It escaped the pipe and not the backslash, so a `\|` was emitted as
+      // `\\|` — an escaped backslash followed by a live delimiter — and the cell
+      // was truncated there. The widest surface of the three: s.outcomeName is
+      // interpolated into the numerator of every ticked metric, so one such
+      // character in the outcome name truncated the operational definition in
+      // every metric table at once. The escaper now lives once in ProtocolCommon.
+      const td = (v) => window.PC.mdCell(v);
       // A <select> restored from a stale draft or a ?seed= link with a value
       // that is no longer one of its options is left at selectedIndex = -1: it
       // shows nothing, contributes nothing to FormData, and every `|| "…"`

@@ -249,6 +249,28 @@
     const AM_FIELD = "amendments";
     const AM_COLS = ["Version date", "Version number", "Section of protocol", "Amendment or update", "Reason"];
 
+    /* Every Markdown table cell on this site goes through here.
+       This is the FOURTH copy of this escaper: `case-crossover`, `sccs` and
+       `descriptive-analysis` each grew their own after a pipe in a code set
+       ("ATC M01A* | excluding M01AX") emitted a three-cell row against a
+       two-column header, and all three stopped at the pipe. Escaping `|`
+       without escaping `\` is not a smaller version of the fix, it is a
+       different bug: a cell holding the two characters `\|` is emitted as
+       `\\|`, which GFM reads as an escaped BACKSLASH followed by a live
+       delimiter. Parsed with micromark's real table extension,
+       "ATC N05A* \| excluding N05AN01" renders as "ATC N05A* \" — the second
+       half of the code set is gone, the row still has the header's cell count,
+       and the .docx (which needs no escaping) keeps the whole string. Two
+       exported documents then specify different exposures for the same study.
+       `\|` is not exotic for this audience: it is R's regex alternation
+       (grepl("N05AH\\|N05AX", code)) and it is what a Markdown-literate author
+       types to mean a literal pipe.
+       Newlines end a table row outright, so they collapse to a space here for
+       the same reason. */
+    function mdCell(v) {
+      return String(v == null ? "" : v).replace(/([\\|])/g, "\\$1").replace(/\r?\n/g, " ");
+    }
+
     // Escape backslash first, so unescaping is unambiguous.
     var amEsc = function (c) { return String(c == null ? "" : c).replace(/\\/g, "\\\\").replace(/\|/g, "\\|"); };
     var amUnesc = function (c) { return String(c).replace(/\\([\\|])/g, "$1"); };
@@ -339,15 +361,9 @@
       var rows = amendmentRows(s);
       var out = "## Amendments and updates\n\n" + amendmentIntro(s, rows);
       if (!rows.length) return out + "\n";
-      // Escape the backslash too, not just the pipe. The comment at the top of
-      // this block promises a typed pipe survives end to end, and it did not:
-      // a cell holding the four characters a\|b was emitted as a\\|b, which a
-      // Markdown reader parses as an escaped backslash followed by a LIVE
-      // column delimiter — the row grew a seventh cell, the renderer truncated
-      // to the header's six, and "b" vanished with no trace. The .docx needs no
-      // escaping and printed the cell correctly, so the two exports of one
-      // protocol disagreed about the table's shape.
-      var esc = function (c) { return String(c || "—").replace(/([\\|])/g, "\\$1"); };
+      // mdCell escapes the backslash as well as the pipe — see its comment for
+      // why the pipe alone is not a smaller version of the fix.
+      var esc = function (c) { return mdCell(c || "—"); };
       out += "\n\n| No. | " + AM_COLS.join(" | ") + " |\n|---|" + AM_COLS.map(function () { return "---"; }).join("|") + "|\n";
       rows.forEach(function (r, i) { out += "| " + (i + 1) + " | " + r.map(esc).join(" | ") + " |\n"; });
       return out;
@@ -986,7 +1002,7 @@
       if (f && f.parentNode) f.parentNode.insertBefore(d, f);
     }
 
-    window.PC = { abstractMd, tailMd, abstractDocx, tailDocx,
+    window.PC = { abstractMd, tailMd, abstractDocx, tailDocx, mdCell: mdCell,
                   readSeed: readSeed, applySeed: applySeed, restore: restore,
                   mountAmendments: mountAmendments, syncAmendments: syncAmendments,
                   amendmentRows: amendmentRows, amendmentsMd: amendmentsMd, amendmentsDocx: amendmentsDocx };

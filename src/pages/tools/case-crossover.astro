@@ -998,7 +998,13 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // header width, so the Markdown silently lost half the code set while the
       // .docx kept all of it — the two exported documents specified different
       // exposures for the same study. Every Markdown table cell goes through tc().
-      const tc = (v) => String(v ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+      //
+      // This escaped the pipe and not the backslash, which is the same defect
+      // one character over: `\|` became `\\|`, an escaped backslash followed by
+      // a LIVE delimiter, and the cell was truncated at it. Three builders had
+      // grown their own copy of this and all three stopped in the same place, so
+      // the escaper now lives once in ProtocolCommon.
+      const tc = (v) => window.PC.mdCell(v);
       const mdTable = (rows) => "| | |\n|---|---|\n" + rows.map(([l, v]) => "| **" + tc(l) + "** | " + tc(v) + " |").join("\n");
       const pcOf = (s) => ({
         design: "case-crossover study",

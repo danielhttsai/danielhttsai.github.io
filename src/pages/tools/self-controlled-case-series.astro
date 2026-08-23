@@ -1009,7 +1009,18 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // sets for the same study. Period names can contain a "|" too, now that
       // the parser splits on the last one. Same defect and same fix as
       // descriptive-analysis.astro.
-      const tc = (v) => String(v ?? "").replace(/\|/g, "\\|");
+      //
+      // It escaped the pipe and not the backslash, and this page had the most to
+      // lose from that: the whole risk/reference strip is ONE cell (see the
+      // "Risk / reference periods" row below), so a `\|` anywhere in a period
+      // name truncated the cell there and deleted every period after it — a
+      // Markdown protocol specifying an SCCS with no exposure risk window,
+      // beside a .docx specifying the full strip. In a self-controlled design
+      // the period strip IS the analysis. The escaper now lives once in
+      // ProtocolCommon, which also collapses newlines; this copy was the only
+      // one of the three that did not, and nothing reaching it can carry one
+      // today, so that part is hardening rather than a fix.
+      const tc = (v) => window.PC.mdCell(v);
       const bullets = (arr) => arr.length === 0 ? "_(none specified)_" : arr.map((l) => "- " + l).join("\n");
       const numbered = (arr) => arr.length === 0 ? "_(none)_" : arr.map((l, i) => (i + 1) + ". " + l).join("\n");
       const orFb = (s, fb) => (s && s.trim()) ? s : fb;
