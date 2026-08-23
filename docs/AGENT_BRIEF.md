@@ -4754,3 +4754,5 @@ anything, and the compound-count defect above. Neither is visible in a diff.
 - Citations: **still none anywhere in these two paths**, and none were added. Snippet-only
   leads, unverified and **not asserted**: Suissa (case-time-control) PubMed 8728434; Wang
   et al., *Epidemiology* 2011, PubMed 21577117. Crossref/PubMed remain blocked.
+
+<!-- CLAIM 2026-08-23 eighteenth run: taking the SCCS interval (Wald vs profile likelihood) and the SCCS numeric-parsing open items in src/pages/tools/rwe-studio.astro. If you are a concurrent run reading this, take something else. -->
