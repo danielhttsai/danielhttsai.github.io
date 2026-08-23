@@ -216,6 +216,15 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   those files is what a parser saw. (2026-08-22: a real `.docx` was generated and
   its `word/document.xml` read, by routing the blocked CDN to an npm copy of the
   same library. Still nobody has opened one in Word.)
+- ~~RWE Studio's weight-stability refusal gate (truncation defeats it; pooled Kish
+  ESS is blind to a nearly-empty arm; `smrbad` measures prevalence).~~ **Done
+  2026-08-23 (twenty-seventh run)** — the three top-ranked items of the twenty-sixth
+  run's list. The rule is now read per arm on the untruncated, unstabilised weights;
+  truncation cannot move a verdict; SMR is judged on the comparator arm; and a
+  weighted estimate is withheld when an arm holds fewer than five effective events.
+  **Do not re-propose an unconditional `|SMD| > 0.1` refusal without reading the
+  measured blast radius in that section** — both reviewers recommended it and both
+  were wrong.
 - **In the Protocol Checker, `"present"` on a planned output is satisfied by a
   promise rather than a shell** — the twenty-third run's own top-ranked open
   item, still the best next target there, with a drafted one-sentence fix in its
@@ -7644,11 +7653,327 @@ The next run on this file should start here. Every item below has a reproduction
   are from reading `buildReportDocx`, not from a generated file. Still nobody has opened
   one in Microsoft Word.
 
-<!-- CLAIM 2026-08-23 (twenty-seventh run): IN PROGRESS — RWE Studio's weight-stability
-     refusal gate: items 1, 2 and 3 of the twenty-sixth run's ranked list (truncation
-     defeats the gate; pooled Kish ESS is blind to a nearly-empty arm under the shipped
-     stabilised default; smrbad applies a pooled threshold to weights that are 1 by
-     construction in one arm). If you are a concurrent run, pick a different gap. -->
+
+### Found 2026-08-23 by a twenty-seventh run — the weight-stability refusal gate, end to end
+
+**Chosen by the previous run's own ranked hand-off** rather than by rotation: its
+section ends "the next run on this file should start here", and its items 1, 2 and 3
+were all defects in one mechanism — the rule that decides whether RWE Studio prints
+a weighted hazard ratio or withholds it. Rotation would have sent this run to the
+generator hub; the hub's open items are editorial and this one releases wrong numbers.
+
+Two reviewers on disjoint briefs (a methodologist and an applied analyst) against a
+tree that kept moving under them, then a third sent at this run's own diff. **The
+orchestrator also found a defect in its own finished work before that reviewer
+reported, by asking one question of its own fix: does this refuse anything it
+shouldn't?** Ask it. It cost one R script and caught a regression.
+
+Everything below was executed: Chromium against a local `astro build`, real `Rscript`
+(R 4.3.3, survival 3.5.8) on the page's own generated scripts, and real R output fed
+back through `window.RWEngine` so the actual parsers and renderers ran.
+
+#### Environment — R is not installed, and the recipe is cheap
+
+- **`Rscript` is absent from a fresh sandbox.** `apt-get install -y --no-install-recommends
+  r-base-core r-cran-survival` gets R 4.3.3 + survival 3.5.8 in about a minute. A bare
+  `apt-get install r-base-core` **fails** on a stale index — run `apt-get update -qq` first.
+- Everything else in "Environment traps" still holds: unpkg blocked, Crossref/PubMed/
+  doi.org blocked, `danielhttsai.github.io` blocked, `npm i --no-package-lock`.
+- **Build to a FIXED directory and leave it there.** `--outDir "dist-$$"` plus
+  `rm -rf dist-*` between builds leaves the static server bound to a deleted directory,
+  serving 404s — and `pagecheck` will report "all pages clean" because a 404 page has
+  no JavaScript errors either. Two reproductions were lost to this. Use one name
+  (`dist-run27`), and have any page check assert on page *content*, not just `pageerror`.
+- **`pkill -f serve.mjs` kills the agent's own shell here** (exit 144, the command chain
+  dies mid-way and any heredoc after it never runs). Kill by PID.
+
+#### What shipped, in order of damage
+
+**1 · The safety rule read whichever weight scale the user picked.** `d0 <- if(wtmode==
+'unstab') dU else dS`. Stabilising multiplies each *arm's* weights by a constant, and
+Kish's effective sample size is scale-free within an arm but not across two, so an
+arm-wise rescale moves the pooled figure without moving anything real. On a 400-row
+extract with 10 exposed patients the pooled figure reads **0.5% of the cohort
+unstabilised and 34.0% stabilised** — same patients, same propensity model, same
+estimand — and the shipped default released **HR 0.06 (95% CI 0.01-0.47)** for a drug
+generated with no treatment term in its hazard at all, while the other setting refused
+it. Five separate safeguards sat downstream of that one line. **Verified that the
+per-arm figures are identical between the two scales to ten decimal places
+(97.2278806168 either way) while the pooled figure crossed the threshold.**
+
+**2 · The pooled figure is blind to an arm that has collapsed, on any scale.** In that
+same extract the exposure arm was worth **1.08 effective patients of 10**, one of them
+holding **96% of the arm's weight**, identically under both settings. The rule is now
+read **per arm**, at the same thresholds as before (ESS < 10% of that arm, heaviest 1%
+> 25% of that arm's weight). Applied where they mean something, those thresholds catch
+every case here under every setting.
+
+**3 · Truncation switched the refusal off — the control the refusal box recommended.**
+The rule read the post-truncation weights, and truncation caps weights by construction:
+it raises the effective sample size and lowers the top-1% share on any data at all. On
+the demo the page calls "a cohort that should not be analysed" (true HR exactly 1.00):
+no truncation withheld; 1/99 released **1.12 (0.85-1.49)**; 5/95 released **1.47
+(1.18-1.84)**, excluding the null in the harmful direction. What truncation cannot fake
+is balance: across those three runs the largest |SMD| went **0.178 → 0.903 → 1.424**
+against a crude 2.183 — *the one configuration whose weights did the job was the one
+being refused.* Truncation no longer moves the verdict at all, and `balfail` (truncation
++ |SMD| > 0.1) withholds on top of it. **The whole eighteen-cell sweep of
+weights x truncation x trimming on that demo now refuses; before this run exactly one
+cell released a number, and the number was 0.72 (0.52-1.01).**
+
+A claim this run made and then had to withdraw: a 264-cohort search found no case where
+truncation both passed the stability rule and balanced the arms, and the first commit's
+comment concluded the rescue "does not appear to exist". **A counter-example turned up
+in this run's own sweep** — on that demo restricted to common support, 1/99 truncation
+moves the largest |SMD| from 0.566 to 0.080. It is still refused (the untruncated
+comparator arm is worth 14 effective patients of 250, one weighted 165x, and the cell
+returns 0.72 where the truth is 1.00), so the code is right and the comment was not.
+Corrected in place. **A truncated weight profile that looks balanced is not evidence
+that the cohort carried the information** — that is the sentence to keep.
+
+**4 · `smrbad` measured exposure prevalence.** SMR weights are **exactly 1** for every
+treated patient by construction, so with clean overlap `sum(w) ≈ 2·nT` and
+`sum(w²) ≈ nT`: pooled `essPct ≈ 400 × prevalence` and `top1 ≈ 0.5 / prevalence`, both
+functions of prevalence alone. Executed: at 1.3%, 1.9% and 2.4% exposure the pooled
+figure came out 4.9, 7.4 and 9.3 against a closed form of 5.0, 7.6 and 9.6, and a
+perfectly clean cohort was refused as "an artefact of a few patients" while its
+comparator arm was 91-95% effective and every treated weight was 1.0. Blind the other
+way too: a cohort with a real ATT positivity failure — comparator arm **6.1% effective,
+largest comparator weight 22.6** — passed. Now judged on the comparator arm alone,
+against `nC`, and the panel says which arm the figure belongs to and why.
+
+**5 · A hazard ratio from one event.** 3 exposed of 400 with **1 exposed event**
+released **3.20 (95% CI 1.56-6.58)** beside a crude **0.73 (0.10-5.42)** — the honest
+width — under "Effective sample size 385 of 400 (96%) · Comfortable". Weighted
+estimates are now withheld when either arm holds fewer than **five effective events**.
+That five is **this tool's own rule of thumb and the panel says so**; it applies to
+overlap weighting too, which is otherwise never gated, because the cause is missing
+data rather than unstable weights.
+
+**6 · The refusal never left the browser.** `PSDIAG`/`PSW`/`PSBAL` are stripped before
+the R output reaches the report, and the explaining panel is rendered client-side only,
+so the file a supervisor receives carried the whole refusal as one table cell reading
+"withheld - weights unstable" — no figures, no reason, and no record of which weight
+setting produced it. Each withheld scheme now emits a `RESULT_NOTE`, the one channel
+that already reaches both exports. **Verified by reading the generated Markdown.**
+
+**7 · Sentences the run's own numbers refuted.** "Stabilising took the effective sample
+from 5% to 57%… only the arithmetic" presented an arm-wise rescale as a precision gain
+(the released estimate was 3.8% *less* precise than the refused one). "Truncation trades
+a little bias for precision" stood above a measured **4965% change that crossed the
+null**, and told the reader to report alongside it an estimate the tool refuses to print.
+"Add the unbalanced covariates to the model" was printed about a single-covariate model
+whose one covariate *is* the unbalanced one. "Top 1% of patients hold X%" is the heaviest
+*single* patient whenever n < 100, because `k = max(1, ceiling(0.01n))`.
+
+**8 · `ciok` passed a boundary fit.** One exposed patient with no exposed events:
+`coxph` warns "coefficient may be infinite" and returns `exp(coef)` = 8.3e-07 with an
+interval of 1.2e-07 to 5.9e-06 — strictly positive, finite, three numbers — printed by
+this tool's own two-decimal format as **"0.00 (95% CI 0.00-0.00)"**. The test is now the
+display's own: a row whose printed figures are not the figures is not a row.
+
+#### The defect this run put into its own diff, and how it was caught
+
+**The first fix for the pooled gate kept the pooled gate.** Moving the rule to the
+unstabilised weights removed the dropdown dependence — the point — and left the shape
+wrong: pooled decays with exposure prevalence on *either* scale, for the same reason
+`smrbad` did, which this run had just finished proving one estimator over. Executed on
+a **randomised** exposure with no confounding, where no weight is doing any work: 3%
+exposure reads 12.4%, 2% reads 9.3% and is **refused**, 1% reads 4.8% and is **refused**,
+while both arms sit at 97-100%. A rare exposure is not an unstable one, and it is the
+ordinary setting for this design.
+
+Found by the orchestrator asking one question of its own finished fix — *does this
+refuse anything it should not?* — and answering it with twenty lines of R. **Add that
+question to the review of every gate.** Over-refusal is not the safe direction: a tool
+that refuses ordinary studies teaches people to click past refusals.
+
+A second one, caught by the first reviewer: the balance guard was gated behind
+`truncmask`, requiring the untruncated weights to have failed *first*. When they passed,
+truncation was free to unbalance the arms unwatched — **1.33 (1.15-1.54) released for a
+drug whose true hazard ratio is 0.75**, reproduced independently by the orchestrator
+with its own generator before the change was made.
+
+#### The third reviewer, sent at this run's own diff — now 9 for 9
+
+**Do not skip this step.** It found nine things, one a straight regression, and the
+pattern in most of them is the same: *a new rule was added and the sentences explaining
+it were written for the case that motivated it, not for every case that reaches it.*
+
+- **The estimability test discarded ordinary results.** Testing all three figures for
+  rounding to 0.00 refused **HR 0.0129 (95% CI 0.0018-0.0941)** from 1 exposed event
+  against 45 — finite, significant, entirely estimable — because a small hazard ratio
+  has a smaller lower bound. It emptied the whole table *including the crude row this
+  run's own refusal boxes tell readers to fall back on*. The test belongs to the point
+  estimate. **Regression, shipped for about forty minutes.**
+- **An effective event count is a weighted quantity, so it collapses when the weights
+  collapse.** The thin-arm test was therefore reached on runs whose weights
+  independently failed the stability rule, and its box — written for the missing-data
+  case — asserted "the weight diagnostics below are healthy" four rows above an
+  effective sample of 5% and a largest weight of 163.8x. **Instability is now tested
+  first in all three places** (estimate row, panel box, exported note). Generalisable:
+  when you add a second refusal reason, decide its priority against every existing one
+  and apply that order everywhere the reason is printed.
+- **The thin-arm refusal reported raw event counts as its reason**, so the no-overlap
+  demo withheld SMR saying "226 event(s) in the exposure arm and 156 in the comparator
+  arm" about a cohort with 382 events. The operative figure was 4.0 *effective*
+  comparator events and appeared nowhere.
+- **The per-protocol rows were not gated at all** — the event vector was the ITT one,
+  built once outside the estimand loop. A PP row with three events printed **2.19 (95%
+  CI 0.22-22.12)** on a cohort whose ITT counts were 190 and 139, while an ITT arm with
+  three events is refused everywhere.
+- **A thin-arm SMR refusal reached no export**: the note ran before the flag it reads
+  was updated — the exact failure the note had just been added to remove, skipping its
+  own new path.
+- **The exported note quoted the pooled figures, both of which had passed**, as the
+  reason for a refusal the arms caused: screen and file gave incompatible reasons for
+  one verdict.
+- **The masked rows fired on a condition the masked box did not** (rows blaming
+  truncation, box blaming a collapsed arm, same panel), and that branch **deleted the
+  per-arm row the paragraph above it says to read**.
+- **IPTW's thin flag was applied to every scheme's block**, red-dotting a reported
+  overlap row and labelling a comparator-arm figure "pooled across both arms". And
+  making overlap's `gated` flag non-constant silently stripped its own explanations —
+  "overlap weights cannot exceed 1 by construction" — exactly when the panel was
+  claiming the problem was not weight instability. **`soft` meant "cannot explode" and
+  was keyed on "was not withheld"; those came apart the moment overlap could be
+  withheld.**
+- **"Set truncation back to no restriction and this estimate is released" was false in
+  43% of the runs that showed it.** The untruncated balance is computed (`mx0`) and was
+  never consulted before promising it.
+
+It also confirmed, with a 45-cell option sweep, **0 Rscript failures and 0 page errors**,
+that no other design is touched, and that `essOf`/`armdiag` are arithmetically right.
+
+#### Where the two reviewers disagreed, and who was right
+
+- **What the gate should read.** The methodologist wanted per-arm Kish ESS and said so
+  with a proof that stabilisation is an arm-wise rescale; the analyst wanted the gate
+  pinned to the unstabilised weights. **The analyst's fix was simpler and wrong** — it
+  fixes the dropdown dependence and keeps the prevalence artefact — and the
+  methodologist's was right but incomplete: he flagged, against his own recommendation,
+  that arm-stratified ESS is *necessary and not sufficient*, with a case at 14 events
+  where every per-arm figure is green. **Both were needed**: the per-arm rule plus an
+  effective-event floor. Neither reviewer proposed the pair; each proposed the half that
+  the other's counter-example broke.
+- **Whether the released estimates were wrong or merely different.** The analyst named
+  this as his own least-confident finding and he was right to: after a common-support
+  restriction the estimand is no longer the ATE on the uploaded cohort. His other
+  findings compare two configurations of the *same* estimand on the *same* rows, where
+  no causal argument is needed at all — which is why they survived and that one is
+  recorded here rather than acted on.
+- **A claim that did not survive.** The methodologist reported that "top 1%" is
+  mislabelled below n=100 and suggested refusing the statistic there. Refusing it is
+  wrong — on a 10-patient arm "one patient holds 96% of the weight" is the single most
+  informative number on the page. The label was fixed instead.
+
+#### Deliberately left — ranked, all reproduced, none acted on
+
+1. **Balance is a gate only when truncation caused the failure.** Untruncated, |SMD|
+   0.292 after weighting releases **1.08 (0.90-1.30)** on a cohort whose true HR is 0.75.
+   Both reviewers wanted `mxI > 0.1` to withhold unconditionally, and the standard
+   (Austin, *Stat Med* 2009;28(25):3083-3107 — **search snippet only**) is already used
+   by this file for `nbad`. **Both reviewers were wrong, and the blast radius is now
+   measured** — do not re-propose this without reading the table. Well-specified
+   logistic PS, moderate confounding, no positivity problem, 200 replicates per cell;
+   the figure is the share of runs an unconditional 0.1 rule would refuse:
+
+   | covariates | n=400 | n=1000 | n=5000 |
+   |---|---|---|---|
+   | 4  | 1%   | 0%   | 0%  |
+   | 10 | 27%  | 4%   | 0%  |
+   | 20 | 96%  | 62%  | 4%  |
+   | 41 | 100% | 100% | 65% |
+
+   The maximum of k noisy standardised differences grows with k, so at realistic
+   covariate counts `max|SMD| > 0.1` is a multiple-comparisons artefact rather than
+   evidence that the weighting failed. An unconditional gate would refuse **every**
+   twenty-covariate study of 400 patients. That is the failure mode this run spent a
+   commit removing, at ten times the scale.
+   **If it is done at all it needs a statistic that does not scale with k** — the share
+   of covariates above 0.1, or the mean, or a bound that widens with k — and that is a
+   new diagnostic, so it is Daniel's call. Note the same arithmetic already applies to
+   the balance row's red dot and its `nbad` count, which will be red on most
+   many-covariate runs today; nobody has looked at whether that has quietly trained
+   readers to ignore it.
+2. **The 10% and 25% thresholds have no source.** Searched for and not found; the
+   general apparatus (Kish's design effect, ESS = (Σw)²/Σw²) is standard, but no
+   published cut-point at 10% and **no top-1%-share diagnostic at all**. Nor is 10%
+   conservative: over 400 replicates the untruncated estimator averages ESS 33% and
+   still carries +5.8% bias with 90.3% coverage. The file names Li/Morgan/Zaslavsky and
+   Yang & Dalton scrupulously, so two unsourced cut-points that decide whether a number
+   is printed stand out. Either cite them or say on screen they are the tool's own — the
+   `MINEV` rule of thumb added this run does say so, and is the pattern to copy.
+3. **The refusal box's advice is still a state machine, not a prediction.** It offers
+   the remedy the user has not tried yet, never one it has checked would work. On the
+   no-overlap demo, following it to its end was the **only cell in an eighteen-
+   combination sweep that produced a number at all**, and the number was wrong. The
+   truncation half of that funnel is closed; restriction is still offered without
+   checking. The honest version fits the candidate remedy in R and names it only if the
+   estimate would actually be released.
+4. **`balfail` makes the 5/95 truncation option nearly unusable on confounded data.**
+   Measured by the third reviewer over 1500-patient cohorts with one confounder and a
+   true HR of 0.80: at confounder strength 1.0 log-OR/SD, 0/60 refused at 1/99 and
+   **60/60 at 5/95**; at 1.5, 53/60 and 60/60. `armbad` fires in at most 1/60 of these,
+   so the untruncated weights are fine — it is truncation genuinely breaking balance
+   each time. **Left deliberately**: the refusal is true, the remedy (turn truncation
+   off) is actionable and correct, and the honest reading is that 5/95 truncation on
+   confounded data is a bad idea rather than that the gate is wrong. But a control that
+   is refused essentially always may be better removed than offered, and that is
+   Daniel's call.
+5. **The weighted intervals are 24-46% too wide** (twenty-sixth run, item 5) — untouched,
+   and now sitting under a gate that is stricter about which of them get printed.
+6. Everything else in the twenty-sixth run's ranked list: `c_dropmiss` deleting rows for
+   a covariate the tool says it left out (item 6), the surrogacy statistic's sampling
+   variability (7), "fine stratification" naming a method the code does not implement
+   (8), `NA`/`.`/`-` becoming factor levels (9), the fold-rare default collapsing a
+   factor to one level (10), the exported report dropping the diagnostics panel (11 —
+   **partly closed this run**: the refusals now travel, the panel still does not), the
+   dead Word button (12), browser-only range checks (13), and the smaller five (14).
+
+#### Checked and found NOT to be a problem — do not re-derive
+
+- **The flagship `cohort` demo is untouched by all of this.** Its gate never fires, its
+  balance is 0.035-0.040, and it returns 0.70 (0.53-0.92) identically across all three
+  truncation settings before and after every commit. Diffed on full R output.
+- **The `smdvec()` refactor is behaviour-preserving.** Every TABLE1 SMD, both columns,
+  is byte-identical on the flagship demo across all three truncation settings; only the
+  intended note text changed. Diffed on output, not on the expression.
+- **Per-arm effective size is invariant to stabilisation** — proved algebraically by both
+  reviewers and measured at ten decimal places here. Do not "fix" a per-arm figure that
+  fails to move when the dropdown changes.
+- **Citations touched this run**: none added or changed. Austin 2009 and the several
+  references the methodologist assembled (Cole & Hernán 2008, Crump 2009, Stürmer 2010,
+  Lee/Lessler/Stuart 2011) are **bibliographically cross-checked across index records
+  but content-verified from search snippets only**, and none of them was put into the
+  page. The 0.10 balance bar appears on screen as "the usual bar" without attribution,
+  which is the status quo, not a new claim.
+
+#### Verified this run, and how — and what was not
+
+- Six scenarios were driven end to end through the built page with real `Rscript`
+  output fed back through `window.RWEngine`, before and after every commit: the flagship
+  cohort demo × 3 truncation settings, the no-overlap demo × 3, a 3-exposed-of-400 rare
+  cohort, a 10-exposed-of-400 cohort under 4 weight/truncation combinations, a
+  protective-drug cohort where the untruncated weights pass, and a one-exposed-patient
+  degenerate fit. All thirteen tool pages reload with **zero `pageerror` and
+  `typeof window.PC === "object"`** after every commit.
+- Each reviewer finding was **reproduced independently by the orchestrator with its own
+  generator** before being acted on — the truncation defeat, the untruncated hole, the
+  stabilisation identity, the `smrbad` prevalence closed form in both directions, and
+  the over-refusal.
+- **Not verified: the live site.** `danielhttsai.github.io` is blocked from this sandbox.
+- **Not verified: WebR.** Its CDN is blocked; every R result here is desktop R 4.3.3.
+- **Not verified: the `.docx` export.** unpkg is blocked. The Markdown report was
+  generated and read; the Word claims are from reading `buildReportDocx`. Still nobody
+  has opened one in Microsoft Word.
+- **Not verified: the real upload path.** Everything went through the demo-injection
+  code path, so `RAWTXT` was empty in every run.
+
+<!-- CLAIM 2026-08-23 (twenty-seventh run): DONE — RWE Studio's weight-stability
+     refusal gate. Six commits; see the section at the bottom of this file for what
+     shipped, the two defects this run put into its own diff, and the ranked list of
+     what is left. -->
 
 <!-- CLAIM 2026-08-23 (twenty-eighth run): IN PROGRESS — the amendment log's raw-input
      path: the twenty-fifth run's top-ranked leftover ("a raw ?seed= payload bypasses
