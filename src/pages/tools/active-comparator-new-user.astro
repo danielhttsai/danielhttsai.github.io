@@ -2848,6 +2848,8 @@ The active comparator is used as an emulated placebo arm; a drug class with simi
 ---
 
 ${staleMdBanner()}${window.PC.abstractMd(pcOf(s))}
+## Study design diagram
+
 ${FIG1_MARK}
 
 ## 1. Research question
@@ -3945,12 +3947,29 @@ _Drafted with the AsPEN protocol builder (${today})._
           staleDoc.forEach((m) => children.push(bullet(m)));
         }
         window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
+        // The figure needs a heading of its own. abstractDocx/abstractMd end at
+        // the amendments section, not at the abstract, so everything a builder
+        // appends to them lands UNDER "Amendments and updates" — in Word's
+        // navigation pane and in any generated table of contents the study
+        // design diagram was a child of the amendment log, and with amendments
+        // recorded it printed directly beneath the amendment table, where it
+        // reads as an illustration of the amendment history. The other eight
+        // builders open a "## 1. ..." heading immediately after the call and
+        // were never affected; this one is the exception.
         // HARPER 7.2. designDiagramDocx emits picture + numbered caption +
         // window list together, and on failure a visible note rather than a
         // silently missing figure, so use it rather than an ImageRun here.
         try {
           const fig = await window.designDiagramFigure(document.getElementById("diagram"));
           const figParas = window.designDiagramDocx(D, fig, { font: FONT });
+          // The heading goes INSIDE the try, immediately before the paragraphs
+          // it heads. Pushed above the try it outlived them: if
+          // designDiagramFigure throws, the catch pushes nothing, and the Word
+          // file carried "Study design diagram" followed straight by
+          // "1. Research question" — a table-of-contents entry promising a
+          // figure with nothing underneath it. designDiagramDocx's own failure
+          // path emits a visible note, so the heading is still correct there.
+          children.push(h1("Study design diagram"));
           figParas.forEach((c) => children.push(c));
           if (!figParas.placed) setMsg("Exported without the design diagram: " + (fig.reason || figParas.error || "unknown reason") + ". The document says so where the figure should be.", true);
         } catch (e) { console.error(e); }
