@@ -6193,3 +6193,60 @@ one body, two tails.
 - **The live site was not checked** — still unreachable from this sandbox.
   Everything was verified against a local build. **Nobody has still opened one
   of these `.docx` files in Microsoft Word.**
+
+#### Correction — the third reviewer, sent at this run's own diff, found six more
+
+It reported after the section above was written, which is why this is a
+correction rather than part of it. **Seven runs out of seven now: a reviewer
+sent at a finished, verified, pushed diff finds real defects in it.** All six
+below are fixed. Every one is the species this run set out to delete,
+introduced or left standing by the fix for it — which is the point, and the
+reason to keep doing this.
+
+1. **A refusal that says nothing can be recovered, in the sentence that
+   recovers it.** SCCS's note ends "the dead value is not recoverable from the
+   saved draft once the page has loaded". True when written; **this run made it
+   false** by putting the record in the draft — which is the only reason the
+   sentence prints at all, and the dead value is quoted three words earlier. It
+   reached the panel, the Markdown, the Word file and STROBE item 19. **When
+   you make something possible, grep for the sentences that say it is not.**
+2. **The new document banner was false for a blank.** "A value this page no
+   longer offers was replaced before this document was written" — of a blank,
+   nothing was offered and nothing was replaced. Three commits in this run
+   argue that exact point about the *body* sentences and left it standing in
+   the *heading above them*. A heading is a claim.
+3. **Messages naming a button that does not exist.** ITS, sequential-trial and
+   trend-in-trend append "press “Keep “<option>”” to confirm it" once per
+   substitution, while the panel renders one button reading "Keep all N
+   substituted choices". With three stale selects: three messages, three named
+   buttons, none of them on the page, each implying it confirms one thing when
+   it confirms three. **And the commit that rewrote those lines claimed to have
+   verified message and button agreeing in exactly that configuration** — it
+   had driven the single-substitution case and generalised. That is this file's
+   own "diff the OUTPUT" trap wearing a different hat: *render the case the
+   claim is about, not the case next to it.*
+4. **SCCS's screen tail was singular after a list of three** — the very defect
+   its own commit message objects to in the text it replaced.
+5. **sequential-trial's interval blocker named the abstract**, which has no
+   interval field (the consumer is §3); and its axis label said "not set" where
+   every other surface says "not specified".
+6. **descriptive-analysis's stale error never named the Keep button** mounted
+   at the foot of its own panel — the button whose stated reason for existing
+   is that a stop nobody can answer teaches people to ignore the panel.
+
+Plus one structural note it made and this run acted on: **sequential-trial's
+`noteStale` still lumps `null` in with `undefined`.** Nothing is silent today
+because all three of its selects have their own blank-blocker, but the coverage
+is incidental — a fourth `<select>` added to that page inherits silence.
+
+**What the third reviewer attacked and could not break**, so a future run need
+not re-derive it: the byte-identity guard on the carried record (both sides come
+from `JSON.parse` of the same stored string in every legitimate path, and
+`writeForm` has no call site outside `PC.restore`'s closure); clean-form byte
+identity on all seven; every select seeded with a *valid* non-default option on
+all seven, with no false refusal; `undefined` still silent; checkbox, radio and
+number fields unaffected by the `null` change; retire-by-value, Keep and
+"Clear all" on four builders; the Markdown-injection cap; the ordering of the
+new notices relative to the abstract in preview and `.docx`; and no duplication
+of a notice in any document. It also independently found the `?seed=paste`
+regression this run had already found and fixed.
