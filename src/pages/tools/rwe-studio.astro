@@ -2241,7 +2241,14 @@ const DESIGNS = [
           { k: "TIDX", label: "Time index / period (date or period label)", types: ["date", "number", "categorical", "text", "id"], req: true },
           { k: "YCOUNT", label: "Event count, rate, or level", types: ["number", "binary"], req: true },
           { k: "DENOM", label: "Population denominator / offset", types: ["number"], req: false },
-          { k: "SEAS", label: "Season / cycle position (e.g. calendar month)", types: ["number", "categorical", "binary"], req: false },
+          // noSuggest, for two reasons. Its keyword list is `month|quarter|season|cycle`,
+          // which matches any column with "month" in its NAME — including
+          // `monthly_pop`, which the page duly auto-mapped to the season role under a
+          // green "Mapping complete ✓" once the time column had claimed
+          // `admission_month`. And mapping this role does nothing at all unless the
+          // separate Seasonality dropdown is also changed from its default of None,
+          // so an automatic fill here can only ever be silent noise or silent harm.
+          { k: "SEAS", label: "Season / cycle position (e.g. calendar month)", types: ["number", "categorical", "binary"], req: false, noSuggest: true },
           // noSuggest: this is the only optional role on the page that changes the
           // ESTIMAND. Auto-filling it opts the analyst into a controlled
           // difference-in-differences design they never asked for, and the keyword
@@ -2374,9 +2381,24 @@ const DESIGNS = [
           // name the exceptions, and refuse outright in the band where neither
           // reading has the weight of the file behind it — the dropdown beside this
           // is the remedy, and it is one click.
-          L.push("if(HASN){ dvar<-vapply(seq_len(nrow(a)), function(i){ z<-N[gid==i]; z<-z[!is.na(z)]; length(z)>=2 && !all(abs(z-z[1])<1e-9) }, TRUE)");
-          L.push("  nvar<-sum(dvar); pvar<-nvar/max(1,nrow(a))");
-          L.push("  if(dmode=='auto'){ if(pvar<=0.1) dmode<-'first' else if(pvar>=0.9) dmode<-'sum' else stop(sprintf('The rows within each period do not agree about what the denominator is. In %d of %d period(s) it repeats on every row, which means it is a population figure for the whole period and the rows must NOT be added up; in %d of %d it varies from row to row, which means it is a per-row quantity such as person-time and the rows must be added up. Those two readings differ by a factor of the number of rows in a period, so guessing wrong multiplies or divides every rate by that factor, and neither reading has enough of this file behind it to be the safe guess. Choose \"first\" or \"sum\" under \"Combine denominator within a period\" instead of leaving it on automatic.', nrow(a)-nvar, nrow(a), nvar, nrow(a))) }");
+          // Only a period holding at least two denominator values can tell the two
+          // readings apart. A period with one row, or with no denominator recorded
+          // at all, is silent — and a first version of this rule counted that
+          // silence as a vote for "first", because the predicate was FALSE and
+          // `pvar` divided by every period. A per-admission extract of a rare
+          // outcome is mostly single-row periods, so it voted overwhelmingly for
+          // "first" whatever its denominator meant. Measured on 36 periods of
+          // person-time, 33 of them single-row: the tool chose "first" and put the
+          // end-of-follow-up row on the WRONG SIDE OF THE NULL — 1.568 where the
+          // correct rule gives 0.584 — under a sentence saying the denominator
+          // "repeats on every row" in 33 periods that hold one row each. The old
+          // global all() got that file right. Two neighbouring shapes turned into
+          // hard refusals of files the old rule handled. Score the periods that can
+          // actually discriminate, and nothing else.
+          L.push("if(HASN){ dn<-vapply(seq_len(nrow(a)), function(i) sum(!is.na(N[gid==i])), 0)");
+          L.push("  dvar<-vapply(seq_len(nrow(a)), function(i){ z<-N[gid==i]; z<-z[!is.na(z)]; length(z)>=2 && !all(abs(z-z[1])<1e-9) }, TRUE)");
+          L.push("  ndisc<-sum(dn>=2); nvar<-sum(dvar); nrep<-ndisc-nvar; pvar<-if(ndisc>0) nvar/ndisc else 0");
+          L.push("  if(dmode=='auto'){ if(pvar<=0.1) dmode<-'first' else if(pvar>=0.9) dmode<-'sum' else stop(sprintf('The rows within each period do not agree about what the denominator is. Of the %d period(s) that hold more than one denominator value - the only ones that can tell - it repeats identically on every row in %d, which means it is a population figure for the whole period and the rows must NOT be added up, and it varies from row to row in %d, which means it is a per-row quantity such as person-time and the rows must be added up. Those two readings differ by a factor of the number of rows in a period, so guessing wrong multiplies or divides every rate by that factor, and neither reading has enough of this file behind it to be the safe guess. If the two series use different conventions, the file has to be fixed rather than the setting changed. Otherwise set \"Combine the denominator by\" to \"First value in the period\" or to \"Sum\" instead of leaving it on automatic.', ndisc, nrep, nvar)) }");
           L.push("  dfun<-if(dmode=='first') function(z){ z<-z[!is.na(z)]; if(length(z)) z[1] else NA_real_ } else if(dmode=='mean') function(z) mean(z,na.rm=TRUE) else function(z) sum(z,na.rm=TRUE)");
           L.push("  a$N<-vapply(seq_len(nrow(a)),function(i) as.numeric(dfun(N[gid==i])),0) }");
           L.push("if(HASS) a$seas<-vapply(seq_len(nrow(a)),function(i){ z<-SS[gid==i]; as.character(z[1]) },'')");
@@ -2432,14 +2454,25 @@ const DESIGNS = [
           // recorded", and those are opposite facts. So the gap is NAMED, never
           // filled: filling it would silently settle that ambiguity in the direction
           // that moves the answer most.
-          L.push("gapn<-0; gapmiss<-character(0)");
+          L.push("gapn<-0; gapmiss<-character(0); spanbad<-''");
           L.push("if(all(!is.na(kd)) && UNIT!='none'){ kk2<-kd[ord]");
           L.push("  if(!is.unsorted(kk2) && is.finite(as.numeric(max(kk2)-min(kk2)))){ full<-try(seq(min(kk2), max(kk2), by=UNIT), silent=TRUE)");
-          // A span that needs tens of thousands of periods to cover is evidence that
-          // the period unit does not match the data, not that periods are missing.
-          // Leave the index alone there and let the aggregation note carry it.
-          L.push("    if(!inherits(full,'try-error') && length(full)<=20000){ fullk<-format(full,'%Y-%m-%d'); gapmiss<-setdiff(fullk,ukey)");
-          L.push("      if(length(gapmiss)>0 && length(setdiff(ukey,fullk))==0){ gapn<-length(gapmiss); ukey<-fullk; kd<-pdate(ukey); ord<-seq_along(ukey); a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey) } } } }");
+          // An absolute cap was not enough. A single out-of-range date — a 1900 or a
+          // 2099 typed into one cell — sits inside 20,000 monthly periods, so the
+          // index was rebuilt over a 120-year span and that one row became a
+          // leverage point 1,438 periods from the rest. Measured: the same file
+          // reported a pre-intervention slope of 1.003 (1.002-1.004), SIGNIFICANT,
+          // with an interval twenty times narrower than the clean file's 1.000
+          // (0.995-1.005) — and the empty-period note then told the reader to write
+          // out 1,413 missing months. The test has to be relative: a span with far
+          // more empty periods than filled ones is a bad date or a wrong period
+          // unit, not a series with gaps. Say so, name the largest jump, and leave
+          // the index alone rather than building a lever out of it.
+          L.push("    if(!inherits(full,'try-error') && length(full)<=20000){ fullk<-format(full,'%Y-%m-%d'); gm<-setdiff(fullk,ukey)");
+          L.push("      if(length(gm) > 2*length(ukey)){ dg<-diff(as.numeric(kk2)); w<-which.max(dg)");
+          L.push("        spanbad<-sprintf('The period labels span %d %s(s) but only %d of them contain any rows. That is not a series with gaps in it - it is what one out-of-range date, or a period unit that does not match the data, looks like. The largest jump is from %s straight to %s. The periods have been numbered one after another in date order rather than spread across that span, because a single point far from the rest would otherwise carry the whole baseline trend on its own - so treat the per-period slope below as per observed period, not per %s, until the dates are fixed. Check the earliest and latest values in the time column (%s to %s), and the period unit.', length(fullk), UNIT, length(ukey), format(kk2[w]), format(kk2[w+1]), UNIT, ukey[1], ukey[length(ukey)]) }");
+          L.push("      else if(length(gm)>0 && length(setdiff(ukey,fullk))==0){ gapmiss<-gm; gapn<-length(gapmiss); ukey<-fullk; kd<-pdate(ukey); ord<-seq_along(ukey); a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey) } } } }");
+          L.push("if(spanbad!='') cat(sprintf('RESULT_NOTE|%s\\n', spanbad))");
           // The attenuation figures are this run's own: 400 replicates per cell of a
           // segmented Poisson series, 24 pre and 12 post periods, baseline mean 8 per
           // period, fitted twice on identical data — once with the empty periods
@@ -2447,7 +2480,7 @@ const DESIGNS = [
           // post-intervention counts are low enough to produce empty periods, and
           // then it grows with the effect, which is the wrong way round for a tool
           // whose job is to measure the effect.
-          L.push("if(gapn>0) cat(sprintf('RESULT_NOTE|%d of the %d %s(s) between %s and %s contain no rows at all. They are kept in the time index, so the periods below are calendar-spaced and a \"per period\" slope is genuinely per %s - but they are NOT analysed as zero, because this tool cannot tell \"no events occurred\" from \"nothing was recorded\", and those are opposite facts: one is an observation, the other is missing data. If they really are zeros, leaving them out pulls the estimate toward the null, and the pull grows as the intervention works: simulated on this model at 400 replicates a cell, a true ratio of 0.50 was recovered unchanged, a true 0.15 came out at 0.22 and a true 0.08 at 0.16. Write those periods into the file with a zero outcome, and their denominator, if that is what they are. Missing: %s%s.\\n', gapn, np, UNIT, ukey[1], ukey[np], UNIT, paste(head(gapmiss,10),collapse=', '), if(gapn>10) sprintf(' and %d more', gapn-10) else ''))");
+          L.push("if(gapn>0) cat(sprintf('RESULT_NOTE|%d of the %d %s(s) between %s and %s contain no rows at all. They are kept in the time index, so the periods below are calendar-spaced and a \"per period\" slope is genuinely per %s - but they are NOT analysed as zero, because this tool cannot tell \"no events occurred\" from \"nothing was recorded\", and those are opposite facts: one is an observation, the other is missing data. If they really are zeros, leaving them out pulls the estimate toward the null, and the pull grows as the intervention works: simulated at 400 replicates a cell on a series of this shape - a count series with no denominator, no seasonality and no control series, 24 periods before and 12 after, averaging 8 per period, a true ratio of 0.50 was recovered unchanged, a true 0.15 came out at 0.22 and a true 0.08 at 0.16. Write those periods into the file with a zero outcome, and their denominator, if that is what they are. Missing: %s%s.\\n', gapn, np, UNIT, ukey[1], ukey[np], UNIT, paste(head(gapmiss,10),collapse=', '), if(gapn>10) sprintf(' and %d more', gapn-10) else ''))");
           // Period labels are data, and they end up inside pipe-delimited estimate
           // labels, ITSMETA and every FITTED row. A month written "2019|03" would
           // shift the fitted series one column and break the chart. Cleaned only
@@ -2540,7 +2573,15 @@ const DESIGNS = [
           // coefficient of the order 1e12 on floating-point noise rather than
           // refusing. Caught in the browser too, but the browser cannot know how
           // many periods survive aggregation, and this is where that is known.
-          L.push("  nper0<-if(ctrl) min(as.numeric(table(a$g))) else nrow(a)");
+          // The SPAN in periods, not the number of observations. Before the period
+          // index became calendar-valued these were the same number, so the guard's
+          // sentence ("a cycle of 12 cannot be estimated from a series of 12") was
+          // true; once a period can be absent they diverge, and 12 rows scattered
+          // over three complete years were refused a seasonal adjustment with the
+          // reason "over less than one full cycle", which was false of the data.
+          // Whether the harmonic columns are degenerate is checked separately, on
+          // the columns themselves, a few lines below.
+          L.push("  nper0<-if(ctrl) min(vapply(split(a$t,a$g), function(z) max(z)-min(z)+1, 0)) else (max(a$t)-min(a$t)+1)");
           L.push("  if(seasok && SEASON=='harmonic' && CYC>=nper0){ cat(sprintf('RESULT_NOTE|A cycle of %g period(s) cannot be estimated from a series of %d period(s): over less than one full cycle the sine and cosine terms are not a season, they are a constant and a straight line, and fitting them silently changes the level and slope estimates. Seasonality was dropped. Shorten the cycle or lengthen the series.\\n',CYC,nper0)); seasok<-FALSE } }");
           L.push("");
           L.push("rhs<-if(ctrl) 'g + t + level + tsince + g:t + g:level + g:tsince' else 't + level + tsince'");
@@ -2588,9 +2629,32 @@ const DESIGNS = [
           L.push("");
           L.push("# --- Durbin-Watson on the residuals, within each series ---");
           L.push("e<-residuals(fit,type=if(inherits(fit,'glm')) 'pearson' else 'response')");
-          L.push("num<-0; den<-0");
-          L.push("for(gg in unique(a$g)){ ee<-e[a$g==gg]; if(length(ee)>2){ num<-num+sum(diff(ee)^2); den<-den+sum(ee^2) } }");
-          L.push("dw<-if(den>0) num/den else NA_real_; r1<-if(is.na(dw)) NA_real_ else 1-dw/2");
+          // The lag in `hacv` twelve lines below is measured in PERIODS. This was
+          // measured in ROWS, and used to differ only when the denominator drop had
+          // removed an interior period. Once the period index became calendar-valued
+          // every absent month makes a hole too, so on a per-admission extract the
+          // statistic labelled "lag-1" is routinely the two-period one: the same
+          // AR(0.85) series reports 0.93 (+0.53) complete and 1.92 (+0.04) with every
+          // second month missing — and 1.92 sits inside the quiet band, so the
+          // "these intervals are too narrow" warning below is silently disarmed by
+          // the gaps rather than by the data.
+          //
+          // Restricting the sums to adjacent pairs is not enough on its own: on a
+          // series where NO pair is adjacent the numerator is zero over a positive
+          // denominator, which prints a Durbin-Watson of exactly 0 and a residual
+          // autocorrelation of exactly +1 — a fabricated maximum, and one that fires
+          // the warning. So the pairs are counted, and a statistic without enough of
+          // them is not computed at all.
+          L.push("num<-0; den<-0; npair<-0; nposs<-0");
+          L.push("for(gg in unique(a$g)){ ii<-which(a$g==gg); tv<-a$t[ii]; ee<-e[ii]; o<-order(tv); tv<-tv[o]; ee<-ee[o]");
+          L.push("  if(length(ee)>2){ adj<-which(diff(tv)==1); nposs<-nposs+length(ee)-1; npair<-npair+length(adj)");
+          L.push("    if(length(adj)) num<-num+sum((ee[adj+1]-ee[adj])^2); den<-den+sum(ee^2) } }");
+          // Requiring most of the possible pairs to be adjacent keeps every complete
+          // series byte-identical to what it reported before, and refuses rather than
+          // mislabels once the series is holed enough for the statistic to be about a
+          // different lag.
+          L.push("dwok<-den>0 && npair>=3 && npair>=0.8*max(1,nposs)");
+          L.push("dw<-if(dwok) num*(nposs/npair)/den else NA_real_; r1<-if(is.na(dw)) NA_real_ else 1-dw/2");
           L.push("");
           L.push("# --- Newey-West HAC sandwich, base R only. Terms R could not estimate");
           L.push("# (collinear with the rest of the model) are dropped everywhere, or the");
@@ -2682,19 +2746,38 @@ const DESIGNS = [
           // the intervention's own step, under the name of the series that never
           // saw the intervention — the same inversion `ctrl` exists to stop, one
           // layer in. Read the attribution off what was actually estimated.
-          L.push("gpre<-unique(a$g[a$t<t0]); gpst<-unique(a$g[a$t>=t0]); gboth<-intersect(gpre,gpst)");
+          //
+          // Attribution has to be read off which series has VARIATION IN THE TERM,
+          // not off which series has rows on both sides of the interruption. The
+          // two are not the same, and a first version of this used the second: a
+          // control observed for every pre period AND the interruption period, and
+          // nothing after, has rows on both sides — so it was called "both series
+          // pooled" — while its `tsince` is identically zero, which is why `g:tsince`
+          // aliased in the first place. The slope row is the intervention series'
+          // alone there. `level` varies within a series that has a period on each
+          // side; `tsince` varies within one that has a period AFTER the
+          // interruption as well as at or before it.
           L.push("snm<-function(z) paste0(if(z>0) 'intervention' else 'control',' series')");
+          L.push("gvl<-intersect(unique(a$g[a$t<t0]), unique(a$g[a$t>=t0])); gvt<-intersect(unique(a$g[a$t<=t0]), unique(a$g[a$t>t0]))");
           L.push("didl<-'g:level' %in% nmv && !is.na(cf[['g:level']]); didt<-'g:tsince' %in% nmv && !is.na(cf[['g:tsince']])");
-          L.push("attrib<-if(length(gboth)==1) snm(gboth) else 'both series pooled'");
-          L.push("if(ctrl){ rep1(paste0('Level change, ',if(didl) 'control series' else attrib,sc),'level'); rep1(paste0('Slope change per period, ',if(didt) 'control series' else attrib,sc),'tsince')");
+          L.push("atl<-if(length(gvl)==1) snm(gvl) else 'both series pooled'; att<-if(length(gvt)==1) snm(gvt) else 'both series pooled'");
+          L.push("if(ctrl){ rep1(paste0('Level change, ',if(didl) 'control series' else atl,sc),'level'); rep1(paste0('Slope change per period, ',if(didt) 'control series' else att,sc),'tsince')");
           L.push("  rep1(paste0('Difference in level change, intervention vs control',sc),'g:level'); rep1(paste0('Difference in slope change per period, intervention vs control',sc),'g:tsince')");
-          L.push("  if(!didl || !didt) cat(sprintf('RESULT_NOTE|The control series does not span the interruption, so there is no difference-in-differences estimate on this data: %s could not be estimated and %s not reported. A comparator can only show what the intervention series would have done if it was observed on both sides of the change. The level and slope rows above are therefore attributed to the %s rather than to the control series, which is what the model actually identifies them from - read them as an uncontrolled result, and note that the pre-intervention trend comparison above them is still valid because both series were observed before the interruption.\\n', if(!didl && !didt) 'the difference in level change and the difference in slope change' else if(!didl) 'the difference in level change' else 'the difference in slope change', if(!didl && !didt) 'are' else 'is', attrib))");
+          // Per term, and never claiming more than the one that failed. An earlier
+          // version said "the control series does not span the interruption" and
+          // "there is no difference-in-differences estimate on this data" whenever
+          // EITHER term aliased — both false on a run that prints a perfectly good
+          // difference in level change two rows above.
+          L.push("  if(!didl || !didt){ dwhy<-c()");
+          L.push("    if(!didl) dwhy<-c(dwhy, sprintf('The difference in LEVEL change could not be estimated: the control series has no periods on one side of the interruption, so it shows no step to difference against. The level row above is therefore the %s, which is what the model identifies it from.', atl))");
+          L.push("    if(!didt) dwhy<-c(dwhy, sprintf('The difference in SLOPE change could not be estimated: the control series has no period after the interruption period itself, so its time-since-intervention term never leaves zero. The slope-change row above is therefore the %s, which is what the model identifies it from.', att))");
+          L.push("    cat(sprintf('RESULT_NOTE|%s A comparator can only difference a change it was observed through. Any difference row that IS printed above is unaffected by this, and so is the pre-intervention trend comparison, because both series were observed before the interruption.\\n', paste(dwhy,collapse=' '))) }");
           L.push("} else { rep1(paste0('Level change, immediate step',slab,sc),'level'); rep1(paste0('Slope change, per period',slab,sc),'tsince') }");
           L.push("");
           L.push("# --- observed vs counterfactual at the end of follow-up ---");
           L.push("gmax<-max(a$g); tn<-max(a$t[a$g==gmax]); tsn<-max(0,tn-t0)");
           L.push("L0<-setNames(rep(0,length(nmv)),nmv)");
-          L.push("zn<-if(HASG) c('g:level','g:tsince') else c('level','tsince')");
+          L.push("zn<-if(ctrl) c('g:level','g:tsince') else c('level','tsince')");
           L.push("if(zn[1] %in% nmv) L0[zn[1]]<-1; if(zn[2] %in% nmv) L0[zn[2]]<-tsn");
           L.push("cfv<-cf[nmv]; cfv[is.na(cfv)]<-0");
           // The contrast is a linear combination, so "the wider of the two" has to
@@ -2715,7 +2798,7 @@ const DESIGNS = [
           L.push("");
           L.push("# --- fitted and counterfactual series ---");
           L.push("X<-model.matrix(fit); Xc<-X");
-          L.push("zc<-if(HASG) grepl('^g:(level|tsince)$',colnames(X)) else colnames(X) %in% c('level','tsince')");
+          L.push("zc<-if(ctrl) grepl('^g:(level|tsince)$',colnames(X)) else colnames(X) %in% c('level','tsince')");
           L.push("Xc[,zc]<-0");
           L.push("off<-fit$offset; if(is.null(off)) off<-rep(0,nrow(X))");
           L.push("bb<-cfv[colnames(X)]; bb[is.na(bb)]<-0");
@@ -2735,6 +2818,10 @@ const DESIGNS = [
           L.push("if(useoff) cat(sprintf('TABLE1|Denominator per period, mean|%.6g|%.6g\\n', mean(a$N[pre]), mean(a$N[pst])))");
           L.push("if(ctrl) cat(sprintf('TABLE1|Control-series periods|%d|%d\\n', sum(a$g!=gref & a$t<t0), sum(a$g!=gref & a$t>=t0)))");
           L.push("dwt<-if(is.na(dw)) 'not computable' else sprintf('%.2f (lag-1 residual autocorrelation %+.2f)',dw,r1)");
+          // A refusal nobody sees is not a refusal: without this the statistic simply
+          // reads "not computable" in the middle of a long sentence, and the two
+          // serial-correlation warnings below stay silent with no reason given.
+          L.push("if(!dwok && den>0) cat(sprintf('RESULT_NOTE|The Durbin-Watson statistic was not computed. It compares each residual with the one from the period BEFORE it, and only %d of the %d neighbouring pairs in this series are actually one period apart - the rest straddle a period with no rows, or one dropped for its denominator. Computing it anyway would report the two-or-more-period statistic under the name of the one-period one, which reads as reassuringly close to 2 exactly when the residuals are most correlated. The serial-correlation warnings that depend on it are therefore not shown either, and their absence here is not evidence that the residuals are independent.\\n', npair, nposs))");
           L.push("cat(sprintf('RESULT_NOTE|Segmented %s regression over %d period(s) fitted: %d before and %d from %s onward%s. Inference uses %s, with %s for the 95%% intervals. Durbin-Watson %s (descriptive only - on GLM Pearson residuals it has no standard null distribution).\\n', famlab, nfit, npre, npost, ukey[t0], if(useoff) ', with log(denominator) as an offset' else '', selab, critlab, dwt))");
           L.push("cat(sprintf('RESULT_NOTE|Periods were ordered by %s. Level change is the immediate step at %s; slope change accrues from the period after it (Wagner 2002 convention, time-since-intervention = 0 at the first affected period).\\n', ordmode, ukey[t0]))");
           L.push("if(cutmoved!='') cat(sprintf('RESULT_NOTE|The interruption you gave (%s) falls inside period %s rather than at its start, so that whole period is treated as the first affected one. If the intervention only applied to part of it, that period is partly pre-intervention and the step will be diluted; consider dropping it or using a finer period unit.\\n', cutmoved, ukey[t0]))");
@@ -2744,7 +2831,7 @@ const DESIGNS = [
           // choice has to announce itself on both sides, and the exceptions to the
           // majority have to be named — they are the data defect this rule now
           // steps over rather than being flipped by.
-          L.push("if(HASN){ dauto<-if(DCOMB!='auto') '' else if(dmode=='first') sprintf(' (chosen automatically: the denominator repeats on every row in %d of the %d period(s), so it is a population figure for the period rather than a per-row quantity, and adding the rows up would multiply it by the number of rows)', nrow(a)-nvar, nrow(a)) else sprintf(' (chosen automatically: the denominator varies from row to row in %d of the %d period(s), so it is treated as a per-row quantity such as person-time)', nvar, nrow(a))");
+          L.push("if(HASN){ dauto<-if(DCOMB!='auto') '' else if(ndisc==0) ' (chosen automatically, though the choice makes no difference here: no period holds more than one denominator value, so taking the first, the sum and the mean all give the same number)' else if(dmode=='first') sprintf(' (chosen automatically: of the %d period(s) holding more than one denominator value, it repeats identically on every row in %d, so it is a population figure for the period rather than a per-row quantity, and adding the rows up would multiply it by the number of rows)', ndisc, nrep) else sprintf(' (chosen automatically: of the %d period(s) holding more than one denominator value, it varies from row to row in %d, so it is treated as a per-row quantity such as person-time)', ndisc, nvar)");
           L.push("  dexc<-if(dmode=='first' && nvar>0) sprintf(' In %d period(s) the denominator was NOT the same on every row, and the first row of each was used. A population figure that changes within a single period is usually a data defect rather than real variation, so those periods are worth checking.', nvar) else ''");
           L.push("  cat(sprintf('RESULT_NOTE|The denominator was combined within each period by taking the %s of the rows in that period%s.%s\\n', dmode, dauto, dexc)) }");
           // A reviewer proposed flagging any run whose combined denominator is much
@@ -2761,7 +2848,7 @@ const DESIGNS = [
           // that multiplies a population by the row count. That, and only that,
           // is worth a note.
           L.push("if(HASN && DCOMB=='sum' && pvar<=0.1){ rawmed<-median(N[!is.na(N)]); permed<-median(a$N[is.finite(a$N)])");
-          L.push("  cat(sprintf('RESULT_NOTE|You chose to add the denominator rows up within each period, but the denominator repeats on every row in %d of the %d period(s) - which is what a population figure for the whole period looks like, not a per-row quantity. Summing it multiplies that population by the number of rows in the period and puts the log of that row count into the offset, which bends both the step and the trend: the median period denominator here is %.6g against a median raw cell of %.6g. Your choice has been honoured. If that column is a population rather than person-time, choose \"first\" instead.\\n', nrow(a)-nvar, nrow(a), permed, rawmed)) }");
+          L.push("  cat(sprintf('RESULT_NOTE|You chose to add the denominator rows up within each period, but of the %d period(s) holding more than one denominator value it repeats identically on every row in %d - which is what a population figure for the whole period looks like, not a per-row quantity. Summing it multiplies that population by the number of rows in the period and puts the log of that row count into the offset, which bends both the step and the trend: the median period denominator here is %.6g against a median raw cell of %.6g. Your choice has been honoured. If that column is a population rather than person-time, choose \"first\" instead.\\n', ndisc, nrep, permed, rawmed)) }");
           // A count model with no offset silently assumes a constant population.
           L.push("if(hacdeg) cat('RESULT_NOTE|The Newey-West correction was skipped: the model fits the series so closely that the sandwich estimator degenerates to zero variance, which would print impossibly narrow intervals. Model-based standard errors are reported instead.\\n')");
           // The sandwich failing outright used to be completely silent: useh was
@@ -3710,12 +3797,23 @@ const DESIGNS = [
       });
       // x ticks: about six evenly spaced periods, always including the first, the
       // last, and the interruption — a long series with only two labels is unreadable.
-      const lab = (t) => { const r = data.find((x) => x.t === t); return r ? r.p : String(t); };
+      // `t` is a position on the calendar, not a row number, so an evenly spaced
+      // tick can land on a period that has no row and therefore no label. That
+      // fallback printed the bare index — an axis reading "2019-01-07 · 2019-04-01
+      // · 2019-06-24 · 31 · 2019-12-02". Snap each tick to the nearest period that
+      // does have a label instead; the spacing stays even to within one period and
+      // every tick names a real date.
+      const known = Array.from(new Set(data.map((r) => r.t))).sort((a, b) => a - b);
+      const snap = (t) => known.reduce((best, k) => (Math.abs(k - t) < Math.abs(best - t) ? k : best), known[0]);
+      const lab = (t) => { const r = data.find((x) => x.t === t); return r ? r.p : ""; };
       const span = tmax - tmin;
       const want = Math.min(6, span + 1);
       const ticks = [];
-      for (let i = 0; i < want; i++) ticks.push(tmin + Math.round((span * i) / Math.max(1, want - 1)));
-      if (t0 > tmin && t0 <= tmax) ticks.push(t0);
+      for (let i = 0; i < want; i++) ticks.push(snap(tmin + Math.round((span * i) / Math.max(1, want - 1))));
+      // Snapped too: with a calendar index the interruption period itself can be one
+      // with no rows. The dashed line carries its own label, so the axis tick only
+      // has to name a real period near it rather than print an index.
+      if (t0 > tmin && t0 <= tmax) ticks.push(snap(t0));
       const uniq = Array.from(new Set(ticks)).sort((a, b) => a - b);
       // drop labels that would collide (~64px of room per label)
       const kept = [];
