@@ -1392,6 +1392,16 @@ const DESIGNS = [
           // the only symptom being crude and adjusted estimates that agree exactly.
           r += R_CHK01 + R_CHKNUM + R_SQ;
           r += "d$TREAT<-chk01(d$TREAT,'Treatment'); d$EVENT<-chk01(d$EVENT,'Outcome event'); d$TIME<-chknum(d$TIME,'Follow-up time')\n";
+          // chk01 accepts a column whose only value is 1, because 1 is a legal flag.
+          // A cohort with one arm is not a weak comparison, it is no comparison: the
+          // propensity model predicts ~1 for everybody, min(ps[!tr]) is min(numeric(0))
+          // = Inf, and the panel reported a common-support range of Inf to -Inf, a
+          // Table 1 comparator column of "NaN (NA)", an effective sample size of
+          // "400 of 400 (100%) - Comfortable" with three green dots, and six rows of
+          // "NA (95% CI NA-NA)" - all under a status of Done. The browser refuses this
+          // before the run now; this is the same refusal for anyone running the
+          // downloaded script in desktop R.
+          r += "if(length(unique(d$TREAT))<2) stop(sprintf('Every row has the same value in the treatment column (%d), so there is only one arm and nothing to compare it with. An active-comparator new-user cohort needs both the exposure and the comparator in the same file.', unique(d$TREAT)[1]))\n";
           r += "covs<-c(" + covInfo.map((c) => q(c.col)).join(",") + "); covsrc<-c(" + covInfo.map((c) => q(c.label)).join(",") + "); covkind<-c(" + covInfo.map((c) => q(c.kind)).join(",") + ")\n";
           r += "if(length(covs)==0) stop('None of the ticked covariates can be used in a propensity model — see the note under the covariate list.')\n";
           r += "need<-c('TREAT','TIME','EVENT',covs)\n";
@@ -1547,7 +1557,20 @@ const DESIGNS = [
           if (!balSch) r += "cat('RESULT_NOTE|No weighted estimator was selected, so there is no weighted balance column: the standardised differences shown are before any adjustment. Balance after matching or after fine stratification is a separate table this tool does not build - check it in your own analysis before reporting the matched estimate.\\n')\n";
           r += "ET<-list(); EE<-list(); ET[['ITT']]<-d$TIME; EE[['ITT']]<-d$EVENT\n";
           if (E.indexOf("PP") >= 0) r += "if('DISC' %in% names(d)){ disc<-ifelse(is.na(d$DISC), Inf, as.numeric(d$DISC)); ET[['PP']]<-pmin(d$TIME, disc); EE[['PP']]<-d$EVENT*(d$TIME<=disc) }\n";
-          r += "fitw<-function(t,e,w,idx,label,quiet=FALSE){ dd<-data.frame(t=t[idx],e=e[idx],TREAT=d$TREAT[idx],w=w[idx]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd,weights=w,robust=TRUE),error=function(x)NULL); if(is.null(fit)){ if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label)); return(NA_real_)}; s<-summary(fit); if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', label, s$conf.int[1,'exp(coef)'], s$conf.int[1,'lower .95'], s$conf.int[1,'upper .95'])); invisible(as.numeric(s$conf.int[1,'exp(coef)'])) }\n";
+          // "not estimable" was reached only when coxph THREW. It does not throw on the
+          // two ways a cohort most often has nothing to compare: no events at all, and
+          // a treatment column that never varies. It returns a fit whose coefficient is
+          // NA, and sprintf('%.2f', NA) is the string "NA" — so all six rows of the
+          // table read "NA (95% CI NA-NA)" under a status of Done and a fully green
+          // weight panel. A formatted interval around nothing is still a formatted
+          // interval; every row now has to produce three finite numbers or say it could
+          // not. ciok is shared with the matching and fine-stratification rows below,
+          // which print their own sprintf and had the identical hole.
+          r += "ciok<-function(s) !is.null(s$conf.int) && nrow(s$conf.int)>=1 && all(is.finite(s$conf.int[1,c('exp(coef)','lower .95','upper .95')]))\n";
+          r += "fitw<-function(t,e,w,idx,label,quiet=FALSE){ dd<-data.frame(t=t[idx],e=e[idx],TREAT=d$TREAT[idx],w=w[idx]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd,weights=w,robust=TRUE),error=function(x)NULL); if(is.null(fit)){ if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label)); return(NA_real_)}; s<-summary(fit); if(!ciok(s)){ if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',label)); return(NA_real_)}; if(!quiet) cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', label, s$conf.int[1,'exp(coef)'], s$conf.int[1,'lower .95'], s$conf.int[1,'upper .95'])); invisible(as.numeric(s$conf.int[1,'exp(coef)'])) }\n";
+          // Say WHY nothing is estimable, once, rather than leaving six identical
+          // refusals to be interpreted.
+          r += "if(sum(d$EVENT==1,na.rm=TRUE)==0) cat('RESULT_NOTE|Not one row in this cohort has the outcome, so no hazard ratio exists to estimate and every row of the table above says so. A hazard ratio is a comparison of event rates; with no events there is nothing to compare, however many patients were followed. Check that the outcome column is the one you meant and that its yes value is the one the structure panel picked.\\n')\n";
           if (M.indexOf("matching") >= 0) r += "matchidx<-function(){ ci<-which(!tr); ti<-which(tr); used<-logical(n); cal<-0.2*sd(d$lp); out<-integer(0); ord<-ti[order(d$lp[ti])]; for(i in ord){ cand<-ci[!used[ci]]; if(!length(cand))next; dd<-abs(d$lp[cand]-d$lp[i]); o<-order(dd); k<-0; for(j in o){ if(dd[j]<=cal){ out<-c(out,i,cand[j]); used[cand[j]]<-TRUE; k<-k+1; if(k>=" + ratio + ")break } } }; unique(out) }\n";
           r += "for(est in names(ET)){ t<-ET[[est]]; e<-EE[[est]]; all<-1:n\n";
           r += "  fitw(t,e,rep(1,n),all, paste0('Crude - ',est,' HR'))\n";
@@ -1567,8 +1590,24 @@ const DESIGNS = [
           // 42% at 50 strata vanished from an estimate printed as if it described
           // everyone. The count now travels with the estimate, as it already does
           // for matching.
-          if (M.indexOf("finestrat") >= 0) r += "  { br<-unique(quantile(ps,probs=seq(0,1,length.out=" + (ns + 1) + "))); if(length(br)>=3){ q<-cut(ps,breaks=br,include.lowest=TRUE,labels=FALSE); keep<-ave(as.integer(tr),q,FUN=function(z)length(unique(z)))==2; ok<-which(keep); dd<-data.frame(t=t[ok],e=e[ok],TREAT=d$TREAT[ok],st=q[ok]); fit<-tryCatch(coxph(Surv(t,e)~TREAT+strata(st),data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|Fine stratification (" + ns + " strata, %d of %d patients) - %s HR|%.2f (95%% CI %.2f-%.2f)\\n',length(ok),n,est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))\n" +
-            "    if(length(ok)<n) cat(sprintf('RESULT_NOTE|Fine stratification discarded %d of %d patient(s) (%.1f%%) who fell in a propensity stratum holding only one arm - there is nobody to compare them with inside their own stratum. The stratified estimate refers to the remaining %d, not to the cohort you uploaded.\\n', n-length(ok), n, 100*(n-length(ok))/n, length(ok)))} } }\n";
+          // The strata count in the label was the number ASKED FOR, interpolated by the
+          // browser, never the number fitted. Ties in the propensity score collapse the
+          // quantile breaks: one binary covariate gives two distinct scores, so a
+          // request for 50 strata is fitted as 2 and the label — which travels verbatim
+          // into the Markdown and Word reports — claimed a stratification twenty-five
+          // times finer than the one that ran. Report what was fitted, and say when it
+          // is not what was asked for.
+          if (M.indexOf("finestrat") >= 0) r += "  { br<-unique(quantile(ps,probs=seq(0,1,length.out=" + (ns + 1) + "))); if(length(br)>=3){ q<-cut(ps,breaks=br,include.lowest=TRUE,labels=FALSE); keep<-ave(as.integer(tr),q,FUN=function(z)length(unique(z)))==2; ok<-which(keep); nbr<-length(br)-1; nst<-length(unique(q[ok])); dd<-data.frame(t=t[ok],e=e[ok],TREAT=d$TREAT[ok],st=q[ok]); fit<-tryCatch(coxph(Surv(t,e)~TREAT+strata(st),data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); flab<-sprintf('Fine stratification (%d strata, %d of %d patients) - %s HR',nst,length(ok),n,est)\n" +
+            "    if(ciok(s)) cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n',flab,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95'])) else cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',flab))\n" +
+            // Two different reasons the count can fall short, and they must not be
+            // confused: quantile ties (nbr) collapse the requested cut points, while
+            // the single-arm drop below removes strata that were cut successfully. A
+            // first version of this note keyed on nst and told the reader the score
+            // "takes too few distinct values" about a run whose real cause was two
+            // strata holding one arm each.
+            "    if(nbr<" + ns + ") cat(sprintf('RESULT_NOTE|The propensity score could only be cut into %d strata, not the " + ns + " asked for: it takes too few distinct values, so the quantile boundaries collapse onto each other. A propensity model built from a handful of categorical covariates can produce only as many distinct scores as it has covariate patterns.\\n',nbr))\n" +
+            "    if(length(ok)<n) cat(sprintf('RESULT_NOTE|Fine stratification discarded %d of %d patient(s) (%.1f%%) who fell in a propensity stratum holding only one arm - there is nobody to compare them with inside their own stratum. The stratified estimate refers to the remaining %d, not to the cohort you uploaded.\\n', n-length(ok), n, 100*(n-length(ok))/n, length(ok)))} }\n" +
+            "    else cat('RESULT_ESTIMATE|Fine stratification - " + ns + " strata|not estimable - the propensity score takes fewer than two distinct values, so it cannot be cut into strata at all\\n') }\n";
           // "(%d matched)" counted ROWS in the matched cohort, which cannot show
           // that half the exposed found no comparator and were dropped. Greedy
           // matching without replacement takes the easiest-to-match exposed first,
@@ -1576,7 +1615,8 @@ const DESIGNS = [
           // sickest exposed — and the estimate is an ATT among whoever is left, a
           // population nobody chose. Report exposed retained, and say when the
           // requested ratio was arithmetically impossible before matching began.
-          if (M.indexOf("matching") >= 0) r += "  { mi<-matchidx(); nex<-sum(tr); nmex<-sum(d$TREAT[mi]==1); if(length(mi)>2){ dd<-data.frame(t=t[mi],e=e[mi],TREAT=d$TREAT[mi]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); cat(sprintf('RESULT_ESTIMATE|" + ratio + ":1 PS matching (%d of %d exposed matched) - %s HR, ATT among the matched exposed|%.2f (95%% CI %.2f-%.2f)\\n',nmex,nex,est,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95']))\n" +
+          if (M.indexOf("matching") >= 0) r += "  { mi<-matchidx(); nex<-sum(tr); nmex<-sum(d$TREAT[mi]==1); if(length(mi)>2){ dd<-data.frame(t=t[mi],e=e[mi],TREAT=d$TREAT[mi]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); mlab<-sprintf('" + ratio + ":1 PS matching (%d of %d exposed matched) - %s HR, ATT among the matched exposed',nmex,nex,est)\n" +
+            "    if(ciok(s)) cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n',mlab,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95'])) else cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',mlab))\n" +
             "    if(nmex<nex) cat(sprintf('RESULT_NOTE|Matching kept %d of %d exposed patient(s): %d found no comparator within the caliper and were dropped. Greedy matching without replacement takes the easiest-to-match exposed first, so the ones left out are systematically those with the highest propensity scores - the estimate is an average treatment effect among the exposed who could be matched, not among the exposed you uploaded.\\n', nmex, nex, nex-nmex))\n" +
             "    if(" + ratio + "*nex > sum(!tr)) cat(sprintf('RESULT_NOTE|A " + ratio + ":1 ratio needs %d comparators for %d exposed and only %d exist, so at least %d exposed could never be matched whatever the caliper allowed. Lower the ratio.\\n', " + ratio + "*nex, nex, sum(!tr), nex-sum(!tr)%/%" + ratio + "))} } }\n";
           r += "}\n";
@@ -2618,9 +2658,17 @@ const DESIGNS = [
         m.className = "mt-3 text-xs text-rose-700";
       }
       else if (bt.length) {
-        m.innerHTML = bt.map((b) => "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but holds " +
-          esc(b.bad.join(", ")) + " — value(s) this tool cannot read as yes or no.").join(" ") +
-          " A 0/1 role must be unambiguous: if the column has exactly two levels, say which one means yes under <strong>Coded flags</strong> in the structure panel above; if it has three or more (1 = yes, 2 = no, 9 = unknown, say), recode it before uploading. It is not treated as “yes” just because it is not zero.";
+        // Two different faults share this list: values that cannot be read as yes/no,
+        // and a treatment column that reads fine and never varies. Each entry states
+        // its own, so a file with one of each does not lose one of the messages.
+        const oneArm = bt.some((b) => b.oneArm !== undefined), unread = bt.some((b) => b.bad);
+        m.innerHTML = bt.map((b) => (b.oneArm !== undefined
+          ? "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but every row in the file reads as " +
+            (b.oneArm === 1 ? "<strong>exposed</strong>" : "<strong>comparator</strong>") + "."
+          : "<strong>" + esc(b.col) + "</strong> is mapped to “" + esc(b.label) + "”, but holds " +
+            esc(b.bad.join(", ")) + " — value(s) this tool cannot read as yes or no.")).join(" ") +
+          (oneArm ? " With only one arm there is nothing to compare: a propensity score would predict the same value for everyone, the common-support range would be empty, and every hazard ratio undefined. Map a column that distinguishes the two treatments, or check under <strong>Coded flags</strong> in the structure panel that the right value is being read as yes." : "") +
+          (unread ? " A 0/1 role must be unambiguous: if the column has exactly two levels, say which one means yes under <strong>Coded flags</strong> in the structure panel above; if it has three or more (1 = yes, 2 = no, 9 = unknown, say), recode it before uploading. It is not treated as “yes” just because it is not zero." : "");
         m.className = "mt-3 text-xs text-rose-700";
       }
       else if (missing.length) { m.textContent = "Map the required roles (*): " + missing.join(", "); m.className = "mt-3 text-xs text-amber-700"; }
@@ -2668,6 +2716,16 @@ const DESIGNS = [
           if (toBin(v) == null) { const s = String(v).trim(); if (bad.indexOf(s) < 0) bad.push(s); }
         }
         if (bad.length) out.push({ label: r.label, col: col, bad: bad });
+        // A 0/1 column that never varies is readable and useless. It matters for one
+        // role only: with a single treatment arm the whole ACNU comparison is empty,
+        // and every diagnostic downstream reports on a cohort that has no comparator
+        // while looking perfectly healthy. Checked here rather than only in R, because
+        // an R stop lands in the debug pre at the end of a run.
+        if (r.k === "TREAT" && getDesign() === "acnu" && !bad.length) {
+          const seen = new Set();
+          for (let i = 0; i < DATA.rows.length && seen.size < 2; i++) { const b = toBin(DATA.rows[i][col]); if (b != null) seen.add(b); }
+          if (seen.size === 1) out.push({ label: r.label, col: col, oneArm: [...seen][0] });
+        }
       });
       return out;
     }
