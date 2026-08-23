@@ -844,6 +844,10 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       // <select> left at selectedIndex = -1 contributes NOTHING to FormData, so
       // by the time anything reads the state the dead value is simply gone.
       let staleSelects = [];
+      // Carried in the saved draft under a key outside the form's namespace, so
+      // readForm() — which is FormData-derived — cannot see it and therefore
+      // cannot leak it into an export as a field.
+      const STALE_KEY = "__staleSelects";
       const writeForm = (state) => {
         const multi = new Set(["sites", "sensitivityPick", "subgroupsPick"]);
         staleSelects = [];
@@ -875,17 +879,50 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
             // unexposed time" — a design variant nobody picked — with nothing
             // on screen to say so. Keep what the markup declares, and name what
             // was dropped.
-            if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === state[name])) {
+            //
+            // String(), because option.value is always a string and a seed is
+            // JSON: a numeric value would fail a strict === against an option
+            // this page does offer, and the page would refuse a choice it has
+            // while blaming a rename that never happened. No SCCS option value
+            // looks numeric today, so this is a guard, not a fix.
+            if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === String(state[name]))) {
               staleSelects.push({
                 name,
                 value: String(state[name]),
                 label: (el.closest("label")?.querySelector("span")?.textContent || name).trim(),
                 kept: (el.options[el.selectedIndex] || {}).text || el.value,
+                // The raw value it was left at, so the note can be retired by
+                // asking what the box holds now rather than by listening for a
+                // `change` that the page's own writes never fire.
+                keptValue: el.value,
               });
               continue;
             }
             el.value = state[name];
           }
+        }
+        // Anything still unanswered from an earlier visit. Its select now holds
+        // the substituted value, so this pass cannot rediscover it — the note
+        // above says so itself: "it is not recoverable from the saved draft
+        // once the page has loaded". Until this existed the page then threw
+        // that record away on the very next render, so the refusal reached the
+        // Markdown, the Word file and STROBE item 19 on ONE load and never
+        // again, while all three went on asserting the substituted variant.
+        // Validated against the live markup rather than trusted: a carried
+        // entry may only name a select this page still has, and nothing from
+        // it is ever assigned to a control.
+        const carried = Array.isArray(state[STALE_KEY]) ? state[STALE_KEY] : [];
+        for (const c of carried) {
+          if (!c || !c.name || staleSelects.some((x) => x.name === c.name)) continue;
+          const el = form.elements[c.name];
+          if (!el || !el.options) continue;
+          staleSelects.push({
+            name: c.name,
+            value: String(c.value == null ? "" : c.value),
+            label: (el.closest("label")?.querySelector("span")?.textContent || c.name).trim(),
+            kept: (el.options[el.selectedIndex] || {}).text || el.value,
+            keptValue: el.value,
+          });
         }
       };
       // A picked citation travels only while the phenotype it validates is still
@@ -1155,7 +1192,7 @@ ${sccsVariantText}
 
 ${ASSUMPTIONS.map((a, i) => (i + 1) + ". **" + a.t + ".** " + a.plain + "\n\n   *Why it matters.* " + a.precise + "\n\n   *What we do about it.* " + a.check + " [" + a.cite + "]").join("\n\n")}
 
-${(() => { const c = sccsChecks(s); return c.length ? "**Outstanding issues in this draft**\n\n" + c.map((x) => "- " + (x.lvl === "stop" ? "**" + x.t + ".** " : x.t + ". ") + x.d).join("\n") : "_The automated checks found nothing outstanding. They test only what this form can see — the structure of the period strip, the censoring rule, the season setting and the wording of the outcome — and are not a substitute for your own judgement on assumptions 1-4 above._"; })()}
+${(() => { const c = sccsChecks(s, true); return c.length ? "**Outstanding issues in this draft**\n\n" + c.map((x) => "- " + (x.lvl === "stop" ? "**" + x.t + ".** " : x.t + ". ") + x.d).join("\n") : "_The automated checks found nothing outstanding. They test only what this form can see — the structure of the period strip, the censoring rule, the season setting and the wording of the outcome — and are not a substitute for your own judgement on assumptions 1-4 above._"; })()}
 
 ## 9. Time-varying confounders
 
@@ -1475,7 +1512,22 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       // Everything here is derived from the form, never from a stored guess.
       const FATAL_RX = /\b(death|deaths|mortality|fatal|suicide|self-?harm|cardiac arrest|sudden death)\b/i;
       const HIGH_MORTALITY_RX = /\b(myocardial infarction|\bmi\b|stroke|h(a)?emorrhage|sepsis|septic|hip fracture|pneumonia|cardiac|cardiovascular|respiratory failure)\b/i;
-      const sccsChecks = (s) => {
+      // Flattened, because these strings quote a value that came from somebody
+      // else's ?seed= link and they travel into a Markdown bullet list, where a
+      // newline ends the item and "## " at the start of the next line is a
+      // heading. Same trap the ITS and ACNU builders record.
+      const clipOne = (v, n) => {
+        const t = String(v == null ? "" : v).replace(/[\r\n\u2028\u2029]+/g, " ").replace(/\s{2,}/g, " ").trim();
+        return t.length > n ? t.slice(0, n - 1) + "…" : t;
+      };
+      // No form ever offered "", so "which is not one of its options" is not a
+      // true sentence about a blank — and a blank is the likeliest way a draft
+      // ends up naming a value this page cannot honour.
+      const staleOne = (x) => "“" + clipOne(x.label, 60) + "” " + (x.value === ""
+        ? "was restored with no value at all — the draft or link it came from left it blank"
+        : "was saved as “" + clipOne(x.value, 80) + "”, which is not one of its options")
+        + "; it has been left at “" + clipOne(x.kept, 70) + "”, and that is what this protocol describes — a specification nobody chose.";
+      const sccsChecks = (s, forDoc) => {
         const out = [];
         const periods = parsePeriods(s.periods);
         const outcomeBlob = [s.picoO, s.outcomeDef, s.outcomeCodes].filter(Boolean).join(" ");
@@ -1492,9 +1544,16 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
             ". No length has been assumed for these, so they are missing from the protocol rather than wrong in it, and the design figure is not drawn. Write each line as Type | days, e.g. Exposure risk | 30. In an SCCS the window lengths are the estimand: the incidence rate ratio is exposed person-time against reference person-time, so a length the tool guessed would change the quantity being estimated." });
         }
         if (staleSelects.length) {
-          out.push({ lvl: "stop", t: "Your saved draft asked for a choice this form no longer offers", d:
-            staleSelects.map((x) => "“" + x.label + "” was saved as “" + x.value + "”, which is not one of its options; it has been left at “" + x.kept + "”").join(". ") +
-            ". Check that setting before you export: a value the form cannot show is a value the protocol cannot honour, and it is not recoverable from the saved draft once the page has loaded." });
+          // Two tails, one body. On screen the note must say what to do; in the
+          // exported protocol there is nothing to press and no panel to press
+          // it in, so "Check that setting before you export" — printed INSIDE
+          // the export, and singular after a list of three — read as a defect
+          // in the document rather than as help. The substance is identical.
+          out.push({ lvl: "stop", t: "A saved choice could not be applied", d:
+            staleSelects.map(staleOne).join(" ") +
+            (forDoc
+              ? " A value the form cannot show is a value the protocol cannot honour, and the dead value is not recoverable from the saved draft once the page has loaded — so nothing can tell you what was meant."
+              : " Pick the option you want, or press the button below to confirm the one it was left at. The dead value is not recoverable from the saved draft once the page has loaded.") });
         }
         const lapsed = citeState(s).lapsed;
         if (lapsed.length) {
@@ -1629,12 +1688,52 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         box.innerHTML = '<p class="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-500">Checks against what you entered</p><div class="mt-2 space-y-2">' +
           notes.map((n) => { const st = style[n.lvl]; return '<div class="rounded-lg border ' + st[0] + ' p-3 text-xs ' + st[1] + '"><p class="font-bold">' + st[2] + " " + esc(n.t) + '</p><p class="mt-1 leading-relaxed">' + esc(n.d) + "</p></div>"; }).join("") + "</div>";
         box.classList.remove("hidden");
+        // Re-picking the option a select already shows fires no event at all,
+        // so a user content with the value it was left at had no way to answer
+        // a stop that names it — and the note now survives every reload and
+        // prints in every export. A stop nobody can dismiss is what teaches
+        // people to ignore the panel.
+        if (staleSelects.length) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "mt-2 rounded-lg border border-rose-400 px-3 py-1 text-xs font-semibold text-rose-900 hover:bg-rose-100";
+          b.textContent = staleSelects.length === 1
+            ? "Keep “" + clipOne(staleSelects[0].kept, 40) + "”"
+            : "Keep all " + staleSelects.length + " substituted choices";
+          b.addEventListener("click", () => { staleSelects = []; render(); });
+          box.appendChild(b);
+        }
+      };
+
+      // Once the user has set the control the warning is about, the warning is
+      // not merely stale — it is false, and it is a blocker. Left uncleared it
+      // said "SCCS variant … has been left at Standard SCCS" in section 8 of a
+      // protocol whose section 5 read "Active-comparator within-person SCCS",
+      // and it travelled into the Word file and STROBE item 19 that way. A stop
+      // nobody can dismiss is exactly what teaches people to ignore the panel.
+      // Retire by VALUE, not by event. Listening for input/change missed every
+      // control this page writes to itself — the phenotype library's picker
+      // sets el.value and re-renders without firing either — so the note
+      // survived and then called the option the user had just picked with the
+      // page's own picker a specification nobody chose. Anything that moves the
+      // select off the value it was left at is an answer, however it moved.
+      const retireAnswered = () => {
+        if (!staleSelects.length) return;
+        staleSelects = staleSelects.filter((x) => {
+          const el = form.elements[x.name];
+          return !el || !el.options || el.value === x.keptValue;
+        });
       };
 
       const render = () => {
         const state = readForm();
+        retireAnswered();
         preview.textContent = buildMarkdown(state);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn("draft not saved", e); }
+        // Without the reserved key this line destroys the note it just raised.
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(
+            staleSelects.length ? Object.assign({}, state, { [STALE_KEY]: staleSelects }) : state));
+        } catch (e) { console.warn("draft not saved", e); }
         renderFeasibility(state);
         try { renderSccsChecks(state); } catch (e) { console.error("assumption checks failed", e); }
         try { renderScheme(state); } catch (e) { console.error("renderScheme failed", e); }
@@ -1650,18 +1749,8 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       // saved draft (or a ?seed= link) actually carried.
       if (window.PC && PC.mountAmendments) PC.mountAmendments(form);
       render();
-      // Once the user has set the control the warning is about, the warning is
-      // not merely stale — it is false, and it is a blocker. Left uncleared it
-      // said "SCCS variant … has been left at Standard SCCS" in section 8 of a
-      // protocol whose section 5 read "Active-comparator within-person SCCS",
-      // and it travelled into the Word file and STROBE item 19 that way. A stop
-      // nobody can dismiss is exactly what teaches people to ignore the panel.
-      const clearStale = (e) => {
-        const n = e && e.target && e.target.name;
-        if (n && staleSelects.some((x) => x.name === n)) staleSelects = staleSelects.filter((x) => x.name !== n);
-      };
-      form.addEventListener("input", (e) => { clearStale(e); render(); });
-      form.addEventListener("change", (e) => { clearStale(e); render(); });
+      form.addEventListener("input", render);
+      form.addEventListener("change", render);
 
       form.addEventListener("click", (e) => {
         const addRow = e.target?.closest?.("[data-add-row]");
@@ -1807,7 +1896,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
                 ". Age modelled as a time-varying covariate in " + ageTxt + " bands; seasonality: " + seasonTxt +
                 ". Site-specific estimates pooled by " + metaTxt + " meta-analysis (report I², τ²). Subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
           "17": "Pre-specified subgroups:\n" + bul(subg) + "\nSensitivity analyses:\n" + bul(sens),
-          "19": "The within-person design controls time-invariant confounding but not time-varying confounders; it assumes event occurrence does not alter subsequent exposure probability, does not curtail the observation period (the extreme violation being a fatal outcome), and that repeat events within a person are independent; outcome misclassification is possible." + (() => { const c = sccsChecks(s); return c.length ? " Outstanding assumption checks in the current draft: " + c.map((x) => x.t + " — " + x.d).join(" ") : ""; })(),
+          "19": "The within-person design controls time-invariant confounding but not time-varying confounders; it assumes event occurrence does not alter subsequent exposure probability, does not curtail the observation period (the extreme violation being a fatal outcome), and that repeat events within a person are independent; outcome misclassification is possible." + (() => { const c = sccsChecks(s, true); return c.length ? " Outstanding assumption checks in the current draft: " + c.map((x) => x.t + " — " + x.d).join(" ") : ""; })(),
           "21": "Results generalise to the source populations of the contributing AsPEN databases: " + sitesPlain + ".",
         };
       };
@@ -1981,7 +2070,7 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
           children.push(p([text("Why it matters. ", { italics: true }), text(a.precise)]));
           children.push(p([text("What we do about it. ", { italics: true }), text(a.check + " [" + a.cite + "]")]));
         });
-        const openChecks = sccsChecks(s);
+        const openChecks = sccsChecks(s, true);
         if (openChecks.length) {
           children.push(h2("Outstanding issues in this draft"));
           openChecks.forEach((x) => children.push(bullet(x.t + ". " + x.d)));
