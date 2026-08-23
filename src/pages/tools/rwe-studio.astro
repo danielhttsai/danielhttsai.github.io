@@ -1426,7 +1426,14 @@ const DESIGNS = [
           r += "if(trimmode=='cs'){ keep<-ps>=csLo & ps<=csHi; trimlab<-'restricted to the region of common support' }\n";
           r += "if(trimmode=='pct'){ lo1<-as.numeric(quantile(ps,0.01)); hi1<-as.numeric(quantile(ps,0.99)); keep<-ps>=lo1 & ps<=hi1; trimlab<-'trimmed to the 1st-99th percentile of the propensity score' }\n";
           r += "ntrim<-sum(!keep)\n";
-          r += "if(ntrim>0){ cat('RESULT_NOTE|Cohort ',trimlab,': ',ntrim,' of ',n,' row(s) removed before every estimate below, so all rows are comparable. This changes the population the effect refers to.\\n',sep='')\n";
+          // "so all rows are comparable" was a claim about the RESULT, printed before
+          // the recount that decides it - and the PSDIAG line emitted moments later
+          // contradicted it. Restricting to common support on the no-overlap demo
+          // leaves one row outside the boundary recomputed on the rows that were kept;
+          // percentile trimming on a cohort with essentially nothing to trim removed
+          // six rows to fix three and left five. Restricting narrows the cohort; it does
+          // not guarantee overlap at the new boundary. So say what the recount found.
+          r += "n0<-n; if(ntrim>0){\n";
           r += "  d<-d[keep,,drop=FALSE]; ps<-ps[keep]; tr<-tr[keep]; n<-nrow(d); d$lp<-qlogis(ps); psT<-ps[tr]; psC<-ps[!tr]\n";
           // outT/outC were counted on the cohort BEFORE the restriction, and nT/nC
           // are reported after it. Printed together they said "245 of 555 patients
@@ -1434,7 +1441,8 @@ const DESIGNS = [
           // then advised the restriction the user had already applied. Recount on
           // the cohort that is actually being analysed.
           r += "  csLo<-max(min(psT),min(psC)); csHi<-min(max(psT),max(psC))\n";
-          r += "  outT<-sum(psT<csLo | psT>csHi); outC<-sum(psC<csLo | psC>csHi) }\n";
+          r += "  outT<-sum(psT<csLo | psT>csHi); outC<-sum(psC<csLo | psC>csHi)\n";
+          r += "  cat('RESULT_NOTE|Cohort ',trimlab,': ',ntrim,' of ',n0,' row(s) removed before every estimate below. This changes the population the effect refers to.',if(outT+outC==0) ' Every row that remains has a counterpart in the other arm.' else sprintf(' %d of the %d row(s) kept still lie outside the propensity range the other arm occupies, recounted at the boundary of the retained cohort - restricting narrows the cohort, it does not guarantee overlap at the new edge.', outT+outC, n),'\\n',sep='') }\n";
           // ── Weights ───────────────────────────────────────────────────────
           // Stabilised by default: the numerator is the marginal probability of the
           // treatment actually received rather than 1. Same estimand, far tamer
@@ -1474,7 +1482,15 @@ const DESIGNS = [
           // the hazard ratios must not be able to miss that a large share of the
           // cohort has no counterpart — the weights can look perfect regardless.
           r += "outPct<-100*(outT+outC)/n\n";
-          r += "if(ntrim==0 && (outT+outC)>0) cat(sprintf('RESULT_NOTE|%d of %d patient(s) (%.1f%%) have no counterpart in the other arm at their propensity score. Every weighted estimate above extrapolates for them rather than comparing them with anyone. Stabilising or truncating the weights does not change this - restricting to common support does.\\n', outT+outC, n, outPct))\n";
+          // "Every weighted estimate above extrapolates for them" was emitted whatever
+          // was selected. With only matching and fine stratification ticked there is no
+          // weighted estimate in the run, no weighting control affects anything in it,
+          // and those two methods do the OPPOSITE of extrapolating: they drop the
+          // patients with no counterpart, which is why the counts beside their estimates
+          // are smaller than the cohort. The advice was wrong in the same breath as the
+          // count was right.
+          const anyW = M.indexOf("iptw") >= 0 || M.indexOf("smrw") >= 0 || M.indexOf("overlap") >= 0;
+          r += "if(ntrim==0 && (outT+outC)>0) cat(sprintf('RESULT_NOTE|%d of %d patient(s) (%.1f%%) have no counterpart in the other arm at their propensity score. " + (anyW ? "Every weighted estimate above extrapolates for them rather than comparing them with anyone. Stabilising or truncating the weights does not change this - restricting to common support does." : "No weighted estimator was selected, so nothing in this run extrapolates for them: matching and fine stratification exclude them instead, which is why the patient counts beside those estimates are smaller than the cohort you uploaded. The effect they report is about the patients who could be compared, not about everyone. Restricting to common support would make that explicit rather than implicit.") + "\\n', outT+outC, n, outPct))\n";
           r += "if(ntrunc>0 && outPct>5) cat('RESULT_NOTE|Truncation was applied while a substantial part of the cohort has no overlap. Truncation tidies the arithmetic; it does not create the missing comparators, so the weight diagnostics will look far healthier than the comparison actually is. Restrict to common support before trusting a truncated estimate here.\\n')\n";
           r += "bi<-function(v) tabulate(pmin(20,pmax(1,ceiling(v*20))),nbins=20)\n";
           r += "cat('PSHIST|',paste(bi(psT),collapse=','),'|',paste(bi(psC),collapse=','),'\\n',sep='')\n";
@@ -3358,12 +3374,21 @@ const DESIGNS = [
         h += '<div class="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900"><strong>The ' + esc(s.label) + ' estimate was not reported.</strong> ' +
           (essPct < 10 ? "The effective sample size fell to " + essPct.toFixed(0) + "% of the cohort. " : "") + (top1 > 25 ? "The heaviest 1% of patients hold " + top1.toFixed(0) + "% of the weight. " : "") +
           "A weighted hazard ratio here would be an artefact of a few patients rather than an effect. " +
+          // The remedy branch tested whether truncation had been applied and never
+          // whether a restriction had. So a user who followed the panel's own advice,
+          // restricted to common support, and still got a withheld estimate was told to
+          // restrict to common support — while section 1 two paragraphs above correctly
+          // said the restriction had already been applied and named narrowing the
+          // eligibility criteria as what was left. The two boxes contradicted each
+          // other about the same run, and the actionable one was the wrong one.
           (isIptw
             ? (dg.rescuable !== "1"
               ? "Truncation has already been applied and did not rescue it, which points at the overlap problem above rather than at the arithmetic — restrict to common support, or narrow the eligibility criteria."
-              : (okOverlap
-                ? "The arms do overlap, so this is an arithmetic problem: <strong>truncate at the 1st/99th percentile</strong> first, and restrict to common support only if that is not enough. Both controls are in step 3."
-                : "<strong>Restrict to common support first</strong> — the overlap problem above is the likelier cause, and truncating would tidy these numbers without fixing it. Both controls are in step 3."))
+              : ntrim
+                ? "You have already restricted the cohort, and it did not rescue this. <strong>Truncation at the 1st/99th percentile</strong> is the step still untried — the control is in step 3 — but if the overlap figure above is still large, narrowing the eligibility criteria is the honest route rather than more arithmetic."
+                : (okOverlap
+                  ? "The arms do overlap, so this is an arithmetic problem: <strong>truncate at the 1st/99th percentile</strong> first, and restrict to common support only if that is not enough. Both controls are in step 3."
+                  : "<strong>Restrict to common support first</strong> — the overlap problem above is the likelier cause, and truncating would tidy these numbers without fixing it. Both controls are in step 3."))
             : "The truncation control in step 3 caps the inverse-probability weights only, so it will not move this scheme. " +
               (okOverlap
                 ? "The arms do overlap, so the propensity model itself is producing the extreme weights — a sparser model, or restricting to common support, is the route out."
@@ -3428,9 +3453,27 @@ const DESIGNS = [
         h += '<p class="mt-2 text-[11px] ' + (released ? "text-slate-600" : "text-rose-700") + '"><strong>Does the correction help on this data?</strong> ' +
           "Fitting the claims-only analogue here (treatment + PS_ep only) gives HR " + hr(num("bT")) +
           ", against a gold-standard fit (treatment + PS_gs) of HR " + hr(num("bG")) + ". " +
-          (released
-            ? "Applying the correction gives HR " + hr(num("bcal")) + "."
-            : "Applying the correction anyway would give HR " + hr(num("bcal")) + " — further from the gold standard than doing nothing. That is what the withheld verdict is protecting you from.") +
+          // "further from the gold standard than doing nothing" was asserted whenever
+          // the verdict was not s-high, with no comparison made — and the three numbers
+          // needed to check it are printed in the same sentence. Over 400 replicates of
+          // an ordinary scenario, 32% of runs were withheld and in 90% of those the
+          // correction moved the estimate CLOSER, so the claim was false far more often
+          // than it was true. Compare on the log scale, which is where a hazard ratio's
+          // distance lives, and say which it actually was. Being closer on one dataset
+          // is not a reason to use it — the verdict is about surrogacy, not about this
+          // sample — so the withheld framing stands either way.
+          (() => {
+            const lg = (v) => (v != null && v > 0 ? Math.log(v) : null);
+            const bT = lg(num("bT")), bG = lg(num("bG")), bc = lg(num("bcal"));
+            const closer = bT != null && bG != null && bc != null ? Math.abs(bc - bG) < Math.abs(bT - bG) : null;
+            if (released) return "Applying the correction gives HR " + hr(num("bcal")) + (closer === null ? "." : closer ? " — closer to the gold standard than doing nothing." : " — further from the gold standard than doing nothing here, which is a reminder that surrogacy holding does not guarantee the correction helps in any one sample.");
+            return "Applying the correction anyway would give HR " + hr(num("bcal")) +
+              (closer === true
+                ? " — which on this particular dataset is closer to the gold standard than doing nothing. That is not a reason to apply it: the withheld verdict is about whether surrogacy holds, and one sample cannot tell you the correction will help on the study data you would use it on."
+                : closer === false
+                  ? " — further from the gold standard than doing nothing. That is what the withheld verdict is protecting you from."
+                  : ".");
+          })() +
           " A self-check on the validation data, not the study estimate.</p>";
       }
       h += '<p class="mt-2 text-[11px] text-slate-500">Still missing, and not obtainable here: <strong>β̂_T, its standard error, and β̂_PS</strong>. Those come from the claims-only study — a different dataset — and are typed into the protocol builder.</p>';
