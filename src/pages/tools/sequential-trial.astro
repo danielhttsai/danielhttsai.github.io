@@ -380,7 +380,7 @@ const SENSITIVITY = [
     const fmtDays = (d) => { const a = Math.abs(d); if (a >= 365) { const y = a / 365; return (Number.isInteger(y) ? y : y.toFixed(1)) + "y"; } if (a >= 60) return Math.round(a / 30) + "mo"; return a + "d"; };
 
     function renderScheme(s) {
-      const interval = s.interval || "monthly";
+      const interval = s.interval || "";
       const lb = dayInt(s.covlookback);
       const wash = dayInt(s.washout);
       const fu = Math.max(1, dayInt(s.futrial) || 1825);
@@ -428,7 +428,7 @@ const SENSITIVITY = [
       renderTrialStrip(s, interval, preSpan, fu, fuSet);
 
       document.getElementById("dcap").textContent =
-        "Top — what happens inside one trial, anchored at its origin (day 0): the same scheme as the active-comparator new-user design (washout and covariate look-back before time zero, follow-up after), because each nested trial IS a new-user trial started at that origin. Bottom — that trial is repeated at every origin (" + interval + ", " + (s.first || "start") + "–" + (s.last || "end") + "), staggered along calendar time; a patient enters every trial they stay eligible for. The strip is schematic: the number of trials drawn is illustrative, not the number your date range implies. Drag the ○ handles in the top panel to edit the windows.";
+        "Top — what happens inside one trial, anchored at its origin (day 0): the same scheme as the active-comparator new-user design (washout and covariate look-back before time zero, follow-up after), because each nested trial IS a new-user trial started at that origin. Bottom — that trial is repeated at every origin (" + (interval || "trial interval not set") + ", " + (s.first || "start") + "–" + (s.last || "end") + "), staggered along calendar time; a patient enters every trial they stay eligible for. The strip is schematic: the number of trials drawn is illustrative, not the number your date range implies. Drag the ○ handles in the top panel to edit the windows.";
     }
 
     // `fuSet` is false when the per-trial follow-up box is blank or unreadable.
@@ -463,11 +463,25 @@ const SENSITIVITY = [
       for (let k = 0; k < 3; k++) { const dx = dxA + (dxB - dxA) * (k / 2); svg += '<circle cx="' + dx + '" cy="' + dy + '" r="2.6" fill="#94a3b8"/>'; }
       svg += '<text x="' + ((dxA + dxB) / 2) + '" y="' + (dy - 8) + '" text-anchor="middle" font-size="9.5" fill="#94a3b8">…a new trial at each origin…</text>';
       svg += '<line x1="' + plotL + '" y1="' + (H - 22) + '" x2="' + plotR + '" y2="' + (H - 22) + '" stroke="#cbd5e1"/>';
-      svg += '<text x="' + plotR + '" y="' + (H - 8) + '" text-anchor="end" font-size="10" fill="#94a3b8">calendar time → (a new trial each ' + esc(interval) + ')</text>';
+      svg += '<text x="' + plotR + '" y="' + (H - 8) + '" text-anchor="end" font-size="10" fill="#94a3b8">calendar time → ' + esc(interval ? "(a new trial each " + interval + ")" : "(trial interval not set)") + '</text>';
       const d2 = document.getElementById("diagram2"); if (d2) d2.innerHTML = svg + "</svg>";
     }
 
     const or = (s, d) => (s && s.length ? s : d);
+    // ONE reading of the trial interval, for the abstract, the figure caption,
+    // the legend, the axis label and the Word file.
+    //
+    // Every one of them used to say `or(s.interval, "monthly")`. The select can
+    // be left with nothing selected — a ?seed= link or a saved draft carrying
+    // interval "" blanks it, and the stale-select machinery deliberately
+    // exempts the empty string because "" is not a value the page ever offered
+    // — so the box on screen was empty, no check fired anywhere, and five
+    // places in the exported protocol asserted monthly origins. The interval is
+    // not decoration: it fixes how many nested trials there are, how often one
+    // patient re-enters (and therefore the multiplicity the patient-level
+    // bootstrap exists to handle), and how often covariates are re-measured.
+    // Monthly and yearly origins are different studies. Nothing is assumed now.
+    const intervalText = (s) => or(s.interval, "(trial interval not specified)");
     // One map, two renderings. There were three near-copies of this — here, in
     // the Word export and in the TARGET handler — and two had already drifted
     // apart ("assignment at each origin, ignoring later switching" against
@@ -640,7 +654,7 @@ const SENSITIVITY = [
         "The windows move with the origin, so a patient ineligible at one origin may be eligible at a later one.",
       ] },
       { el: "diagram2", cap: "Figure 2. The same trial repeated at every origin — the nested trials staggered along calendar time.", lines: [
-        "One trial begins at each origin: " + or(s.interval, "monthly") + ", from " + or(s.first, "(first origin)") + " to " + or(s.last, "(last origin)") + ".",
+        "One trial begins at each origin: " + intervalText(s) + ", from " + or(s.first, "(first origin)") + " to " + or(s.last, "(last origin)") + ".",
         "Each trial carries the same pre-origin windows and the same follow-up length as Figure 1, re-measured at its own origin.",
         "Where the control arm is those not yet treated, a patient enters every trial for which they remain eligible, so the same person appears in several trials with overlapping follow-up; where both arms initiate at the origin, each patient sits in one trial.",
         "Trials with later origins have less calendar time before the data end and are administratively censored earlier.",
@@ -664,7 +678,7 @@ This study emulates a **sequence of nested target trials** to estimate the effec
 Among **${or(s.population, "(population)")}**, what is the effect of **${or(s.exposure, "(treatment)")}** versus **${or(s.comparator, "(comparator)")}** on **${or(s.outcome, "(outcome)")}**?
 
 ## 3. Study design
-A **sequential trial emulation**: a series of nested trials with origins **${or(s.interval, "monthly")}** from **${or(s.first, "(first origin)")}** to **${or(s.last, "(last origin)")}**, using observational data from **${or(s.data, "(data source)")}**.
+A **sequential trial emulation**: a series of nested trials with origins **${intervalText(s)}** from **${or(s.first, "(first origin)")}** to **${or(s.last, "(last origin)")}**, using observational data from **${or(s.data, "(data source)")}**.
 
 ## 3a. Study design diagram
 
@@ -778,6 +792,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // a value the page does not offer — an empty string is not a value.
       if (!s.estimand) checks.push({ level: "error", msg: "No estimand is selected, so sections 9 and 10 of the protocol say so rather than naming one. Choose intention-to-treat, per-protocol, or both — the choice decides whether patients are censored at deviation, which is the analysis, not a presentational detail." });
       if (!s.effect) checks.push({ level: "error", msg: "No effect measure is selected, so the protocol says so rather than naming one. Choose one before exporting." });
+      if (!s.interval) checks.push({ level: "error", msg: "No trial interval is selected. The dropdown is empty — a saved draft or a ?seed= link can leave it that way, and an empty box reads as merely unremarkable rather than unset. The protocol says the interval is not specified rather than naming one, in the abstract, the figure caption, the legend, the axis label and the Word file alike. The interval decides how many nested trials there are, how often a patient re-enters one, and how often covariates are re-measured, so monthly and yearly origins are different studies." });
       const est = s.estimand;
       if (est === "ITT" || est === "both") checks.push({ level: "info", msg: "ITT (assignment at each origin): the strategy is fixed at the origin — later switching or add-on is ignored (no deviation censoring). Switching attenuates this estimate toward the null by an amount the ITT estimate itself cannot tell you, so report how much switching occurred." });
       if (est === "PP" || est === "both") checks.push({ level: "info", msg: "Per-protocol: within each trial, censor at deviation and apply IPCW — fit the weights separately per arm, and list the predictors of deviation. Without the weights, censoring at deviation is itself a source of selection bias. Note that the arms here are different people, so the treatment weights and the censoring weights multiply; a cloned design needs only the censoring weights, because its two arms are the same person." });
@@ -968,7 +983,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       if (!window.buildTargetChecklistDocx) { setMsg("The TARGET checklist component did not load — reload the page.", true); return; }
       const s = readForm();
       const E = or(s.exposure, "(treatment)"), C = or(s.comparator, "(comparator)");
-      const origins = or(s.interval, "monthly") + " (" + or(s.first, "start") + "–" + or(s.last, "end") + ")";
+      const origins = intervalText(s) + " (" + or(s.first, "start") + "–" + or(s.last, "end") + ")";
       const estPlain = estimandPlain(s.estimand);
       const subg = mergeList(s.subgroupsPick, s.subgroupsCustom).join("; ") || "none pre-specified";
       const sens = mergeList(s.sensitivityPick, s.sensitivityCustom).join("; ") || "(see protocol)";
