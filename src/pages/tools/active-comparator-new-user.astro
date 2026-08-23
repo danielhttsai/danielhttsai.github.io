@@ -376,7 +376,7 @@ const PHENOTYPES = {
       name: "Hip fracture",
       codes: "ICD-10 S72.0, S72.1, S72.2 (primary discharge diagnosis); paired with surgical procedure code for highest PPV",
       definition: "First hospitalisation with primary discharge diagnosis of hip fracture (typically also requiring surgical-fixation code).",
-      provenance: "Used as an outcome in AsPEN multi-country fracture work. This entry names no specific paper well enough to cite, so nothing is added to the reference list; cite the site-specific positive predictive value you are relying on.",
+      provenance: "Used as an outcome in AsPEN multi-country fracture work. This entry names no specific paper well enough to cite.",
     },
     {
       name: "Any fracture",
@@ -783,9 +783,9 @@ const TIMELINE_PRESETS: Record<string, string> = {
             <div>
               <button type="button" data-open-library data-category="outcomes" data-target-def="outcomeDef" data-target-codes="outcomeCodes" data-also-fill="picoO"
                       class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">
-                📚 Pick outcome from validated library
+                📚 Pick outcome from library
               </button>
-              <span class="ml-2 text-[11px] text-slate-500">Fills definition + codes; the validation citation is added to the References section on export, and withdrawn again if the definition here stops being the one that was picked.</span>
+              <span class="ml-2 text-[11px] text-slate-500">Fills definition + codes. Each row says whether this library carries a validation study for it — most do not. Where one exists it is added to the References section on export, and withdrawn again if the definition here stops being the one that was picked.</span>
             </div>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Operational definition</span>
@@ -1719,6 +1719,41 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
       // all. Three commits in this run fixed exactly that wording in the body
       // sentences and left it standing in the heading above them.
       const STALE_DOC_HEAD = "A saved choice could not be applied, and this document describes the substitute.";
+      // The person who receives the .docx is not the person who saw the checks
+      // panel — the comment above STALE_DOC_HEAD says exactly that about a
+      // substituted <select>, and it is just as true here. Two things this page
+      // decides in silence otherwise: a validation study withheld because the
+      // definition it validates is no longer in the form, and operational
+      // details written for a method other than the one the document names.
+      // The second is the more dangerous, because the document then specifies
+      // two different analyses targeting two different estimands and says
+      // nothing; withholding the reference for it removed the only trace a
+      // reader could have followed. Both are stated in the document now.
+      const LIB_DOC_HEAD = "This protocol was assembled with help from the builder's phenotype library, and the builder has something to report about it.";
+      const libMsgsDoc = (s) => {
+        const out = [];
+        const rec = libraryPicks.psMethod;
+        const from = rec && rec.fields ? rec.fields.psMethodDetails : null;
+        const details = String(s.psMethodDetails || "").trim();
+        if (rec && from && details && String(rec.wrote) !== String(s.psMethod || "")) {
+          out.push("The operational details in the confounding-control section were filled from the library entry for “" +
+            ((PS_METHODS.find((m) => m.value === rec.wrote) || {}).label || String(rec.wrote)) +
+            "”, and the method named in that same section is “" +
+            ((PS_METHODS.find((m) => m.value === String(s.psMethod || "")) || {}).label || String(s.psMethod || "(not specified)")) +
+            "”. The section therefore names one approach and describes another; they target different estimands, and only one of them is the study that will be run. Decide which before this protocol is used.");
+        }
+        liveCitations(s).lapsed.forEach((x) => {
+          out.push("A " + (x.cat === "confounding" ? "method reference" : "validation study") +
+            " that the library attached to a pick has been left out of the reference list, because the field it belongs to no longer holds what was picked. It read: " + x.cite);
+        });
+        return out;
+      };
+      const libMdBanner = (s) => {
+        const m = libMsgsDoc(s);
+        return m.length
+          ? "> **" + LIB_DOC_HEAD + "**\n" + m.map((x) => ">\n> - " + x).join("\n") + "\n\n"
+          : "";
+      };
       const staleMdBanner = () => {
         const m = staleMsgsDoc();
         return m.length
@@ -2966,7 +3001,7 @@ The active comparator is used as an emulated placebo arm; a drug class with simi
 
 ---
 
-${staleMdBanner()}${window.PC.abstractMd(pcOf(s))}
+${staleMdBanner()}${libMdBanner(s)}${window.PC.abstractMd(pcOf(s))}
 ## Study design diagram
 
 ${FIG1_MARK}
@@ -3298,6 +3333,21 @@ _Drafted with the AsPEN protocol builder (${today})._
         // this page never shows the user. The comment above `shownText` says
         // exactly that about a different panel, and this run reintroduced it
         // three inches below.
+        // Both sides of "was filled with X, and now reads Y" used to be clipped
+        // at 60 characters from the START, and the ordinary way a user edits
+        // library text is to APPEND to it — so the sentence rendered two
+        // byte-identical quotations and told the reader a value had changed
+        // while showing them proof that it had not. Reproduced three ways by a
+        // reviewer against this run's own diff. Clip around the first point at
+        // which the two actually differ, so the quotation contains the change.
+        const diffPair = (a, b, w) => {
+          a = String(a); b = String(b);
+          let i = 0;
+          while (i < a.length && i < b.length && a[i] === b[i]) i++;
+          const start = Math.max(0, i - Math.floor(w / 3));
+          const cut = (t) => (start > 0 ? "…" : "") + t.slice(start, start + w) + (t.length > start + w ? "…" : "");
+          return [cut(a), cut(b)];
+        };
         const asShown = (field, v) => {
           const el = form.elements[field];
           if (el && el.options) {
@@ -3332,19 +3382,20 @@ _Drafted with the AsPEN protocol builder (${today})._
               ? "The details are still that entry's, word for word"
               : "The details have been edited since, but they were written for the other method") +
             ", and the protocol prints the method and the details in the same section — so section 7 will name one approach and describe another. Re-pick the method from the library to refill the details, or rewrite them for the method you have chosen." +
-            (psRec.cite ? " That entry's method reference is being withheld from the reference list for the same reason; if it still belongs in this protocol, paste it into the References box: " + String(psRec.cite).trim() : "") });
+            (psRec.cite ? " That entry's method reference is being withheld from the reference list for the same reason; if it still belongs in this protocol, paste it into “" + fieldLabel("references") + "”: " + String(psRec.cite).trim() : "") });
         }
         liveNotes(s).forEach((x) => checks.push({ level: "info", msg:
           "The library entry filled into “" + fieldLabel(x.field) + "” carries a note, which reaches no field and no export and is shown here for as long as that pick stands: " + x.note }));
         liveCitations(s).lapsed.forEach((x) => {
           if (x.field === "psMethod" && psMismatch) return;   // said once, above
           const method = x.cat === "confounding";
+          const pair = diffPair(asShown(x.field, x.wrote), asShown(x.field, x.now), 60);
           checks.push({ level: "warn", msg:
-            "“" + fieldLabel(x.field) + "” was filled from the library with “" + clipTxt(asShown(x.field, x.wrote), 60) + "”, and now " +
-            (x.now ? "reads “" + clipTxt(asShown(x.field, x.now), 60) + "”" : "is empty") +
+            "“" + fieldLabel(x.field) + "” was filled from the library with “" + pair[0] + "”, and now " +
+            (x.now ? "reads “" + pair[1] + "”" : "is empty") +
             ". The " + (method ? "method reference" : "validation study") + " that pick carried is being withheld from the reference list: it is evidence about the " +
             (method ? "method that was replaced" : "library entry that was picked, and this field is no longer what that entry put there") +
-            ". If it still belongs in this protocol, paste it into the References box: " + x.cite });
+            ". If it still belongs in this protocol, paste it into “" + fieldLabel("references") + "”: " + x.cite });
         });
         const washR = readDays(s.washout), lbR = readDays(s.lookback), graceR = readDays(s.grace);
         const wash = washR.days || 0, lb = lbR.days || 0, grace = graceR.days || 0;
@@ -4130,6 +4181,11 @@ _Drafted with the AsPEN protocol builder (${today})._
           children.push(p([text(STALE_DOC_HEAD, { bold: true, color: "B00000" })]));
           staleDoc.forEach((m) => children.push(bullet(m)));
         }
+        const libDoc = libMsgsDoc(s);
+        if (libDoc.length) {
+          children.push(p([text(LIB_DOC_HEAD, { bold: true, color: "B00000" })]));
+          libDoc.forEach((m) => children.push(bullet(m)));
+        }
         window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
         // The figure needs a heading of its own. abstractDocx/abstractMd end at
         // the amendments section, not at the abstract, so everything a builder
@@ -4560,6 +4616,11 @@ _Drafted with the AsPEN protocol builder (${today})._
           children.push(p([text(STALE_DOC_HEAD, { bold: true, color: "B00000" })]));
           staleTgt.forEach((m) => children.push(p([text("• " + m)])));
         }
+        const libTgt = libMsgsDoc(s);
+        if (libTgt.length) {
+          children.push(p([text(LIB_DOC_HEAD, { bold: true, color: "B00000" })]));
+          libTgt.forEach((m) => children.push(p([text("• " + m)])));
+        }
 
         children.push(h1("Item 7; Target trial specification vs emulation"));
         children.push(p([text("Item 7 is the heart of TARGET. Rows a-h show what the target trial would specify and how this study emulates each piece in observational data.")]));
@@ -4639,6 +4700,7 @@ _Drafted with the AsPEN protocol builder (${today})._
         // is the single most important thing about it, and it is now on the
         // row, at the moment of picking, in both directions.
         const isMethod = currentCategory === "confounding";
+        const isDrug   = currentCategory === "exposures";
         modalList.innerHTML = filtered.map((it, idx) => `
           <button type="button" data-phenotype-idx="${idx}"
                   class="block w-full text-left px-4 py-3 rounded-lg border border-transparent hover:border-brand-300 hover:bg-brand-50/40 transition">
@@ -4650,8 +4712,10 @@ _Drafted with the AsPEN protocol builder (${today})._
               ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">${isMethod ? "Method reference" : "Validation study"}</span> · ${esc(it.validation)} <span class="text-slate-500">Added to this protocol's reference list while ${isMethod ? "this method is the one selected" : "this definition is the one in the form"}.</span></p>`
               : (isMethod
                 ? `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No method reference</span> · This library carries no reference for this variant of the method. Nothing is added to the reference list; cite the estimator and variance treatment you intend to use.</p>`
-                : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring how accurately this definition identifies the condition in routinely collected data. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`)}
-            ${it.provenance ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Used in</span> · ${esc(it.provenance)}</p>` : ""}
+                : (isDrug
+                  ? `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · Dispensing records identify a drug class directly, so there is no positive predictive value to quote — but nothing here has been checked against your site's formulary, and a wildcard's membership changes as the ATC index is revised. Nothing is added to the reference list.</p>`
+                  : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring how accurately this definition identifies the condition in routinely collected data. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`))}
+            ${it.provenance ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">About this entry</span> · ${esc(it.provenance)}</p>` : ""}
           </button>
         `).join("");
         // Click handler; fill targets + close
