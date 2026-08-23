@@ -312,6 +312,13 @@ const SENSITIVITY = [
     const readPts = (raw) => {
       const t = String(raw == null ? "" : raw).trim();
       if (!t) return { raw: t, n: null, state: "blank" };
+      // Decimal only. Number() also parses "0x10" as 16 and "0b11" as 3, and
+      // nobody typing those into a box labelled "Pre-intervention points" means
+      // sixteen or three — that is a guess dressed as a reading. A thousands
+      // separator ("1,000") is refused for the same reason: Number() would read
+      // it as NaN here but the same trap has produced a tenfold-wrong answer
+      // elsewhere in this repo, so it is refused by name rather than by luck.
+      if (!/^[+-]?(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i.test(t)) return { raw: t, n: null, state: "bad" };
       const v = Number(t);
       if (!isFinite(v) || !Number.isInteger(v) || v < 0) return { raw: t, n: null, state: "bad" };
       return { raw: t, n: v, state: "ok" };
