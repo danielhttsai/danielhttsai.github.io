@@ -226,7 +226,7 @@ const fwList = Object.values(FRAMEWORKS);
             <h2 class="text-lg font-bold text-slate-900">Planned outputs &amp; figures</h2>
             <p class="mt-1 text-xs text-slate-500">Does the protocol pre-specify the shell tables and figures a rigorous RWE study mocks up in advance — Table 1, a Love plot, a participant flow diagram, results shells, and so on?</p>
             <div id="delivtally" class="mt-3 flex flex-wrap gap-2 text-xs font-semibold"></div>
-            <p id="delivnote" class="mt-3 text-xs text-slate-500 leading-relaxed"><strong class="text-slate-600">What the five labels mean.</strong> <em>Present / Partial / Absent</em> are claims about your document: whether it pre-specifies this output — or the equivalent your design owes, since these seven names are written for a person-level, propensity-score-adjusted, time-to-event cohort. A case-selection flow counts as the flow diagram; a case-series or period-composition description counts as the Table 1; an incidence-rate-ratio profile by risk window counts as the survival curve. <em>N/A</em> is a claim about your design: its estimator cannot produce this output or any equivalent — there is no between-person balance to diagnose in a within-person design, and no survival curve where nobody is followed from a shared time origin. Two rows can never be N/A and are recorded as Absent if the AI says otherwise — the primary results shell and the sensitivity-analysis outputs, because every design has a primary estimate, and assumptions worth probing: identifying assumptions where a contrast is estimated, measurement assumptions where none is. Two of the five labels are therefore this tool’s and not the AI’s — <em>Not assessed</em>, which is this tool recording that the AI gave no verdict or gave one it does not recognise, and an <em>Absent</em> on either of those two barred rows, which is this tool overruling the AI. Both say so in the evidence line. Read the evidence line before acting on any of them.</p>
+            <p id="delivnote" class="mt-3 text-xs text-slate-500 leading-relaxed"><strong class="text-slate-600">What the five labels mean.</strong> <em>Present / Partial / Absent</em> are claims about your document: whether it pre-specifies this output — or the equivalent your design owes, since these seven names are written for a person-level, propensity-score-adjusted, time-to-event cohort. A case-selection flow counts as the flow diagram; a case-series or period-composition description counts as the Table 1; an incidence-rate-ratio profile by risk window counts as the survival curve. <em>N/A</em> is a claim about your design: its estimator cannot produce this output or any equivalent — there is no between-person balance to diagnose in a within-person design, and no survival curve where nobody is followed from a shared time origin. Two rows can never be N/A and are recorded as Absent if the AI says otherwise — the primary results shell and the sensitivity-analysis outputs, because every design has a primary estimate, and assumptions worth probing: identifying assumptions where a contrast is estimated, and measurement assumptions — outcome and denominator misclassification — where none is. Two of the five labels can be this tool’s rather than the AI’s: <em>Not assessed</em>, which is always this tool recording that the AI gave no verdict or gave one it does not recognise, and an <em>Absent</em> on one of those two barred rows where the AI had said N/A, which is this tool overruling it. An ordinary <em>Absent</em> on those rows is the AI’s own verdict like any other. Every label this tool supplied rather than read says so in its own evidence line. Read the evidence line before acting on any of them.</p>
             <ol id="delivlist" class="mt-4 space-y-3"></ol>
           </div>
 
@@ -1108,6 +1108,13 @@ const fwList = Object.values(FRAMEWORKS);
       // reviewed: the screen said "not one of the 7 standard outputs" and both
       // exports said "not one of the standard outputs", for the same row in the
       // same run. Exactly the drift this change was fixing elsewhere.
+      // The twin of delivExtraLabel, and for the same reason: a volunteered row
+      // says on the row that it is not one of the seven, while a row the tool
+      // GUESSED onto the list said so only in a caveat two cards above — on the
+      // far side of the design-scheme panel on screen, and pages earlier in the
+      // Word file. A guess disclosed that far from the number it qualifies is
+      // the defect this run had just fixed for the tally.
+      const delivGuessLabel = (raw) => " (matched to this row by this tool — the AI wrote “" + raw + "”)";
       const delivExtraLabel = " (volunteered by the AI — not one of the " + DELIVERABLE_NAMES.length + " standard outputs)";
 
       // Names come back re-typeset: "Kaplan–Meier" with an en dash where the
@@ -1141,7 +1148,7 @@ const fwList = Object.values(FRAMEWORKS);
         // the row its verdict twice over. Collapsing them collides no pair of
         // the seven; there is a runtime check below that says so out loud if a
         // future name ever changes that.
-        .replace(/[\s/\-]+/g, "-");
+        .replace(/[\s/\-]+/g, "-").replace(/^-+|-+$/g, "");
       // A second, deliberately LOSSY key, tried only where the strict one found
       // nothing: a trailing parenthetical and a plural on the last word both go.
       // "Primary results table" and "Forest plots" are what a model writes when
@@ -1178,10 +1185,16 @@ const fwList = Object.values(FRAMEWORKS);
         // its own. The loose key needs no such check — it already stores null
         // for a shared key and declines to guess between them.
         const strictKeys = DELIVERABLE_NAMES.map(normName);
-        const collided = DELIVERABLE_NAMES.filter((n, i) => strictKeys.indexOf(strictKeys[i]) !== i);
-        if (collided.length && caveats) caveats.push("PROTOCOL-CHECKER DEFECT: the planned-output name(s) " +
-          collided.join(", ") + " no longer normalise to a key of their own, so two rows of the standard list are " +
-          "sharing one verdict. The panel below is wrong until this is fixed — report it rather than reading it.");
+        const collided = [...new Set(strictKeys)]
+          .map((k) => DELIVERABLE_NAMES.filter((n, i) => strictKeys[i] === k))
+          .filter((g) => g.length > 1).map((g) => g.join(" and "));
+        // Groups, not "the later member of each pair", and no hardcoded count:
+        // a defect report that misdescribes the defect is worse than none, and
+        // the first version named only the row that did NOT keep the verdict
+        // while saying "two rows" of a three-way collision.
+        if (collided.length && caveats) caveats.push("PROTOCOL-CHECKER DEFECT: " + collided.join("; ") +
+          " no longer normalise to keys of their own, so each of those groups shares a single verdict and the " +
+          "rest of the group has no row. The panel below is wrong until this is fixed — report it rather than reading it.");
         const byName = new Map();
         const extras = [], dupes = [], nameless = [], loose = [], pending = [];
         for (const d of (Array.isArray(list) ? list : [])) {
@@ -1199,7 +1212,7 @@ const fwList = Object.values(FRAMEWORKS);
           // caught here too: `{"name":{…}}` used to reach the panel as a
           // volunteered output titled "[object Object]".
           if (!d || typeof d !== "object" || Array.isArray(d) ||
-              typeof d.name !== "string" || !d.name.trim()) { nameless.push(d); continue; }
+              typeof d.name !== "string" || !normName(d.name)) { nameless.push(d); continue; }
           const canon = canonBy.get(normName(d.name));
           if (!canon) { pending.push(d); continue; }
           // First verdict wins, the rest are named — never rendered twice with
@@ -1210,11 +1223,26 @@ const fwList = Object.values(FRAMEWORKS);
         // Strict matching finishes for EVERY entry before the lossy key is
         // tried, so an exact name can never be displaced by a paraphrase that
         // happened to come earlier in the array.
+        // The collision branch is the one where a guess can destroy data, so it
+        // is the one that must not guess. The first version of this loop sent a
+        // loose match onto an already-taken row to `dupes` and dropped the
+        // entry: "Baseline characteristics table (Table 2)" — a genuine second
+        // shell for the weighted sample, which before any of this was rendered
+        // and labelled as volunteered — vanished from all three surfaces under
+        // a caveat reading "The AI returned more than one verdict for planned
+        // output(s) Baseline characteristics table (Table 1); only the first
+        // was used." The AI had returned no such thing. An exact name has
+        // already claimed that row, so a paraphrase landing on it is at least
+        // as likely to be a different output as the same one, and the tool
+        // cannot tell which: it keeps the row, says what it nearly did, and
+        // leaves the entry visible rather than merging or dropping it.
+        const looseTaken = [], looseRaw = new Map();
         for (const d of pending) {
           const canon = looseBy.get(looseName(d.name));
           if (!canon) { extras.push(d); continue; }
-          if (byName.has(canon)) { dupes.push(canon); continue; }
+          if (byName.has(canon)) { looseTaken.push("“" + d.name + "” (" + canon + ")"); extras.push(d); continue; }
           byName.set(canon, d);
+          looseRaw.set(canon, d.name);
           loose.push("“" + d.name + "” → " + canon);
         }
         // Volunteered rows were compared with the seven and never with each
@@ -1233,20 +1261,43 @@ const fwList = Object.values(FRAMEWORKS);
           [...new Set(dupes)].join(", ") + "; only the first was used.");
         if (dupeExtras.length && caveats) caveats.push("The AI returned more than one verdict for volunteered planned output(s) " +
           [...new Set(dupeExtras)].join(", ") + "; only the first was used.");
+        if (looseTaken.length && caveats) caveats.push("The AI named " + looseTaken.length +
+          " planned output(s) that this tool would have matched to a standard row by ignoring a bracketed suffix or a plural, " +
+          "except that the row already held a verdict from an exactly-named entry (" + looseTaken.join("; ") +
+          " — the row it would have gone to is in brackets). Merging them would have thrown one verdict away on a guess, so " +
+          (looseTaken.length === 1 ? "it is shown last as a volunteered output" : "they are shown last as volunteered outputs") + " instead. If " +
+          (looseTaken.length === 1 ? "it names" : "they name") + " the same output as the row in brackets, the two verdicts disagree and both are worth reading.");
         if (loose.length && caveats) caveats.push("The AI named " + loose.length + " planned output(s) differently from the list it was asked about, and this tool matched " +
           (loose.length === 1 ? "it" : "them") + " to a standard row by ignoring a bracketed suffix or a plural (" + loose.join("; ") +
           "). That match is this tool's guess, not the AI's statement — read the evidence and confirm the AI was judging the row it has been filed under.");
-        if (nameless.length && caveats) caveats.push("The AI returned " + nameless.length +
+        // Two sentences, not one. The first version said of every unusable
+        // entry that "nothing in them says which planned output they are about"
+        // — and then quoted, inside its own parentheses, a bare string reading
+        // "Forest plot", which says exactly that. A bare value is a name with
+        // no verdict; an object with no name is a verdict with no name. They
+        // are opposite failures and one sentence cannot be true of both.
+        const unnamedRows = nameless.filter((d) => d && typeof d === "object" && !Array.isArray(d));
+        const notEntries = nameless.filter((d) => !(d && typeof d === "object" && !Array.isArray(d)));
+        if (unnamedRows.length && caveats) caveats.push("The AI returned " + unnamedRows.length +
           " planned-output verdict(s) carrying no usable name (" +
-          nameless.map((d) => {
-            if (!d || typeof d !== "object" || Array.isArray(d)) return "“" + String(d) + "”";
+          unnamedRows.map((d) => {
             const st = String(d.status == null ? "no status" : d.status).trim() || "no status";
             const evd = String(d.evidence == null ? "" : d.evidence).trim();
-            return "“" + st + "”" + (evd ? ": " + evd : "");
+            const sug = String(d.suggestion == null ? "" : d.suggestion).trim();
+            // The suggestion is the one actionable sentence in the entry, and
+            // the first version of this caveat promised nothing was dropped
+            // while dropping it.
+            return "“" + st + "”" + (evd ? ": " + evd : "") + (sug && sug !== "—" && sug !== "–" && sug !== "-" ? " — suggested: " + sug : "");
           }).join("; ") +
-          "). Nothing in " + (nameless.length === 1 ? "it says which planned output it is" : "them says which planned outputs they are") +
-          " about, so " + (nameless.length === 1 ? "it is" : "they are") + " on no row above — " +
-          (nameless.length === 1 ? "it is" : "they are") + " reproduced here rather than dropped.");
+          "). Nothing in " + (unnamedRows.length === 1 ? "it says which planned output it is" : "them says which planned outputs they are") +
+          " about, so " + (unnamedRows.length === 1 ? "it is" : "they are") + " on no row above — " +
+          (unnamedRows.length === 1 ? "it is" : "they are") + " reproduced here rather than dropped.");
+        if (notEntries.length && caveats) caveats.push("The AI returned " + notEntries.length +
+          " item(s) in the planned-outputs list that are not verdicts at all (" +
+          notEntries.map((d) => "“" + String(d) + "”").join("; ") +
+          "). " + (notEntries.length === 1 ? "It carries" : "They carry") + " no status and no evidence this tool can read, so " +
+          (notEntries.length === 1 ? "it is" : "they are") + " on no row above; " +
+          (notEntries.length === 1 ? "it is" : "they are") + " reproduced here rather than dropped.");
         const ev = evidenceText;
         const readStatus = (d) => DELIV_ALIASES[String(d.status == null ? "" : d.status).trim().toLowerCase()];
         // One sentence for a status the aliases do not recognise, used by the
@@ -1296,12 +1347,13 @@ const fwList = Object.values(FRAMEWORKS);
             // asserting a causal contrast that may not exist.
             evidence = "The AI called this not applicable, which it cannot be: every design has a " +
               "primary estimate, and every design has assumptions worth probing — identifying " +
-              "assumptions where a contrast is estimated, measurement assumptions where none is. " +
+              "assumptions where a contrast is estimated, and measurement assumptions (outcome and " +
+              "denominator misclassification) where none is. " +
               "Recorded as absent instead" +
               (said ? ", and the AI's own words are kept here so you can judge them — it said: " + said
                     : ". The AI gave no evidence for the verdict this tool has overridden, so there is nothing of its own to judge here.");
           }
-          return { name, status: st, evidence, suggestion: d.suggestion };
+          return { name, status: st, evidence, suggestion: d.suggestion, guessed: looseRaw.get(name) };
         });
         // Tagged, so every surface can say what they are. Untagged, they were
         // counted in a tally that claims to summarise the seven standard rows
@@ -1336,7 +1388,7 @@ const fwList = Object.values(FRAMEWORKS);
           " “not applicable”. " + (naBarred.length === 1 ? "That row cannot be" : "Neither row can be") +
           ": every design has a primary estimate, and assumptions worth probing. " +
           (naBarred.length === 1 ? "It is" : "They are") + " shown as Absent instead — that verdict is this tool's, not the AI's." +
-          (naRows.length ? " Treat it as a sign the other N/A verdicts in this run are worth checking too." : ""));
+          (naRows.length ? (naBarred.length === 1 ? " Treat it" : " Treat them") + " as a sign the other N/A verdicts in this run are worth checking too." : ""));
         if (naRows.length && caveats) caveats.push("The AI judged " + naRows.length + " planned output(s) not applicable to this design (" +
           naRows.join(", ") + "). That is a claim about your design rather than about your document, and nothing in this tool can check it — read the evidence for each and confirm the estimator really has no equivalent to produce.");
         if (unrecExtras.length && caveats) caveats.push("The AI volunteered planned output(s) with a verdict this tool does not recognise (" +
@@ -1350,7 +1402,8 @@ const fwList = Object.values(FRAMEWORKS);
           return '<li class="border-l-2 pl-4 ' + m.border + '">' +
             '<div class="flex items-start justify-between gap-3">' +
               '<p class="text-sm font-semibold text-slate-900">' + escapeHtml(d.name) +
-                (d.extra ? ' <span class="font-normal text-slate-400">' + escapeHtml(delivExtraLabel.trim()) + '</span>' : '') + '</p>' +
+                (d.extra ? ' <span class="font-normal text-slate-400">' + escapeHtml(delivExtraLabel.trim()) + '</span>' : '') +
+                (d.guessed ? ' <span class="font-normal text-amber-700">' + escapeHtml(delivGuessLabel(d.guessed).trim()) + '</span>' : '') + '</p>' +
               '<span class="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ' + m.chip + '"><span class="inline-block w-1.5 h-1.5 rounded-full ' + m.dot + '"></span>' + m.label + '</span>' +
             '</div>' +
             (d.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(d.evidence) + '</p>' : '') +
@@ -1883,6 +1936,7 @@ const fwList = Object.values(FRAMEWORKS);
           if (delivNoteText()) md += "_" + delivNoteText() + "_\n\n";
           for (const x of delivRows) {
             md += "- **" + mdText(x.name) + (x.extra ? delivExtraLabel : "") +
+              (x.guessed ? mdText(delivGuessLabel(x.guessed)) : "") +
               "** — _" + ((DELIV_META[x.status] || DELIV_META.unassessed).label) + "_\n";
             if (x.evidence) md += "  - Evidence: " + mdText(x.evidence) + "\n";
             if (showSuggestion(x)) md += "  - Suggestion: " + mdText(suggestionText(x)) + "\n";
@@ -2022,7 +2076,7 @@ const fwList = Object.values(FRAMEWORKS);
             for (const x of delivRows) {
               const lab = (DELIV_META[x.status] || DELIV_META.unassessed).label;
               children.push(para([
-                text(x.name + (x.extra ? delivExtraLabel : "") + " — ", { bold: true }),
+                text(x.name + (x.extra ? delivExtraLabel : "") + (x.guessed ? delivGuessLabel(x.guessed) : "") + " — ", { bold: true }),
                 text(lab, { color: STCOL[x.status] || STCOL.unassessed, bold: true })]));
               if (x.evidence) children.push(para([text("Evidence: " + x.evidence, { size: 18, color: "555555" })]));
               if (showSuggestion(x)) children.push(para([text("Suggestion: " + suggestionText(x), { size: 18, color: "555555" })]));
