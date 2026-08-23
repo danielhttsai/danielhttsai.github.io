@@ -2471,7 +2471,16 @@ const DESIGNS = [
           L.push("    if(!inherits(full,'try-error') && length(full)<=20000){ fullk<-format(full,'%Y-%m-%d'); gm<-setdiff(fullk,ukey)");
           L.push("      if(length(gm) > 2*length(ukey)){ dg<-diff(as.numeric(kk2)); w<-which.max(dg)");
           L.push("        spanbad<-sprintf('The period labels span %d %s(s) but only %d of them contain any rows. That is not a series with gaps in it - it is what one out-of-range date, or a period unit that does not match the data, looks like. The largest jump is from %s straight to %s. The periods have been numbered one after another in date order rather than spread across that span, because a single point far from the rest would otherwise carry the whole baseline trend on its own - so treat the per-period slope below as per observed period, not per %s, until the dates are fixed. Check the earliest and latest values in the time column (%s to %s), and the period unit.', length(fullk), UNIT, length(ukey), format(kk2[w]), format(kk2[w+1]), UNIT, ukey[1], ukey[length(ukey)]) }");
-          L.push("      else if(length(gm)>0 && length(setdiff(ukey,fullk))==0){ gapmiss<-gm; gapn<-length(gapmiss); ukey<-fullk; kd<-pdate(ukey); ord<-seq_along(ukey); a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey) } } } }");
+          L.push("      else if(length(gm)>0 && length(setdiff(ukey,fullk))==0){ gapmiss<-gm; gapn<-length(gapmiss); ukey<-fullk; kd<-pdate(ukey); ord<-seq_along(ukey); a$t<-match(a$key,ukey); a<-a[order(a$g,a$t),,drop=FALSE]; rownames(a)<-NULL; np<-length(ukey) } }");
+          // The absolute cap tripping is the SAME evidence as the relative test — a
+          // day-unit series with a 2099 in one cell needs 29,586 periods to cover —
+          // and it used to decline in silence. A run headed "Fitted vs
+          // counterfactual at 2099-12-31 (end of follow-up)" printed five notes,
+          // none of which mentioned the date, the span or the outlier. Declining to
+          // act on a conclusion the code has already reached is the one thing this
+          // file is not allowed to do.
+          L.push("    else { dg<-diff(as.numeric(kk2)); w<-which.max(dg)");
+          L.push("      spanbad<-sprintf('The period labels run from %s to %s, which is more than twenty thousand %s(s) - far longer than any interrupted time series, and what one out-of-range date or a period unit far finer than the data looks like. The largest jump is from %s straight to %s. The periods below are numbered one after another in date order rather than spread across that span, so read the per-period slope as per observed period until the dates are checked.', ukey[1], ukey[length(ukey)], UNIT, format(kk2[w]), format(kk2[w+1])) } } }");
           L.push("if(spanbad!='') cat(sprintf('RESULT_NOTE|%s\\n', spanbad))");
           // The attenuation figures are this run's own: 400 replicates per cell of a
           // segmented Poisson series, 24 pre and 12 post periods, baseline mean 8 per
