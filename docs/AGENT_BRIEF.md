@@ -4755,7 +4755,6 @@ anything, and the compound-count defect above. Neither is visible in a diff.
   leads, unverified and **not asserted**: Suissa (case-time-control) PubMed 8728434; Wang
   et al., *Epidemiology* 2011, PubMed 21577117. Crossref/PubMed remain blocked.
 
-<!-- CLAIM 2026-08-23 eighteenth run: taking the SCCS interval (Wald vs profile likelihood) and the SCCS numeric-parsing open items in src/pages/tools/rwe-studio.astro. If you are a concurrent run reading this, take something else. -->
 ### Found 2026-08-23 — clone-censor-weight, second pass (concurrent with the SCCS run above)
 
 **Stop numbering runs; label them by target.** This run and the SCCS /
@@ -4978,3 +4977,174 @@ done**, and twice it was the same error class the run had set out to delete:
      builders that rely on it (case-control, clone-censor-weight, and the four
      with their own writeForm). NOT rwe-studio — a concurrent run holds that.
      If you are a concurrent run reading this, take something else. -->
+### Found 2026-08-23 by an eighteenth run — the SCCS interval, the item the seventeenth run reserved
+
+The seventeenth run's open list called the Wald-versus-profile question "the sharpest thing
+left" and left it for a run of its own, "exactly as the fourth run left the ITS standard
+errors for the fifth". This is that run. It also took the decimal comma, which the same list
+called "the only silent statistical failure in the family and the one to fix first".
+
+**Eight commits, and three of them fix defects this run itself created.** Read the
+self-inflicted section — it is the most useful part.
+
+#### The collision mitigation works and costs thirty seconds
+
+The seventeenth run lost ~40% of its output to a concurrent run picking the same gap, and
+suggested staking a claim first. This run pushed a one-line claim marker into this file
+**before doing any work** (`9d00f3e`, removed at the end). A concurrent run did fire, and it
+took clone-censor-weight instead. **Do this every time.**
+
+#### The adjudication the seventeenth run asked for: both prior runs were right
+
+Reproduced independently: 10 cases, 1 event each, 2 in a 14-day risk window against 351
+control days gives **IRR 6.268, Wald 1.331–29.517, profile 0.946–25.015** — the seventeenth
+run's numbers to the digit.
+
+**The variable that separates the two prior runs' opposite conclusions is person-time
+imbalance, not sample size.** With a 14-day window and few cases the Wald interval is
+anticonservative; with a 90-day window it is fine at every size (2.5–4.9% against a nominal
+5%), which is why a simulation using a wider window found it over-covering. Away from the
+null (IRR 2/3/5, 20 000 reps, MC se 0.0015) the likelihood-ratio interval covers 0.946–0.977
+and the Wald 0.935–0.968.
+
+**A 4000-rep run showed a 0.938 coverage dip for the profile interval that did not survive
+20 000 reps (0.947). Do not chase small-n coverage dips without replicates.**
+
+#### Shipped
+
+- **The SCCS headline interval is a profile-likelihood (likelihood-ratio) interval**, and so
+  is the pooled contrast row. Profiling the intercept out of a log-link Poisson with an
+  offset leaves `Sx*b - N*log(sum(tau*exp(b*x)))`, which is **the same function over a single
+  stratum** — one implementation serves both. Checked against re-fitting the glm with the
+  coefficient held fixed in the offset: identical to 8 decimals.
+- `sccsll()` uses `rowsum()`, not `split()`, so the interval costs about what the fit costs.
+  `profl()` brackets outward in units of the Wald SE, so it is scale-free — days, years and
+  seconds give identical limits.
+- **The estimability guard already makes the limits finite.** `0 < Sobs < Stot` rules out a
+  monotone likelihood before `profl` is called. A reviewer found `pok` TRUE in 3280/3280
+  files and argued the Wald-fallback branch is **unreachable**; it is kept, and announces
+  itself if it ever fires.
+- **The decimal comma is refused on screen** — see the self-inflicted section for how badly
+  the first attempt failed. Western (`1,234`) and Indian (`1,23,456`) grouping still build.
+- **`%.2f` on the estimate row is gone.** It printed a strongly protective rate ratio and
+  both its limits as `0.00 (95% CI 0.00-0.00)`, and rounded a lower limit of 0.00568 to 0.01.
+  Now `%.2f` above 0.1 and three significant figures below.
+- **The `factor(ID)` cross-check is bounded at 300 people.** It costs rows × people²:
+  0.73s at 250 cases, 4.9s at 500, 40.7s at 1000, **336s at 2000** in native R, against 0.1s
+  for the estimator it checks — and it sits *before* Table 1, in an engine with no timeout.
+  Above the threshold the same likelihood is re-maximised with a different optimiser (O(rows)).
+  A 1500-case file went **45.2s → 0.5s**, identical estimate.
+- **Stale results no longer come back from the dead.** `invalidateMaster` hides eight panes;
+  the design radio and `setData` hid only the containing card, and `buildMaster` re-opens it.
+  All three now call one `hideResults()`.
+- **Table 1's person-time rows are computed over the cases**, so the note claiming they are
+  is true. On a cohort extract: `Person-time exposed 27360 (62.5%)` → `960 (8.2%)`.
+
+#### The three defects this run created, and how each was caught
+
+**This is the fifth run running where the diff's own new machinery was the worst finding.**
+
+1. **The comma guard could not fire on a CSV — the only format it was written for.** Found
+   independently by *two* reviewers. It read `DATA.rows`, but every file enters through
+   SheetJS, which resolves `"14,0"` to the number `140` at parse time; the guard's first
+   line skips numbers. **The commit message's own verification did not reproduce**, because
+   it drove the page with `setData(DATA.columns, DATA.rows.map(f))` — injecting strings and
+   bypassing the parse every real upload takes. **A guard on uploaded data must be tested by
+   uploading a file through `#file`, not by calling `setData`.** The text survives on the
+   cell as `.w`; `sheet_to_json` exposes it with `raw:false`.
+2. **A sentence generalised from one file.** The note claimed that with a longer risk window
+   or a few hundred cases the two intervals "agree to two decimal places" — from watching the
+   demo print 2.57–3.49 either way. Measured: identical to 2dp in **0.0%** of 3000 files at
+   300 cases, and they still disagree about excluding 1 for **1.02%** of files at a thousand.
+3. **A simulated percentage no one could reproduce.** The note quoted "11.2 percent at 10
+   cases". Three independent re-implementations got **6.5, 7.0 and 14.1**. The spread was the
+   finding: this run's generator drew 10 *people* (≈7 cases) while the prose said 10 *cases*,
+   and the figure swings 15%→4.5% with the baseline rate alone. **A number that cannot be
+   reproduced from its own description does not belong in a document a reviewer may quote.**
+   Replaced by the exact worked example (10 cases → 6.27, Wald 1.33–29.52, LR 0.95–25.02).
+
+Also caught by **rendering the panel and reading it cold**: "The interval above" was singular
+above a two-row table, and a companion note quoted Wald limits without saying which row.
+**That procedure is now five runs old and has never failed.**
+
+#### Method notes worth keeping
+
+- **Three reviewers on disjoint briefs, then one at this run's own diff. Ten for ten.**
+- **Reproduce a reviewer's challenge yourself before believing either side.** Reviewer A said
+  this run's percentage was wrong; running it directly showed *why* (people vs cases), which
+  neither the reviewer's number nor this run's original had isolated.
+- **Test visibility by forcing the ancestor open.** Both stale-panel paths read `hidden`
+  while `#anacard` is closed and only misbehave once `buildMaster` opens it.
+- Verification loop: extract `SPEC.sccs.rscript()` / `buildScript()` from the **built** page
+  with Playwright, run under real `Rscript`. A real `.docx` was generated via
+  `npm pack docx@8.5.0` routed over the blocked unpkg CDN. SheetJS was likewise served from
+  `npm pack xlsx@0.18.5`. **Building the pre-change commit in a git worktree and diffing the
+  generated R per design is a cheap, strong regression proof** — cco/ITS/ACNU came back
+  byte-identical.
+- The live site was **not** checked; `danielhttsai.github.io` is blocked.
+
+#### Open, examined this run, deliberately left — ranked
+
+- **The interval is not a 95% interval under recurrent events.** A reviewer measured coverage
+  falling from 95.2% to **70.8%** (intervals 42% too narrow) when a case's repeat events are
+  clustered. The tool takes an event *count* per interval, prints `Events per case` up to 8 on
+  its own demo, and offers no first-event-only option, no cluster-robust SE and no
+  overdispersion check. **This is the largest remaining statistical defect and it is not an
+  approximation issue — the Wald→profile change does not touch it.**
+- **The closing assumption note misattributes the tool's limitation to the design.** It says a
+  self-controlled series "assumes each person's underlying rate is constant across their
+  observation period". Standard SCCS does not — age and calendar effects are handled by
+  splitting person-time, which the sibling builder
+  `src/pages/tools/self-controlled-case-series.astro:200` states correctly. **Two pages of
+  this site give contradictory accounts of the method.** That builder also lists recurrent-event
+  independence as assumption 3, cited to Whitaker 2006.
+- **The differential-missingness warning is unreachable by default.** `c_dropmiss` ships
+  ticked and deletes the rows in JS before R can count them, so `ndropna` is 0. A reviewer
+  blanked the exposure on the exposed interval of 120 cases: **2.99 → 3.28 (2.71–3.98)**, the
+  interval excluding the truth, with nothing on screen.
+- **Role dropdowns still ignore their declared `types`** — `types` is referenced once, in
+  `suggestCol`, for a default. Mapping the case ID to a *date* column on a file with a true
+  IRR of **1.00** gives **2.45 (2.26–2.65)** from 36 strata; to a binary column, 2.52. A
+  one-line change in `opts()` closes it, **but it is global and was not checked against the
+  other three designs.**
+- **The self-controlled/pooled collapse detector is still unbuilt**, and the mis-map above is
+  exactly what it catches (the two rows agree to 2dp on a 600-case file, far above the
+  `ncase>=3` gate). It is now *more* visible: on a sparse file both rows print the same number
+  **and** the same interval.
+- **Hard `stop()` refusals still cannot be exported** — `LAST` is nulled, `#expcard` stays
+  visible, and the `.md` says "(run the analysis first)". Reachable from a default-on
+  checkbox: untick "Standardise coded flags" on a `Y`/`N` column and `chk01` stops. The *soft*
+  refusals travel correctly.
+- **The two "reproducible" exports do not run together.** `analysis.R` reads `/data.csv`
+  (WebR's VFS root) and the master-file button emits *source* column names, while the script
+  expects role keys. Both break; there is no download for the CSV the script actually reads.
+- **No export records which column filled which role, or which cleaning options were on**,
+  while the page claims at `:343` that each fix "is logged and re-emitted into the exported R
+  script". **This is what makes every parsing defect above unauditable after the fact.**
+- **The tiny-interval guard cannot fire on the error it names.** `thr <- max(INTERVAL)/1e4` is
+  52 minutes on a 365-day file; a 1-day interval among 30/60/120-day ones moved the demo from
+  2.99 to **7.59**, interval excluding the truth, silently. **Examined and left deliberately:
+  every threshold that would catch it also fires on a legitimate short risk window, which is
+  the design's normal shape. A false refusal here is as bad as a false number.**
+- **The refusals are a conditioning event.** At 50 cases and a 7-day window under a true null a
+  reviewer measured **35% of files refused** and a mean log-IRR bias of **+0.32** among the
+  survivors. In a signal-detection screen the reported IRRs are systematically inflated. The
+  tool also tells the user to "report an upper bound instead" and computes none — `profl` is
+  now right there and a one-sided LR bound is a two-line change.
+- **`Sobs` is never reported.** It is the sufficient statistic, it governs the two refusals,
+  and how far the Wald and LR limits diverge is essentially a function of it (median
+  discrepancy 143% at 1–2 exposed events, 2.5% at 21–50).
+- **`%.2f` is still live on the case-crossover and ACNU estimate rows** (`:1783`, `:1429`,
+  `:1449`, `:1458`). Same defect, out of this run's scope.
+- **`profileColumn` prints `min Infinity · max -Infinity`** for every text-coded binary
+  column, beside a green tick, in the first panel the user sees.
+- **`WebrEngine.astro:33` may discard every R warning** — still unverified, still the highest
+  value per character. WebR's CDN is blocked.
+- **Apostrophes are stripped from every note** ("each person s underlying rate") to dodge
+  quote-escaping, and travel that way into the `.docx`. `qraw` at `:1270` already exists.
+- Citations: **still none in this path.** A `WebSearch` corroborates the mechanism in general
+  ("the larger the imbalance in the expected numbers of events in risk and control periods,
+  the worse the small sample bias") but nothing states a head-to-head recommendation for LR
+  over Wald intervals in SCCS, so **none was asserted** — the note reports this run's own
+  worked example instead. Snippet-only leads: Farrington, *Biometrics* 1995;51(1):228-235,
+  PMID 7766778; Whitaker et al., *Stat Med* 2006;25(10):1768-1797, doi 10.1002/sim.2302.
