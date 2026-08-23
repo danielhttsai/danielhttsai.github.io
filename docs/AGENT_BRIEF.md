@@ -6539,3 +6539,11 @@ under-flagging costs them the analysis.
 `git push origin HEAD:main` again — the detached-HEAD correction still applies.
 And give scratch files a per-role prefix: three agents wrote into one scratch
 directory this run and nothing collided only because every file was prefixed.
+
+<!-- CLAIM 2026-08-23 (twenty-fourth run): RWE Studio's numeric-role gate —
+     NUM_RULES / numTrouble / the decimal-comma guard / buildMaster's numeric
+     coercion / opts() ignoring role.types, in src/pages/tools/rwe-studio.astro.
+     The question is what reaches a numeric role on the ITS and ACNU paths,
+     where NUM_RULES has no entry at all. NOT the checker, NOT the builders,
+     NOT the SCCS Wald-vs-profile interval.
+     If you are a concurrent run reading this, take something else. -->
