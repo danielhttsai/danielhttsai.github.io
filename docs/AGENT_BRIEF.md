@@ -3608,3 +3608,237 @@ drag as "works but I could not measure it" — this is why.
   deciding what "2005-03" to "2018" means, and guessing there would recreate
   the bug the check exists to catch.
 
+### Found 2026-08-23 by a fifteenth run — the protocol generator hub, the last unreviewed tool
+
+Fourteen runs had worked the nine builders (all now opened at least once), RWE
+Studio twice and the Protocol Checker once. **`src/pages/tools/protocol-generator.astro`
+— one of the three top-level tools, and the page every reader meets first — had
+three commits ever, all drive-by, and no review.** 367 lines, no client script,
+so the bug class here is not a wrong number: it is a wrong *route* and a claim
+the builder it links to states more carefully.
+
+Two reviewers ran concurrently on disjoint briefs (statistics + citations;
+routing + navigation). They **converged independently on the routing defect**,
+which the orchestrator had also written up before either reported — three
+independent findings of the same thing.
+
+#### Environment: one new trap, everything else unchanged
+
+- **`npm i --no-package-lock` can leave packages partially extracted** — the
+  directory is present but the entry file is missing, `npm i` then reports "up
+  to date", and `astro build` dies with `ERR_MODULE_NOT_FOUND` on
+  `prismjs/components/index.js`, `zod-to-json-schema/dist/esm/index.js` and
+  others. Reinstalling the named package one at a time **does not converge** —
+  it wipes that package's own deps and you chase it round in circles. The fix
+  is `rm -rf node_modules && npm i --no-package-lock --no-audit --fund=false`,
+  which takes 10 seconds. Both reviewers hit this independently; one lost its
+  build entirely and reviewed from source only.
+- **`npm i <pkg>` rewrites `package.json`.** The repair loop above silently
+  added `prismjs`, `zod-to-json-schema` and `package-manager-detector` to
+  dependencies and bumped `astro` from `^5.0.0` to `^5.18.2`. Caught at
+  `git diff` before staging. **Always `git diff package.json` before you commit.**
+- `dist-*/` **is** gitignored now (it was not when the sixth run wrote that it
+  was not). The ship loop's `--outDir "dist-$$"` is safe.
+- Detached HEAD as always — `git push origin HEAD:main`.
+- Crossref/PubMed/doi.org/CRAN/publisher hosts all 403, `WebSearch` the only
+  way out, live site unreachable: all still true.
+- Ports used: reviewers 8181/8191, orchestrator 8201, round two 8211.
+
+#### Checked and clean (do not re-derive)
+
+- **All nine citations resolve — authors, journal, year, volume, pages — and no
+  fabricated reference is in this file.** Snippet evidence only (Crossref,
+  PubMed and doi.org are 403); checked by one reviewer and spot-checked
+  independently by the orchestrator. Lund 2015 Curr Epidemiol Rep 2:221-228;
+  Maringe 2020 IJE 49:1719-1729; Hernán 2008 Epidemiology 19:766-779;
+  Petersen 2016 BMJ 354:i4515; Maclure 1991 AJE 133:144-153; Vandenbroucke &
+  Pearce 2012 IJE 41:1480-1489; Lopez Bernal 2017 IJE 46:348-355; Ji 2017
+  Epidemiology 28:529-536; Lai 2015 Curr Epidemiol Rep 2:229-238. All nine DOI
+  prefixes are also internally consistent with the journal claimed (Springer
+  s40471 series, OUP ije dy{aa,s,w} year-letters, LWW pre-2010 `0b013e` vs
+  modern `EDE.00000`, BMJ `i` series) — a cheap cross-check worth repeating.
+- **The trend-in-trend CPE definition fixed by the fourteenth run is correct
+  and matches the builder.** Do not revisit.
+- **The case-control card is the strongest on the page.** Every clause of its
+  risk-set / cumulative / case-cohort / Prentice-weighted estimand sentence was
+  checked against `case-control.astro:336-351` and `:513` and is faithful, as
+  is the matching rule. Leave it alone.
+- **All nine slugs resolve to pages that build; all nine `#SHORT` anchors exist,
+  are unique, and every chip href resolves** (executed against the build).
+- **The `studioDesigns` sentence is true**: `rwe-studio.astro` defines exactly
+  `acnu`, `sccs`, `cco`, `its`, and exactly those four cards carry `studio: true`.
+  Checked both directions.
+- **No horizontal overflow at 390 / 768 / 1024 / 1440 px**, re-measured after
+  the routing change made the question blocks taller.
+- Descriptive-analysis, ITS and ACNU cards otherwise match their builders.
+
+#### Fixed this run
+
+All executed in Chromium against a local build, before and after.
+
+- ~~**Every routing question answered only one of its own branches.**~~ The six
+  questions each rendered one flat row of chips labelled "Points to". Q1's row
+  was the *yes* branch, Q2's was the *no* branch, Q4's was one of the two
+  answers its own heading names — **no consistent polarity to learn**. A reader
+  who correctly infers from Q1 that the row means "designs for yes" reads Q2's
+  row as saying CCW and ST are for when you *can* tell the strategies apart on
+  day one, the exact inverse; ACNU, the design for that case, had no chip on Q2
+  and was reachable from one chip on the whole page. Two rows contradicted the
+  prose printed directly beneath them: Q1's paragraph ends "If no such
+  comparator exists, you are pushed towards a self-controlled or calendar-time
+  design" above a row offering only the three cohort designs, so the
+  drug-versus-nothing reader was routed to the ACNU card whose *Breaks when* is
+  "No genuine comparator exists and the honest question is 'drug vs nothing'" —
+  the routing delivering them to the card that refutes it. Q4 was worse: the
+  question names both answers and the paragraph's second half explains that the
+  three chipped designs do not handle the other one. Routes now carry
+  `{ if, to, note? }`; both branches always render; a branch that leads nowhere
+  says so (Q3's "if no") rather than being omitted.
+- ~~**Case-crossover "removes time-invariant within-person confounding".**~~
+  Inverted — self-matching removes *between*-person confounding, and the page
+  said so correctly twelve lines above in the family lede. A factor constant
+  within a person *is* a between-person difference; what survives within the
+  person is the time-varying part the design is most vulnerable to.
+- ~~**A zero grace period "means the strategies coincide".**~~ They become
+  perfectly *distinguishable* at time zero, which is what cloning exists to
+  avoid; `clone-censor-weight.astro:501` says so verbatim and names the remedy
+  the card omitted (use ACNU). Reading it as "coincide" also mis-signposts the
+  fix — it suggests redefining the strategies when you should change design.
+- ~~**Four conditions the builders state and the hub had dropped.**~~ ACNU
+  asserted censoring at switch *is* informative (builder conditions it on the
+  reasons for stopping being outcome-associated). Sequential trial asserted the
+  trials are not independent samples — which is false for the variant where
+  both arms initiate at the origin, and the builder raises a *hard error* asking
+  the user which study they mean. SCCS listed three of the builder's four
+  assumptions, omitting that repeat events within a person must be independent —
+  on a card whose own example is recurrent falls in older adults. Its
+  pre-exposure window was described as absorbing confounding by indication,
+  the reading the builder explicitly refuses.
+- ~~**The caution box generalised an SCCS-only failure to both self-controlled
+  designs.**~~ It said they "are unusable if the event changes later exposure".
+  A backward-looking case-crossover never samples post-event exposure, so it
+  cannot be biased by it — `case-crossover.astro` mentions event-dependent
+  exposure **0 times**, the SCCS builder **6**. Now attributed to the design it
+  belongs to, with the note that the bidirectional referent offered as a
+  sensitivity analysis gives that immunity up.
+- ~~**"At least 8, ideally 12" pre-intervention points, unattributed.**~~ It
+  matches the builder so it was not a contradiction, but it sat inside *Assumes*
+  directly above a citation that does not support it. A search traces the 8 to
+  Penfold & Zhang rather than Lopez Bernal and finds **nothing at all for the
+  12**. Labelled this tool's own rule of thumb, following the precedent
+  trend-in-trend already sets. **No citation was added** — snippet evidence is
+  not grounds for asserting one, and this repo has had a fabricated reference
+  introduced by exactly that route.
+- Smaller, same species: the nine short codes were used thousands of characters
+  before the cards defining them with **no title or aria-label**, so decoding a
+  chip meant clicking it and losing your place — they now carry the design's
+  full title from **one map derived from the card list**, with a build-time
+  throw if a route ever names a design the page does not define (**verified by
+  planting a typo: the build fails with the route named**). All eleven anchors
+  landed their target *under* the 65px sticky header (`scroll-mt-6` = 24px), so
+  clicking a chip labelled SCCS hid the SCCS label that confirms arrival —
+  measured 49 vs 65, now 121. The novice box promised the questions "narrow nine
+  designs down to one or two" four lines above the retraction that they are not
+  a decision tree. Chips were 23px against a WCAG minimum of 24. `studioDesigns`
+  would have rendered "undefined" into a user-facing sentence at one design or
+  none.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The two reviewers cited the SAME sentence to opposite effect, and that is
+  the most useful thing that happened this run.** The applied analyst quoted
+  clone-censor-weight's "there is nothing to clone and the strategies coincide"
+  **approvingly**, as supporting evidence for its (correct) point that cloning
+  is wasted machinery when the arms are already distinguishable at time zero.
+  The methodologist independently identified that same sentence as **inverted**.
+  The methodologist was right — the builder says "distinguishable at time zero"
+  verbatim. **B's conclusion survived; its supporting quote did not.** This is
+  the brief's standing lesson in a new form: a reviewer can be right about the
+  conclusion and wrong about the evidence, so check the quote, not just the
+  claim.
+- **The disjoint-brief split paid off again and should be kept.** The
+  methodologist's top finding was a term inverted between two lines of the same
+  page; the applied analyst's was that the routing widget delivers the
+  no-comparator reader to the card that refutes the routing. Neither could have
+  found the other's. Both shipped.
+- **The orchestrator's own finding was invisible to both briefs.** The caution
+  box is neither a card (methodologist's scope) nor a route (applied analyst's),
+  so nobody was pointed at it and it carried the run's third inversion. **When
+  you split briefs by structure, list the page regions that belong to neither.**
+- **The applied analyst named its own least-confident finding and it was
+  rejected on its own advice.** It argued CCW is mis-filed under an
+  active-comparator question when its worked example is statin-vs-no-statin,
+  but said itself it would not move CCW. Not moved — CCW runs fine with two
+  active strategies, and the family lede already hedges with "Strongest when a
+  genuine active comparator exists". Recorded below as an editorial question.
+- **The methodologist named its own least-confident finding and it was
+  downgraded, also on its own advice.** Whether "separated out to absorb" fairly
+  conveys the builder's "report it as a parameter in its own right". Folded into
+  the SCCS rewrite as a rider rather than shipped as a headline.
+- **One reviewer suggestion was rejected outright**: noting the 2021 corrigendum
+  to Lopez Bernal 2017 on a one-line hub citation. Correct that it exists;
+  wrong thing to put on a chooser card.
+
+#### Open in the hub, examined this run, deliberately left
+
+- **`Q4`'s "if it changes over time → ACNU, CCW, ST" is the weakest new route.**
+  It mirrors the page's own amber box ("The cohort designs handle time-varying
+  confounding, but only for what you actually measured"), and the note says the
+  confounder must have been measured — but strictly, only CCW's IPCW is a
+  g-method. A baseline propensity score, which is what ACNU and per-origin ST
+  fit, does not handle treatment-confounder feedback, and `sequential-trial.astro`
+  says so in its own *Breaks when*. The route is defensible as a pointer and is
+  consistent with the page; **naming the g-method requirement in that note would
+  be more honest and is the obvious next edit.**
+- **CCW is chipped under "do you have an active comparator?" while its worked
+  example is statin vs no statin**, and its family is literally named "Cohort
+  designs with a comparator" whose `plain` says "from the day they start
+  treatment" — the no-statin arm never starts treatment. The Q1-**no** reader,
+  often exactly the grace-period treat-vs-don't case CCW exists for, is now
+  routed to SCCS/CCO/ITS/TIT and will not find it. **Editorial: change the
+  example, the family label, or add CCW to the no-comparator route. Daniel's
+  call — all three are visible choices, not bugs.**
+- **The `interrupted-time-series.astro` builder still states "aim for ≥ 8
+  (ideally ≥ 12)" unattributed.** The hub now labels it a rule of thumb; the
+  builder does not. One-line consistency fix, left because the ITS builder had
+  its own dedicated run and this was not that run's scope.
+- **Penfold & Zhang 2013 is a LEAD for the ≥ 8 threshold, not a finding.** From
+  a course-website snippet summarising the ITS literature, not the paper. **Do
+  not cite it without an authoritative record.** Nothing was found for "12".
+- **The build-time guard checks that route codes exist; it does not check that
+  `short` values are unique**, so two designs sharing a short would silently
+  collapse `titleOf` and duplicate an anchor id. All nine are unique today
+  (verified). Cheap to add.
+- **Nothing checks that every design is reachable from some route.** Deliberate
+  — a design legitimately need not be routed — but it means a future edit could
+  orphan one silently.
+- **`PC.mountAmendments` is still never called in seven of nine builders**,
+  unchanged since the third run. Not a hub issue; still open.
+- The hub's TIT card framing of time-invariant confounding was examined by the
+  fourteenth run and left; unchanged here.
+
+#### Round two: the reviewer was pointed at this run's own commits
+
+A third reviewer was launched against this run's diff, per the standing rule
+(6/6 across six runs). **It had not reported when this section was written and
+the run's time was up** — so unlike the previous six runs, this diff has NOT
+been through an independent adversarial pass. Treat the two commits above as
+reviewed by their authors only, and if you are the next run, **reading this
+diff adversarially is the cheapest high-value thing available to you.**
+
+The orchestrator did attack its own diff and found three defects, all in prose
+it had itself introduced, all by **reading the rendered card text rather than
+the source diff**:
+
+- An em-dash aside inserted into case-crossover's `assumes` **replaced the comma
+  that separated the first list item**, so the list ran on: "...prevalence — ...
+  — the outcome has abrupt onset". Rewritten with semicolons.
+- Clone-censor-weight's `fails` gained a sentence opening "Or ..." directly
+  above a "; or" clause.
+- The novice box ended "a fault in theirs", with no clear antecedent.
+
+**The lesson worth keeping: render the strings and read them, do not read the
+diff.** All three were invisible in the diff and obvious on the page. This is
+the same species as the fourteenth run's grammar findings, and it is now clear
+that any run editing these long prose strings should dump the rendered
+`when`/`assumes`/`fails` for every card it touched and read them cold.

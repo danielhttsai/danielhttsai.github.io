@@ -122,7 +122,7 @@ const designs = [
     plain: "The strategies differ only in what happens after treatment starts, so everyone is counted in both — then dropped when they stop matching.",
     when: "Use when the strategies cannot be distinguished at time zero: grace periods ('start within X days'), sustained use, or treat-to-target. Each patient is cloned into every strategy at time zero, censored when their data stop matching the assigned strategy, and reweighted by inverse-probability-of-censoring weights to recover the per-protocol effect.",
     assumes: "Exchangeability, positivity and consistency — plus, because the artificial censoring is informative by design, no unmeasured predictors of deviation. During the grace period the arms contain the same people, so their hazards are equal by construction and proportional hazards is violated by design: Maringe et al. advise against reading a Cox hazard ratio causally here, and the interpretable contrast is an absolute one — a difference in survival at the end of follow-up, or in restricted mean survival time.",
-    fails: "The grace period is zero — the strategies are then already distinguishable at time zero, which is the situation cloning exists to avoid: every clone deviates immediately, no person-time is shared between the arms, and an active-comparator new-user cohort is the design you want instead. Or the grace period swallows most of the follow-up; or deviation is driven by something you never measured, in which case the weights cannot repair it.",
+    fails: "The grace period is zero — the strategies are then already distinguishable at time zero, which is the situation cloning exists to avoid: every clone deviates immediately, no person-time is shared between the arms, and an active-comparator new-user cohort is the design you want instead. It also fails if the grace period swallows most of the follow-up, or if deviation is driven by something you never measured, in which case the weights cannot repair it.",
     example: "Statin vs no statin within 90 days of MI (90-day grace period)",
     cite: "Maringe C, Benitez Majano S, Exarchakou A, et al. Int J Epidemiol 2020;49:1719–1729.",
     doi: "10.1093/ije/dyaa057",
@@ -162,7 +162,7 @@ const designs = [
     studio: true,
     plain: "Only people who had the event; ask whether they were exposed just before it more often than at earlier moments.",
     when: "Outcome-anchored: enrol patients on the acute event itself, then look back and compare exposure prevalence in a short hazard window immediately before onset with prevalence in matched control windows further back. Because each case is their own control, the matched analysis removes time-invariant between-person confounding automatically; what it cannot remove is anything that changes within the person across the look-back.",
-    assumes: "Exposure is transient with no time trend in its prevalence — within the person, not only across the calendar — the outcome has abrupt onset, and there is no carry-over from the control windows into the hazard window.",
+    assumes: "Exposure is transient and its prevalence does not trend over time — within the person, not only across the calendar; the outcome has abrupt onset; and there is no carry-over from the control windows into the hazard window.",
     fails: "Exposure prevalence trends over time, because the hazard window is always more recent than the control windows. A time-stratified referent removes the calendar-time part of that, and a case-time-control or case-case-time-control subtracts the part shared with a comparison series; none of them removes a trend specific to the individual, such as a dose escalated as that person deteriorates. Chronic exposure or insidious onset breaks the design outright.",
     example: "Triggers of acute MI in the 24 hours before onset",
     cite: "Maclure M. Am J Epidemiol 1991;133:144–153.",
@@ -290,8 +290,8 @@ const studioDesigns =
           event could not yet have been recorded gets credited to one arm, or two groups turn out to differ by how
           sick they were rather than by the drug. Each design below arranges the data so that one particular error
           cannot happen, and pays for it with an assumption you then have to defend. The six questions below narrow
-          the nine designs to the few worth considering — often more than one, and the questions can point different
-          ways, which is a real finding about your question rather than a fault in theirs.
+          the nine designs to the few worth considering — often more than one. When two of them point different ways,
+          that is a real feature of your research question rather than a defect in these six.
         </p>
       </div>
 
