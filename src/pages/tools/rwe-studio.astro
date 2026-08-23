@@ -3043,7 +3043,21 @@ const DESIGNS = [
       if (getDesign() === "its") return spec.rscript(covNames, itsOpts());
       return spec.rscript(covNames);
     }
-    ["its_cut", "its_unit", "its_comb", "its_model", "its_season", "its_cycle", "its_ac", "its_order", "its_denomcomb"].forEach((id) => $(id).addEventListener("input", () => { if (getDesign() === "its") validateMap(); }));
+    // Every control that buildScript() reads has to invalidate what is on screen.
+    // invalidateMaster was wired to the mapping, the covariates and the cleaning
+    // ticks, and to NONE of the analysis options — so the twelve switches that
+    // decide the estimand, the weight family and the analysed population were the
+    // only ones on the page a user could change with no effect at all. Set
+    // Positivity to "restrict to common support" (which is what the refusal box
+    // tells you to do) after a run and the estimates stayed on screen unchanged,
+    // the panel still read "the inverse-probability weights are stabilised", and
+    // "⬇ R script (.R)" still shipped LAST.script carrying trimmode<-'none' and
+    // wtmode<-'stab' while the controls beside it said otherwise. The ITS option
+    // boxes had a listener, but it only re-validated the mapping; the results and
+    // the exports went as stale there as here.
+    ["m_match", "m_ratio", "m_iptw", "m_smrw", "m_overlap", "m_fine", "m_nstrata", "m_trim", "m_wts", "m_trunc", "est_itt", "est_pp"]
+      .forEach((id) => { const e = $(id); if (e) e.addEventListener("change", invalidateMaster); });
+    ["its_cut", "its_unit", "its_comb", "its_model", "its_season", "its_cycle", "its_ac", "its_order", "its_denomcomb"].forEach((id) => $(id).addEventListener("input", () => { invalidateMaster(); if (getDesign() === "its") validateMap(); }));
 
     $("applyclean").addEventListener("click", buildMaster);
     document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; $("anacard").classList.add("hidden"); hideResults(); renderMap(); }));
