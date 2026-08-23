@@ -332,11 +332,25 @@ const SENSITIVITY = [
       // read" about "-5" states a false reason for a true refusal.
       if (isFinite(v) && Number.isInteger(v) && v < 0) return { raw: t, n: null, state: "bad", why: "negative" };
       if (!isFinite(v) || !Number.isInteger(v)) return { raw: t, n: null, state: "bad" };
+      // Above 2^53 `String(n)` switches to exponential and `Number()` silently
+      // rounds to the nearest representable integer. `1e21` came back out of
+      // here as "1e+21" — the exact notation the regex above exists to keep out
+      // of the protocol — and `9007199254740993` printed as …992, a count
+      // nobody typed. Neither tripped a check: computeChecks only objects below
+      // 8 points and missing() only refuses blank, bad and zero, so both
+      // travelled into the design-summary table, the study-size paragraph and
+      // the Word file with nothing on screen disagreeing.
+      //
+      // trend-in-trend's readNum has refused this since it was found there. The
+      // two readers are otherwise the same function, and this one was simply
+      // never brought up to it — which is the whole argument for checking a
+      // hardened reader's twin whenever one of them is fixed.
+      if (!Number.isSafeInteger(v)) return { raw: t, n: null, state: "bad", why: "huge" };
       return { raw: t, n: v, state: "ok" };
     };
     const ptsText = (p) => p.state === "ok" ? String(p.n)
       : p.state === "blank" ? "(not specified)"
-      : "(not specified — “" + clip(p.raw, 40) + "” " + (p.why === "negative" ? "is a negative number of periods" : "could not be read as a whole number of periods") + ")";
+      : "(not specified — “" + clip(p.raw, 40) + "” " + (p.why === "negative" ? "is a negative number of periods" : p.why === "huge" ? "is far too large to be a number of intervals in a series" : "could not be read as a whole number of periods") + ")";
     const prePts = (s) => readPts(s.prePoints);
     const postPts = (s) => readPts(s.postPoints);
 
@@ -593,7 +607,9 @@ const SENSITIVITY = [
       // document with no incomplete banner at all.
       const seg = (p, which, why) =>
         p.state === "blank" ? "the number of " + which + "-intervention points"
-        : p.state === "bad" ? "the number of " + which + "-intervention points (“" + clip(p.raw, 40) + "” " + (p.why === "negative" ? "is a negative number of periods" : "is not a whole number of periods") + ")"
+        // "1e21" is a whole number, so the old two-way fallback would have
+        // refused it for a reason that is not true. A refusal states why.
+        : p.state === "bad" ? "the number of " + which + "-intervention points (“" + clip(p.raw, 40) + "” " + (p.why === "negative" ? "is a negative number of periods" : p.why === "huge" ? "is far too large to be a number of intervals in a series" : "is not a whole number of periods") + ")"
         : p.n === 0 ? "the number of " + which + "-intervention points (0 was entered, and " + why + ")"
         : "";
       return [
