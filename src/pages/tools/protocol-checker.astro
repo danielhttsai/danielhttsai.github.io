@@ -753,7 +753,13 @@ const fwList = Object.values(FRAMEWORKS);
         // "unclear" to "partial".
         notscored: { label: "Not scored", dot: "bg-slate-400", chip: "bg-slate-50 text-slate-500 border-slate-300 border-dotted", bar: "bg-slate-400", edge: "border-slate-300" },
       };
-      const SCORED = ["met", "partial", "missing", "na"];
+      // There was a `SCORED` constant here, listing met/partial/missing/**na**.
+      // Nothing read it, and it contradicted the only denominator this page
+      // actually computes — `assessable`, which is met + partial + missing and
+      // deliberately excludes N/A. A dead constant with an authoritative name
+      // and the wrong contents is worse than no constant: the next hand to
+      // reach for the obviously-named list would have put every N/A row back
+      // into the denominator, and both exports would have followed silently.
       // Every bucket, in the order the tally and the bar show them. `total` must
       // stay equal to the checklist's own size, so anything added here must be
       // counted there too.
@@ -1029,20 +1035,62 @@ const fwList = Object.values(FRAMEWORKS);
       // `canonBy` has already resolved. Keep in lock-step with the same two
       // names in the rubric in workers/target-checker/worker.js.
       const DELIV_NEVER_NA = ["Primary results table (shell)", "Sensitivity-analysis outputs"];
-      // One rule, three surfaces. It was written out three times (screen,
-      // Markdown, Word) and had to be extended three times for "na" — the
-      // copy-pasted-lookup species this codebase keeps finding. A suggestion on
-      // an N/A row would tell the reader to add the output that same row says
-      // their design cannot produce. The trim matters: the rubric tells the
-      // model to return "—" when no suggestion is wanted, and a row reading
-      // "Suggestion: —" is a content-free advice line exactly where a red row's
-      // advice belongs. `ev()` below already holds blank evidence to this
-      // standard; the two adjacent fields should not have two standards.
-      const delivSuggestion = (r) => {
+      // One rule, SIX surfaces — the two panels' three each. It was written out
+      // three times for the planned outputs (screen, Markdown, Word) and
+      // extracted here; the checklist's three copies were left behind, still
+      // spelled as a not-equal blacklist, and so never learned about "na". The
+      // result was a row reading "10. Reporting of adverse events — N/A" with
+      // "Suggestion: State how adverse events will be handled" underneath it,
+      // in all three surfaces: advice to satisfy the item the same row says
+      // cannot apply. That is not a rare shape. The worker's prompt requires a
+      // suggestion for EVERY checklist item and carves out only "met", and only
+      // the planned-outputs half of that same prompt teaches the model to
+      // return "—" when none is wanted — so a suggestion beside a checklist
+      // N/A is the documented happy path, not a slip.
+      //
+      // The two panels' vocabularies are disjoint apart from the three words
+      // they already share, so one set covers both: "present"/"met" are the
+      // satisfied verdicts, and N/A, Not assessed and Not scored are the three
+      // this file spends two paragraphs elsewhere insisting are claims about
+      // the design, the run and the tool rather than about the protocol. None
+      // of the five is something the author can act on, and advice under any of
+      // them is advice about a finding nobody made.
+      const NO_SUGGESTION = new Set(["present", "met", "na", "unassessed", "notscored"]);
+      // The trim matters: the rubric tells the model to return "—" when no
+      // suggestion is wanted, and a row reading "Suggestion: —" is a
+      // content-free advice line exactly where a red row's advice belongs.
+      const suggestionText = (r) => {
         const s = String(r && r.suggestion == null ? "" : r.suggestion).trim();
         return (!s || s === "—" || s === "–" || s === "-") ? "" : s;
       };
-      const delivShowSuggestion = (r) => !!delivSuggestion(r) && r.status !== "present" && r.status !== "unassessed" && r.status !== "na";
+      const showSuggestion = (r) => !!suggestionText(r) && !NO_SUGGESTION.has(r && r.status);
+      // …but suppressing it on an N/A row must not DELETE it, and the first
+      // version of this change did. A suggestion under a row the model called
+      // not applicable is the reader's best evidence that the N/A is wrong —
+      // often the model's own words contradicting its own verdict, as when it
+      // marks HARPER item 3 (amendments) N/A on a v1.0 protocol and then writes
+      // "Add an amendments table with version, date and rationale". The caveat
+      // this run adds tells the reader to audit exactly those rows, and the
+      // evidence line on an N/A row is the model's justification FOR the N/A —
+      // self-serving by construction. Deleting the one field that can disagree
+      // with it, in the same change, would have stripped the audit's best
+      // signal. So the text stays and the label changes: this file already
+      // keeps the model's words and relabels them in the two other places it
+      // disagrees with the model (`unrec` and the DELIV_NEVER_NA demotion), and
+      // a refusal that is invisible is not a refusal.
+      const showNaNote = (r) => !!suggestionText(r) && !!r && r.status === "na";
+      const NA_NOTE_LABEL = "The AI called this row N/A and still wrote:";
+      // A verdict with no evidence is a bare accusation, and both panels' notes
+      // tell the reader to read the evidence line before acting on a chip. Say
+      // that it is missing rather than rendering nothing, so a red row without a
+      // stated basis is visibly a red row without a stated basis. This lived
+      // inside renderDeliverables, so the planned-outputs panel held the line
+      // and the 23-row checklist next to it did not: a "Missing" verdict whose
+      // evidence came back "" exported as a red label and a bare instruction,
+      // with no statement of what the tool had found. The two adjacent fields
+      // should not have two standards, and neither should the two panels.
+      const evidenceText = (s) => (String(s == null ? "" : s).trim() ||
+        "The AI returned this verdict with no evidence, so nothing on this row is supported beyond the label itself.");
       // Written out three times in the first version of this change — screen,
       // Markdown, Word — and the three had already drifted by the time it was
       // reviewed: the screen said "not one of the 7 standard outputs" and both
@@ -1083,13 +1131,7 @@ const fwList = Object.values(FRAMEWORKS);
         }
         if (dupes.length && caveats) caveats.push("The AI returned more than one verdict for planned output(s) " +
           [...new Set(dupes)].join(", ") + "; only the first was used.");
-        // A verdict with no evidence is a bare accusation, and this panel's own
-        // note tells the reader to read the evidence line before acting on a
-        // chip. Say that it is missing rather than rendering nothing, so a red
-        // row without a stated basis is visibly a red row without a stated
-        // basis.
-        const ev = (s) => (String(s == null ? "" : s).trim() ||
-          "The AI returned this verdict with no evidence, so nothing on this row is supported beyond the label itself.");
+        const ev = evidenceText;
         const readStatus = (d) => DELIV_ALIASES[String(d.status == null ? "" : d.status).trim().toLowerCase()];
         // One sentence for a status the aliases do not recognise, used by the
         // canonical rows AND by the volunteered ones. Fixing only the canonical
@@ -1165,7 +1207,8 @@ const fwList = Object.values(FRAMEWORKS);
               '<span class="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ' + m.chip + '"><span class="inline-block w-1.5 h-1.5 rounded-full ' + m.dot + '"></span>' + m.label + '</span>' +
             '</div>' +
             (d.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(d.evidence) + '</p>' : '') +
-            (delivShowSuggestion(d) ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(delivSuggestion(d)) + '</p>' : '') +
+            (showSuggestion(d) ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(suggestionText(d)) + '</p>' : '') +
+            (showNaNote(d) ? '<p class="mt-1 text-xs text-slate-500 leading-relaxed"><span class="font-semibold text-slate-400">' + NA_NOTE_LABEL + '</span> ' + escapeHtml(suggestionText(d)) + '</p>' : '') +
           '</li>';
         }).join("");
         // Derived from DELIV_META rather than hand-listed, the way ALL_STATUSES
@@ -1214,7 +1257,13 @@ const fwList = Object.values(FRAMEWORKS);
               evidence: v.evidence ? "The AI could not tell (“" + String(v.status) + "”): " + v.evidence : "The AI reported that it could not tell whether this item is addressed (“" + String(v.status) + "”)." });
             continue;
           }
-          byId.set(id, { status: st, evidence: v.evidence, suggestion: v.suggestion });
+          // Held to the same standard as the planned-outputs rows: a verdict the
+          // model returned with an empty or whitespace-only `evidence` says so,
+          // once, here — the single point every one of the three surfaces reads
+          // from — rather than each of them rendering a red label with nothing
+          // under it. `evidence` is `required` in the worker's schema, so a
+          // blank one is the model filling a field it had nothing for.
+          byId.set(id, { status: st, evidence: evidenceText(v.evidence), suggestion: v.suggestion });
         }
         // A heading row is the conjunction of the rows beneath it: TARGET item 7
         // is "Describe how each target-trial component is emulated (elements a-h
@@ -1275,6 +1324,11 @@ const fwList = Object.values(FRAMEWORKS);
         const fw = fwOf(data.framework || requestedFramework);
         const { byId, unmatched, badStatus, duplicates, omitted, undecided, doubled } = reconcile(fw, data.items);
         const counts = { met: 0, partial: 0, missing: 0, na: 0, unassessed: 0, notscored: 0 };
+        // Which rows the model took out of the denominator, so the caveat below
+        // can name them. Every other status that leaves the score is already
+        // named by id in a caveat — omitted, unrecognised, undecided, doubled.
+        // N/A was the one that left it as a bare count.
+        const naItems = [];
 
         itemsEl.innerHTML = "";
         for (const sec of fw.checklist) {
@@ -1287,6 +1341,7 @@ const fwList = Object.values(FRAMEWORKS);
             const v = byId.get(it.id);
             const st = STATUS_META[v.status];
             counts[v.status] += 1;
+            if (v.status === "na") naItems.push(it.id);
             const li = document.createElement("li");
             li.className = "border-l-2 pl-4 " + st.edge;
             li.innerHTML =
@@ -1298,7 +1353,8 @@ const fwList = Object.values(FRAMEWORKS);
               // is useful — on an item the author still has work to do on.
               (it.hint && v.status !== "met" ? '<p class="mt-1 text-xs text-slate-500 leading-relaxed"><span class="font-semibold text-slate-400">What this asks for:</span> ' + escapeHtml(it.hint) + '</p>' : '') +
               (v.evidence ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-slate-500">Evidence:</span> ' + escapeHtml(v.evidence) + '</p>' : '') +
-              (v.suggestion && v.status !== "met" && v.status !== "unassessed" && v.status !== "notscored" ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(v.suggestion) + '</p>' : '');
+              (showSuggestion(v) ? '<p class="mt-1 text-xs text-slate-600 leading-relaxed"><span class="font-semibold text-brand-700">Suggestion:</span> ' + escapeHtml(suggestionText(v)) + '</p>' : '') +
+              (showNaNote(v) ? '<p class="mt-1 text-xs text-slate-500 leading-relaxed"><span class="font-semibold text-slate-400">' + NA_NOTE_LABEL + '</span> ' + escapeHtml(suggestionText(v)) + '</p>' : '');
             ol.appendChild(li);
           }
           block.appendChild(ol);
@@ -1351,6 +1407,35 @@ const fwList = Object.values(FRAMEWORKS);
           " that were all judged separately below. Counting a heading alongside its own sub-items would score the same content twice, so " +
           (doubled.length === 1 ? "it was" : "they were") + " marked “Not scored” and left out of the score; the sub-items carry the verdict.");
         if (undecided.length) caveats.push("The AI answered that it could not tell for " + undecided.length + " item(s) (" + undecided.join(", ") + "). That is a statement about this check, not a finding about your protocol, so those items are marked “Not assessed” and excluded from the score — read the item and judge it yourself.");
+        // N/A was the only status that could leave the score without saying
+        // which rows left it. The four caveats above all name ids; the sentence
+        // beside the score says how many rows went and what the denominator
+        // became, but never which ones — so a reader could see "12 of 12
+        // assessable items met" with eleven rows silently removed and have no
+        // way to check the removals. This is also the ONE verdict here whose
+        // basis the tool cannot inspect: "missing" is a claim about the text,
+        // and the text is on the reader's screen; "not applicable" is a claim
+        // about what kind of document it is. The planned-outputs panel next
+        // door already carries this caveat, and there N/A cannot move a number
+        // at all — the panel where the verdict is harmless was the one that
+        // disclosed it.
+        // It says what N/A removed, and NOT what the denominator became. The
+        // first version said "it is out of 12 rather than out of 23", which is
+        // true only when N/A is the sole reason rows left the score — the state
+        // it was tested in. Ordinarily rows also leave as Not assessed (the
+        // model skipping items is the commonest shape there is) and, on TARGET,
+        // as Not scored, so the sentence credited two N/A verdicts with a
+        // collapse from 23 to 1 that twenty omitted rows had done — directly
+        // below the bullet that names those twenty. The summary line beside the
+        // score already enumerates every reason and is the one place the full
+        // arithmetic belongs; a second, simpler account of it is a second
+        // answer.
+        if (naItems.length) caveats.push("The AI judged " + naItems.length + " checklist item(s) not applicable to this document (" + naItems.join(", ") +
+          "), taking " + (naItems.length === 1 ? "it" : "them") + " out of the score's denominator — the sentence beside the score gives what the denominator became, and every reason rows left it. " +
+          "“Not applicable” is a claim about what kind of document yours is rather than about what it says, and nothing in this tool can check it. " +
+          (assessable
+            ? "Read the evidence on each: an item wrongly called not applicable raises the score instead of lowering it."
+            : "Nothing is left in the denominator at all, so there is no ratio here to read — go by the verdicts themselves."));
         if (unmatched.length) caveats.push("The AI returned " + unmatched.length + " verdict(s) for item id(s) that are not in the " + fw.name + " checklist (" + unmatched.slice(0, 8).join(", ") + (unmatched.length > 8 ? ", …" : "") + "). They were ignored.");
         if (duplicates.length) caveats.push("The AI returned more than one verdict for item(s) " + [...new Set(duplicates)].join(", ") + "; only the first was used.");
         // From the run record, never the live global: see stampSource.
@@ -1457,6 +1542,109 @@ const fwList = Object.values(FRAMEWORKS);
             " were sent to the AI; the rest was not assessed" : "") + ".";
       };
 
+      // ── The AI's words are this report's CONTENT, never its STRUCTURE ──
+      //
+      // Markdown is line-oriented and this report is built by concatenation, so
+      // every model-supplied string lands somewhere a line break stops being
+      // text and starts being layout. The other two surfaces are safe by
+      // construction and had hidden the problem: the screen puts each string
+      // through `escapeHtml` into a single element, where a newline is
+      // whitespace, and the Word export gives each string its own TextRun,
+      // where the line ending lands inside a single <w:t> and so cannot become
+      // a heading, a row or a colour whatever Word decides to do with it. (What
+      // Word DOES do with it — space, or nothing at all — is untested: nobody
+      // has opened one of these files in Word. It cannot change the structure,
+      // which is the property being relied on here.) The Markdown report was
+      // the one surface that read the model's answer as source, and what it did
+      // with it, verified by parsing the emitted file with a GFM parser rather
+      // than by reading the string:
+      //
+      //   · A blank line inside `summary` ENDS the blockquote it is quoted in.
+      //     The rest became an unattributed paragraph in the report's own voice,
+      //     stating a rival total ("21 of the 23 HARPER elements are addressed")
+      //     eight paragraphs under the tool's computed 16 of 23 — defeating the
+      //     one thing the comment beneath this one exists to guarantee. `summary`
+      //     is `required` by the worker's schema and is mentioned NOWHERE in its
+      //     prompt: no length, no format, no instruction. Multi-paragraph prose
+      //     is what an unconstrained summary field returns.
+      //   · A line beginning `- ` inside `evidence` became a sibling of the
+      //     HARPER items — verdict-less rows in the checklist — and re-parented
+      //     the real row's Suggestion under one of them. The model is told to
+      //     "quote or closely paraphrase" the protocol, and protocol text is
+      //     full of headings and numbered lists, so this needs no ill intent.
+      //   · A line beginning `#` became a report heading, a peer of the tool's
+      //     own "What this check could not do". A `---` became a rule and threw
+      //     what followed into the body. A closing ``` at column 0 OPENED a
+      //     fence: eighteen verdicts, two section headings and the framework
+      //     citation swallowed into one code block, in a file that still looked
+      //     complete.
+      //
+      // The fix is one line, and the reason it is a collapse rather than an
+      // escaper is that the other two surfaces already collapse. Making the
+      // Markdown preserve the model's paragraphing would have been a FOURTH
+      // behaviour for one report; making it match is a rule the whole file can
+      // state: nothing the AI writes can create a row, a heading, a rule, a
+      // table or a code block. What it wrote is still all there, on one line,
+      // exactly as the screen and the .docx already show it.
+      //
+      // Every model-derived string in this function goes through it — including
+      // ones that reach it inside a tool-written sentence, because a caveat
+      // naming an id or a volunteered output name is carrying model text too.
+      // Tool strings (`frameText`, `delivNoteText`, the summary line, headings)
+      // are left alone: they are ours, they have no newlines, and quoting them
+      // through an escaper would be a claim that we do not trust our own file.
+      //
+      // Deliberately NOT escaped: `*`, `_`, `` ` ``, `[`. Both reviewers drove
+      // them and a GFM parser confirms that inline emphasis in a single-line
+      // string cannot break out of its container or forge a verdict — the worst
+      // it does is render the model's own emphasis as emphasis, or leak a
+      // literal `**`. An escaper that backslashes them would put a stray `\` in
+      // front of a legitimate en dash or a variable name in every report.
+      //
+      // What this DOES cost, and it is a real cost: a model that returns a
+      // genuine shell table in `suggestion` — pipes, delimiter row and all,
+      // which is exactly what "mock up the table" invites — now prints as one
+      // line of pipe soup instead of a rendered table. The characters all
+      // survive; the layout does not. That is the price of the guarantee above,
+      // and it is the same price the screen and the .docx have always charged.
+      //
+      // `\s+`, not `\r?\n`. The first version of this matched only LF and
+      // CRLF, and CommonMark counts a lone CR as a line ending too — so an
+      // `evidence` string carrying CR paragraph marks (which is what this
+      // tool's own .docx and PDF extraction produces, handed to a prompt that
+      // asks the model to quote the text back) still forged an `<h1>`, still
+      // opened a code fence, and still walked the AI's summary out of its
+      // blockquote, underneath a comment claiming it could not. Collapsing
+      // every whitespace run leaves no line ending of any spelling — CR, LF,
+      // CRLF, U+2028 — and takes the trailing-two-space hard break with it.
+      //
+      // U+FEFF is stripped first because JS's `\s` includes it: a zero-width
+      // no-break space collapsed to a visible one, so a quoted Japanese
+      // sentence exported with a word gap in a script that has none. It is
+      // routine debris from .docx and PDF text extraction, which is exactly the
+      // text the model is asked to quote back. U+200C and U+200D are NOT
+      // stripped — they are meaningful in Arabic and Indic scripts and in emoji
+      // sequences, and they are not `\s`, so they pass through untouched.
+      const mdText = (s) => String(s == null ? "" : s).replace(/\uFEFF/g, "").replace(/\s+/g, " ").trim();
+      // For the handful of positions where the tool prints an em dash to mean
+      // "the AI gave us nothing here". `mdText` stringifies, so `mdText(v) ||
+      // "—"` cannot reach the dash for a falsy NON-string: `0` and `false`
+      // printed as "0" and "false" in the Markdown while the screen and the
+      // Word file both printed "—" for the same run.
+      //
+      // The truthiness test has to be on the ORIGINAL value, not on its type.
+      // A `typeof v === "string"` gate sent every non-string to the dash,
+      // including the truthy ones the other two surfaces print — so a
+      // `population` returned as `["Adults with T2D", "aged 40 or older"]`
+      // exported as "Population: —", the tool asserting it had been given
+      // nothing about a field the model had filled, in a file whose companion
+      // screen read "Adults with T2D,aged 40 or older". That is a worse lie
+      // than the one it replaced, and `readList` two hundred lines up already
+      // states the principle: read what is there, say what could not be read.
+      // `v ? … : ""` gives exact parity with the `escapeHtml(v || "—")` on
+      // screen and the `text(v || "—")` in Word, for every shape.
+      const mdField = (v, dash) => (v ? mdText(v) : "") || dash;
+
       function downloadReport() {
         if (!lastReport) return;
         const { data, counts, fw, byId, caveats, delivRows, scheme, source } = lastReport;
@@ -1465,7 +1653,7 @@ const fwList = Object.values(FRAMEWORKS);
         // the next morning.
         const date = (source && source.date) || new Date().toISOString().slice(0, 10);
         let md = "![Population Health Data Center](" + LOGO_ABS + ")\n\n# " + fw.name + " conformance report\n\n_Population Health Data Center · checked " + date + " · AI-assisted self-check (Google Gemini) · not a substitute for peer review._\n\n";
-        md += "**" + sourceLine(source) + "**\n\n";
+        md += "**" + mdText(sourceLine(source)) + "**\n\n";
         // A report can be downloaded after the input it describes has been
         // changed. It is still a real report of a real run, so it is not
         // withheld — but it must not leave the browser looking like a report on
@@ -1473,7 +1661,8 @@ const fwList = Object.values(FRAMEWORKS);
         const stale = staleReasons();
         if (stale.length) {
           md += "> ### ⚠ This report was already out of date when it was downloaded\n>\n";
-          for (const r of stale) md += "> - " + r.file + "\n";
+          // A tool sentence, but one carrying a file name off the user's disk.
+          for (const r of stale) md += "> - " + mdText(r.file) + "\n";
           md += ">\n> It was **not** re-run. Every verdict below describes the input named above and nothing else.\n\n";
         }
         md += "**Tally:** " + counts.met + " met · " + counts.partial + " partial · " + counts.missing + " missing" +
@@ -1488,10 +1677,10 @@ const fwList = Object.values(FRAMEWORKS);
         // Attributed, and below the tool's own count — not passed off as the
         // report's opening statement, which is where an unchecked model total
         // used to sit.
-        if (data.summary) md += "**The AI's own summary**, quoted unchecked — any count or claim in it is the model's, not this tool's:\n\n> " + data.summary + "\n\n";
+        if (data.summary) md += "**The AI's own summary**, quoted unchecked — any count or claim in it is the model's, not this tool's:\n\n> " + mdText(data.summary) + "\n\n";
         if (caveats && caveats.length) {
           md += "## What this check could not do\n\n";
-          for (const c of caveats) md += "- " + c + "\n";
+          for (const c of caveats) md += "- " + mdText(c) + "\n";
           md += "\n";
         }
         // `scheme` is null when the screen refused to show a scheme at all. The
@@ -1501,7 +1690,7 @@ const fwList = Object.values(FRAMEWORKS);
         if (d) {
           md += "## Study design scheme\n\n";
           md += "_Drawn by this tool from the text. It is not evidence that the protocol contains a study-design diagram — see the verdict on that item. A window marked as assumed was not read from the protocol; the AI does not always declare an assumption, so an unmarked window is not a guarantee either._\n\n";
-          md += "- **Design:** " + (d.designType || "—") + "\n- **Population:** " + (d.population || "—") + "\n- **Exposure:** " + (d.exposure || "—") + "\n- **Comparator:** " + (d.comparator || "—") + "\n- **Outcome:** " + (d.outcome || "—") + "\n- **Index date:** " + (d.indexDate || "—") + "\n\n";
+          md += "- **Design:** " + mdField(d.designType, "—") + "\n- **Population:** " + mdField(d.population, "—") + "\n- **Exposure:** " + mdField(d.exposure, "—") + "\n- **Comparator:** " + mdField(d.comparator, "—") + "\n- **Outcome:** " + mdField(d.outcome, "—") + "\n- **Index date:** " + mdField(d.indexDate, "—") + "\n\n";
           if (scheme.kept.length || scheme.dropped.length) {
             md += "Timeline (days relative to index):\n\n";
             // The windows the diagram drew, and the ones it could not — never the
@@ -1509,16 +1698,16 @@ const fwList = Object.values(FRAMEWORKS);
             // caveats say was unusable.
             for (const w of scheme.kept) {
               const asm = assumedNote(w);
-              md += "- " + (w.label || w.kind) + ": day " + w.startDay + " → " + w.endDay +
-                (asm ? " — DURATION ASSUMED BY THE AI (“" + asm + "”), not stated in the text" : (w.note ? " (" + w.note + ")" : "")) + "\n";
+              md += "- " + mdText(w.label || w.kind) + ": day " + w.startDay + " → " + w.endDay +
+                (asm ? " — DURATION ASSUMED BY THE AI (“" + mdText(asm) + "”), not stated in the text" : (w.note ? " (" + mdText(w.note) + ")" : "")) + "\n";
             }
-            for (const x of scheme.dropped) md += "- " + x.name + ": NOT USABLE — " + (x.why || "no start/end day") + "; this window was not drawn and is not part of the scheme\n";
+            for (const x of scheme.dropped) md += "- " + mdText(x.name) + ": NOT USABLE — " + mdField(x.why, "no start/end day") + "; this window was not drawn and is not part of the scheme\n";
             md += "\n";
           }
           const critList = (title, key) => {
             const L = scheme.lists[key];
-            md += "**" + title + ":** " + (L.items.length ? "\n" + L.items.map((x) => "  - " + x).join("\n") : "none stated") + "\n";
-            if (L.note) md += "  - _⚠ " + L.note + "._\n";
+            md += "**" + title + ":** " + (L.items.length ? "\n" + L.items.map((x) => "  - " + mdText(x)).join("\n") : "none stated") + "\n";
+            if (L.note) md += "  - _⚠ " + mdText(L.note) + "._\n";
             md += "\n";
           };
           critList("Inclusion", "inclusion");
@@ -1536,10 +1725,11 @@ const fwList = Object.values(FRAMEWORKS);
           // a bare "__", which CommonMark renders as literal underscores.
           if (delivNoteText()) md += "_" + delivNoteText() + "_\n\n";
           for (const x of delivRows) {
-            md += "- **" + x.name + (x.extra ? delivExtraLabel : "") +
+            md += "- **" + mdText(x.name) + (x.extra ? delivExtraLabel : "") +
               "** — _" + ((DELIV_META[x.status] || DELIV_META.unassessed).label) + "_\n";
-            if (x.evidence) md += "  - Evidence: " + x.evidence + "\n";
-            if (delivShowSuggestion(x)) md += "  - Suggestion: " + delivSuggestion(x) + "\n";
+            if (x.evidence) md += "  - Evidence: " + mdText(x.evidence) + "\n";
+            if (showSuggestion(x)) md += "  - Suggestion: " + mdText(suggestionText(x)) + "\n";
+            if (showNaNote(x)) md += "  - " + NA_NOTE_LABEL + " " + mdText(suggestionText(x)) + "\n";
           }
           md += "\n";
         }
@@ -1548,8 +1738,9 @@ const fwList = Object.values(FRAMEWORKS);
           for (const it of sec.items) {
             const v = byId.get(it.id);
             md += "- **" + it.id + ". " + it.label + "** — _" + STATUS_META[v.status].label + "_\n";
-            if (v.evidence) md += "  - Evidence: " + v.evidence + "\n";
-            if (v.suggestion && v.status !== "met" && v.status !== "unassessed" && v.status !== "notscored") md += "  - Suggestion: " + v.suggestion + "\n";
+            if (v.evidence) md += "  - Evidence: " + mdText(v.evidence) + "\n";
+            if (showSuggestion(v)) md += "  - Suggestion: " + mdText(suggestionText(v)) + "\n";
+            if (showNaNote(v)) md += "  - " + NA_NOTE_LABEL + " " + mdText(suggestionText(v)) + "\n";
           }
           md += "\n";
         }
@@ -1677,7 +1868,8 @@ const fwList = Object.values(FRAMEWORKS);
                 text(x.name + (x.extra ? delivExtraLabel : "") + " — ", { bold: true }),
                 text(lab, { color: STCOL[x.status] || STCOL.unassessed, bold: true })]));
               if (x.evidence) children.push(para([text("Evidence: " + x.evidence, { size: 18, color: "555555" })]));
-              if (delivShowSuggestion(x)) children.push(para([text("Suggestion: " + delivSuggestion(x), { size: 18, color: "555555" })]));
+              if (showSuggestion(x)) children.push(para([text("Suggestion: " + suggestionText(x), { size: 18, color: "555555" })]));
+              if (showNaNote(x)) children.push(para([text(NA_NOTE_LABEL + " " + suggestionText(x), { size: 18, color: "777777" })]));
             }
           }
 
@@ -1688,7 +1880,8 @@ const fwList = Object.values(FRAMEWORKS);
               const lab = STATUS_META[v.status].label;
               children.push(para([text(it.id + ". " + it.label + "  ", { bold: true }), text("[" + lab + "]", { color: STCOL[v.status] || STCOL.unassessed, bold: true })]));
               if (v.evidence) children.push(para([text("Evidence: " + v.evidence, { size: 18, color: "555555" })]));
-              if (v.suggestion && v.status !== "met" && v.status !== "unassessed" && v.status !== "notscored") children.push(para([text("Suggestion: " + v.suggestion, { size: 18, color: "555555" })]));
+              if (showSuggestion(v)) children.push(para([text("Suggestion: " + suggestionText(v), { size: 18, color: "555555" })]));
+              if (showNaNote(v)) children.push(para([text(NA_NOTE_LABEL + " " + suggestionText(v), { size: 18, color: "777777" })]));
             }
           }
           children.push(para([text(fw.name + ": " + fw.citation + " " + fw.url, { italics: true, size: 16, color: "777777" })], { spacing: { before: 300 } }));
