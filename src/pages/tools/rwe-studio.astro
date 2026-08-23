@@ -886,7 +886,7 @@ const DESIGNS = [
       DATA = { rows: rows, columns: columns, profile: columns.map((c) => profileColumn(c, rows)), name: name || DATA.name || "dataset" };
       applyCodebook();
       MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; RAWTXT = {};
-      $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden");
+      $("anacard").classList.add("hidden"); hideResults();
       $("fileinfo").textContent = DATA.name + " · " + rows.length + " rows × " + columns.length + " cols" + (STRUCT.sheet ? " · sheet “" + STRUCT.sheet + "”" : "");
       render();
     }
@@ -1686,7 +1686,8 @@ const DESIGNS = [
           // computed, because they are the fallback if the root search fails and because the
           // two disagreeing is itself worth telling the reader about.
           "wlo<-b-1.96*se; whi<-b+1.96*se\n" +
-          "pl<-profl(b,se,sccsll(a$EVENTS,a$EXPOSED,a$INTERVAL,a$ID))\n" +
+          "llf<-sccsll(a$EVENTS,a$EXPOSED,a$INTERVAL,a$ID)\n" +
+          "pl<-profl(b,se,llf)\n" +
           "pok<-is.finite(pl[1]) && is.finite(pl[2]) && pl[1]<=b && pl[2]>=b\n" +
           "clo<-if(pok) pl[1] else wlo; chi<-if(pok) pl[2] else whi\n" +
           // The pooled contrast row is FITTED here, before anything is printed, so the note
@@ -1726,8 +1727,21 @@ const DESIGNS = [
           "# Fitting a dummy per case is the other route to the same number. Where they disagree\n" +
           "# something is wrong - but only a converged fit can be compared, and the message no\n" +
           "# longer offers \"a numerical problem\" as its only hypothesis.\n" +
-          "fe<-tryCatch(glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=a), error=function(e) NULL)\n" +
-          "if(!is.null(fe)){ bfe<-coef(fe)['EXPOSED']; if(is.finite(bfe) && abs(bfe-b)>0.01) cat(sprintf('RESULT_NOTE|The exact conditional fit (IRR %.3f) and a fixed-effect Poisson fit (IRR %.3f) disagree by more than 1%%. They are algebraically the same estimator, so the difference is numerical rather than substantive - treat both as unreliable here and check the interval lengths and event counts of the largest contributing cases.\\n', irr, exp(bfe))) }\n" +
+          "# The dummy-per-case fit is a dense n x (npeople+1) design matrix, so it costs\n" +
+          "# O(rows x people^2): measured in native R at 0.73s for 250 cases, 4.9s for 500,\n" +
+          "# 40.7s for 1000 and 336s for 2000, against 0.1s for the estimator it is checking.\n" +
+          "# WebR is slower still and has no timeout, and this sits BEFORE Table 1 - so at the\n" +
+          "# size a real vaccine-safety series reaches, it would hang the tab and take the\n" +
+          "# counts down with it. Above the threshold the check is done by maximising the same\n" +
+          "# conditional likelihood with a different optimiser, which is O(rows) and catches\n" +
+          "# the failure this is actually guarding against: the hand-rolled Newton iteration\n" +
+          "# stopping somewhere that is not the maximum.\n" +
+          "npeep<-length(unique(a$ID))\n" +
+          "fe<-if(npeep<=300) tryCatch(glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=a), error=function(e) NULL) else NULL\n" +
+          "bchk<-NA_real_; how<-''\n" +
+          "if(!is.null(fe)){ bchk<-as.numeric(coef(fe)['EXPOSED']); how<-'a fixed-effect Poisson fit' } else {\n" +
+          "  bchk<-tryCatch(optimize(function(z) -llf(z), c(b-5,b+5), tol=1e-9)$minimum, error=function(e) NA_real_); how<-'an independent search for the maximum of the same conditional likelihood' }\n" +
+          "if(is.finite(bchk) && abs(bchk-b)>0.01) cat(sprintf('RESULT_NOTE|The exact conditional fit (IRR %.3f) and %s (IRR %.3f) disagree by more than 1%%. They are the same estimator, so the difference is numerical rather than substantive - treat both as unreliable here and check the interval lengths and event counts of the largest contributing cases.\\n', irr, how, exp(bchk)))\n" +
           "if(pgot) cat(sprintf('RESULT_ESTIMATE|Pooled across people, NOT self-controlled (contrast only)|%s (95%% CI %s-%s)\\n', fmr(exp(bp)), fmr(exp(if(ppok) pp[1] else bp-1.96*sp)), fmr(exp(if(ppok) pp[2] else bp+1.96*sp))))\n" +
           "if(ncase>0) cat(sprintf('RESULT_NOTE|%d of %d case(s) have an event and both exposed and unexposed person-time, and so carry the estimate; the rest contribute nothing to it. This is the same test the likelihood applies, so it is the number of cases the result actually rests on.\\n', ninf, ncase))\n" +
           "if(ncase>0 && median(epc[epc>0])<2) cat('RESULT_NOTE|Half the cases contribute a single event. The conditional likelihood handles that correctly - it is the design working as intended, not a defect - but the estimate rests on how each case s one event fell relative to their own exposed window, so precision comes from the number of cases rather than the number of events.\\n')\n" +
@@ -2692,6 +2706,16 @@ const DESIGNS = [
     // drug reported as harmful, across the null, with nothing on screen different
     // between the two states. Anything that can change what buildMaster would
     // produce must come through here.
+    // Everything on screen that was computed from a master file. Hiding the CARD that
+    // contains them is not enough: buildMaster un-hides the card, and its children keep
+    // whatever class they had, so the previous run's estimates and Table 1 come back with
+    // it — under a line naming the new file and its row count. Declared as a function so
+    // it can be called from setData, which runs before this point in source order.
+    function hideResults() {
+      ["anaresults", "table1", "routput", "itschart", "dlfitted", "pscresults", "psdiag", "expcard"]
+        .forEach((id) => { const e = $(id); if (e) e.classList.add("hidden"); });
+      const st = $("anastatus"); if (st) st.textContent = "";
+    }
     function invalidateMaster() {
       if (MASTER === null && LAST === null) return;
       MASTER = null; LAST = null;
@@ -2701,8 +2725,7 @@ const DESIGNS = [
       // The exports go with them: every download button falls back to rebuilding
       // from a null MASTER, which would have shipped an R script describing rows
       // that are no longer being dropped alongside an empty data file.
-      ["anaresults", "table1", "routput", "itschart", "dlfitted", "pscresults", "psdiag", "expcard"].forEach((id) => { const e = $(id); if (e) e.classList.add("hidden"); });
-      const st = $("anastatus"); if (st) st.textContent = "";
+      hideResults();
     }
 
     // What kind of variable is this, really? A covariate that is text must not be
@@ -2840,7 +2863,7 @@ const DESIGNS = [
     ["its_cut", "its_unit", "its_comb", "its_model", "its_season", "its_cycle", "its_ac", "its_order", "its_denomcomb"].forEach((id) => $(id).addEventListener("input", () => { if (getDesign() === "its") validateMap(); }));
 
     $("applyclean").addEventListener("click", buildMaster);
-    document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; $("anacard").classList.add("hidden"); $("expcard").classList.add("hidden"); $("itschart").classList.add("hidden"); $("dlfitted").classList.add("hidden"); renderMap(); }));
+    document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; $("anacard").classList.add("hidden"); hideResults(); renderMap(); }));
 
     // The core ITS figure: observed points, the fitted pre/post segments, and the
     // pre-trend extrapolated forward as the counterfactual.
