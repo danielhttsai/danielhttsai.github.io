@@ -186,16 +186,23 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
 - **`PC.mountAmendments` is still called in only two of nine builders** — open
   since the third run, and examined in full by the twenty-fifth run, which
   deliberately did not do it and explains why in its section at the bottom.
-  It is now **unblocked**: the four builders that could not have persisted what
-  the user typed now can. Read that section's opening before starting, and note
-  the methodologist's argument that mounting fixes none of the defects that
-  actually ship.
-- **A raw `?seed=` payload bypasses the amendment log's pipe escaping entirely**,
-  reproducing verbatim the "complete, plausible, wrong row" that
-  `ProtocolCommon.astro`'s own comment claims to have fixed. The twenty-fifth
-  run's best next target in that area; it wants the mounting item done first,
-  because the honest fix is a visible warning and seven builders have no panel
-  to put one in.
+  It is now **unblocked twice over**: the four builders that could not have
+  persisted what the user typed now can (twenty-fifth run), and `writeRows` no
+  longer rewrites a line the parser could not read (twenty-eighth run — until
+  that landed, mounting would have shipped a silent-data-destruction bug to all
+  nine, which is a sequencing constraint both of that run's reviewers agreed on).
+  Read the twenty-fifth run's section opening before starting, and note the
+  methodologist's argument that mounting fixes none of the defects that ship.
+  The twenty-eighth run's counter-argument: mounting is now the only thing that
+  lets a recipient *repair* a refused entry, which on seven builders they still
+  cannot do at all.
+- ~~**A raw `?seed=` payload bypasses the amendment log's pipe escaping
+  entirely.**~~ **Done 2026-08-23 (twenty-eighth run)** — a stored line that does
+  not hold exactly five unescaped-pipe-separated values is now refused rather
+  than split, in the document (so all nine builders show it), with the line
+  reproduced verbatim and a numbered placeholder keeping its row in the table.
+  See that run's section at the bottom, including the two things this does NOT
+  fix and the false-positive class the two reviewers disagreed about.
 - SCCS's Farrington event-dependent-exposure sensitivity item is ticked by default
   with no explanation or citation. Daniel said to leave it for now.
 - ~~Weight diagnostics in RWE Studio cover IPTW only.~~ **Stale — checked
@@ -7975,9 +7982,290 @@ that no other design is touched, and that `essOf`/`armdiag` are arithmetically r
      shipped, the two defects this run put into its own diff, and the ranked list of
      what is left. -->
 
-<!-- CLAIM 2026-08-23 (twenty-eighth run): IN PROGRESS — the amendment log's raw-input
-     path: the twenty-fifth run's top-ranked leftover ("a raw ?seed= payload bypasses
-     the pipe escaping entirely", plus the newline row-split), and the sibling
-     unescaped-backslash Markdown table cells in case-crossover, SCCS and
-     descriptive-analysis. Shared component + those three builders. If you are a
-     concurrent run, pick a different gap. -->
+
+### Found 2026-08-23 by a twenty-eighth run — the amendment log's raw-input path
+
+**The twenty-fifth run's top-ranked leftover — "a raw `?seed=` payload bypasses
+the pipe escaping entirely" — is done, and the blocker it cited was not real.**
+It left the item because "the honest fix is a visible warning and seven of nine
+builders have no panel to put one in". That reasoning narrows this file's own
+standard — *make every refusal visible on screen* — to *visible in a form panel*.
+**The exported protocol is a screen too.** It is the only surface all nine
+builders have, it is where the damage lands (a reviewer holding the `.docx` never
+sees the form), and the live preview pane renders it, so a refusal emitted into
+`amendmentsMd`/`amendmentsDocx` is on screen on all nine builders today with no
+mounting work. If you find yourself blocked on "there is nowhere to put the
+warning", check whether the document is the right place before you conclude that.
+
+Two reviewers on disjoint briefs against a frozen tree (a methodologist and an
+applied analyst), each then sent at the other's list, then a third at this run's
+own committed diff.
+
+#### The invariant everything rests on
+
+`writeRows` joins exactly five cells with `" | "`, each through `amEsc`, so
+**every line the editor writes has exactly five unescaped-pipe segments** —
+blank cells included, because a blank cell still contributes its separators.
+Verified two ways: by construction, and by mounting the panel at runtime on a
+builder that does not have it and counting. A line with any other count was not
+written by the current editor, and the tool does not know which value belongs in
+which column. That is the whole basis of the fix. **The counter must reuse
+`amSplit`'s scanning loop, not a regex** — `7 \| 8` has five raw pipes and four
+unescaped ones.
+
+#### What shipped
+
+`src/components/ProtocolCommon.astro`
+
+- **The complete, plausible, wrong row, still reachable on every builder.** The
+  block comment above this code describes the row it claims to have fixed —
+  `"7 | 8"` in Section of protocol, meaning sections 7 and 8, exported as Section
+  7, Amendment 8, with the description of the change filed under Reason. The
+  escaping it describes covers exactly one of the four ways text reaches this
+  field. `?seed=`, a saved draft and `?seed=paste` all write it raw (all three
+  run and confirmed to carry the payload verbatim), and `amEsc` is called in
+  exactly one place, inside an editor two of nine builders mount. So the row was
+  reachable verbatim on every builder, in the preview, the Markdown **and a real
+  `.docx`**, all three agreeing with each other and all three wrong — which is
+  strictly harder to notice than the export divergence the twenty-fifth run
+  fixed. A line that does not hold exactly five values is now **refused**: it
+  keeps a numbered placeholder row in the table and is reproduced verbatim
+  beneath it, under a heading saying so, with a lead naming the three things that
+  actually cause a refusal. The same change catches the short row that shifted
+  every value one column left, the Markdown-style leading pipe, the seven-bare-
+  pipes payload that used to export a row of four em dashes as a real amendment,
+  and the wrapped line that became a second amendment dated with its own
+  continuation prose.
+- **"; a cell the author left blank is shown as an em dash" — deleted.** One
+  glyph carried three states: the author left the cell blank, the parser
+  manufactured the cell by padding a short line, and the author typed an em dash
+  meaning *not applicable*. The sentence asserted the first, unconditionally, in
+  the one HARPER item that exists to attribute changes to people. A seed of
+  `2026-03-04 | v2.0 | Section 7 updated` — or of a plain sentence with no pipes
+  at all — made the protocol tell a regulator that a named human deliberately
+  left cells blank that the parser invented. Refusing short lines removes the
+  second state; the third is byte-identical to the first in storage, so no parser
+  work can rescue the sentence. **No legend replaces it** — every legend either
+  reviewer proposed is false in the third state too.
+- **Zero readable entries no longer falls through to "no amendments have been
+  made".** Both emitters short-circuited on `!rows.length` into the empty-case
+  sentence, so the naive "refuse everything" implementation would have converted
+  a log the tool could not read into an **affirmative denial that any amendment
+  exists** — strictly worse than the bug being fixed. This is the first thing to
+  run against any change in this area.
+- **One click on "+ Add an amendment" destroyed the sender's text.** It touches
+  no existing row, and it rewrote the misparse over the raw line in the field,
+  in `localStorage`, surviving a reload with no query string: the pipe between
+  `7` and `8` promoted to a hard column boundary, permanently. The trigger is
+  not the add handler — `writeRows` fires on every keystroke and every delete
+  too; mounting alone writes nothing. The editor's model now distinguishes an
+  editable row from a refused raw line and re-emits refused lines byte-for-byte.
+  Readable rows are still re-serialised — whitespace normalised (`  7  ` → `7`)
+  **and backslashes re-escaped**, so a stored `C:\temp` becomes `C:\\temp` in the
+  field; the exported cell value is unchanged. **The byte-for-byte freeze holds
+  only for refused lines**, which is what it is claimed for.
+- **Numbering is positional over the whole log, and both exports run one pass
+  over one ordered list.** The natural implementation — emit the readable rows,
+  then append the refused lines — silently **re-orders the log and renumbers the
+  survivors**: with an unreadable entry chronologically in the middle, the
+  sender's third amendment prints as No. 2. In a numbered amendment table that is
+  a new wrong-document defect in the shape of the one being fixed, and the
+  numbers are how amendments get cited.
+- **The refused entry keeps a row inside the table**, not only a block beneath
+  it, because amendment tables get lifted out of protocols — into a submission
+  package, a change-control form, a reviewer's summary — and a block beneath does
+  not travel with the table. Without the stub row a three-entry log with one
+  refusal becomes a two-entry table the moment anyone selects it.
+- **`mdFence`, not a code span.** A refused line is reproduced verbatim, so one
+  backtick in the sender's text would end a code span and the rest would be read
+  as Markdown. The fence is sized to the longest backtick run in the content.
+- **The refusal lead is spelled out in words, deliberately.** Writing the escape
+  as `\|` is correct in the stored field and wrong on the page: a Markdown reader
+  renders `\|` as a bare pipe, so the instruction would have printed as "write it
+  as |". Caught by reading the rendered output, not the string.
+
+`src/pages/tools/{case-crossover,self-controlled-case-series,descriptive-analysis}.astro`
+
+- **The escaper that stopped one character short.** All three escape `|` and
+  leave `\` alone, which is not a smaller version of the fix but a different bug:
+  a cell holding `\|` is emitted as `\\|`, which GFM reads as an escaped
+  backslash followed by a **live** delimiter. Parsed with micromark's real table
+  extension, `"ATC N05A* \| excluding N05AN01"` renders as `ATC N05A* \` — the
+  second half of the code set gone, the row still carrying the header's cell
+  count, and the `.docx` keeping the whole string. `\|` is R's regex alternation
+  and is what a Markdown-literate author types for a literal pipe. **SCCS had the
+  most to lose**: its entire risk/reference strip is one cell, so the truncation
+  deleted every period after the first — a protocol specifying a self-controlled
+  design with no exposure risk window. descriptive-analysis has the widest
+  surface (the outcome name feeds the numerator of every ticked metric).
+  Now one `PC.mdCell`, because three copies had already drifted (one omitted the
+  newline collapse the other two had).
+
+#### What the two reviewers disagreed about, and who was right
+
+- **Which finding is top.** The analyst ranked the "+ Add" destruction first; the
+  methodologist ranked the em-dash sentence first and argued the analyst's is a
+  *recoverability* defect, not a *document-correctness* one — the wrong `.docx`
+  ships identically on all nine builders either way, and what mounting destroys
+  is a future fix's ability to reconstruct intent from the draft. **The
+  methodologist won on the ranking**; the analyst won a sequencing constraint
+  that is now recorded against the mounting item. The analyst's counter — that
+  the methodologist ranked first a finding its own remedy deletes for free — is
+  also fair, and both are in the diff.
+- **Refuse the row, or print it with a marker?** The analyst attacked refusal as
+  risking a reader concluding there were fewer amendments. It was right about the
+  mechanism (lifted tables) and the fix is the stub row, not the marker: a marked
+  row still asserts a specific wrong section number, and the footnote does not
+  tell the reader the true value because the tool does not know it.
+- **The Markdown-fence false positive — unresolved, and the one live
+  disagreement.** A sender who writes the row the way Markdown tables are written
+  (leading pipe, or leading and trailing) gets six or seven segments and is
+  refused, although a human reads the intent instantly. The analyst proposed
+  stripping at most one leading and one trailing empty segment before counting.
+  The methodologist opposed it: a full Markdown row has both delimiters and this
+  one has only the leading pipe, so the convention is not self-consistent enough
+  to strip, and unconditional stripping of a trailing pipe destroys the one
+  unambiguous way to say "Reason is deliberately empty". **Shipped as a refusal**,
+  because conditional stripping still guesses: ` | v2 | 7 | 8 | x | y` (blank date
+  intended, six values) strips to a row whose Version date reads `v2`. The
+  refusal lead names the fix — *"remove the | at the start and end of the line"* —
+  which is the actionable half. A future run may take the other side with an
+  argument; it should not take it silently.
+
+#### Deliberately left, argued, not manufactured
+
+- **A five-segment raw line is undetectable and still exports as a clean wrong
+  row.** `2026-03-04 | v2.0 | 7 | 8 | Sections 7 and 8 harmonised`, where the
+  sender meant Section = `7 | 8`, is byte-identical to a legitimate editor row.
+  No check can ever catch it. This is why nothing in the new wording says the
+  printed rows were validated — "could not be read", never "the remaining
+  entries were checked". **Do not report this as fixed.**
+- **The newline case is contained, not repaired.** The field is
+  newline-separated, so a newline inside a cell is indistinguishable from a row
+  separator at rest. Both fragments are now refused and reproduced verbatim
+  instead of becoming a fabricated dated row, which is the right outcome, but the
+  amendment is not reassembled.
+- **A raw doubled backslash is silently halved before any of this runs.**
+  `C:\\rx\\codes` in the field parses to `C:\rx\codes`, because `amSplit`
+  consumes `\\` as an escape pair on text `amEsc` never wrote. Four unescaped
+  pipes, so the line is readable and the loss is already done. Low consequence,
+  genuinely hard to fix (you would have to know whether the line was
+  `amEsc`-written), accepted. Note the acceptance criterion this defeats:
+  `CHANGED: false` on a re-serialise is **necessary and not sufficient** — the
+  canonicalisation here is idempotent and wrong, so pair it with an assertion on
+  `PC.amendmentRows()`'s cell values.
+- **A pre-escaping saved draft in which the user typed a bare pipe is now
+  refused** — a line the editor did write. `amEsc` landed 2026-08-23, so the
+  affected corpus is at most one day of drafts, and those lines are *already*
+  mis-columned today, so the refusal replaces a silent wrong row with a loud
+  legible one. Accepted rather than migrated. The wording never calls such a line
+  invalid, which is the condition the analyst attached to accepting it.
+- **On seven builders a refused entry is legible and uncorrectable.** There is
+  still no control and the only removal is "Clear all". Both reviewers reached
+  this from opposite directions and both now treat it as the argument for the
+  mounting item — which the `writeRows` fix has unblocked.
+- **HARPER's Reason column carries an instruction the tool drops** (note whether
+  the amendment occurred after registration / finalization / approval). Still
+  **corroborated by search snippet only**; the template is unreachable from this
+  sandbox. Unchanged from the twenty-fifth run's note.
+
+#### Checked and found NOT to be a problem — do not re-derive these
+
+- **`AM_COLS` is right and must not be changed.** Re-corroborated, search snippet
+  only. Changing it is a silent data migration on an unversioned format.
+- **The preview reaches the amendments section on all nine builders** — but by
+  **two different selectors**: `<pre id="preview">` on five, `<pre data-preview>`
+  on four (`active-comparator-new-user`, `descriptive-analysis`, `case-crossover`,
+  `self-controlled-case-series`). A check using only `#preview` silently covers
+  five of nine. Anything added to the *page* has to be added in two places.
+- **All nine "Clear all" paths empty the field**, re-verified after the change.
+- **An unrelated edit plus autosave leaves the raw text byte-identical**, on both
+  a panel and a panel-less builder. `syncAmendments` only reads; that asymmetry
+  is deliberate and load-bearing.
+- **No XSS**; the preview writes with `textContent` and the `.docx` writer
+  escapes (`&apos;` observed in a real `word/document.xml`).
+- **`docxKit`'s `text()` spreads its options after `font`**, so
+  `{ font: "Courier New" }` works — confirmed as `w:ascii="Courier New"` in a
+  generated `word/document.xml`. One reviewer asserted the Word path had no way
+  to distinguish the refused line from prose; it does.
+
+#### Six defects a reviewer found, three of them in this run's own diff
+
+The third reviewer, sent at the two shipped commits, found three real ones. All
+three are fixed in the third commit; they are recorded because each is a trap.
+
+- **A lone carriage return.** The new shared escaper collapses newlines with
+  `/\r?\n/`, which is two of the three line endings GFM recognises. A cell
+  holding `Section 6\rand 7` kept its CR, ended the Markdown row there, and the
+  remainder became an **unnumbered** row with every value shifted one column
+  left — while the `.docx` printed the cell whole. The defect class the whole
+  diff is about, reintroduced by the fix for it, on its first day. Fixed in
+  `amSplit` so both exports see the same cell, not in one emitter.
+- **The refusal heading was not a heading.** With no readable entry there is no
+  table above it, so the Markdown ended mid-paragraph and the single newline
+  before the bold heading was a soft break: a real GFM parse put the heading
+  *inside* the intro sentence, while the `.docx` made it its own paragraph. The
+  commit had named the all-refused case as verified — as a **string**, not as a
+  rendered document.
+- **A trade reversed silently.** `amSplit`'s overflow join protected the trailing
+  column deliberately, and a six-segment raw line whose sixth value belonged to
+  Reason used to produce a *correct* row. The five-value gate refuses it. This is
+  the one input where the new code produces a worse document than the old, it is
+  defensible (that line is indistinguishable from the `7 | 8` case), and it is
+  now written down where the gate is.
+- **And one false sentence in a commit message**, uncorrectable in place:
+  "readable rows are still normalised, which is whitespace only". They are also
+  re-escaped — a stored `C:\temp` becomes `C:\\temp` in the field after any
+  panel interaction. The exported cell is unchanged, so it is a false sentence
+  rather than data loss, but **the byte-for-byte freeze holds only for refused
+  lines**, which is what it was claimed for.
+
+The reviewer could **not** break the editor's typed model: delete-by-index with a
+refused entry first, in the middle and last; add/delete/add-two/delete-middle in
+all three placements; "Clear all" on both panel builders; `paintNotes` on every
+mixture. It also settled that `window.PC.mdCell`'s availability is a non-issue —
+`ProtocolCommon` is script #5 and each builder script #7, both synchronous, and
+the same function already calls `PC.abstractMd` unguarded.
+
+Two low-severity notes it left, both pre-existing: a stored line of nothing but
+separators is dropped before it becomes an entry, so a non-empty field can still
+produce "no amendments have been made"; and `amRefuseLabel` reports the segment
+count, so a Markdown-pasted `| a | b | c | d | e |` is announced as "7 values"
+when the sender wrote five.
+
+#### Verified this run, and how
+
+- Everything driven in headless Chromium against a local `astro build` + a static
+  server. **`scratch/amendments-probe.mjs` is the harness** — rebuild it with
+  `npm pack docx@8.5.0` in `scratch/` and run
+  `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scratch/amendments-probe.mjs assert`.
+  It is not committed (`scratch/` is ignored); its scenarios are `shifted`,
+  `newline`, `paths`, `roundtrip`, `freeze`, `degenerate`, `visibility`,
+  `clearall`, `health`, `pcount`, `emdash`, `denial`, `remedyb` and `assert`.
+- **51 assertions pass**, before and after the third commit,: the freeze (`CHANGED: false` on both panel builders for
+  both hostile payloads), a visible refusal reproduced on its own line in the
+  preview, the `.md` **and a real `.docx`** for four hostile payloads with no
+  fabricated five-column row, the all-refused case not printing a denial, the
+  empty log keeping the settled sentence byte-for-byte, editor round trips
+  including a typed pipe surviving as one Markdown cell, and every fail-safe
+  established in round one.
+- **Real `.docx` files generated** through the blocked-CDN route and
+  `word/document.xml` read — the ordering case shows rows 1, 2 (placeholder) and
+  3 in log order with the raw line in Courier New.
+- **GFM claims were parsed with micromark + the real table extension**, before
+  and after, never by reading the expression. The old escaper yields
+  `ATC N05A* \`; the new one round-trips.
+- **All nine builders: zero `pageerror` and `typeof window.PC === "object"`**,
+  before and after, plain and under every payload.
+- **The live site was not checked** — `danielhttsai.github.io` is blocked from
+  this sandbox. **Nobody has opened one of these `.docx` files in Microsoft
+  Word**; every Word claim here is what a `word/document.xml` parse saw.
+- **Not verified: the `?seed=paste` clipboard auto-read branch** (it shares
+  `applyText` with the manual textarea, which was run) and the seed banner's
+  "Restore my previous draft" button as a raw-input path.
+
+<!-- CLAIM 2026-08-23 (twenty-eighth run): DONE — the amendment log's raw-input path
+     and the three sibling Markdown escapers. Three commits; see the section
+     immediately above for what shipped, the one live disagreement between the two
+     reviewers (whether to strip Markdown fences before counting), and the three
+     things this deliberately does not fix. -->
