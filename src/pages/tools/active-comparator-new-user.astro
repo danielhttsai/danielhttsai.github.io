@@ -198,8 +198,8 @@ const PS_METHODS: { value: string; label: string; definition: string; validation
   {
     value: "match-greedy",
     label: "Greedy PS matching with replacement",
-    definition: "Estimate the PS. Match each exposed user to the nearest-neighbour comparator on the PS within a 0.2 × SD logit-PS caliper, allowing comparators to be re-used. Analyse via Cox regression with cluster-robust variance to account for re-use.",
-    validation: "Rosenbaum PR, Rubin DB. The bias due to incomplete matching. Biometrics 1985;41:103-16.",
+    definition: "Estimate the PS. Match each exposed user to the nearest-neighbour comparator on the LOGIT of the PS within a 0.2 × SD logit-PS caliper, allowing comparators to be re-used. Analyse via Cox regression with cluster-robust variance to account for re-use — note that a comparator re-used k times induces a correlation this only partly addresses, and the estimator-and-variance treatment for matching with replacement is a substantive choice to state in the protocol.",
+    validation: "",
   },
   {
     value: "strat",
@@ -342,8 +342,8 @@ const PHENOTYPES = {
     },
     {
       name: "4-point MACE",
-      codes: "3-point MACE + ICD-10 I50.* heart-failure hospitalisation",
-      definition: "Time to first of: non-fatal MI, non-fatal stroke, CV death, or heart-failure hospitalisation.",
+      codes: "3-point MACE + heart-failure hospitalisation, ICD-10 I50.*, I11.0, I13.0, I13.2",
+      definition: "Time to first of: non-fatal MI, non-fatal ischemic stroke, CV death, or heart-failure hospitalisation.",
       validation: "Composite of validated components; Cheng CL 2014 (MI), Cheng CL 2011 (stroke), Shao SC et al CGRD HF studies.",
     },
     {
@@ -4599,7 +4599,9 @@ _Drafted with the AsPEN protocol builder (${today})._
             ${it.notes ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed">${esc(it.notes)}</p>` : ""}
             ${it.validation
               ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">${isMethod ? "Method reference" : "Validation study"}</span> · ${esc(it.validation)} <span class="text-slate-500">Added to this protocol's reference list while ${isMethod ? "this method is the one selected" : "this definition is the one in the form"}.</span></p>`
-              : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring how accurately this definition identifies the condition in routinely collected data. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`}
+              : (isMethod
+                ? `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No method reference</span> · This library carries no reference for this variant of the method. Nothing is added to the reference list; cite the estimator and variance treatment you intend to use.</p>`
+                : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring how accurately this definition identifies the condition in routinely collected data. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`)}
           </button>
         `).join("");
         // Click handler; fill targets + close
