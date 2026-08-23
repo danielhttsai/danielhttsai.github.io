@@ -429,7 +429,7 @@ const DESIGNS = [
     // survives on the cell as .w, which sheet_to_json exposes with raw:false; this is
     // the only place it can be captured. Empty for demo data and anything not read
     // from a workbook, which is correct — those never had a comma.
-    let RAWTXT = {};
+    let RAWTXT = Object.create(null);   // keyed by spreadsheet header text; see commaExamples
     let CODEBOOK = {};      // normalised column name → definition text
     let CBWB = null, CBNAME = "";
     let CBINFO = null;      // { name, matched, sheet }
@@ -462,50 +462,51 @@ const DESIGNS = [
     // So: gather the cells that can only be read one way, let them decide the column,
     // and classify the ambiguous cells against that decision.
     //
-    // Only a decimal point: a comma group that is not exactly three digits ("60,5",
-    // "1,2345"), a first group with a leading zero ("0,125" — no thousands grouping ever
-    // starts with one), or the dot-grouped European form ("1.234,56").
-    const DEC_ONLY = (s) => /^[+-]?\d+,\d{1,2}$/.test(s) || /^[+-]?\d+,\d{4,}$/.test(s) ||
-                            /^[+-]?0\d*,\d+$/.test(s) || /^[+-]?\d{1,3}(\.\d{3})+,\d+$/.test(s);
-    // Only a grouping separator: more than one comma group ("12,345,678", "1,23,456"), or
-    // a comma group followed by a decimal POINT ("1,234.56") — one number cannot carry
-    // both conventions at once.
-    const GRP_ONLY = (s) => /^[+-]?\d{1,3}(,\d{3}){2,}(\.\d+)?$/.test(s) ||
-                            /^[+-]?\d{1,2}(,\d{2})+(,\d{3})(\.\d+)?$/.test(s) ||
-                            /^[+-]?\d{1,3}(,\d{3})+\.\d+$/.test(s);
+    // These are DERIVED from the two predicates above rather than enumerated again. A
+    // first attempt wrote out the decimal shapes by hand and left out "1234,567" — four
+    // or more integer digits with exactly three decimals — which the old per-cell code
+    // had always refused, so the "fix" made a live refusal silent. A value only one
+    // predicate matches can only be read one way, by construction, and that is the whole
+    // definition; the only case needing a hand-written rule is the overlap, where a
+    // leading zero in the first group rules grouping out ("0,125" is never 125).
+    const LEAD0 = (s) => /^[+-]?0\d*,\d+$/.test(s);
+    const DEC_ONLY = (s) => (COMMA_DECIMAL(s) && !COMMA_GROUPED(s)) || LEAD0(s);
+    const GRP_ONLY = (s) => COMMA_GROUPED(s) && !COMMA_DECIMAL(s) && !LEAD0(s);
     function commaExamples(cols, rows) {
-      const out = {};
+      const out = Object.create(null);
+      const keep = (a, s) => { if (a.length < 4 && a.indexOf(s) < 0) a.push(s); };
       cols.forEach((c) => {
-        // Pass 1: what does this column prove about itself?
+        // ONE pass. A first version scanned the column twice — once to decide what it
+        // was, once to collect examples — which doubled the cost of the whole ingest on
+        // a large file (measured: 2.3s against 1.0s on 200,000 rows x 30 columns, on the
+        // main thread, with nothing on screen saying why). Sort into buckets while
+        // scanning and decide at the end instead.
         let anyDec = false, anyGrp = false;
+        const decEg = [], ambEg = [], oddEg = [];
         for (let i = 0; i < rows.length; i++) {
           const v = rows[i][c]; if (v == null) continue;
           const s = String(v).trim(); if (s.indexOf(",") < 0) continue;
-          if (DEC_ONLY(s)) anyDec = true; else if (GRP_ONLY(s)) anyGrp = true;
-          if (anyDec && anyGrp) break;
+          // Both predicates once per cell rather than once per question — DEC_ONLY and
+          // GRP_ONLY would otherwise re-test the same two regexes up to five times.
+          const g = COMMA_GROUPED(s), d = COMMA_DECIMAL(s);
+          if ((d && !g) || (g && d && LEAD0(s))) { anyDec = true; keep(decEg, s); }
+          else if (g && !d) anyGrp = true;
+          else if (g || d) keep(ambEg, s);                                // could be either
+          else keep(oddEg, s);                                            // neither convention
         }
-        // A column that proves BOTH conventions is not a column this tool can read at
-        // all, and guessing either way changes some of its values by a factor of a
-        // thousand. That is the "odd" bucket, which refuses rather than guessing.
-        const contradictory = anyDec && anyGrp;
-        // With no unambiguous cell either way, every comma here is a genuine coin flip.
-        // Keep reading it as grouping, which is what this tool has always done and what
-        // its message text promises — changing that would refuse ordinary US data.
-        const dec = [], odd = [];
-        for (let i = 0; i < rows.length && dec.length < 4 && odd.length < 4; i++) {
-          const v = rows[i][c]; if (v == null) continue;
-          const s = String(v).trim();
-          if (s.indexOf(",") < 0) continue;
-          let b = null;
-          if (!COMMA_GROUPED(s) && !COMMA_DECIMAL(s)) b = odd;          // neither convention
-          else if (contradictory) b = odd;
-          else if (DEC_ONLY(s)) b = dec;
-          else if (GRP_ONLY(s)) b = null;                                // grouped, read as before
-          else if (anyDec) b = dec;                                      // ambiguous, in a decimal column
-          else b = null;                                                 // ambiguous, read as grouping
-          if (b && b.indexOf(s) < 0 && b.length < 4) b.push(s);
-        }
-        if (dec.length || odd.length) out[c] = { dec: dec, odd: odd };
+        // A column proving BOTH conventions cannot be read at all, and guessing either
+        // way changes some of its values by a factor of a thousand. It is refused, but
+        // under its own wording: telling someone "this tool reads 1,234 as a grouped
+        // whole number" while listing 1,234 as unreadable is a contradiction on screen.
+        if (anyDec && anyGrp) { out[c] = { dec: [], odd: decEg.concat(ambEg).slice(0, 4), mixed: true }; return; }
+        // An unambiguous witness settles the column, and the ambiguous values in it are
+        // then decimal too — which is the only way "1,250" is ever caught.
+        const dec = anyDec ? decEg.concat(ambEg).slice(0, 4) : [];
+        // With no witness either way every comma here is a genuine coin flip, and the
+        // column is character-identical to an ordinary US grouped one. Keep reading it as
+        // grouping, which is what this tool has always done and what its message promises
+        // — refusing it would refuse ordinary US data.
+        if (dec.length || oddEg.length) out[c] = { dec: dec, odd: oddEg, mixed: false };
       });
       return out;
     }
@@ -932,7 +933,7 @@ const DESIGNS = [
     function setData(columns, rows, name) {
       DATA = { rows: rows, columns: columns, profile: columns.map((c) => profileColumn(c, rows)), name: name || DATA.name || "dataset" };
       applyCodebook();
-      MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; RAWTXT = {};
+      MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; RAWTXT = Object.create(null);
       $("anacard").classList.add("hidden"); hideResults();
       $("fileinfo").textContent = DATA.name + " · " + rows.length + " rows × " + columns.length + " cols" + (STRUCT.sheet ? " · sheet “" + STRUCT.sheet + "”" : "");
       render();
@@ -953,7 +954,7 @@ const DESIGNS = [
         if (STRUCT.split) ta = splitDelimited(ta).aoa;
         const tt = tableFromAOA(ta, STRUCT.headerRow);
         RAWTXT = commaExamples(tt.columns, tt.rows);
-      } catch (e) { RAWTXT = {}; }
+      } catch (e) { RAWTXT = Object.create(null); }
     }
 
     async function ingest(file) {
@@ -2572,9 +2573,13 @@ const DESIGNS = [
       // event-count advice ("map the count here") attached to the sentence about
       // their person-time column, and the person-time remedy never appeared at all.
       else if (nt.length) {
+        // Examples are quoted and separated by a middot, not joined with ", ": these are
+        // values that contain commas, so a comma-joined list of them cannot be read back
+        // — "Site 2, South · Site 1, North" is two values, "Site 2, South, Site 1, North"
+        // looks like four.
         m.innerHTML = nt.map((b) => "<strong>" + esc(b.col) + "</strong> " +
           (b.cov ? "is ticked as a baseline covariate, but " : "is mapped to “" + esc(b.label) + "”, but ") + esc(b.why) +
-          " (for example: " + esc(b.eg.join(", ")) + "). " + esc(b.fix)).join(" ");
+          " (for example: " + b.eg.map((e) => "“" + esc(e) + "”").join(" · ") + "). " + esc(b.fix)).join(" ");
         m.className = "mt-3 text-xs text-rose-700";
       }
       else if (bt.length) {
@@ -2688,12 +2693,25 @@ const DESIGNS = [
         const pcol = rule.pair && MAP[rule.pair] ? MAP[rule.pair] : "";
         for (let i = 0; i < src.length && eg.length < 4; i++) {
           const v = src[i][col];
-          if (isBlank(v)) { if (keepBlanks && eg.indexOf("(blank)") < 0) eg.push("(blank)"); continue; }
+          // Only for a REQUIRED role. DISC is optional and R reads a blank as "never
+          // discontinued" (disc <- ifelse(is.na(DISC), Inf, ...)), so blocking on it
+          // refused a perfectly ordinary cohort — and told the user about negatives
+          // while they were looking at the word "(blank)".
+          if (isBlank(v)) { if (keepBlanks && r.req && eg.indexOf("(blank)") < 0) eg.push("(blank)"); continue; }
           const n = typeof v === "number" ? v : Number(String(v).trim().replace(/,/g, ""));
-          // The paired value goes through toBin as well as Number, because the roles that
-          // pair here are the 0/1 ones and "Y" is a perfectly ordinary way to write 1.
+          // How to read the paired value depends on what the paired ROLE is. INTERVAL
+          // pairs with EVENTS, which is a COUNT: running that through toBin was wrong and
+          // silently disabled this guard, because yesMap is keyed by value across the
+          // whole file, so one unrelated column coded 1/2 taught toBin that "2" means 0 —
+          // and two events inside a zero-length interval then read as no events.
           let p = NaN;
-          if (pcol) { const pv = src[i][pcol]; if (!isBlank(pv)) { const b = toBin(pv); p = b == null ? Number(String(pv).trim().replace(/,/g, "")) : b; } }
+          if (pcol) {
+            const pv = src[i][pcol];
+            if (!isBlank(pv)) {
+              if (BIN_ROLES.indexOf(rule.pair) >= 0) { const b = toBin(pv); p = b == null ? NaN : b; }
+              else p = Number(String(pv).trim().replace(/,/g, ""));
+            }
+          }
           if (!isFinite(n) || rule.bad(n, p)) { const s = String(v).trim(); if (eg.indexOf(s) < 0) eg.push(s); }
         }
         if (eg.length) out.push({ label: r.label, col: col, why: rule.why, fix: rule.fix, eg: eg });
@@ -2711,20 +2729,42 @@ const DESIGNS = [
       // XLSX keeps "30,5"); the point is that RAWTXT covers both, and stays empty for a
       // well-formed numeric XLSX with a de-DE display format, so a correct file is not
       // falsely refused.
-      const commaCols = {};
-      const noteCol = (col, label) => { if (!col) return; (commaCols[col] = commaCols[col] || []).push(label); };
-      spec.roles.forEach((r) => { if (NUM_ROLES.indexOf(r.k) >= 0) noteCol(MAP[r.k], r.label); });
-      // Marked so the message can say "is ticked as a baseline covariate" rather than
-      // "is mapped to a baseline covariate": a covariate is not a role and reads wrong.
-      if (spec.covariates) COVS.forEach((c) => { if (!commaCols[c]) commaCols[c] = { cov: true }; });
+      // Object.create(null), not {}: these keys are spreadsheet header text, and on a
+      // plain object a column named "constructor" resolves to a function that has no
+      // .push. The same species was found in the checker's alias table last run.
+      const commaCols = Object.create(null);
+      spec.roles.forEach((r) => { if (NUM_ROLES.indexOf(r.k) >= 0 && MAP[r.k]) commaCols[MAP[r.k]] = r.label; });
+      // A covariate is not a role, so the message has to read "is ticked as" rather than
+      // "is mapped to". Two exclusions:
+      //  - a column already carrying a role is not described as a covariate. COVS is
+      //    never pruned when a role is mapped onto a ticked column, so the checkbox
+      //    disappears from the list while the entry survives: the panel then blamed "a
+      //    baseline covariate" the user could not see or untick, and — because
+      //    validateMap tests numTrouble before binTrouble — it replaced the accurate
+      //    message about the 0/1 role that column had just been given.
+      //  - only a covariate classifyCov reads as a NUMBER. A factor covariate is never
+      //    handed to Number() at all (buildMaster leaves a non-numeric value alone and R
+      //    fits it as a factor), so a site called "Boston, MA" is not a parse defect, and
+      //    telling its owner to "re-export the column as plain digits" is nonsense.
+      if (spec.covariates) COVS.forEach((c) => {
+        if (commaCols[c] || spec.roles.some((r) => MAP[r.k] === c)) return;
+        if (!RAWTXT[c]) return;
+        const k = classifyCov(c, src).kind;
+        if (k === "numeric" || k === "binary") commaCols[c] = null;   // null marks "covariate"
+      });
       Object.keys(commaCols).forEach((col) => {
         const ct = RAWTXT[col]; if (!ct) return;
-        const isCov = !Array.isArray(commaCols[col]);
-        const label = isCov ? "" : commaCols[col].join(" / ");
-        if (ct.dec.length) out.push({ label: label, col: col, eg: ct.dec, cov: isCov,
+        const label = commaCols[col], isCov = label === null;
+        if (ct.dec.length) out.push({ label: label || "", col: col, eg: ct.dec, cov: isCov,
           why: "holds value(s) that use a comma as a decimal point",
           fix: "The comma is removed rather than read, so 60,5 becomes 605 and 1.234,56 becomes 1.23456 — the first ten times too large, the second a thousand times too small, and both still numbers, so nothing further down refuses them. Where every value is scaled by the same amount some estimates survive it and some do not; where the number of decimal places varies from row to row, which is the ordinary case, the scaling varies with it and moves the estimate itself. Re-export the file with a decimal point." });
-        if (ct.odd.length) out.push({ label: label, col: col, eg: ct.odd, cov: isCov,
+        // The contradictory column gets its own wording. The sentence below it — "this
+        // tool reads 1,234 as a grouped whole number" — is true, and printing it under a
+        // list that includes 1,234 as unreadable contradicts itself on screen.
+        if (ct.odd.length && ct.mixed) out.push({ label: label || "", col: col, eg: ct.odd, cov: isCov,
+          why: "uses a comma both ways in the same column — some values can only be a decimal point, others can only be a thousands separator",
+          fix: "Read one way some of these values are a thousand times wrong; read the other way the rest are. Nothing here can tell which rows were written under which convention, so none of them is guessed at. Re-export the column under a single convention, with a decimal point and no grouping." });
+        if (ct.odd.length && !ct.mixed) out.push({ label: label || "", col: col, eg: ct.odd, cov: isCov,
           why: "holds value(s) containing a comma that is neither a decimal point nor a thousands separator this tool recognises",
           fix: "This tool reads 1,234 and 12,345,678 and 1,23,456 as grouped whole numbers and 60,5 as a decimal comma. A value outside both conventions is not guessed at, because every guess available here changes the number by a factor of ten or more. Re-export the column as plain digits with a decimal point and no grouping." });
       });
