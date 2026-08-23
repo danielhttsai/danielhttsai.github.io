@@ -1529,7 +1529,17 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
           }
         }
       };
-      const clipTxt = (v, n) => (String(v).length > n ? String(v).slice(0, n - 1) + "…" : String(v));
+      // Flattened, not just capped. These strings quote a value that came from
+      // somebody else's ?seed= link, and they now travel into a Markdown
+      // blockquote — where a newline ENDS the quote. A seed carrying
+      // psMethod "x\n\n## 99. Forged section\n" would otherwise put a forged
+      // top-level heading and a free paragraph between the title block and the
+      // abstract of the exported protocol. The same trap was found in the ITS
+      // builder; it is a property of the destination, not of that file.
+      const clipTxt = (v, n) => {
+        const t = String(v == null ? "" : v).replace(/[\r\n\u2028\u2029]+/g, " ").replace(/\s{2,}/g, " ").trim();
+        return t.length > n ? t.slice(0, n - 1) + "…" : t;
+      };
       // What the box is showing RIGHT NOW, in the words the user can read.
       // Naming the raw option value instead — "re", "federated", "after-washout"
       // — asks someone to confirm a choice in a vocabulary the page never shows
@@ -1547,13 +1557,34 @@ Schneeweiss S, Rassen JA, Glynn RJ, Avorn J, Mogun H, Brookhart MA. High-dimensi
       // "press the button below to confirm the one it was left at" invited a
       // user answering the first to silently confirm three other
       // specifications they had not read.
-      const staleMsg = (x, many) => (x.saved === ""
+      //
+      // Split in two because it goes to two audiences. The core sentence is
+      // true wherever it is read; only the instruction differs, and in a
+      // document there is no panel and no button, so an instruction to press
+      // one reads as a defect in the protocol rather than as help.
+      const staleCore = (x) => (x.saved === ""
         ? "“" + clipTxt(x.label, 60) + "” was restored with no value at all — the draft or link it came from left it blank."
         : "“" + clipTxt(x.label, 60) + "” was saved as “" + clipTxt(x.saved, 80) + "”, which this page does not offer.")
-        + " It has been set to “" + clipTxt(shownText(x.name) || x.used, 70) + "”, and that is what this protocol and the exported documents say — a specification nobody chose."
+        + " It has been set to “" + clipTxt(shownText(x.name) || x.used, 70) + "”, and that is what this protocol and the exported documents say — a specification nobody chose.";
+      const staleMsg = (x, many) => staleCore(x)
         + (many
           ? " Pick the option you want here. The button at the foot of this panel confirms ALL of the substitutions listed, not only this one."
           : " Pick the option you want, or press the button below to confirm the one it was left at.");
+      // The sentence above ends "…that is what this protocol and the exported
+      // documents say", and until this existed the exported documents were the
+      // one place it was not said. The panel showed two red lines; the Markdown,
+      // the Word protocol and the TARGET checklist named "Stabilised IPTW with
+      // weight truncation" and "a hazard ratio" with no trace that neither had
+      // been chosen — and the person who receives the .docx is not the person
+      // who saw the panel. Verified in a real .docx before and after.
+      const staleMsgsDoc = () => staleSelects.map(staleCore);
+      const STALE_DOC_HEAD = "A value this page no longer offers was replaced before this document was written.";
+      const staleMdBanner = () => {
+        const m = staleMsgsDoc();
+        return m.length
+          ? "> **" + STALE_DOC_HEAD + "**\n" + m.map((x) => ">\n> - " + x).join("\n") + "\n\n"
+          : "";
+      };
 
       const writeForm = (state) => {
         const multi = new Set(["sites", "censoringPick", "covariatesPick", "subgroupsPick", "sensitivityPick", "inclusionPick", "exclusionPick", "secondaryOutcomesPick"]);
@@ -2772,7 +2803,7 @@ The active comparator is used as an emulated placebo arm; a drug class with simi
 
 ---
 
-${window.PC.abstractMd(pcOf(s))}
+${staleMdBanner()}${window.PC.abstractMd(pcOf(s))}
 ${FIG1_MARK}
 
 ## 1. Research question
@@ -3860,6 +3891,15 @@ _Drafted with the AsPEN protocol builder (${today})._
           "The active comparator is used as an emulated placebo arm; a drug class with similar indication, similar temporal trends in use, and no known a priori association with the outcome of interest. This minimises confounding by indication and addresses immortal-time / prevalent-user bias by anchoring follow-up at the moment of treatment commencement, similar to randomisation in a target RCT (Hernán & Robins 2016)."
         )]));
 
+        // Ahead of the abstract, because the abstract is the sentence that
+        // carries the substituted choice — "Analysis. Stabilised IPTW with
+        // weight truncation …, reporting a hazard ratio" is written from two
+        // dropdowns, and this is what says neither was chosen.
+        const staleDoc = staleMsgsDoc();
+        if (staleDoc.length) {
+          children.push(p([text(STALE_DOC_HEAD, { bold: true, color: "B00000" })]));
+          staleDoc.forEach((m) => children.push(bullet(m)));
+        }
         window.PC.abstractDocx(D, pcOf(s)).forEach((c) => children.push(c));
         // HARPER 7.2. designDiagramDocx emits picture + numbered caption +
         // window list together, and on failure a visible note rather than a
@@ -4262,6 +4302,17 @@ _Drafted with the AsPEN protocol builder (${today})._
           text: "Generated " + today + " from the AsPEN ACNU protocol builder. Methods items 5-7 are pre-filled from your protocol; Results / Discussion / Other-information items are placeholders to be completed at the time of reporting.",
           font: FONT, size: 18, italics: true, color: "777777",
         })], { spacing: { after: 240 } }));
+
+        // The checklist is a mapping of the protocol's fields, so a substituted
+        // field is mapped here too — rows 7c, 7f, 7g and 7h are written from
+        // psMethod, effectMeasure and metaMethod. A reviewer reading only the
+        // checklist would otherwise see the substituted specification certified
+        // against a reporting guideline.
+        const staleTgt = staleMsgsDoc();
+        if (staleTgt.length) {
+          children.push(p([text(STALE_DOC_HEAD, { bold: true, color: "B00000" })]));
+          staleTgt.forEach((m) => children.push(p([text("• " + m)])));
+        }
 
         children.push(h1("Item 7; Target trial specification vs emulation"));
         children.push(p([text("Item 7 is the heart of TARGET. Rows a-h show what the target trial would specify and how this study emulates each piece in observational data.")]));
