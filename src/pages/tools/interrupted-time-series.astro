@@ -651,7 +651,10 @@ ${REFS.map((r) => "- " + r).join("\n")}
       const pp = prePts(s), qp = postPts(s);
       const miss = missing(s);
       (forDoc ? staleMsgsDoc() : staleMsgs()).forEach((m) => checks.push({ level: "error", msg: m }));
-      if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". The draft below is printed with placeholders so you can see its shape — it is not a finished protocol." });
+      // "below" is true of the preview pane and false of the exported
+      // document, where this block renders at the top. Making the checks travel
+      // changed their audience, and three messages had not noticed.
+      if (miss.length) checks.push({ level: "error", msg: "This protocol is not yet complete. Still to be specified: " + miss.join("; ") + ". " + (forDoc ? "The sections that depend on those items print a placeholder rather than a value — this is a draft, not a finished protocol." : "The draft below is printed with placeholders so you can see its shape — it is not a finished protocol.") });
       if (!s.interruptDate) checks.push({ level: "error", msg: "Set the interruption date — the whole design hinges on when the intervention took effect; it defines the pre/post segments." });
       // Only judge the length of a series whose length could be read. "Only 1
       // pre-intervention points" for a box reading 1e3 is a third answer to a
@@ -680,7 +683,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // trades directly against the change-in-slope coefficient the study is about.
       if (s.seasonality === "harmonic")
         checks.push({ level: "warn", msg: "Harmonic (Fourier) seasonality is specified but its cycle length and its number of sine/cosine pairs are not. Those are choices that trade directly against the change-in-slope coefficient, so name both in the protocol (for example: an annual cycle, two pairs) — “Fourier terms” alone leaves them to be picked after the data are seen." });
-      if (s.autocorr === "none") checks.push({ level: "warn", msg: "No autocorrelation handling — adjacent periods resemble each other, which does not bias the level and slope estimates but makes their standard errors too small. Report the Durbin–Watson statistic and the ACF/PACF, and pre-specify what will be done if they show serial correlation. Note that each of the corrections has its own cost: see the caveat this panel raises once one is chosen." });
+      if (s.autocorr === "none") checks.push({ level: "warn", msg: "No autocorrelation handling — adjacent periods resemble each other, which does not bias the level and slope estimates but makes their standard errors too small. Report the Durbin–Watson statistic and the ACF/PACF, and pre-specify what will be done if they show serial correlation. Each of the available corrections has its own cost, so the choice is not free: name the one you intend and the conditions under which it will be used." });
       if (!s.controlled) checks.push({ level: "info", msg: "Single-group ITS assumes no co-intervention or secular change coincides with the interruption. A control series (controlled ITS) lets you difference those out and strengthens causal inference." });
       // The form already collects the two numbers that decide whether the model
       // can be fitted at all, and nothing compared them with the number of
@@ -703,7 +706,7 @@ ${REFS.map((r) => "- " + r).join("\n")}
       // series with the box unticked was dropped from the protocol, from the
       // Word design-summary table (which then read "None (uncontrolled)") and
       // from the figure, with nothing anywhere saying it had been discarded.
-      if (!s.controlled && s.controlSeries) checks.push({ level: "warn", msg: "A control series is named (“" + s.controlSeries + "”) but “Controlled ITS” is not ticked, so this protocol describes a single-group analysis and that series appears nowhere in it. Tick the box to analyse it as a controlled ITS, or clear the field." });
+      if (!s.controlled && s.controlSeries) checks.push({ level: "warn", msg: "A control series is named (“" + s.controlSeries + "”) but “Controlled ITS” is not ticked, so this protocol describes a single-group analysis and that series appears nowhere in it. " + (forDoc ? "Either the analysis is a controlled ITS, in which case this protocol understates it, or the series is not part of the study and should not have been named." : "Tick “Controlled ITS” to analyse it as one, or clear the field.") });
       // No check read the model against the inference method, so the panel
       // endorsed combinations that are not defined. Prais–Winsten is a GLS
       // quasi-differencing transform of a LINEAR model with AR(1) errors; it
@@ -730,7 +733,11 @@ ${REFS.map((r) => "- " + r).join("\n")}
       }
       if (s.lag) checks.push({ level: "info", msg: "You have specified a transition / phase-in period. RWE Studio cannot exclude periods around the interruption, so that part of the protocol would have to be done in your own analysis code (or by excluding those rows before upload)." });
       checks.push({ level: "info", msg: "Report BOTH estimates. Level change and slope change answer different questions and can point in opposite directions — a one-off drop that then drifts back up is level down, slope up. Reporting only one describes it wrongly." });
-      checks.push({ level: "info", msg: "Two conventions exist for coding time-since-interruption. Under the Wagner (2002) convention it is 0 at the first affected period, so the level-change coefficient IS the immediate step and the slope change accrues from the following period. State which convention you used — the coefficients are not interchangeable." });
+      // Named only one of the two it said existed, so a reader working under
+      // the other was told nothing about what their own level coefficient
+      // means. §4 of the protocol now fixes the coding, so this says which one
+      // it fixed and what the other one would give.
+      checks.push({ level: "info", msg: "Two conventions exist for coding time-since-interruption, and this protocol fixes one of them in §4: it is 0 at the first affected period, so the level-change coefficient is the immediate step and the slope change accrues from the following period. Under the other convention the counter starts at 1 there, and the step at the first affected period is the level coefficient PLUS the slope coefficient — so a coefficient from one convention read as the other's is simply a different quantity. If your analysis code uses the second, say so in §4 and reinterpret accordingly." });
       return checks;
     };
 
