@@ -2933,3 +2933,335 @@ should be treated as a required step, not an optional one.
   estimator, comments that name the bugs they fixed); `interrupted-time-series`
   overlaps the ITS statistics two runs have already gone deep on in RWE Studio,
   so knowledge transfers.
+
+### Found 2026-08-23 by a thirteenth run — the ITS builder, second-to-last never-opened file
+
+Twelve runs had worked ACNU (×3), RWE Studio (×2), the Protocol Checker,
+case-control, clone-censor-weight, descriptive-analysis, SCCS, case-crossover and
+sequential-trial. Two builders had never been opened. This run took
+**`src/pages/tools/interrupted-time-series.astro`** (715 lines) on the grounds
+that the ITS statistics two runs went deep on in RWE Studio transfer directly,
+and ITS is much the more used of the two designs. **`trend-in-trend.astro` is now
+the last file in the set that has never been reviewed.**
+
+Two reviewers ran concurrently on genuinely different briefs with a 40-minute
+deadline; both reported on time with executed evidence. A third was then sent at
+this run's own commits. The deadline instruction keeps working — keep using it.
+
+#### Environment: nothing newly blocked, four notes
+
+- `npm i --no-package-lock --no-audit --fund=false`, `npm pack docx@8.5.0` +
+  `page.route('**unpkg.com/**', …)`, Crossref/PubMed/doi.org blocked with
+  `WebSearch` only, the live site unreachable, detached HEAD (`git push origin
+  HEAD:main`) — all still true. The deploy was confirmed green via the Actions
+  API instead of against `danielhttsai.github.io`.
+- **R is NOT installed in this session's container.** The fourth run's
+  `apt-get install r-base-core` note is about RWE Studio's generated R; nothing
+  in this builder needs it, and no statistical claim here was executed in R.
+  Where this run relies on simulated evidence it is the FIFTH run's, cited as
+  such, not re-derived.
+- Ports: reviewers 8141/8142 and 8151/8152, orchestrator 8161-8170, round two
+  8171/8172. Assign up front.
+- A reusable `harness.mjs` is in this run's scratch: static server, Playwright by
+  absolute path, the `docx` CDN route, `setField`/`preview`/`checks` helpers, and
+  an `armCapture` whose `URL.createObjectURL` stub delegates for `image/*` so
+  `svgToPng` still works. `smoke.mjs`, `v3.mjs` (captures and unzips a real
+  `.docx`) and `v5.mjs` (drives the checks matrix) are worked examples.
+- The `<script is:inline>` block is a classic script, so `page.evaluate(() =>
+  readPts('1e3'))` and `computeChecks(readForm())` reach its functions directly.
+  That is by far the fastest way to test this file.
+
+#### Fixed this run
+
+All executed in Chromium against a local build, before and after; every export
+claim asserted by unzipping a generated `.docx` and reading `word/document.xml`,
+never inferred.
+
+- ~~**One box, four different numbers.**~~ `prePoints = "1e3"` — which
+  `<input type="number">` accepts without complaint — gave a protocol asserting
+  "1e3 pre-intervention points", a caption quoting 1e3, a checks panel saying
+  "Only **1**", and a drawing of **2**. The clamp disclosure, the one sentence
+  that promises to say when the picture is not showing your number, stayed
+  silent because it tested `parseInt("1e3") > 36`, which is `1 > 36`. One
+  `readPts` now; `1e3` reads as 1000 (matching the other builders' day readers),
+  a fractional count is refused, and the caption discloses both the 36-point
+  clamp and the fallback-to-illustrative case.
+- ~~**A blank count exported as 24, and silenced its own warning.**~~
+  `readForm` had `V("prePoints") || "24"`. Emptying the box exported a protocol
+  asserting 24 points **and** cleared the "aim for ≥ 8" bar, so the warning that
+  would have queried it disappeared at the same moment.
+- ~~**Zero pre-intervention points was a caution.**~~ With no pre-period there
+  is no trend to extrapolate, so there is no counterfactual; it exported "0
+  pre-intervention points" with no incomplete banner at all. A blocker now.
+- ~~**A stale draft rewrote the whole analysis and destroyed itself.**~~ The
+  brief's standing item, worst instance yet, because this page has **four**
+  selects. A draft naming an unoffered time unit / model / seasonality /
+  autocorrelation left all four at `selectedIndex = -1`; a select with no
+  selection contributes nothing to `FormData`, so the export substituted
+  monthly + Poisson + no seasonality + no autocorrelation handling, the checks
+  panel reported the substitutions as facts ("No seasonality adjustment with
+  **monthly** data" for a draft that never said monthly), no banner appeared,
+  and the first render wrote the substitutions back over the draft — the user's
+  values gone within a second of page load. Ported the twelfth run's machinery
+  (record inside the draft under a reserved key, per-control clearing, a Keep
+  button, two renderings for the two audiences).
+- ~~**The warnings that decide whether the estimate means anything never left
+  the screen.**~~ Only `missing()` travelled. A protocol with every field filled,
+  monthly data, no seasonality adjustment and no autocorrelation handling
+  exported as a clean, finished-looking document while the page showed both
+  warnings in amber. Blockers and cautions now open both exports.
+- ~~**§6 and §7 named two different primary estimands.**~~ Ticking Controlled
+  ITS rewrote §6 ("the difference … is the primary estimate") and left
+  `effectText` — a function of `s.model` alone — naming the undifferenced
+  within-series changes in the section headed Estimand. Also wrong on scale (the
+  group-by-segment interaction is a **ratio of rate ratios**, not an IRR) and on
+  the counterfactual (§7 kept the intervention series' own extrapolated
+  pre-trend, which is the object the control series exists to replace).
+- ~~**A pre-specification of something the form cannot specify.**~~ §7 promised
+  the difference from the counterfactual "at a pre-specified post-intervention
+  time point"; every named control was enumerated and there is no horizon field.
+  The contrast is linear in the change-in-slope coefficient, so without a horizon
+  it is a family of estimands. The protocol fixes the end of the series, says
+  why, and asks for any additional horizon to be named — which is also the only
+  horizon RWE Studio can produce, as the form's own note two panels up said.
+- ~~**The panel endorsed an estimator that is not defined for the model.**~~ No
+  check read `model` against `autocorr`, so the default Poisson with
+  Prais–Winsten exported a §6 naming a log link with an offset and a GLS
+  quasi-differencing transform of a linear model in consecutive sentences, while
+  the panel called it "a sound choice for this protocol". Refused now; ARIMA on
+  counts flagged more softly (it can be made to mean something, but not what §6
+  names). Prais–Winsten and Cochrane–Orcutt were also treated as synonyms — they
+  differ in whether the first observation survives, which on these series
+  lengths is one of the few pre-intervention points.
+- ~~**Choosing Newey–West silenced the autocorrelation warning and said nothing
+  in its place.**~~ The fifth run's simulated evidence (rejection ≈0.38 at 12
+  periods, 0.21 at 24, 0.18 at 36; worse than model-based below ~60 even under
+  AR(1)) says that at this builder's own default of 24 + 24, picking HAC
+  produces the failure the warning it silenced was describing. Now caveated
+  below 60 periods, with the wider-of-the-two rule the Studio itself uses, and
+  the prose asks for the lag rule to be pre-specified.
+- ~~**Seasonality exported as an unqualified assertion.**~~ "Harmonic (Fourier)
+  terms" names neither cycle length nor number of pairs — the number of pairs
+  trades directly against the change-in-slope coefficient, so it left that to be
+  chosen after the data were seen. Calendar dummies were accepted with **yearly**
+  periods, where every observation falls at the same point of the calendar year.
+  And the "no seasonality" warning was written against three of the five options
+  in the unit dropdown, so two fell through it silently — the copy-drift species.
+  Rewritten as "which period lengths can resolve a within-year cycle", with the
+  ones that cannot saying so.
+- ~~**Nothing compared the model's size with the series length.**~~ The form has
+  always collected both. Monthly dummies with three points either side is 15
+  parameters against 6 observations, and the panel warned only that the segments
+  were short. Blocker now, with the count shown; a thin-but-fittable model
+  reports its residual degrees of freedom.
+- ~~**The study-size paragraph was written for a person-level cohort.**~~
+  "Power … from observed exposure and outcome frequencies", "person-time and
+  event counts" — and in an uncontrolled ITS there is no exposure frequency,
+  because after the date everyone is exposed. **Fifth builder to record this
+  objection, and the first to close it without a cross-cutting change**:
+  `tailSections` reads `nz(s.studySize, …)` for exactly this purpose and ACNU
+  already passes `skip: ["studySize", "ethics"]`, so a builder-supplied
+  paragraph is the house-sanctioned route. The new one prints the two numbers
+  the form already collects and points at two published simulation methods.
+- ~~**The corrigendum's year.**~~ Cited as `Int J Epidemiol 2020;50(3):1045`;
+  volume 50 issue 3 of that journal is 2021 (search-snippet evidence from the
+  OUP listing). Also: the parameterisation error the corrigendum exists because
+  of had no citation until §4 began stating the coding — Xiao/Augusto/Wagenaar
+  IJE 2021;50(3):1011-1015 (dyaa148) added.
+- Smaller, same species: a named control series with the box unticked was
+  dropped from every surface with nothing said (the check only ever fired the
+  other way); the figure's written description asserted 60 points over a drawing
+  of 36, because the clamp sentence never travelled; the `.docx` ran two
+  sentences together whenever a denominator was supplied, because the full stop
+  sat inside the `or()` fallback, while the Markdown read correctly; the two
+  exports lower-cased the acronyms in their analysis plans ("newey–west …
+  (hac)", "acf/pacf", "arima"); the Word statistical-analysis list had four
+  steps where the Markdown had five; "every 6 months" read out as "aggregated
+  into equal every 6 months intervals"; `doReset` set selects to
+  `selectedIndex = 0` rather than their authored default; and the reference
+  list, the seasonality label map and the autocorrelation label map were each
+  two copies with different fallbacks — one of each now.
+
+#### Checked and clean (do not re-derive)
+
+- **The Wagner (2002) convention claim is defensible.** The panel's note ("0 at
+  the first affected period, so the level-change coefficient IS the immediate
+  step") was the assigned suspicion and survived: Wang et al. BMC Med Res
+  Methodol 2025;25:98 says under Wagner's parametrization that coefficient
+  "indicat[es] the change-in-level or immediate effect", and Xiao 2021 says the
+  post-intervention segment should "begin by counting from zero". The arithmetic
+  agrees. **Wagner 2002's own coding table could NOT be read — every publisher
+  host is blocked — so this rests on two secondary sources via snippets.** The
+  claim now also travels into both exports, which was the actual defect.
+- **All six original citations confirmed from search snippets** (Wagner 2002
+  JCPT 27(4):299-309 / PMID 12174032; Lopez Bernal 2017 IJE 46(1):348-355;
+  Lopez Bernal 2018 IJE 47(6):2082-2093; Kontopantelis BMJ 2015;350:h2750 /
+  PMID 26058820; Penfold & Zhang Acad Pediatr 2013;13(6 Suppl):S38-44 /
+  PMID 24268083), one year corrected. **Snippet evidence, not a Crossref check.**
+  The two new power references are snippet-confirmed the same way and are cited
+  with the PMIDs actually observed rather than DOIs that were not.
+- **Layout is clean at 390 / 768 / 1024 / 1440 px** (`scrollWidth ===
+  clientWidth`), re-measured after the new and longer check messages were added.
+- **Every `name=` in the form is read by `readForm`** (20 controls, checked).
+- **Every `<select>` option is covered by every consuming map** — no
+  fall-through to a `||` default in `modelText`, `seasonText`, `autocorrText`,
+  `effectText` or the design-summary table.
+- **The drag handles work** (a real mouse drag moves the count, the preview and
+  the autosave agree), and **"Clear all" was already correct** for text inputs.
+- **The claims this page makes about what RWE Studio implements are accurate**,
+  checked against `rwe-studio.astro`'s current option list — including that its
+  ITS now offers "the wider of the model-based and Newey–West standard error".
+
+#### Round two: the reviewer was pointed at this run's own commits
+
+**Five for five.** A third reviewer was given only this run's diff and told to
+break it, and every one of its five findings was damage this run had done — two
+of them worse than what they replaced. Treat this as a required step, not an
+optional one; it is now 5/5 across five runs.
+
+- ~~**Making the checks travel opened a Markdown injection.**~~ The messages
+  quote what the user typed. The form's own inputs cannot contain a newline, but
+  a saved draft or a `?seed=` link can, and a quoted message becomes a
+  blockquote line — so a link carrying `unit: "X\n\n## 99. Forged section\n"`
+  put a forged top-level heading and a free paragraph **between the banner and
+  §1 of the exported protocol**. A shared link was enough; nothing in the
+  recipient's browser had to be touched. The old code could not do this, because
+  `missingMd()` only ever emitted fixed strings. **General rule: the moment a
+  message containing user text starts travelling into a structured document,
+  it needs flattening and a length cap.** The `.docx` was unaffected (it
+  XML-escapes runs), which is exactly why checking only the `.docx` would have
+  missed it.
+- ~~**The estimand sentence had the scale exactly backwards.**~~ It said the
+  group-by-segment interaction terms "on the log scale are ratios of rate ratios
+  rather than rate ratios". On the log scale they are **differences of log rate
+  ratios**; they are ratios of rate ratios once **exponentiated**. That shipped
+  in both exports, inside the sentence this run rewrote *in order to get the
+  scale right*.
+- ~~**The estimand section still contradicted three other surfaces.**~~ The
+  commit claimed to fix "two sections naming two different primary estimands",
+  and made it 3-vs-1: the abstract, §1 and §6 all said "difference" while §7
+  said "RATIO … rather than rate ratios". Both are true on different scales, but
+  nothing said so. Naming the contrast a difference and the reported quantity
+  its exponent reconciles all four. **When you rewrite one surface's wording,
+  grep the other surfaces for the claim before calling it fixed** — the same
+  lesson the twelfth run recorded, learned again.
+- ~~**The counterfactual sentence denied what it had just said.**~~ "the
+  intervention series' pre-intervention trend carried forward with the change
+  the control series shows — **not its own extrapolated pre-trend**". The first
+  clause *is* that trend, control-adjusted. A control series replaces the
+  *assumption* that the pre-trend would have continued unchanged, not the trend,
+  which is still fitted and still the baseline.
+- ~~**The degrees-of-freedom guard's stated reason was half false.**~~ It said a
+  model with as many parameters as observations "cannot be fitted" and that
+  "nothing can be estimated". A square full-rank design estimates every
+  coefficient **exactly**; what does not exist is the residual variance and
+  therefore the standard errors. Two separate messages now. The reviewer
+  independently confirmed the parameter arithmetic itself (4 / 8 segmented
+  terms, `nObs = (pre+post) × 2` when controlled, 11 month / 3 quarter dummies,
+  harmonic charged 2 as a stated lower bound) is **correct** — do not "fix" it.
+- ~~**A true refusal with a false reason.**~~ `-5` was refused as a value that
+  "could not be read as a whole number of periods". It reads perfectly well; it
+  is negative.
+
+Found by the orchestrator re-reading its own diff, before the reviewer reported:
+three check messages written for a screen that now travelled into the document
+("the draft **below**", "see the caveat **this panel** raises", "**Tick the
+box**"), a `§6` hard-coded into a message that reaches both exports (**the Word
+file drops "Intervention and interruption", so its sections are offset by one
+from §5 on** — the step-3 strings got this right and a later message did not),
+`readPts` accepting `0x10` as 16, and the stale-select guard exempting the empty
+string, which is the single likeliest way a select ends up blank. **A sweep that
+enumerates every message the code can emit and greps them for positional
+language is cheap and worth doing whenever checks start travelling** — 40
+distinct messages here, one bad one left after two manual passes.
+
+#### The trap that cost this run the most
+
+`astro build` does not parse `is:inline` scripts, and this file's script is one.
+A regex literal was written with **literal U+2028 / U+2029 characters inside its
+character class**. Those are line terminators in JavaScript source, so the
+literal was broken across lines: `Invalid regular expression: missing /`, thrown
+at runtime, with the build reporting success and the entire page's JavaScript
+dead. Only loading the page in a browser found it. The eleventh and twelfth runs
+recorded the same class (a stray identifier, a duplicate `const`); this is a new
+member of it, and a `new Function(src)` check would **not** have caught it
+either, since the source is only invalid once the line breaks are interpreted.
+**Click the buttons in a browser after every edit to an `is:inline` script.**
+
+#### What the reviewers disagreed about, and who was right
+
+- **The two briefs split cleanly and neither could see the other's half, again.**
+  The methodologist's top finding was that the panel called an undefined
+  estimator "a sound choice" — a false statement in the exported document. The
+  applied analyst's was that opening the page with a stale draft **destroyed the
+  user's saved values within a second**, silently, and then described a study
+  they had not specified. Neither would have found the other's: one is a claim
+  about statistics, the other is a lifecycle bug with no wrong sentence in it.
+  Both shipped.
+- **The methodologist declined to propose the fix its own argument implied, and
+  was overruled.** On the study-size paragraph it wrote "I side with the previous
+  four reviewers on the content; I am not proposing a local `skip`", treating the
+  disposition as settled against it. That deference was misplaced: the shared
+  component reads `nz(s.studySize, …)` **specifically** so a builder can supply
+  its own paragraph, and ACNU has passed `skip: ["studySize", "ethics"]` since
+  before any of these runs. Using a documented per-builder hook is not the
+  cross-cutting change previous reviewers were refused. **Five runs recorded this
+  objection; it was closeable locally the whole time.** Worth checking, when an
+  item has been deferred repeatedly, whether it was deferred for a reason that
+  still applies.
+- **A lead one reviewer could not execute, another executed.** The methodologist
+  filed the blank-`<select>` fall-through as "lead, not a finding — `readForm`
+  defaults `model` to `poisson` before `effectText` and I could not construct a
+  reaching input". Round two constructed it: a `?seed=` link with all four select
+  values as empty strings. The lead was right and the reason it could not be
+  reached was wrong. **Do not discard a lead because one route into it is
+  blocked.**
+- **Both reviewers named their least-sure finding, and both were vindicated
+  differently.** The methodologist's was the ARIMA half of its estimator
+  finding — "some analysts legitimately fit ARIMA to log rates, so it may be
+  shorthand rather than error". That is right, and it is why Prais-Winsten with a
+  count model is a **blocker** here and ARIMA is only a **warning** asking which
+  model is meant. Round two's least-sure was that the estimand sections still
+  contradicted each other, "a specialist might not call it a contradiction at
+  all" — it was correct, and the fix was to name the scale rather than to pick a
+  side.
+- **The Wagner (2002) attribution was checked twice, independently, and held.**
+  The orchestrator and the methodologist searched separately, found the same two
+  secondary sources, and reached the same verdict. Neither could read Wagner
+  itself. Recorded as snippet evidence in both places, and the item that actually
+  changed was that the claim never reached the exported document.
+
+#### Open, examined this run, deliberately left
+
+- **`ProtocolCommon`'s planned-outputs list is still wrong in kind here**, and
+  unlike `studySize` it has **no per-builder override hook**: every ITS protocol
+  promises a "Participant-flow diagram (source population → analytic cohort)"
+  and a "Table 1 — baseline characteristics", for an analysis of an aggregated
+  count series that has no participants and no analytic cohort. What ITS
+  reporting actually needs — the coefficient table with the design-matrix
+  coding, the ACF/PACF and Durbin–Watson diagnostics §8 promises, the
+  counterfactual-difference table §7 promises — is absent. Fixing it means
+  either a hook like `studySize`'s or `skip: ["outputs"]` plus a local list.
+  **Cross-cutting; the same is true of `limitationsText`, which leads with
+  person-level residual confounding for a design whose principal threat is a
+  co-intervention.**
+- **`PC.mountAmendments` is never called here** — seven of nine builders still
+  do not, unchanged since the third run.
+- **No horizon field.** This run made the horizon explicit and honest in prose;
+  a `<select>` or text field for additional horizons is a feature, so Daniel's
+  call.
+- **Both "📚 Library" buttons drop the validated code set.** They set
+  `data-target-name` only, and this page has no codes field at all, so picking
+  from a modal headed "Validated phenotype library" writes the bare phenotype
+  name and discards `item.codes`, `item.definition` and the validation citation.
+  The user believes they took a validated definition. Same species as the third
+  run's ACNU indication-button finding, but here it is the norm for both
+  buttons, and closing it properly means adding a field (a feature).
+- **Two subgroups and five sensitivity analyses ship ticked**, including
+  "Exclude a transition / phase-in period" while the transition field is empty
+  and RWE Studio cannot do it. **Defaults policy — Daniel's call**, the sixth
+  builder to record it.
+- **`trend-in-trend.astro` has never been opened** — `git log --` shows one
+  cross-cutting commit and nothing else. It is the last one. A read-through
+  suggests it is carefully written (tri-state estimator handling, a real refusal
+  for a stale estimator), which is exactly what was said about this file too.
