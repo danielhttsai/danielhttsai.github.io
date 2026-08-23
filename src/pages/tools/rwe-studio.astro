@@ -1555,8 +1555,31 @@ const DESIGNS = [
           r += "if(balexact) cat('RESULT_NOTE|The \"SMD after overlap weighting\" column above is zero by construction rather than by evidence. With a propensity score fitted by logistic regression, overlap weights balance every covariate in that model exactly (Li, Morgan and Zaslavsky, J Am Stat Assoc 2018;113:390-400), so this column reads 0.000 on any data at all - including data where the two arms barely meet. It cannot tell you whether this comparison is sound. Judge overlap weighting on its effective sample size and on the common-support figure, and on covariates that were NOT in the propensity model.\\n')\n";
           r += "if(balovl && !balexact) cat('RESULT_NOTE|Read the \"SMD after overlap weighting\" column with care. Overlap weights balance every covariate in the propensity model exactly on the cohort that model was fitted to (Li, Morgan and Zaslavsky, J Am Stat Assoc 2018;113:390-400). This column is computed after the restriction applied to this run, on propensity scores fitted before it, so it is a weakened form of that identity rather than an independent check of it. Judge overlap weighting on its effective sample size and on the common-support figure as well.\\n')\n";
           if (!balSch) r += "cat('RESULT_NOTE|No weighted estimator was selected, so there is no weighted balance column: the standardised differences shown are before any adjustment. Balance after matching or after fine stratification is a separate table this tool does not build - check it in your own analysis before reporting the matched estimate.\\n')\n";
-          r += "ET<-list(); EE<-list(); ET[['ITT']]<-d$TIME; EE[['ITT']]<-d$EVENT\n";
+          // The ITT checkbox could not be unticked: this line was unconditional and only
+          // PP was gated, so a user who deliberately deselected intention-to-treat got
+          // ITT rows in the results table anyway. It is gated now, with a fallback so
+          // that asking for per-protocol alone and having no discontinuation column
+          // does not produce an empty table with no explanation.
+          r += "ET<-list(); EE<-list()\n";
+          if (E.indexOf("ITT") >= 0) r += "ET[['ITT']]<-d$TIME; EE[['ITT']]<-d$EVENT\n";
+          // The whole per-protocol analysis is this line: censor at discontinuation and
+          // reuse the BASELINE treatment weights. There are no inverse-probability-of-
+          // censoring weights anywhere in this file. Censoring at discontinuation is
+          // informative whenever stopping depends on anything that also predicts the
+          // outcome, which is the usual reason people stop - so the per-protocol rows
+          // can report a confident effect for a drug that does nothing. Demonstrated on
+          // a simulated cohort of 4000 with no treatment effect at all, in which only
+          // the treated discontinue and the sicker ones stop sooner: the ITT rows
+          // returned 1.05 (0.97-1.13), correctly, and all three weighted PP rows
+          // returned 0.84 with intervals excluding 1. The rows are worth keeping - a
+          // per-protocol contrast is a real question - but they must not be presented
+          // as something this tool has estimated, and they must not wear the marginal
+          // estimand badges, which belong to the ITT rows and are inherited by the PP
+          // rows only because the label is built once with est interpolated into it.
           if (E.indexOf("PP") >= 0) r += "if('DISC' %in% names(d)){ disc<-ifelse(is.na(d$DISC), Inf, as.numeric(d$DISC)); ET[['PP']]<-pmin(d$TIME, disc); EE[['PP']]<-d$EVENT*(d$TIME<=disc) }\n";
+          if (E.indexOf("PP") >= 0) r += "if('PP' %in% names(ET)) cat('RESULT_NOTE|The per-protocol rows below are a different causal question from the intention-to-treat rows, and they are not adjusted the same way. Each patient is censored at the discontinuation time you mapped, and the baseline treatment weights are reused unchanged: no inverse-probability-of-censoring weights are applied, and this tool does not offer them. Censoring at discontinuation is informative whenever stopping depends on anything that also predicts the outcome - which is the usual reason people stop - and the resulting bias has no fixed direction. A cohort in which the drug does nothing at all, but in which the patients who stop are the sicker ones, will produce a protective per-protocol hazard ratio whose interval excludes 1, from the censoring alone. Treat these rows as a sensitivity analysis whose assumption you have to argue for, not as a per-protocol effect this tool has estimated. Rows with no discontinuation time recorded are treated as never discontinuing, so the per-protocol cohort is not the intention-to-treat cohort.\\n')\n";
+          if (E.indexOf("PP") >= 0) r += "if(!('PP' %in% names(ET))) cat('RESULT_NOTE|A per-protocol analysis was requested and could not be run: no column is mapped to \"Time to discontinuation / switch\", so there is nothing to censor at. Map that column in step 3, or untick per-protocol.\\n')\n";
+          r += "if(length(ET)==0){ ET[['ITT']]<-d$TIME; EE[['ITT']]<-d$EVENT; cat('RESULT_NOTE|Only a per-protocol analysis was requested, and it could not be run, so the intention-to-treat rows are shown instead - an empty results table would say nothing about why.\\n') }\n";
           // "not estimable" was reached only when coxph THREW. It does not throw on the
           // two ways a cohort most often has nothing to compare: no events at all, and
           // a treatment column that never varies. It returns a fit whose coefficient is
@@ -1572,18 +1595,18 @@ const DESIGNS = [
           // refusals to be interpreted.
           r += "if(sum(d$EVENT==1,na.rm=TRUE)==0) cat('RESULT_NOTE|Not one row in this cohort has the outcome, so no hazard ratio exists to estimate and every row of the table above says so. A hazard ratio is a comparison of event rates; with no events there is nothing to compare, however many patients were followed. Check that the outcome column is the one you meant and that its yes value is the one the structure panel picked.\\n')\n";
           if (M.indexOf("matching") >= 0) r += "matchidx<-function(){ ci<-which(!tr); ti<-which(tr); used<-logical(n); cal<-0.2*sd(d$lp); out<-integer(0); ord<-ti[order(d$lp[ti])]; for(i in ord){ cand<-ci[!used[ci]]; if(!length(cand))next; dd<-abs(d$lp[cand]-d$lp[i]); o<-order(dd); k<-0; for(j in o){ if(dd[j]<=cal){ out<-c(out,i,cand[j]); used[cand[j]]<-TRUE; k<-k+1; if(k>=" + ratio + ")break } } }; unique(out) }\n";
-          r += "for(est in names(ET)){ t<-ET[[est]]; e<-EE[[est]]; all<-1:n\n";
+          r += "for(est in names(ET)){ t<-ET[[est]]; e<-EE[[est]]; all<-1:n; eb<-function(b) if(est=='ITT') b else ''\n";
           r += "  fitw(t,e,rep(1,n),all, paste0('Crude - ',est,' HR'))\n";
           // An IPTW estimate built on collapsed weights is not a weak estimate, it
           // is an arbitrary one: a handful of subjects carry the answer. Refuse it
           // and say which diagnostic failed, rather than print a confident number.
-          if (M.indexOf("iptw") >= 0) r += "  if(unstable){ cat(sprintf('RESULT_ESTIMATE|IPTW (ATE) - %s HR|withheld - weights unstable\\n',est)) } else { hrT<-fitw(t,e,wI,all, paste0('IPTW (ATE)',if(wtmode=='stab') ', stabilised' else ', unstabilised', if(ntrunc>0) paste0(', truncated at the ',trunclab) else '',' - ',est,' HR'))\n" +
+          if (M.indexOf("iptw") >= 0) r += "  if(unstable){ cat(sprintf('RESULT_ESTIMATE|IPTW%s - %s HR|withheld - weights unstable\\n',eb(' (ATE)'),est)) } else { hrT<-fitw(t,e,wI,all, paste0('IPTW',eb(' (ATE)'),if(wtmode=='stab') ', stabilised' else ', unstabilised', if(ntrunc>0) paste0(', truncated at the ',trunclab) else '',' - ',est,' HR'))\n" +
             "    if(ntrunc>0){ hr0<-fitw(t,e,w0,all,'',TRUE); if(is.finite(hr0) && is.finite(hrT)) cat(sprintf('RESULT_NOTE|Truncation moved the %s IPTW hazard ratio from %.3f (untruncated) to %.3f, by capping %d weight(s) at the %s. Truncation buys precision by accepting a little bias - the capped patients are no longer counted at their full weight - so report the untruncated estimate alongside it.\\n', est, hr0, hrT, ntrunc, trunclab)) } }\n";
           // SMR weights are 1 for the treated and the treatment odds for everyone
           // else: unbounded above, and just as capable of collapsing onto a handful
           // of comparators as the IPTW weights. Same rule, same refusal.
-          if (M.indexOf("smrw") >= 0) r += "  if(smrbad){ cat(sprintf('RESULT_ESTIMATE|SMR weighting (ATT) - %s HR|withheld - weights unstable\\n',est)) } else fitw(t,e,wSMR,all, paste0('SMR weighting (ATT) - ',est,' HR'))\n";
-          if (M.indexOf("overlap") >= 0) r += "  fitw(t,e,wOVL,all, paste0('Overlap weighting (ATO) - ',est,' HR'))\n";
+          if (M.indexOf("smrw") >= 0) r += "  if(smrbad){ cat(sprintf('RESULT_ESTIMATE|SMR weighting%s - %s HR|withheld - weights unstable\\n',eb(' (ATT)'),est)) } else fitw(t,e,wSMR,all, paste0('SMR weighting',eb(' (ATT)'),' - ',est,' HR'))\n";
+          if (M.indexOf("overlap") >= 0) r += "  fitw(t,e,wOVL,all, paste0('Overlap weighting',eb(' (ATO)'),' - ',est,' HR'))\n";
           // A stratum containing only one arm contributes nothing to a stratified
           // Cox model, so its patients are dropped. That was happening in silence:
           // on the tool's own no-overlap demo, 20% of the cohort at 10 strata and
@@ -1615,7 +1638,7 @@ const DESIGNS = [
           // sickest exposed — and the estimate is an ATT among whoever is left, a
           // population nobody chose. Report exposed retained, and say when the
           // requested ratio was arithmetically impossible before matching began.
-          if (M.indexOf("matching") >= 0) r += "  { mi<-matchidx(); nex<-sum(tr); nmex<-sum(d$TREAT[mi]==1); if(length(mi)>2){ dd<-data.frame(t=t[mi],e=e[mi],TREAT=d$TREAT[mi]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); mlab<-sprintf('" + ratio + ":1 PS matching (%d of %d exposed matched) - %s HR, ATT among the matched exposed',nmex,nex,est)\n" +
+          if (M.indexOf("matching") >= 0) r += "  { mi<-matchidx(); nex<-sum(tr); nmex<-sum(d$TREAT[mi]==1); if(length(mi)>2){ dd<-data.frame(t=t[mi],e=e[mi],TREAT=d$TREAT[mi]); fit<-tryCatch(coxph(Surv(t,e)~TREAT,data=dd),error=function(x)NULL); if(!is.null(fit)){s<-summary(fit); mlab<-sprintf('" + ratio + ":1 PS matching (%d of %d exposed matched) - %s HR%s',nmex,nex,est,eb(', ATT among the matched exposed'))\n" +
             "    if(ciok(s)) cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n',mlab,s$conf.int[1,'exp(coef)'],s$conf.int[1,'lower .95'],s$conf.int[1,'upper .95'])) else cat(sprintf('RESULT_ESTIMATE|%s|not estimable\\n',mlab))\n" +
             "    if(nmex<nex) cat(sprintf('RESULT_NOTE|Matching kept %d of %d exposed patient(s): %d found no comparator within the caliper and were dropped. Greedy matching without replacement takes the easiest-to-match exposed first, so the ones left out are systematically those with the highest propensity scores - the estimate is an average treatment effect among the exposed who could be matched, not among the exposed you uploaded.\\n', nmex, nex, nex-nmex))\n" +
             "    if(" + ratio + "*nex > sum(!tr)) cat(sprintf('RESULT_NOTE|A " + ratio + ":1 ratio needs %d comparators for %d exposed and only %d exist, so at least %d exposed could never be matched whatever the caliper allowed. Lower the ratio.\\n', " + ratio + "*nex, nex, sum(!tr), nex-sum(!tr)%/%" + ratio + "))} } }\n";
