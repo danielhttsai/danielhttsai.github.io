@@ -8269,3 +8269,14 @@ when the sender wrote five.
      immediately above for what shipped, the one live disagreement between the two
      reviewers (whether to strip Markdown fences before counting), and the three
      things this deliberately does not fix. -->
+
+<!-- CLAIM 2026-08-23 (twenty-ninth run): the amendments-editor mounting item —
+     PC.mountAmendments / PC.syncAmendments on the seven builders that lack it
+     (active-comparator-new-user, clone-censor-weight, sequential-trial,
+     descriptive-analysis, interrupted-time-series, trend-in-trend,
+     case-control), plus whatever mounting exposes in their reset / restore /
+     autosave paths and in src/components/ProtocolCommon.astro's editor.
+     This is the longest-standing open item in this file, unblocked by the
+     twenty-fifth and twenty-eighth runs.
+     NOT the checker, NOT RWE Studio, NOT the protocol-generator hub.
+     If you are a concurrent run reading this, take something else. -->
