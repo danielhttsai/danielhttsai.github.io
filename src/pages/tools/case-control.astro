@@ -463,6 +463,19 @@ const SENSITIVITY = [
       [!s.indexdate, "the index date, and how it is assigned to controls"],
       [!s.expdef, "the exposure definition"],
       [!s.data, "the data source"],
+      // The comment above says a case-control protocol without a
+      // control-sampling rule is not a protocol, and then this list did not
+      // check for one. The scheme is a <select>, so it can only be missing via
+      // a draft or ?seed= carrying a value the page no longer offers — which
+      // this builder's restore path does not guard, leaving selectedIndex = -1
+      // and the control contributing nothing. Three sentences in the document
+      // then refuse correctly ("(not chosen) sampling", "a control-sampling
+      // scheme that has not been chosen", "an effect measure that cannot be
+      // named until the sampling scheme is chosen") while the document as a
+      // whole presented itself as complete and section 8 still named a definite
+      // analysis. Say it is incomplete, in the one place that travels into the
+      // preview, the Markdown and the Word file together.
+      [!s.sampling, "the control-sampling scheme"],
     ].filter((x) => x[0]).map((x) => x[1]);
     const missingMd = (s) => {
       const m = missing(s);
