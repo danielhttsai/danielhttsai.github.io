@@ -1644,24 +1644,12 @@ const DESIGNS = [
           "pl<-profl(b,se,sccsll(a$EVENTS,a$EXPOSED,a$INTERVAL,a$ID))\n" +
           "pok<-is.finite(pl[1]) && is.finite(pl[2]) && pl[1]<=b && pl[2]>=b\n" +
           "clo<-if(pok) pl[1] else wlo; chi<-if(pok) pl[2] else whi\n" +
-          "cat(sprintf('Exact conditional SCCS incidence-rate ratio (exposed vs unexposed): %.3f (95%% %s CI %.3f to %.3f)\\n', irr, if(pok) 'profile-likelihood' else 'Wald', exp(clo), exp(chi)))\n" +
-          "cat(sprintf('Cases (strata): %d; interval-rows: %d; events: %d\\n', length(unique(a$ID)), nrow(a), sum(a$EVENTS)))\n" +
-          "cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', EST, irr, exp(clo), exp(chi)))\n" +
-          // Naming the interval is not optional: a rate ratio and its limits are not
-          // reproducible without it, and this is the only channel that travels into the
-          // Markdown and the .docx alongside the number.
-          "if(pok){\n" +
-          "cat('RESULT_NOTE|The interval above is a profile-likelihood (likelihood-ratio) interval, not exp(estimate +/- 1.96 x standard error). A self-controlled series conditions each case on their own event count, so when few events fall in the risk window the conditional log-likelihood is markedly asymmetric, and a symmetric Wald interval is too narrow on exactly the side that decides whether the interval clears 1. Simulated at a true rate ratio of 1, with a 14-day risk window inside a year of observation and about one event per case, a Wald interval excluded 1 for 11.2 percent of the files this tool would estimate at 10 cases and 6.7 percent at 20, against the 5 percent it promises; the likelihood-ratio interval gave 4.7 and 3.2 percent. With a longer risk window, or a few hundred cases, the two agree to two decimal places.\\n')\n" +
-          "  wexc<-(wlo>0 || whi<0); pexc<-(pl[1]>0 || pl[2]<0)\n" +
-          "  if(wexc && !pexc) cat(sprintf('RESULT_NOTE|The two intervals disagree on this data, which is why the distinction is not academic here. A Wald interval would have been %.2f to %.2f and would have excluded 1; the likelihood-ratio interval above includes it. This rate ratio is compatible with no effect - do not report it as a signal.\\n', exp(wlo), exp(whi)))\n" +
-          "  if(pexc && !wexc) cat(sprintf('RESULT_NOTE|The two intervals disagree on this data. A Wald interval would have been %.2f to %.2f and would have included 1; the likelihood-ratio interval above excludes it. The likelihood-ratio limits are the ones to report, but a finding this close to the boundary rests on the shape of the likelihood rather than on weight of evidence.\\n', exp(wlo), exp(whi)))\n" +
-          "} else cat('RESULT_NOTE|The profile-likelihood limits could not be located on this data, so the interval above is the Wald approximation exp(estimate +/- 1.96 x standard error) instead. That approximation is unreliable when few events fall in the risk window - which is the situation most likely to have caused the root search to fail - so treat the width of this interval as indicative only.\\n')\n" +
-          "# Fitting a dummy per case is the other route to the same number. Where they disagree\n" +
-          "# something is wrong - but only a converged fit can be compared, and the message no\n" +
-          "# longer offers \"a numerical problem\" as its only hypothesis.\n" +
-          "fe<-tryCatch(glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=a), error=function(e) NULL)\n" +
-          "if(!is.null(fe)){ bfe<-coef(fe)['EXPOSED']; if(is.finite(bfe) && abs(bfe-b)>0.01) cat(sprintf('RESULT_NOTE|The exact conditional fit (IRR %.3f) and a fixed-effect Poisson fit (IRR %.3f) disagree by more than 1%%. They are algebraically the same estimator, so the difference is numerical rather than substantive - treat both as unreliable here and check the interval lengths and event counts of the largest contributing cases.\\n', irr, exp(bfe))) }\n" +
+          // The pooled contrast row is FITTED here, before anything is printed, so the note
+          // below can say how many of the rows in the table are profile intervals instead of
+          // asserting it of a row that may not be there. Its cat() still comes after the
+          // headline's, which is what fixes the order of the table.
           "p0<-tryCatch(glm(EVENTS ~ EXPOSED, family=poisson, offset=log(INTERVAL), data=a), error=function(e) NULL)\n" +
+          "pgot<-FALSE; ppok<-FALSE\n" +
           "if(!is.null(p0)){ bp<-as.numeric(coef(p0)['EXPOSED']); sp<-as.numeric(sqrt(diag(vcov(p0)))['EXPOSED'])\n" +
           // The contrast row gets a profile-likelihood interval too, and it is the SAME
           // function: profiling the intercept out of a log-link Poisson with an offset leaves
@@ -1670,12 +1658,38 @@ const DESIGNS = [
           // to eight decimals on the demo and on a sparse file. If this row kept a Wald
           // interval it would sit directly under a likelihood-ratio one and could contradict
           // it about whether 1 is excluded - which is corroboration the reader has not got.
-          "  if(is.finite(bp) && is.finite(sp)){ pp<-profl(bp,sp,sccsll(a$EVENTS,a$EXPOSED,a$INTERVAL,rep(1L,nrow(a))))\n" +
-          "    ppok<-is.finite(pp[1]) && is.finite(pp[2]) && pp[1]<=bp && pp[2]>=bp\n" +
-          "    cat(sprintf('RESULT_ESTIMATE|Pooled across people, NOT self-controlled (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bp), exp(if(ppok) pp[1] else bp-1.96*sp), exp(if(ppok) pp[2] else bp+1.96*sp))) } }\n" +
+          "  if(is.finite(bp) && is.finite(sp)){ pgot<-TRUE\n" +
+          "    pp<-profl(bp,sp,sccsll(a$EVENTS,a$EXPOSED,a$INTERVAL,rep(1L,nrow(a))))\n" +
+          "    ppok<-is.finite(pp[1]) && is.finite(pp[2]) && pp[1]<=bp && pp[2]>=bp } }\n" +
+          "cat(sprintf('Exact conditional SCCS incidence-rate ratio (exposed vs unexposed): %.3f (95%% %s CI %.3f to %.3f)\\n', irr, if(pok) 'profile-likelihood' else 'Wald', exp(clo), exp(chi)))\n" +
+          "cat(sprintf('Cases (strata): %d; interval-rows: %d; events: %d\\n', length(unique(a$ID)), nrow(a), sum(a$EVENTS)))\n" +
+          "cat(sprintf('RESULT_ESTIMATE|%s|%.2f (95%% CI %.2f-%.2f)\\n', EST, irr, exp(clo), exp(chi)))\n" +
+          // Naming the interval is not optional: a rate ratio and its limits are not
+          // reproducible without it, and this is the only channel that travels into the
+          // Markdown and the .docx alongside the number.
+          "if(pok){\n" +
+          // Says how many rows it is speaking for, because the pooled row is not always
+          // there. Read cold off the rendered panel, "The interval above" was singular
+          // above a two-row table in which both intervals had moved.
+          "  lead<-if(pgot && ppok) 'Both intervals in the table above are profile-likelihood (likelihood-ratio) intervals, not exp(estimate +/- 1.96 x standard error)' else 'The interval on the self-controlled row above is a profile-likelihood (likelihood-ratio) interval, not exp(estimate +/- 1.96 x standard error)'\n" +
+          "  cat('RESULT_NOTE|',lead,'. A self-controlled series conditions each case on their own event count, so when few events fall in the risk window the conditional log-likelihood is markedly asymmetric, and a symmetric Wald interval is too narrow on exactly the side that decides whether the interval clears 1. Simulated at a true rate ratio of 1, with a 14-day risk window inside a year of observation and about one event per case, a Wald interval excluded 1 for 11.2 percent of the files this tool would estimate at 10 cases and 6.7 percent at 20, against the 5 percent it promises; the likelihood-ratio interval gave 4.7 and 3.2 percent. With a longer risk window, or a few hundred cases, the two agree to two decimal places.\\n',sep='')\n" +
+          "  wexc<-(wlo>0 || whi<0); pexc<-(pl[1]>0 || pl[2]<0)\n" +
+          "  if(wexc && !pexc) cat(sprintf('RESULT_NOTE|The two kinds of interval disagree on this data, which is why the distinction is not academic here. On the self-controlled row a Wald interval would have been %.2f to %.2f and would have excluded 1; the likelihood-ratio interval shown includes it. This rate ratio is compatible with no effect - do not report it as a signal.\\n', exp(wlo), exp(whi)))\n" +
+          "  if(pexc && !wexc) cat(sprintf('RESULT_NOTE|The two kinds of interval disagree on this data. On the self-controlled row a Wald interval would have been %.2f to %.2f and would have included 1; the likelihood-ratio interval shown excludes it. The likelihood-ratio limits are the ones to report, but a finding this close to the boundary rests on the shape of the likelihood rather than on weight of evidence.\\n', exp(wlo), exp(whi)))\n" +
+          "  if(pgot && !ppok) cat('RESULT_NOTE|The profile-likelihood limits could not be located for the pooled contrast row, so that row alone carries a Wald interval. It is a contrast and not the result, so this does not affect the self-controlled estimate above it.\\n')\n" +
+          "} else cat('RESULT_NOTE|The profile-likelihood limits could not be located on this data, so the interval on the self-controlled row above is the Wald approximation exp(estimate +/- 1.96 x standard error) instead. That approximation is unreliable when few events fall in the risk window - which is the situation most likely to have caused the root search to fail - so treat the width of this interval as indicative only.\\n')\n" +
+          "# Fitting a dummy per case is the other route to the same number. Where they disagree\n" +
+          "# something is wrong - but only a converged fit can be compared, and the message no\n" +
+          "# longer offers \"a numerical problem\" as its only hypothesis.\n" +
+          "fe<-tryCatch(glm(EVENTS ~ EXPOSED + factor(ID), family=poisson, offset=log(INTERVAL), data=a), error=function(e) NULL)\n" +
+          "if(!is.null(fe)){ bfe<-coef(fe)['EXPOSED']; if(is.finite(bfe) && abs(bfe-b)>0.01) cat(sprintf('RESULT_NOTE|The exact conditional fit (IRR %.3f) and a fixed-effect Poisson fit (IRR %.3f) disagree by more than 1%%. They are algebraically the same estimator, so the difference is numerical rather than substantive - treat both as unreliable here and check the interval lengths and event counts of the largest contributing cases.\\n', irr, exp(bfe))) }\n" +
+          "if(pgot) cat(sprintf('RESULT_ESTIMATE|Pooled across people, NOT self-controlled (contrast only)|%.2f (95%% CI %.2f-%.2f)\\n', exp(bp), exp(if(ppok) pp[1] else bp-1.96*sp), exp(if(ppok) pp[2] else bp+1.96*sp)))\n" +
           "if(ncase>0) cat(sprintf('RESULT_NOTE|%d of %d case(s) have an event and both exposed and unexposed person-time, and so carry the estimate; the rest contribute nothing to it. This is the same test the likelihood applies, so it is the number of cases the result actually rests on.\\n', ninf, ncase))\n" +
           "if(ncase>0 && median(epc[epc>0])<2) cat('RESULT_NOTE|Half the cases contribute a single event. The conditional likelihood handles that correctly - it is the design working as intended, not a defect - but the estimate rests on how each case s one event fell relative to their own exposed window, so precision comes from the number of cases rather than the number of events.\\n')\n" +
-          "cat('RESULT_NOTE|The pooled row ignores which person each interval belongs to. It is shown only as a contrast: it is confounded by anything that differs between people, which is exactly what the self-controlled design removes. Report the self-controlled row.\\n')\n" +
+          // Guarded on the row existing. It was unconditional, so a run where the pooled
+          // glm did not fit told the reader to prefer one of two rows when only one was on
+          // the screen. Cheap to fix now that the fit happens before anything is printed.
+          "if(pgot) cat('RESULT_NOTE|The pooled row ignores which person each interval belongs to. It is shown only as a contrast: it is confounded by anything that differs between people, which is exactly what the self-controlled design removes. Report the self-controlled row.\\n')\n" +
           "}}\n" +
           "# Table 1 and the data-quality notes print whether or not an estimate was made - when\n" +
           "# the tool refuses, these counts are the evidence the reader needs to see why.\n" +
