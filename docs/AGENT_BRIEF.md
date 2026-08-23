@@ -5918,3 +5918,10 @@ re-rendered with zero `pageerror`; five `.docx` regenerated and read. The
 analyst separately proved Markdown and Word cannot diverge here by capturing
 the real `pcOf(s)` off each live page and feeding the identical object to
 `tailMd` and `tailDocx` — byte-identical on all nine.
+
+<!-- CLAIM 2026-08-23 (twenty-second run): taking the stale-select REFUSAL PATH —
+     capture → persist → reach the exported document — across the six builders
+     that detect it (ACNU, descriptive-analysis, SCCS, case-crossover carry it
+     nowhere or lose it on reload) plus the two that never capture (case-control,
+     clone-censor-weight). NOT the checker's "na" verdict, NOT the planned-outputs
+     work. If you are a concurrent run reading this, take something else. -->
