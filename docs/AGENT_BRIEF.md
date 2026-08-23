@@ -5925,3 +5925,9 @@ the real `pcOf(s)` off each live page and feeding the identical object to
      nowhere or lose it on reload) plus the two that never capture (case-control,
      clone-censor-weight). NOT the checker's "na" verdict, NOT the planned-outputs
      work. If you are a concurrent run reading this, take something else. -->
+
+<!-- CLAIM 2026-08-23 (twenty-third run): the deliverables rubric's missing "na"
+     verdict — workers/target-checker/worker.js (DELIVERABLES prompt + schema
+     enum) and the planned-outputs panel/exports in protocol-checker.astro.
+     NOT the builders, NOT the stale-select refusal path, NOT `skip` validation.
+     If you are a concurrent run reading this, take something else. -->
