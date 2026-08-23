@@ -479,8 +479,11 @@ const SENSITIVITY = [
       // effect estimate") silently licensed an unlabelled odds ratio, which is
       // the one discipline a case-control protocol cannot do without: what the
       // OR estimates depends on how controls were sampled.
-      skipOutputs: ["flow", "table1", "results"],
-      plannedOutputs: ["Case/control selection flow (source population → eligible cases → sampled controls, with counts and matching yield).", "Table 1 — characteristics of cases vs controls.", "Odds ratio (crude and adjusted) with 95% CI, named as the rate ratio or risk ratio the sampling scheme entitles."],
+      plannedOutputs: [
+        { key: "flow", text: "Case/control selection flow (source population → eligible cases → sampled controls, with counts and matching yield)." },
+        { key: "table1", text: "Table 1 — characteristics of cases vs controls." },
+        { key: "results", text: "Odds ratio (crude and adjusted) with 95% CI, named as the rate ratio or risk ratio the sampling scheme entitles." },
+      ],
     });
 
     function renderScheme(s) {

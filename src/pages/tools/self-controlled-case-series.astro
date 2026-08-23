@@ -1052,8 +1052,10 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         // Table 1 and the results table are NOT dropped: nothing here
         // duplicates them, and describing who the cases were is what carries
         // the generalisability of an IRR across sites.
-        skipOutputs: ["flow"],
-        plannedOutputs: ["Case-selection flow diagram (source population → ascertained cases → cases contributing to the likelihood, with exclusions and counts at each step).", "Distribution of exposed vs unexposed person-time and events.", "Incidence-rate ratio by risk window, with a forest plot across sites."],
+        // Fills the flow slot rather than skipping it, so it renders FIRST,
+        // where a selection diagram belongs. Skipping and appending put it
+        // below the Table 1 describing the very population it defines.
+        plannedOutputs: [{ key: "flow", text: "Case-selection flow diagram (source population → ascertained cases → cases contributing to the likelihood, with exclusions and counts at each step)." }, "Distribution of exposed vs unexposed person-time and events.", "Incidence-rate ratio by risk window, with a forest plot across sites."],
       });
       const sitesLine = (ids, otherText) => {
         const parts = (ids || []).map((c) => "- " + formatSiteFull(c));

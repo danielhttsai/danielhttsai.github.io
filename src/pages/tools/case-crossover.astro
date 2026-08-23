@@ -1026,8 +1026,10 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         // counts)" content the shared bullet carried moves here so the trade
         // loses nothing. Table 1 and the results table stay: neither is
         // duplicated here, and the forest plot is a figure, not a table shell.
-        skipOutputs: ["flow"],
-        plannedOutputs: ["Case-selection flow diagram (source population → ascertained cases → exposure-discordant cases contributing to the likelihood, with exclusions and counts at each step).", "Exposure discordance across hazard / control windows.", "Odds ratio with a forest plot across sites."],
+        // Fills the flow slot rather than skipping it, for the same reason as
+        // the SCCS builder: a selection diagram has to precede the table that
+        // describes the population it selects.
+        plannedOutputs: [{ key: "flow", text: "Case-selection flow diagram (source population → ascertained cases → exposure-discordant cases contributing to the likelihood, with exclusions and counts at each step)." }, "Exposure discordance across hazard / control windows.", "Odds ratio with a forest plot across sites."],
       });
       const sitesLine = (ids, otherText) => {
         const parts = (ids || []).map((c) => "- " + formatSiteFull(c));

@@ -15,11 +15,16 @@
 //   groupBy,           // label for Table 1 columns (default "exposure group")
 //   dataMeta, studySize, ethics, registration,  // optional; sensible defaults
 //   limitations,       // optional design-specific sentence, appended to the generic one
-//   plannedOutputs,    // optional array of extra shell tables/figures for this design
-//   skipOutputs,       // optional subset of ["flow","table1","results"] — the shared
-//                      // planned-output bullets this design prints better itself, or
-//                      // cannot produce at all. An unrecognised key prints a visible
-//                      // defect notice rather than silently omitting nothing.
+//   plannedOutputs,    // optional array of extra shell tables/figures for this design.
+//                      // An entry may be a plain string, or { key, text } where key is
+//                      // one of "flow" / "table1" / "results" — that bullet then
+//                      // REPLACES the shared one and renders in its position.
+//   skipOutputs,       // optional subset of ["flow","table1","results"] — shared
+//                      // planned-output bullets this design cannot produce at all
+//                      // (only ITS). To print a better version of one, fill its slot
+//                      // via plannedOutputs instead of skipping it. An unrecognised
+//                      // key, or a non-list, prints a visible defect notice rather
+//                      // than silently doing nothing.
 //   amendments,        // optional; the raw "amendments" field (see below)
 //   version,           // optional; the builder's version/date string
 // }
@@ -102,10 +107,29 @@
     // rewrite of the same three items. A protocol commissioned two flow
     // diagrams, two tables both called Table 1, and two results tables — and on
     // the designs that are not person-level cohorts the SHARED half was the
-    // wrong half. A builder drops the ones it prints better itself with
-    //   skipOutputs: ["flow", "table1", "results"]
-    // in its pcOf(). Keys, not indices, so this list can be reordered without
-    // silently changing which bullet a builder omits.
+    // wrong half. There are two different things a builder needs to say about
+    // one of these bullets, and they are not the same statement:
+    //
+    //   "I print this better myself" — give the bullet the slot it fills:
+    //       plannedOutputs: [{ key: "flow", text: "Case-selection flow …" }, …]
+    //     It then renders IN THAT SLOT'S POSITION. Saying it this way instead
+    //     of skipping the slot and appending the replacement is what keeps the
+    //     order right: the first version of this dropped `flow` and pushed the
+    //     replacement into the trailing block, so SCCS and case-crossover
+    //     tabulated the baseline characteristics of a population one bullet
+    //     BEFORE saying how that population was ascertained — the same species
+    //     of inversion the results-last rule below exists to prevent.
+    //     It also means a bullet's identity is written in exactly one place,
+    //     so the replacement and the thing it replaces cannot drift apart.
+    //
+    //   "this design cannot produce this at all" — genuine deletion:
+    //       skipOutputs: ["flow", "table1", "results"]
+    //     Only interrupted-time-series needs this: its unit of analysis is a
+    //     calendar period, so there is no cohort to draw and no baseline to
+    //     tabulate. Everywhere else the honest statement is a replacement.
+    //
+    // Keys, not indices, so this list can be reordered without silently
+    // changing which bullet a builder omits or fills.
     const OUTPUT_KEYS = ["flow", "table1", "results"];
     const baseOutputs = (s) => (s.descriptive ? {
       flow: "Population-selection flow diagram (source population → analytic cohort, with exclusions and counts).",
@@ -119,36 +143,74 @@
 
     const defaultOutputs = (s) => {
       const base = baseOutputs(s);
-      const drop = Array.isArray(s.skipOutputs) ? s.skipOutputs.map(String) : [];
-      const own = Array.isArray(s.plannedOutputs) ? s.plannedOutputs.filter((x) => x && String(x).trim()) : [];
+      const KEYLIST = OUTPUT_KEYS.join(", ");
+
+      // Anything a builder said about these bullets that this component could
+      // not act on. Every entry is a full clause, because the failures differ:
+      // a misspelled key omits nothing, a bad slot name fills nothing, and a
+      // `skipOutputs` that is not a list does neither. Each of them would
+      // otherwise leave the duplicate standing with no trace but a string
+      // nobody reads — `"table-1"` for `"table1"` is one keystroke, and
+      // `skipOutputs: "flow"` without the brackets is what you write when you
+      // are dropping exactly one. Reported in the document, below.
+      const bad = [];
+
+      const rawDrop = s.skipOutputs;
+      const drop = Array.isArray(rawDrop) ? rawDrop.map(String) : [];
+      if (rawDrop != null && !Array.isArray(rawDrop)) {
+        bad.push("skipOutputs was given as " + JSON.stringify(rawDrop) + " rather than a list, so nothing was omitted");
+      }
+      drop.forEach(function (k) {
+        if (OUTPUT_KEYS.indexOf(k) === -1) {
+          bad.push('skipOutputs asked to omit "' + k + '", which is not one of ' + KEYLIST + ', so nothing was omitted for it');
+        }
+      });
+
+      // A plannedOutputs entry is either a plain string (an extra bullet) or
+      // { key, text } claiming one of the shared slots.
+      const slot = {}, own = [];
+      (Array.isArray(s.plannedOutputs) ? s.plannedOutputs : []).forEach(function (e) {
+        if (e && typeof e === "object" && !Array.isArray(e)) {
+          const text = String(e.text == null ? "" : e.text).trim();
+          if (!text) return;
+          if (OUTPUT_KEYS.indexOf(e.key) === -1) {
+            bad.push('a planned output claimed the slot "' + String(e.key) + '", which is not one of ' + KEYLIST + ', so it was added as an extra bullet instead');
+            own.push(text);
+            return;
+          }
+          slot[e.key] = text;
+          return;
+        }
+        if (e && String(e).trim()) own.push(String(e).trim());
+      });
+
       // Order: flow, Table 1, the design's own outputs, then the results table.
       // A plain `shared.concat(own)` reads correctly only while all three
       // shared bullets are present — drop the middle one and the results table
       // floats up to sit above the Table 1 that has not been commissioned yet.
       // A protocol's outputs list is read in the order the study produces
       // them, so the results shell goes last whatever else is dropped.
-      const keep = (k) => drop.indexOf(k) === -1;
-      const out = OUTPUT_KEYS.filter((k) => k !== "results" && keep(k)).map((k) => base[k])
-        .concat(own, keep("results") ? [base.results] : []);
-
-      // A key that is not one of ours would omit NOTHING and say nothing: the
-      // duplicate bullet stays, the builder's author believes it is gone, and
-      // the only trace is a string nobody reads. `"table-1"` for `"table1"` is
-      // one keystroke. So say it, in the document, where the first person to
-      // render the page cannot miss it. This is a defect in the generator, not
-      // a study decision, and it says so.
-      const unknown = drop.filter((k) => OUTPUT_KEYS.indexOf(k) === -1);
-      if (unknown.length) {
-        out.push("⚠ PROTOCOL-GENERATOR DEFECT — this builder asked to omit a standard planned output named " +
-          unknown.map((k) => '"' + k + '"').join(", ") + ", which is not one of " + OUTPUT_KEYS.join(", ") +
-          "; nothing was omitted for it, so this list may repeat an item. Please report this — it is a bug in the tool, not a decision about your study.");
-      }
+      const line = (k) => (drop.indexOf(k) !== -1 ? null : (slot[k] || base[k]));
+      const out = [];
+      ["flow", "table1"].forEach(function (k) { const v = line(k); if (v) out.push(v); });
+      own.forEach(function (v) { out.push(v); });
+      const res = line("results");
+      if (res) out.push(res);
 
       // Never hand back an empty list: `tailMd` would print the heading with
       // nothing under it, and a protocol whose planned-outputs section is a
       // bare heading reads as finished while it commissions nothing at all.
+      // This runs BEFORE the defect notice below, because the two can happen
+      // together — a builder that drops every slot AND misspells a key — and
+      // in that case the sentence telling the researcher the section is
+      // unfinished is the one that must not be crowded out by the bug report.
       if (!out.length) {
         out.push("(No analytical outputs are specified — this protocol does not yet say what tables or figures it will produce. This section has to be completed before the protocol is circulated.)");
+      }
+
+      if (bad.length) {
+        out.push("⚠ PROTOCOL-GENERATOR DEFECT — " + bad.join("; ") +
+          ". This list may therefore repeat an item or leave one out. Please report this — it is a bug in the tool, not a decision about your study.");
       }
       return out;
     };
