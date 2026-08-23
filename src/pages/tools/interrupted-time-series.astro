@@ -352,9 +352,38 @@ const SENSITIVITY = [
       prais: "A Prais–Winsten (Cochrane–Orcutt) correction for first-order autocorrelation is applied",
       arima: "Autocorrelated errors are modelled with an ARIMA structure (order chosen by AIC and residual diagnostics)",
     })[a] || "Residual autocorrelation is assessed with the Durbin–Watson statistic";
-    const effectText = (m) => m === "linear"
-      ? "the change in level (immediate step) and the change in slope (trend), both on the outcome's natural scale, with 95% confidence intervals"
-      : "the change in level and the change in slope expressed as rate ratios (incidence-rate ratios) with 95% confidence intervals";
+    // Reads `controlled`, which it did not. §6 already said the difference in
+    // level and slope changes "is the primary estimate" as soon as the box was
+    // ticked, while §7 — the section headed "Estimand" — went on naming the
+    // undifferenced within-series changes. Two adjacent sections of one
+    // protocol declaring two different primary estimands, and on the log scale
+    // the difference is not a rate ratio at all: the group-by-segment
+    // interaction is a RATIO of the two series' rate ratios.
+    const effectText = (s) => s.controlled
+      ? (s.model === "linear"
+        ? "the DIFFERENCE between the intervention and control series in the change in level and in the change in slope (a difference-in-differences on the outcome's natural scale), with 95% confidence intervals"
+        : "the RATIO of the intervention series' level change to the control series' level change, and the same for the slope change — the group-by-segment interaction terms, which on the log scale are ratios of rate ratios rather than rate ratios — with 95% confidence intervals")
+      : (s.model === "linear"
+        ? "the change in level (immediate step) and the change in slope (trend), both on the outcome's natural scale, with 95% confidence intervals"
+        : "the change in level and the change in slope expressed as rate ratios (incidence-rate ratios) with 95% confidence intervals");
+    // The counterfactual is not the same object in the two designs. In a
+    // controlled ITS the intervention series' own extrapolated pre-trend is
+    // precisely what the control series exists to replace, so naming it under a
+    // controlled design describes the analysis the control was added to avoid.
+    const cfText = (s) => s.controlled
+      ? "the counterfactual (the intervention series' pre-intervention trend carried forward with the change the control series shows over the same periods — not its own extrapolated pre-trend, which is the object the control series exists to replace)"
+      : "the counterfactual (this series' extrapolated pre-intervention trend)";
+    // The contrast with the counterfactual grows with how far past the
+    // interruption you look — it is linear in the slope-change coefficient — so
+    // "the difference from the counterfactual" is a family of estimands until a
+    // horizon is fixed. The protocol used to call that horizon "pre-specified"
+    // while the form collected nothing that could specify it.
+    const HORIZON_AT = "at the end of the post-intervention series";
+    const HORIZON_WHY = "That horizon is stated because the difference from the counterfactual grows with how far past the interruption it is measured — it is linear in the change-in-slope coefficient, so it is a family of numbers rather than one. Any additional horizon must be named in this protocol before the analysis is run.";
+    // One map per select, used by the design-summary table and by the analysis
+    // steps alike. They were separate copies with their own fallbacks.
+    const SEASON_LABEL = { none: "None", harmonic: "Harmonic (Fourier) terms", month: "Calendar-month / quarter dummies" };
+    const AC_LABEL = { none: "Durbin–Watson / ACF check, model-based standard errors", newey: "Newey–West (HAC) standard errors", prais: "Prais–Winsten", arima: "ARIMA errors" };
 
     // Normalised inputs for the shared HARPER/TARGET common sections (window.PC).
     const pcOf = (s) => ({
@@ -365,8 +394,14 @@ const SENSITIVITY = [
       comparator: "",
       outcome: or(s.outcome, "(outcome)"),
       data: s.data,
-      analysis: "segmented " + (s.model === "linear" ? "linear" : "Poisson") + " regression estimating the change in level and change in slope at the interruption" + (s.autocorr === "none" ? "" : ", with autocorrelation-adjusted inference"),
-      groupBy: "period (pre- vs post-intervention)",
+      // The abstract used to describe a single-group analysis whatever the box
+      // said: "Design. controlled interrupted time series" two sentences above
+      // an Analysis line with no control series in it. The HARPER abstract is
+      // the first thing a reviewer reads and often the only thing.
+      analysis: "segmented " + (s.model === "linear" ? "linear" : "Poisson") + " regression estimating the change in level and change in slope at the interruption"
+        + (s.controlled ? ", differenced against a control series (" + or(s.controlSeries, "not yet named") + ") with group-by-segment interactions, so the primary estimate is the difference in those changes" : "")
+        + (s.autocorr === "none" ? "" : ", with autocorrelation-adjusted inference"),
+      groupBy: s.controlled ? "series and period (intervention vs control, pre- vs post-intervention)" : "period (pre- vs post-intervention)",
       limitations: "Co-interventions or secular changes coinciding with the interruption can confound an uncontrolled ITS; " + (s.controlled ? "the control series mitigates this." : "a control series would strengthen inference."),
       plannedOutputs: ["Observed series with the fitted pre/post segments and the extrapolated counterfactual (the core ITS figure).", "Level-change and slope-change estimates with 95% CIs."],
     });
@@ -552,13 +587,15 @@ The outcome is aggregated per **${unitPhrase(s.unit)}** interval across the stud
 The outcome is modelled with ${modelText(s.model)}. The segmented model estimates: (i) the **baseline level** and **pre-intervention slope**; (ii) the **change in level** (immediate step at the interruption); and (iii) the **change in slope** (post- minus pre-intervention trend). ${seasonText(s.seasonality)}. ${autocorrText(s.autocorr)}.${s.controlled ? ` A control series (${or(s.controlSeries, "a comparison group/region/outcome unaffected by the intervention")}) is included, with group-by-segment interaction terms so the **difference** in level and slope changes (intervention minus control) is the primary estimate.` : ""}
 
 ## 7. Estimand and effect measures
-The primary estimands are ${effectText(s.model)}. We also report the **absolute and relative difference** between the observed outcome and the counterfactual (extrapolated pre-trend) at a pre-specified post-intervention time point, with 95% confidence intervals.
+The primary estimands are ${effectText(s)}.
+
+We also report the **absolute and relative difference** between the observed outcome and ${cfText(s)}, with 95% confidence intervals, ${HORIZON_AT}. ${HORIZON_WHY}
 
 ## 8. Statistical analysis
 1. Construct the aggregated time series and the segmented-regression design matrix (time, interruption, time-since-interruption${s.controlled ? ", control-group, and their interactions" : ""}).
-2. Fit the ${s.model === "linear" ? "segmented linear" : "segmented Poisson (or negative-binomial)"} model; ${autocorrText(s.autocorr).toLowerCase()}.
-3. ${seasonText(s.seasonality).replace(/^No explicit.*/, "Assess and, if present, adjust for seasonality")}.
-4. Report the level change and slope change (with 95% CI), plot the observed series with the fitted segments and the counterfactual, and estimate the difference-from-counterfactual at the chosen horizon.
+2. Fit the ${s.model === "linear" ? "segmented linear" : "segmented Poisson (or negative-binomial)"} model. ${autocorrText(s.autocorr)}.
+3. ${s.seasonality === "none" ? "Assess seasonality and, if present, adjust for it" : "Fit the seasonality terms specified in §6 (" + SEASON_LABEL[s.seasonality] + ") and report how many terms were used"}.
+4. Report the level change and slope change (with 95% CI), plot the observed series with the fitted segments and the counterfactual, and estimate the difference-from-counterfactual ${HORIZON_AT}.
 5. Check model fit and residual autocorrelation (Durbin–Watson, ACF/PACF); refit if diagnostics indicate.
 
 ## 9. Subgroup analyses
@@ -807,8 +844,8 @@ ${window.PC.tailMd(pcOf(s))}
         ["Time unit", s.unit],
         ["Pre / post points", ptsText(prePts(s)) + " / " + ptsText(postPts(s))],
         ["Regression model", s.model === "linear" ? "Segmented linear (OLS)" : "Segmented Poisson / negative-binomial"],
-        ["Seasonality", ({ none: "None", harmonic: "Harmonic (Fourier) terms", month: "Calendar-month / quarter dummies" })[s.seasonality] || "None"],
-        ["Autocorrelation", ({ none: "Durbin–Watson / ACF check", newey: "Newey–West (HAC) SE", prais: "Prais–Winsten", arima: "ARIMA errors" })[s.autocorr] || "-"],
+        ["Seasonality", SEASON_LABEL[s.seasonality] || "(not specified)"],
+        ["Autocorrelation", AC_LABEL[s.autocorr] || "(not specified)"],
         ["Control series", s.controlled ? or(s.controlSeries, "(specify)") : "None (uncontrolled)"],
       ]));
 
@@ -863,12 +900,14 @@ ${window.PC.tailMd(pcOf(s))}
       children.push(para("The outcome is modelled with " + modelText(s.model) + ". The segmented model estimates the baseline level and pre-intervention slope, the change in level (step at the interruption), and the change in slope (post minus pre). " + seasonText(s.seasonality) + ". " + autocorrText(s.autocorr) + "." + (s.controlled ? " A control series (" + or(s.controlSeries, "a comparison series unaffected by the intervention") + ") is included with group-by-segment interactions, so the difference in level and slope changes is the primary estimate." : "")));
 
       children.push(h1("6. Estimand and effect measures"));
-      children.push(para("Primary estimands: " + effectText(s.model) + ". We also report the absolute and relative difference between the observed outcome and the counterfactual at a pre-specified post-intervention time point."));
+      children.push(para("Primary estimands: " + effectText(s) + "."));
+      children.push(para("We also report the absolute and relative difference between the observed outcome and " + cfText(s) + ", with 95% confidence intervals, " + HORIZON_AT + ". " + HORIZON_WHY));
 
       children.push(h1("7. Statistical analysis"));
       ["Construct the aggregated series and the segmented-regression design matrix (time, interruption, time-since-interruption" + (s.controlled ? ", control group, and interactions" : "") + ").",
-       "Fit the " + (s.model === "linear" ? "segmented linear" : "segmented Poisson / negative-binomial") + " model; " + autocorrText(s.autocorr).toLowerCase() + ".",
-       "Report the level change and slope change (95% CI); plot the observed series with fitted segments and the counterfactual; estimate the difference-from-counterfactual at the chosen horizon.",
+       "Fit the " + (s.model === "linear" ? "segmented linear" : "segmented Poisson / negative-binomial") + " model. " + autocorrText(s.autocorr) + ".",
+       (s.seasonality === "none" ? "Assess seasonality and, if present, adjust for it." : "Fit the seasonality terms specified in §5 (" + SEASON_LABEL[s.seasonality] + ") and report how many terms were used."),
+       "Report the level change and slope change (95% CI); plot the observed series with fitted segments and the counterfactual; estimate the difference-from-counterfactual " + HORIZON_AT + ".",
        "Check model fit and residual autocorrelation (Durbin–Watson, ACF/PACF) and refit if indicated."].forEach((l) => children.push(numItem(l)));
 
       children.push(h1("8. Subgroup analyses"));
