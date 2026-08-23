@@ -16,6 +16,10 @@
 //   dataMeta, studySize, ethics, registration,  // optional; sensible defaults
 //   limitations,       // optional design-specific sentence, appended to the generic one
 //   plannedOutputs,    // optional array of extra shell tables/figures for this design
+//   skipOutputs,       // optional subset of ["flow","table1","results"] — the shared
+//                      // planned-output bullets this design prints better itself, or
+//                      // cannot produce at all. An unrecognised key prints a visible
+//                      // defect notice rather than silently omitting nothing.
 //   amendments,        // optional; the raw "amendments" field (see below)
 //   version,           // optional; the builder's version/date string
 // }
@@ -91,17 +95,62 @@
     // important effect" — three statements about an effect that the very next
     // sentence says is not being estimated. Only the descriptive-analysis
     // builder sets s.descriptive, so these branches reach exactly that one page.
+    //
+    // The three shared bullets are also KEYED, because `base.concat(own)` with
+    // no de-duplication printed each of them twice in eight of the nine
+    // builders: every builder's own `plannedOutputs` is a design-specific
+    // rewrite of the same three items. A protocol commissioned two flow
+    // diagrams, two tables both called Table 1, and two results tables — and on
+    // the designs that are not person-level cohorts the SHARED half was the
+    // wrong half. A builder drops the ones it prints better itself with
+    //   skipOutputs: ["flow", "table1", "results"]
+    // in its pcOf(). Keys, not indices, so this list can be reordered without
+    // silently changing which bullet a builder omits.
+    const OUTPUT_KEYS = ["flow", "table1", "results"];
+    const baseOutputs = (s) => (s.descriptive ? {
+      flow: "Population-selection flow diagram (source population → analytic cohort, with exclusions and counts).",
+      table1: "Table 1 — characteristics of the study population by " + nz(s.groupBy, "stratum") + ".",
+      results: "Primary-results table — each reported rate or proportion with its 95% confidence interval, by site and by stratum.",
+    } : {
+      flow: "Participant-flow diagram (source population → analytic cohort, with exclusions and counts).",
+      table1: "Table 1 — baseline characteristics by " + nz(s.groupBy, "exposure group") + ".",
+      results: "Primary-results table — the effect estimate with its 95% confidence interval.",
+    });
+
     const defaultOutputs = (s) => {
-      const base = s.descriptive ? [
-        "Population-selection flow diagram (source population → analytic cohort, with exclusions and counts).",
-        "Table 1 — characteristics of the study population by " + nz(s.groupBy, "stratum") + ".",
-        "Primary-results table — each reported rate or proportion with its 95% confidence interval, by site and by stratum.",
-      ] : [
-        "Participant-flow diagram (source population → analytic cohort, with exclusions and counts).",
-        "Table 1 — baseline characteristics by " + nz(s.groupBy, "exposure group") + ".",
-        "Primary-results table — the effect estimate with its 95% confidence interval.",
-      ];
-      return base.concat(Array.isArray(s.plannedOutputs) ? s.plannedOutputs : []);
+      const base = baseOutputs(s);
+      const drop = Array.isArray(s.skipOutputs) ? s.skipOutputs.map(String) : [];
+      const own = Array.isArray(s.plannedOutputs) ? s.plannedOutputs.filter((x) => x && String(x).trim()) : [];
+      // Order: flow, Table 1, the design's own outputs, then the results table.
+      // A plain `shared.concat(own)` reads correctly only while all three
+      // shared bullets are present — drop the middle one and the results table
+      // floats up to sit above the Table 1 that has not been commissioned yet.
+      // A protocol's outputs list is read in the order the study produces
+      // them, so the results shell goes last whatever else is dropped.
+      const keep = (k) => drop.indexOf(k) === -1;
+      const out = OUTPUT_KEYS.filter((k) => k !== "results" && keep(k)).map((k) => base[k])
+        .concat(own, keep("results") ? [base.results] : []);
+
+      // A key that is not one of ours would omit NOTHING and say nothing: the
+      // duplicate bullet stays, the builder's author believes it is gone, and
+      // the only trace is a string nobody reads. `"table-1"` for `"table1"` is
+      // one keystroke. So say it, in the document, where the first person to
+      // render the page cannot miss it. This is a defect in the generator, not
+      // a study decision, and it says so.
+      const unknown = drop.filter((k) => OUTPUT_KEYS.indexOf(k) === -1);
+      if (unknown.length) {
+        out.push("⚠ PROTOCOL-GENERATOR DEFECT — this builder asked to omit a standard planned output named " +
+          unknown.map((k) => '"' + k + '"').join(", ") + ", which is not one of " + OUTPUT_KEYS.join(", ") +
+          "; nothing was omitted for it, so this list may repeat an item. Please report this — it is a bug in the tool, not a decision about your study.");
+      }
+
+      // Never hand back an empty list: `tailMd` would print the heading with
+      // nothing under it, and a protocol whose planned-outputs section is a
+      // bare heading reads as finished while it commissions nothing at all.
+      if (!out.length) {
+        out.push("(No analytical outputs are specified — this protocol does not yet say what tables or figures it will produce. This section has to be completed before the protocol is circulated.)");
+      }
+      return out;
     };
 
     const limitationsText = (s) =>
