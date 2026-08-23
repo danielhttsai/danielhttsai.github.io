@@ -119,6 +119,14 @@ verify. Two specific traps:
 
 - **The live site serves stale copies after deploy.** Always cache-bust when
   verifying. Agents have twice nearly reported their own shipped work missing.
+- **A finished commit is not a verified one. Send the reviewers back at your own
+  diff.** That round is now 4 for 4 at finding real damage in a run's own work:
+  the thirty-first run's found eight defects in five commits, two of them sign
+  reversals, and both reviewers independently led with the same one. Budget for
+  it. **Also build a small regression battery of working cases before the first
+  commit and diff its OUTPUT after each one** — it is what makes the claim "these
+  lines moved and nothing else did" checkable, and it caught two wording
+  regressions that no reviewer looked for.
 - **The checker is non-deterministic.** The same protocol scored 19, 20, 21 and 22
   of 23 across four runs. Read the per-item evidence string, never the total, and
   never conclude from a single run.
@@ -279,6 +287,23 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   item, still the best next target there, with a drafted one-sentence fix in its
   section. It is a `worker.js` prompt edit, so it is **unverifiable from this
   sandbox** and inert until Daniel deploys; weigh that before picking it.
+- ~~The fifth run's ranked list of open items in RWE Studio's ITS path.~~
+  **Mostly done 2026-08-23 (thirty-first run)** — the control-series wipeout,
+  the `dconst` global `all()`, the bare `cat()` sweep and the silently closed-up
+  calendar periods, plus eight regressions its own round-3 reviewers found in
+  that work. Nine items are still open there and are ranked at the bottom of
+  this file; **the end-of-follow-up counterfactual sentence and its chart
+  caption is the best next target in the tool**, and the printed coefficient
+  table's model-based p-values is second. The **decimal comma** on that list is
+  stale — `readWorkbook` now classifies a comma per column. Before proposing a
+  remedy in that path, read the "Do NOT re-derive these" list in the
+  thirty-first run's section: **two reviewer-proposed fixes were implemented,
+  measured, and found worse than the bugs they were meant to fix.**
+- **`renderITSChart`'s caption asserts the dashed line "extrapolates the
+  pre-intervention trend forward as the counterfactual".** In a controlled run
+  it does not — it is the difference-in-differences counterfactual, and the
+  picture visibly contradicts the words. Named with a worked example at the
+  bottom of this file.
 
 ### Found 2026-08-22, argued over by two reviewers, deliberately left
 
