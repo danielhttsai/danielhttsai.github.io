@@ -387,6 +387,22 @@ const SENSITIVITY = [
     const HORIZON_WHY = "That horizon is stated because the difference from the counterfactual grows with how far past the interruption it is measured — it is linear in the change-in-slope coefficient, so it is a family of numbers rather than one. Any additional horizon must be named in this protocol before the analysis is run.";
     // One map per select, used by the design-summary table and by the analysis
     // steps alike. They were separate copies with their own fallbacks.
+    // One list, used by both exports. Verified against search records rather
+    // than from memory; the corrigendum was cited as 2020 while volume 50
+    // issue 3 of that journal is 2021, and the parameterisation question the
+    // corrigendum exists because of had no citation at all until §4 started
+    // stating the coding.
+    const REFS = [
+      "Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27(4):299-309. doi:10.1046/j.1365-2710.2002.00430.x",
+      "Lopez Bernal J, Cummins S, Gasparrini A. Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2017;46(1):348-355. doi:10.1093/ije/dyw098",
+      "Lopez Bernal J, Cummins S, Gasparrini A. Corrigendum to: Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2021;50(3):1045. doi:10.1093/ije/dyaa118",
+      "Xiao H, Augusto O, Wagenaar BH. Reflection on modern methods: a common error in the segmented regression parameterization of interrupted time-series analyses. Int J Epidemiol 2021;50(3):1011-1015. doi:10.1093/ije/dyaa148",
+      "Lopez Bernal J, Cummins S, Gasparrini A. The use of controls in interrupted time series studies of public health interventions. Int J Epidemiol 2018;47(6):2082-2093. doi:10.1093/ije/dyy135",
+      "Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. Regression based quasi-experimental approach when randomisation is not an option: interrupted time series analysis. BMJ 2015;350:h2750. doi:10.1136/bmj.h2750",
+      "Penfold RB, Zhang F. Use of interrupted time series analysis in evaluating health care quality improvements. Acad Pediatr 2013;13(6 Suppl):S38-S44. doi:10.1016/j.acap.2013.08.002",
+      "Zhang F, Wagner AK, Ross-Degnan D. Simulation-based power calculation for designing interrupted time series analyses of health policy interventions. J Clin Epidemiol 2011;64(11):1252-1261. PMID 21640554",
+      "Liu W, Ye S, Barton BA, et al. Simulation-based power and sample size calculation for designing interrupted time series analyses of count outcomes in evaluation of health policy interventions. Contemp Clin Trials Commun 2020;17:100474. PMID 31886433",
+    ];
     const SEASON_LABEL = { none: "None", harmonic: "Harmonic (Fourier) terms", month: "Calendar-month / quarter dummies" };
     const AC_LABEL = { none: "Durbin–Watson / ACF check, model-based standard errors", newey: "Newey–West (HAC) standard errors", prais: "Prais–Winsten", arima: "ARIMA errors" };
 
@@ -408,6 +424,20 @@ const SENSITIVITY = [
         + (s.autocorr === "none" ? "" : ", with autocorrelation-adjusted inference"),
       groupBy: s.controlled ? "series and period (intervention vs control, pre- vs post-intervention)" : "period (pre- vs post-intervention)",
       limitations: "Co-interventions or secular changes coinciding with the interruption can confound an uncontrolled ITS; " + (s.controlled ? "the control series mitigates this." : "a control series would strengthen inference."),
+      // ProtocolCommon's default study-size paragraph is written for a
+      // person-level cohort: "power ... from observed exposure and outcome
+      // frequencies", "available person-time and event counts". None of that
+      // exists here. In an uncontrolled ITS there is no exposure frequency at
+      // all — after the date, everyone is exposed — and the quantities that do
+      // decide the answer are the two the form already collects and three
+      // properties of the series. tailSections reads nz(s.studySize, ...) for
+      // exactly this, and ACNU already skips the section outright, so supplying
+      // a design-appropriate paragraph is the house-sanctioned route rather
+      // than a change to the shared component.
+      studySize: "An interrupted time series is sized by the series, not by a count of exposed and unexposed people. What decides the answer is: the number of pre- and post-intervention points (here " + ptsText(prePts(s)) + " and " + ptsText(postPts(s)) + "), the residual variance or overdispersion of the aggregated outcome, the residual autocorrelation — which reduces the effective number of independent observations below the nominal count — where in the series the interruption falls, and which target is being powered, since a change in slope generally needs a longer post-intervention series to detect than a one-off change in level does."
+        + (s.controlled ? " With a control series, power depends further on how closely the two series track each other before the interruption." : "")
+        + " Power is therefore established by simulation from a pre-intervention series of the same length and variability, at the level and slope changes considered clinically important, rather than from an event-count formula (Zhang 2011 for the segmented linear case; Liu 2020 for count outcomes). Feasibility is confirmed before the analysis is executed: that the outcome"
+        + (s.model === "poisson" ? " and its denominator" : "") + " can be aggregated into every period of the window, and that no period is missing — a gap closed up rather than left as a gap turns a per-period coefficient into a per-observed-row coefficient.",
       plannedOutputs: ["Observed series with the fitted pre/post segments and the extrapolated counterfactual (the core ITS figure).", "Level-change and slope-change estimates with 95% CIs."],
     });
 
@@ -612,12 +642,7 @@ ${(mergeList(s.sensitivityPick, s.sensitivityCustom).length ? mergeList(s.sensit
 ${window.PC.tailMd(pcOf(s))}
 
 ## References
-- Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27(4):299-309. doi:10.1046/j.1365-2710.2002.00430.x
-- Lopez Bernal J, Cummins S, Gasparrini A. Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2017;46(1):348-355. doi:10.1093/ije/dyw098
-- Lopez Bernal J, Cummins S, Gasparrini A. Corrigendum to: Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2020;50(3):1045. doi:10.1093/ije/dyaa118
-- Lopez Bernal J, Cummins S, Gasparrini A. The use of controls in interrupted time series studies of public health interventions. Int J Epidemiol 2018;47(6):2082-2093. doi:10.1093/ije/dyy135
-- Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. Regression based quasi-experimental approach when randomisation is not an option: interrupted time series analysis. BMJ 2015;350:h2750. doi:10.1136/bmj.h2750
-- Penfold RB, Zhang F. Use of interrupted time series analysis in evaluating health care quality improvements. Acad Pediatr 2013;13(6 Suppl):S38-S44. doi:10.1016/j.acap.2013.08.002
+${REFS.map((r) => "- " + r).join("\n")}
 `;
     };
 
@@ -980,12 +1005,7 @@ ${window.PC.tailMd(pcOf(s))}
       window.PC.tailDocx(D, pcOf(s)).forEach((c) => children.push(c));
 
       children.push(h1("References"));
-      ["Wagner AK, Soumerai SB, Zhang F, Ross-Degnan D. Segmented regression analysis of interrupted time series studies in medication use research. J Clin Pharm Ther 2002;27(4):299-309. doi:10.1046/j.1365-2710.2002.00430.x",
-       "Lopez Bernal J, Cummins S, Gasparrini A. Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2017;46(1):348-355. doi:10.1093/ije/dyw098",
-       "Lopez Bernal J, Cummins S, Gasparrini A. Corrigendum to: Interrupted time series regression for the evaluation of public health interventions: a tutorial. Int J Epidemiol 2020;50(3):1045. doi:10.1093/ije/dyaa118",
-       "Lopez Bernal J, Cummins S, Gasparrini A. The use of controls in interrupted time series studies of public health interventions. Int J Epidemiol 2018;47(6):2082-2093. doi:10.1093/ije/dyy135",
-       "Kontopantelis E, Doran T, Springate DA, Buchan I, Reeves D. Regression based quasi-experimental approach when randomisation is not an option: interrupted time series analysis. BMJ 2015;350:h2750. doi:10.1136/bmj.h2750",
-       "Penfold RB, Zhang F. Use of interrupted time series analysis in evaluating health care quality improvements. Acad Pediatr 2013;13(6 Suppl):S38-S44. doi:10.1016/j.acap.2013.08.002"].forEach((l) => children.push(bullet(l)));
+      REFS.forEach((l) => children.push(bullet(l)));
 
       children.push(p([new D.TextRun({ text: "Drafted with the Protocol Generator (" + today + ").", font: FONT, size: 18, italics: true, color: "808080" })], { spacing: { before: 400 } }));
 
