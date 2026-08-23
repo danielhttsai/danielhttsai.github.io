@@ -70,9 +70,12 @@
 //      "self-heal on the form's change event" never runs on this path, and the
 //      panel goes on showing rows the reset has already deleted. Without this
 //      call the panel and the document disagree until the user touches the
-//      panel again; the editor no longer writes a stale model back (see
-//      `stale()` in mountAmendments), so what you get for forgetting it is a
-//      panel one interaction out of date, not a resurrected amendment.
+//      panel again. The editor no longer writes a stale model back (see
+//      `stale()` in mountAmendments), so nothing is fabricated — but what a
+//      user meets is not a merely out-of-date panel: their first keystroke is
+//      DISCARDED and the box repaints from the field under the caret, with no
+//      message. That is the right outcome and a poor experience, and it is
+//      what forgetting this call actually costs.
 //
 // Storage format: one line per amendment in the single field "amendments",
 // pipe-delimited in HARPER's own column order —
@@ -514,9 +517,13 @@
       "If an entry was copied from a Markdown table, remove the \"|\" at the start and end of the line; " +
       "if a cell is meant to contain a \"|\", put a backslash in front of it; " +
       "if an entry runs over more than one line, put it on one line.";
+    /* "…where this table has 5 columns" sent a sender counting columns to
+       repair their line to a table with SIX headed cells, because both emitters
+       prepend a No. So count what the sender actually controls — the values on
+       the line — and say nothing about the table's shape. */
     var amRefuseLabel = function (e) {
       return "Entry " + e.no + " — " + amPlural(e.values, "value", "values") +
-        ", where this table has " + AM_COLS.length + " columns:";
+        ", where an entry needs exactly " + AM_COLS.length + ":";
     };
     /* A refused entry still occupies a numbered row in the table, and this is
        not decoration. Amendment tables get lifted out of the protocol — into a
@@ -613,8 +620,18 @@
            either. No legend for the em dash — the twenty-eighth run's argument
            against one still holds, because an author who types "—" meaning
            "not applicable" is indistinguishable, on the page, from a cell left
-           blank. */
-        ["registration", "Registration and amendments", ["The protocol is registered before analysis (e.g. the EU PAS Register / ClinicalTrials.gov) where applicable" + (s.registration ? ": " + s.registration : "") + ". Amendments are version-controlled and recorded in the amendment table in this protocol's front matter."]],
+           blank.
+
+           "version-controlled" went with "logged with date and rationale", one
+           clause later than it should have. The first draft of this change kept
+           it, and a reviewer ran the same reproduction against the kept clause:
+           the same row prints an em dash in Version NUMBER too, and on five of
+           the nine builders the document carries no version string anywhere at
+           all — only "drafted <today>", where today is the date the file was
+           downloaded. A certification the document cannot evidence is a
+           certification either way, whichever cell it is about. What is left is
+           purely locative, which is the only thing this section can see. */
+        ["registration", "Registration and amendments", ["The protocol is registered before analysis (e.g. the EU PAS Register / ClinicalTrials.gov) where applicable" + (s.registration ? ": " + s.registration : "") + ". Amendments are recorded in the amendment table in this protocol's front matter."]],
         ["ae", "Adverse-event reporting", ["As a secondary-data analysis of a pre-specified outcome, individual adverse-event reporting does not apply; safety is addressed through the pre-specified outcome analyses."]],
         ["funding", "Funding and conflicts of interest", ["Funding source(s) and each author's conflicts of interest are declared in the final report."]],
       ].filter((x) => !skip.includes(x[0]));
@@ -772,7 +789,15 @@
          The two builders that call PC.syncAmendments after their reset were
          immune, which is what step 3 of the recipe is for; this guard is what
          makes forgetting step 3 degrade instead of fabricate. Every path that
-         writes the model checks first. */
+         writes the model checks first.
+
+         The comparison rests on an invariant kept in three other functions: a
+         <textarea>'s value getter normalises line endings, so `t.value = "a\rb"`
+         reads back "a\nb". If `writeRows` ever wrote a CR, this would be
+         PERMANENTLY true and every keystroke and every ✕ would be dropped for
+         the life of the page. It cannot: an <input> cannot hold a CR, writeRows
+         collapses /\r?\n/ per cell, and amSplit strips [\r\n]+ from every cell.
+         The twenty-eighth run was bitten once by exactly this character. */
       var stale = function () { return field.value !== lastWritten; };
       /* The notes have to be recomputed on every KEYSTROKE, not only on a
          repaint. The first attempt at this ran once per paint, and because
@@ -891,9 +916,36 @@
              page-level scrollWidth assertion at 390px and 1024px — which is
              what two earlier runs measured — cannot see any of it, because at
              1024px the overflow lands inside the viewport, on top of the
-             preview, rather than past its edge. */
-          row.className = "grid gap-1.5 @[36rem]:grid-cols-[minmax(0,8rem)_minmax(0,6rem)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_auto] items-start";
+             preview, rather than past its edge.
+
+             The form column is 422-550px on every desktop viewport this site
+             has a layout for, so the six-track row is in practice reached only
+             between roughly 700px and 900px, where the page is one column. The
+             STACKED state is therefore the normal one, and it has to stand on
+             its own — which is why each box carries a visible caption below,
+             rather than relying on a placeholder that disappears the moment
+             anything is typed into it. */
+          row.className = "grid gap-1.5 @[36rem]:gap-1.5 @[36rem]:grid-cols-[minmax(0,8rem)_minmax(0,6rem)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_auto] items-start rounded border border-slate-200 p-2 @[36rem]:border-0 @[36rem]:p-0";
+          // Stacked, five boxes in a column are indistinguishable once they are
+          // filled, so say which amendment they are. Hidden where the row has
+          // its own columns; the aria-labels carry the same thing either way.
+          var hdr = document.createElement("p");
+          hdr.className = "@[36rem]:hidden text-[11px] font-semibold text-slate-600";
+          hdr.textContent = "Amendment " + (i + 1);
+          row.appendChild(hdr);
           AM_COLS.forEach(function (label, j) {
+            // The caption is the placeholder's replacement, not its companion:
+            // a placeholder is gone as soon as the box is filled, which is
+            // exactly when a reader needs to know which column they are looking
+            // at. sr-only rather than hidden in the wide state, so the column
+            // heading a screen reader announces does not depend on the width.
+            var wrap = document.createElement("label");
+            wrap.className = "grid gap-0.5 min-w-0";
+            var cap = document.createElement("span");
+            cap.className = "@[36rem]:sr-only text-[10px] font-medium text-slate-500";
+            cap.textContent = label;
+            cap.setAttribute("aria-hidden", "true");
+            wrap.appendChild(cap);
             var inp = document.createElement("input");
             inp.className = INPUT;
             inp.placeholder = label;
@@ -936,12 +988,20 @@
               if (stale()) { sync(); return; }
               r[j] = inp.value; writeRows(rows); paintNotes(rows);
             });
-            row.appendChild(inp);
+            wrap.appendChild(inp);
+            row.appendChild(wrap);
           });
           var del = document.createElement("button");
           del.type = "button";
-          del.className = "text-xs text-slate-400 hover:text-rose-600 px-2 py-1.5";
-          del.textContent = "✕";
+          /* `justify-self-end` and a border, because stacked this button is a
+             grid item in a one-column grid: without them it was a 550px-wide
+             borderless strip carrying one glyph, sitting eight pixels above the
+             next amendment's Version-date box — a full-width click target that
+             deletes an entire amendment with no undo, painted where the eye
+             reads a separator. It also says what it removes when there are no
+             column headings beside it to imply it. */
+          del.className = "justify-self-end text-xs text-slate-500 hover:text-rose-600 border border-slate-200 hover:border-rose-300 rounded px-2 py-1.5 transition";
+          del.innerHTML = '<span class="@[36rem]:hidden">Remove this amendment </span><span aria-hidden="true">✕</span>';
           del.setAttribute("aria-label", "Remove amendment " + (i + 1));
           del.addEventListener("click", function () {
             if (stale()) { sync(); return; }
