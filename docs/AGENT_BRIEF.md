@@ -96,6 +96,20 @@ codebase, all of which produced confident, wrong, non-crashing output:
 - An `<option>` 1293 characters wide setting a grid column's min-content, pushing
   an entire form off a phone screen — a layout bug, but the same species: nothing
   errors, the page just silently becomes unusable at one viewport.
+- **A key absent from a state object read as "the user chose none".**
+  `(state[name] || []).includes(el.value)` on a checkbox group cannot tell "the
+  sender did not mention this" from "the sender chose nothing", so a partial
+  `?seed=` link unticked 67 default-ticked boxes and exported a
+  propensity-score-adjusted protocol with no covariates. Whenever an object may
+  be *partial*, the test is `Object.prototype.hasOwnProperty.call(o, k)`, never
+  a truthiness or `!== undefined` test on the value.
+- **A refusal that erases itself before anyone can read it.** A builder's first
+  `render()` autosaves the form it just restored, so a value the restore refused
+  is gone from the draft within milliseconds: the warning shows on one load and
+  the next load has no blank control, no warning, and a document confidently
+  asserting the substituted choice. **Any state captured at restore has to be
+  carried in the saved draft under a reserved key**, or it is destroyed by the
+  render that raised it. Six builders now do; two capture without persisting.
 
 ## The bar for "done"
 
@@ -108,6 +122,17 @@ verify. Two specific traps:
 - **The checker is non-deterministic.** The same protocol scored 19, 20, 21 and 22
   of 23 across four runs. Read the per-item evidence string, never the total, and
   never conclude from a single run.
+- **A green `astro build` says nothing about an inline `<script>`.** Astro does
+  not parse their contents, so a stray `*/` in `ProtocolCommon.astro` killed
+  `window.PC` on all nine builder pages and the build reported success. Load
+  every tool page in Chromium and assert zero `pageerror` plus
+  `typeof window.PC === "object"` before every commit that touches a script.
+- **Diff the OUTPUT, not the expression.** A run replaced
+  `=== "HR" || !s.effectMeasure` with `m.ratio && m.measure === "HR"` and said
+  the behaviour had changed; `measure` is `em || "HR"`, so the two are the same
+  and the generated R was byte-identical. Rendering the four *working* cases and
+  finding them unchanged is not confirmation — it is the case you did not render
+  that the change was for.
 
 ## Ship loop
 
@@ -4971,12 +4996,6 @@ done**, and twice it was the same error class the run had set out to delete:
   text** — the analyst argued that is normal for a bibliography and it was left.
 - **Nothing was verified against the live site**, which is unreachable from
   here, and nobody has still ever opened one of these `.docx` files in Word.
-
-<!-- CLAIM 2026-08-23 (seed/restore run): taking the `<select>` membership gap in
-     `PC.applySeed` / `PC.restore` in src/components/ProtocolCommon.astro and the
-     builders that rely on it (case-control, clone-censor-weight, and the four
-     with their own writeForm). NOT rwe-studio — a concurrent run holds that.
-     If you are a concurrent run reading this, take something else. -->
 ### Found 2026-08-23 by an eighteenth run — the SCCS interval, the item the seventeenth run reserved
 
 The seventeenth run's open list called the Wald-versus-profile question "the sharpest thing
@@ -5148,3 +5167,283 @@ above a two-row table, and a companion note quoted Wald limits without saying wh
   over Wald intervals in SCCS, so **none was asserted** — the note reports this run's own
   worked example instead. Snippet-only leads: Farrington, *Biometrics* 1995;51(1):228-235,
   PMID 7766778; Whitaker et al., *Stat Med* 2006;25(10):1768-1797, doi 10.1002/sim.2302.
+
+### Found 2026-08-23 — the draft-restore and `?seed=` hand-off path (shared code + six builders)
+
+**Chosen by rotation.** Every builder and both other tools had had a dedicated
+run; the path that puts values *into* a form never had. It is one shared
+implementation plus six hand-written copies of the same loop, and the copies had
+drifted from the shared one in the usual direction. It held the worst defect
+this run found — one that needs nothing to be stale, malformed or unusual, and
+that fires when the feature is used exactly as designed.
+
+Two reviewers on disjoint briefs (methodologist: estimands, refusal prose,
+citations; applied analyst: form plumbing, parsers, silent drops, exports), both
+against a frozen `cbb1290`; then a fourth agent sent to adjudicate where they
+disagreed, and a third sent at this run's own diff.
+
+#### Environment: three new traps, all of which cost this run real time
+
+Every trap in the previous runs' lists still holds exactly as written. Three
+additions, in order of how much they will cost you:
+
+- **`astro build` does not parse the contents of an inline `<script>`.** A stray
+  `*/` left mid-comment in `ProtocolCommon.astro` killed `window.PC` on all nine
+  builder pages and the build reported success in green. **A clean build proves
+  nothing about these files.** The gate takes nine seconds: load every tool page
+  in Chromium, assert zero `pageerror` and `typeof window.PC === "object"`. Write
+  it once and run it before every commit that touches a `<script>` — it caught
+  this within a minute of the edit, and nothing else would have.
+- **`[data-preview]` is not the export node on every builder.** ACNU, SCCS,
+  case-crossover, descriptive-analysis, ITS, sequential-trial and trend-in-trend
+  use it; **`case-control` and `clone-censor-weight` use `#preview`.** A test
+  reading the wrong one gets `""`, so every "is the bad string present?"
+  assertion passes — *in both directions*, giving you a clean "before" and a
+  clean "after" and an entirely fictional result. This produced a false negative
+  in one reviewer's first cross-builder sweep and again in this run's own merge
+  test. **Assert the preview length is non-zero before believing any export
+  claim.**
+- `git add <file>` stages the whole file, so two topics in one file become one
+  commit whose message describes one of them. Splitting afterwards worked and is
+  cheap: `git reset --soft HEAD~1 && git reset`, split the diff by hunk with a
+  five-line Python script, `git apply --cached` the first commit's hunks, commit,
+  then `git add` the rest.
+
+#### Fixed this run
+
+- ~~**A `?seed=` link unticked every default-ticked box on the page.**~~ The
+  worst thing found this run, and the one that needed nothing to go wrong first.
+  `el.checked = (state[name] || []).includes(el.value)` ran unconditionally in
+  ACNU, case-crossover, SCCS and descriptive-analysis, so a key **absent** from
+  the state object was read as "the empty set" rather than as "not mentioned".
+  Opening a link carrying the three fields a colleague had actually written down
+  unticked **67 of 67** boxes on ACNU — all 41 covariates, the censoring rules,
+  the inclusion and exclusion criteria, the subgroups and the sensitivity
+  analyses — and 9, 9 and 11 on the other three. The exported protocol then read
+  "**Baseline covariates** _(none specified)_" with the next sentence promising
+  SMDs "across all covariates", and an on-treatment analysis with no censoring
+  rules; seven empty `_(none specified)_` blocks and **no warning anywhere**.
+  Seeding a proposal from elsewhere is what `?seed=` is *for*, and a seed will
+  never carry 67 ticks, so the feature deleted the page's starter template every
+  time it was used as designed. The five builders delegating to `PC.applySeed`
+  were always right — it skips keys the seed does not carry. Fixed with
+  `Object.prototype.hasOwnProperty.call(state, name)`, **not** `!== undefined`:
+  `readForm()` pre-seeds every multi key with `[]`, so a saved draft always owns
+  the key and a deliberate untick still restores as unticked. The `multi` Set in
+  `writeForm` and the one in `readForm` were checked against each other in all
+  four files and match exactly — that is the precondition, so re-check it if you
+  add a group. Measured on all nine builders before and after; the untick and
+  the explicit-empty-seed cases were re-measured on both builds and are unchanged.
+- ~~**ACNU: a saved choice the page no longer offers, erased by the render that
+  hid it.**~~ Assigning a `<select>` a value matching no `<option>` leaves
+  `selectedIndex = -1`: the box renders empty, the control contributes nothing to
+  FormData, and each export's `|| "…"` fallback names a definite choice. A draft
+  carrying `effectMeasure "OR"`, `indexDateChoice "first-dispensing"`,
+  `metaMethod "random"` and `sex "F"` blanked eight of the thirteen selects and
+  the protocol asserted an index date, a sex eligibility criterion, a five-year
+  follow-up cap and DerSimonian-Laird pooling nobody had chosen. **The reason it
+  survived seventeen runs is that it erases itself**: `render()` runs immediately
+  after restore and saves `readForm()` — which omits every blank select — back
+  over the draft, so on the next load the keys are absent, the selects show
+  their authored defaults, and the export reads "Effect estimate: Hazard ratio
+  (95% CI) from Cox proportional-hazards models" where the draft said OR. One
+  reload and there is no blank box and no refusal left to notice. ACNU now keeps
+  the markup default, carries the report under a reserved `__staleSelects` key
+  `readForm` cannot see, and prints a red blocker naming the field, the dead
+  value and what the field now says — **in the words shown in the box, not the
+  raw option value**, because nobody can confirm a choice called "re" or
+  "federated". Answering retires it; a Keep button retires one the user is happy
+  with, since re-picking the option a select already shows fires no `change`.
+- ~~**ACNU: four readings of one dropdown, disagreeing about whether it had an
+  answer.**~~ The PS-calibration section read `s.effectMeasure` as `!== "RD"`, as
+  a four-entry lookup with `|| "HR"`, as `=== "HR"`, and as `=== "HR" ||
+  !s.effectMeasure`. Unset, those go four ways at once: the lookup substituted
+  "HR" while `=== "HR"` stayed false, so the collapsible branch ran with measure
+  "HR" and indexed a three-entry map that has no HR key. The document printed
+  "**4. Your effect measure is collapsible…** undefined is collapsible — it is
+  the odds ratio and the hazard ratio that are not — so Wan's non-collapsibility
+  bias does not apply": a literal `undefined`, a heading asserting a property of
+  a measure the same document calls unspecified, and a false all-clear retiring a
+  bias source for the one measure it applies to. The fourth reading shipped five
+  `coxph()` lines in the generated R under a Section 8 reading "(effect measure
+  not specified)". One resolved measure drives every branch now, and `em` — null
+  exactly when the value is not one of the four offered — is the only thing
+  allowed to answer "do we know?". All five states rendered and read on the page.
+  **Reach is narrow** (the whole block is gated on the optional `pscEnable`
+  checkbox) and the adjudicator was right to say so; it was fixed because a
+  literal `undefined` in a protocol is indefensible at any reach, and because
+  ruling one option out is never a way to assert a positive fact about a dropdown.
+- ~~**`?seed=paste` destroyed the saved draft while the panel promised it
+  wouldn't.**~~ `restore()` returned "paste" without loading the draft, and the
+  caller's first `render()` autosaved the default form over it — so merely
+  *opening* a hand-off link, pasting nothing, emptied the form and storage on the
+  four builders with no inline second restore loop. The panel on screen at that
+  moment said 你目前的草稿在套用前不會被改動 — your current draft will not be
+  modified before you apply. **The first fix for this was wrong and worth
+  recording**: taking a `.before-seed` copy on arrival meant a second visit
+  overwrote the copy with the wreckage the first visit left, so the recovery
+  button restored an empty form while a green notice promised otherwise.
+  Backing up on arrival cannot work, because nothing distinguishes a real draft
+  from the defaults a previous visit saved. The shipped fix loads the draft on
+  the paste path, so the autosave writes back what it read, nothing is displaced,
+  and the panel's original promise is true as written. The copy is taken in
+  `pastePanel` at the moment something is actually pasted — once. A paste now
+  also `form.reset()`s first, which fixes the merge below.
+- ~~**A paste merged into whatever the reader was already writing.**~~ On the
+  five builders whose own restore loop loads the draft when `seeded === false`,
+  pasting a colleague's protocol over an open draft produced one document naming
+  two studies: title "COLLEAGUE STUDY SGLT2i" with population "MY OWN POPULATION
+  T2DM adults", with nothing to say so. A paste resets to the markup defaults
+  before applying, which is where a `?seed=` link lands too, so both hand-off
+  routes now agree that an unmentioned field means the page's default rather than
+  the last reader's text. Verified on case-control and clone-censor-weight:
+  the population survived the paste before, and is gone after.
+- ~~**Case-control checked seven things for completeness and not the one its own
+  comment names.**~~ The comment above `missing()` says a protocol without a case
+  definition, an index date or a control-sampling rule is not a protocol; the
+  list had no entry for the sampling rule. With a stale scheme, three sentences
+  refused correctly while the document carried no incompleteness banner and
+  section 8 still named conditional logistic regression. `missing()` is the one
+  place that reaches the preview, the Markdown and the Word file together.
+
+#### What the reviewers disagreed about, and who was right
+
+- **Ranking.** The methodologist put the ACNU blank-select assertions at the top
+  and the `undefined` sentence with them; the analyst put the checkbox wipe
+  joint-top. **The analyst was right, on reachability**: the wipe needs one click
+  on an ordinary, correct link and has no downstream guard at all, while the
+  `undefined` sentence additionally needs an opt-in section to be ticked. Rank by
+  what a user actually hits, not by how bad the sentence reads.
+- **`case-control`'s sampling select.** The methodologist filed it as a *negative*
+  finding — already fully defended at export level, and warned that a fixer would
+  add a contradictory second refusal. **That was wrong**, and a wrong "nothing to
+  see here" is the expensive kind: three consumers refuse, the fourth
+  (`analysisText`) names a definite analysis, and `missing()` omitted the field
+  entirely. Fixed above.
+- **`ProtocolCommon`'s shared defaults.** The methodologist said they can never
+  fire because each builder's `pcOf()` always supplies non-empty strings. **Also
+  wrong**: five builders pass `data: s.data` raw, so `nz(s.data, "(data source)")`
+  really does print "**Data source(s).** (data source)."; and `studySize`,
+  `dataMeta`, `ethics` and `registration` are absent from every `pcOf()`.
+  Left deliberately — see below.
+- **The re-save trap after this run's fix.** The adjudicator claimed all four
+  landed fixes leave it intact. **Half right.** Re-measured on both builds and
+  both entry paths: before, three selects blank on load 1 with nothing said, and
+  by load 2 the draft silently reads `{sex:"both", effectMeasure:"HR",
+  arch:"federated"}` with no trace; after, no select is blank, three red lines
+  appear on load 1 **and are still there on load 2**, and `__staleSelects` is
+  carried in the draft. The draft does still end up holding the substituted
+  values — that is unavoidable, since the form must hold something and
+  `readForm` is FormData-derived — but it is now recorded and reported instead of
+  silent, which is the whole of the fix and what the on-screen line says.
+- **Raw option values in refusal prose.** The methodologist found ITS,
+  sequential-trial and trend-in-trend printing `"RDRMST"`, `"poisson"`, `"ITT"`
+  where SCCS and case-crossover print labels. Correct about the *substituted*
+  half and it was applied to this run's own new ACNU strings. The adjudicator's
+  qualification is right and worth keeping: the **saved** half must stay raw in
+  all five, because there is no label for an option the page no longer has.
+
+#### Round two: a reviewer sent at this run's own diff
+
+Seven for seven now. It found three real defects, all invisible in the diff:
+
+- **The `surv` fix was a no-op and the commit message said otherwise.**
+  `m.ratio && m.measure === "HR"` is the same expression as the
+  `=== "HR" || !s.effectMeasure` it replaced, because `measure` is `em || "HR"`.
+  The generated R was byte-identical before and after while the commit claimed
+  the contradiction was gone. **Diff the OUTPUT, not the expression** — this run
+  had already diffed the exported Markdown for all four measures and found it
+  identical, and read that as confirmation rather than as the warning it was.
+- **Retiring a blocker on a `change` event misses everything the page writes to
+  itself.** The library picker (`el.value = …; render()`) and the diagram's
+  follow-up drag both set selects without firing `change`, so the red line
+  survived and then called the option the user had just picked "a specification
+  nobody chose". Retire by value, not by event.
+- **One button at the foot of the panel, four lines each calling it "the button
+  below to confirm the one it was left at".**
+
+It also found four defects in the *first* version of the paste fix, which this
+run had already replaced before the review landed (the arrival-backup design).
+Worth knowing the review was right about all four.
+
+#### Open, examined this run, deliberately left
+
+- **Five builders still ship a cohort-flavoured power paragraph.** `tailSections`
+  in `ProtocolCommon.astro` defaults `studySize` to "Power is assessed per data
+  source from observed exposure and outcome frequencies in a pilot extraction;
+  the study targets ≥ 80% power to detect the smallest clinically important
+  effect at a two-sided α = 0.05." No builder has a control for it. ACNU skips
+  the section; ITS, trend-in-trend and descriptive-analysis supply their own
+  design-specific text (earlier runs did that work, which is the precedent);
+  **SCCS, case-crossover, case-control, clone-censor-weight and sequential-trial
+  print the generic sentence** — measured on all nine. It is wrong in the same
+  way it was wrong for ITS: an SCCS is powered by the number of exposed cases and
+  the ratio of risk to control person-time, not by exposure and outcome
+  frequencies per data source. **Not written, deliberately**: five design-specific
+  power paragraphs need citations, and Crossref/PubMed/doi.org are blocked from
+  this sandbox, so writing them here would mean writing them from memory. This is
+  the sharpest well-scoped piece of work left, and the pattern to copy is already
+  in `interrupted-time-series.astro:471` and `trend-in-trend.astro:382`.
+- **`case-control` and `clone-censor-weight` still have no stale-select capture.**
+  Both have exactly one `<select>`, and both already refuse downstream, so the
+  damage is limited to the user not being told which dead value was dropped —
+  much less than ACNU's thirteen. `clone-censor-weight.astro:615` has a genuinely
+  dead branch because of it: `blank(s.effect) ? "empty" : "…" + s.effect + "…"`
+  can never take its second arm, since a blanked select is omitted by FormData
+  and `s.effect` is always `""`. Capturing at restore is what makes that branch
+  reachable.
+- **SCCS and descriptive-analysis never persist their `staleSelects`.** They have
+  the capture but no `__staleSelects` round-trip, so the warning appears once and
+  is gone after one reload while the protocol keeps describing the substituted
+  choice. case-crossover, ITS, sequential-trial and trend-in-trend all persist it;
+  ACNU does now. Measured across three consecutive loads on all six.
+- **descriptive-analysis's stale warning never reaches its exports.** Its
+  `computeChecks` is consumed at exactly one site (the on-screen panel) while the
+  documents read `blockers()`, which never mentions `staleSelects`. Confirmed
+  against the rendered export. Its neighbours all carry it into the document.
+- **`applySeed`'s silent-drop inventory**, executed against synthetic forms and
+  ranked by whether anything today can reach it. Reachable: an unparseable
+  `type=number` becomes `""` while `checkValidity()` returns true; an object
+  value writes the literal `[object Object]`; a radio group given an unknown
+  value leaves every radio unchecked with not even an empty box as a cue (one
+  group exists, `sccsAnchor`). **Not reachable today**: `<select multiple>` and
+  `type=date` exist in none of the nine forms, and the `"1"/"on"/"true"`
+  over-checking only bites a multi-box group, while the two colliding values
+  (`pscEnable`, ITS's `controlled`) are single boxes. Also silent and currently
+  unreachable: a field named `length`, `elements`, `item` or `namedItem`
+  resolves through `form.elements[k]` to a Number or a Function and is skipped.
+- **ITS, sequential-trial and trend-in-trend name raw option values** ("RDRMST",
+  "poisson", "ITT") where SCCS and case-crossover name labels. The *substituted*
+  half should be the label — that is what the user can read, and it was applied
+  to this run's new ACNU strings. The *saved* half must stay raw in all five,
+  because there is no label for an option the page no longer has.
+- **`case-control`'s `analysisText` names a definite analysis with the sampling
+  scheme unset**, and the two reviewers split on it. The methodologist: it is
+  statistically right, because conditional logistic is the correct fit under both
+  risk-set and cumulative sampling given individual matching, and what the scheme
+  determines is what the odds ratio *estimates* — which is already refused, so
+  refusing the analysis too would delete a true statement. The adjudicator: it is
+  wrong outright if the intended scheme was case-cohort, which needs Prentice
+  weighting. **Both are right, and the disagreement is only about the unchosen
+  case.** Resolved for now by making the document say it is incomplete, so nobody
+  reads the sentence as settled; whoever revisits it should decide whether the
+  case-cohort branch deserves its own refusal.
+- **`nz(s.data, "(data source)")` really does fire.** Five builders pass
+  `data: s.data` raw to `pcOf()`, so a protocol can export "**Data source(s).**
+  (data source)." and "**Design.** matched case-control study using data from
+  (data source)." A visible placeholder rather than a confident wrong claim, so
+  it ranks below everything above, but the methodologist's confident "these
+  defaults can never fire" was wrong and should not be trusted a second time.
+- **`missing()` on ACNU has no equivalent of case-control's.** The exports refuse
+  field by field; there is no single "this draft is incomplete" line naming what
+  is still unset. Worth considering, not attempted.
+- Citations: **none were added and none asserted.** Wan 2024, Lunt 2012 and
+  Stürmer 2005 are cited in the ACNU PS-calibration text this run edited; they
+  were not re-verified, because Crossref, PubMed, doi.org and WebFetch are all
+  blocked here and `WebSearch` returns snippets. Nothing this run wrote depends
+  on a citation it did not already find in the file.
+- **Nothing was checked against the live site**, which is unreachable from this
+  sandbox, and nobody has still ever opened one of these `.docx` files in Word.
+  The `.docx` half of the ACNU changes was read, not executed — `pscValidity`
+  feeds the on-screen card, the Markdown and the Word file from one source, so
+  the three cannot drift, but only the first two were rendered.
