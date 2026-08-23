@@ -2282,7 +2282,17 @@ const DESIGNS = [
           L.push("floorp<-function(dt,u){ if(u=='day') return(dt); if(u=='week') return(dt-(as.integer(format(dt,'%u'))-1)); if(u=='month') return(as.Date(paste0(format(dt,'%Y-%m'),'-01'))); if(u=='quarter'){ m<-as.integer(format(dt,'%m')); return(as.Date(sprintf('%s-%02d-01',format(dt,'%Y'),(m-1)%/%3*3+1))) }; if(u=='year') return(as.Date(paste0(format(dt,'%Y'),'-01-01'))); dt }");
           L.push("tid<-d$TIDX; dts<-pdate(tid); nz<-sum(!is.na(tid) & trimws(as.character(tid))!='')");
           L.push("isdate<-nz>0 && sum(!is.na(dts))>=0.8*nz");
-          L.push("if(UNIT!='none' && !isdate){ cat('The time column does not parse as dates, so its literal values are used as the periods.\\n'); UNIT<-'none' }");
+          // Five warnings in this block used to be bare cat(). Only RESULT_NOTE|
+          // lines are collected into `notes`, which is what the panel prints under
+          // the estimates and what the Markdown and Word reports carry under "How
+          // the model was fitted". A bare cat lands in #routput — a black <pre>
+          // that reads as a debug console — and reaches the exports only inside the
+          // raw "R output" code block, below the estimates, below the notes, below
+          // Table 1 and below the fitted series. So these were not invisible; they
+          // were DEMOTED, filed under debug output rather than under what was done
+          // to the data. Every one of them describes rows or periods that left the
+          // analysis, or a change of scale applied to all of it.
+          L.push("if(UNIT!='none' && !isdate){ cat('RESULT_NOTE|The column mapped to the time index does not parse as dates, so the period unit you chose was not applied: each distinct literal value in that column is treated as one period instead. Check that those are the periods you meant, and that they are all the same length - a segmented regression fits one slope per period and cannot tell that one period is a week and the next a quarter.\\n'); UNIT<-'none' }");
           L.push("key<-if(UNIT!='none') format(floorp(dts,UNIT),'%Y-%m-%d') else trimws(as.character(tid))");
           L.push("");
           L.push("Y<-chknum(d$YCOUNT,'Event count / rate / level')");
@@ -2292,7 +2302,14 @@ const DESIGNS = [
           // collapsing both series into one. Refuse rather than merge them.
           L.push("G<-if(HASG) chk01(d$SERIES,'the control-series indicator (1=intervention, 0=control)') else rep(0,nrow(d))");
           L.push("SS<-if(HASS) d$SEAS else rep(NA,nrow(d))");
-          L.push("ok<-!is.na(key) & key!='' & !is.na(Y); if(sum(!ok)>0) cat(sprintf('Dropped %d row(s) with a missing time or outcome value.\\n',sum(!ok)))");
+          // A hospital extract that writes \"<5\" for a suppressed small cell reaches
+          // here as a value, not a blank: chknum only refuses a column with NO
+          // numeric value at all, so as.numeric gives NA and the whole period goes.
+          // The suppressed periods are systematically the post-intervention ones
+          // whenever the intervention is what pushed the counts under five, so this
+          // drop attenuates the very effect being measured. Say what was dropped
+          // and why it is not a neutral loss.
+          L.push("ok<-!is.na(key) & key!='' & !is.na(Y); if(sum(!ok)>0) cat(sprintf('RESULT_NOTE|%d row(s) were dropped before aggregation because the time value or the outcome value was missing or could not be read as a number. An outcome written as text - \"<5\", \"n/a\", \"suppressed\" - is dropped here rather than read as a number. That is not a neutral loss: if the unreadable rows are the ones the intervention created, dropping them pulls the estimate toward the null. Check this count against how many rows you expected to lose.\\n',sum(!ok)))");
           L.push("key<-key[ok]; Y<-Y[ok]; N<-N[ok]; G<-G[ok]; SS<-SS[ok]");
           L.push("if(length(Y)<6) stop('Fewer than 6 usable rows — an interrupted time series needs a series, not a handful of points.')");
           L.push("");
@@ -2312,7 +2329,13 @@ const DESIGNS = [
           L.push("  dfun<-if(dmode=='first') function(z){ z<-z[!is.na(z)]; if(length(z)) z[1] else NA_real_ } else if(dmode=='mean') function(z) mean(z,na.rm=TRUE) else function(z) sum(z,na.rm=TRUE)");
           L.push("  a$N<-vapply(seq_len(nrow(a)),function(i) as.numeric(dfun(N[gid==i])),0) }");
           L.push("if(HASS) a$seas<-vapply(seq_len(nrow(a)),function(i){ z<-SS[gid==i]; as.character(z[1]) },'')");
-          L.push("if(max(a$nrows)>1) cat(sprintf('Aggregated %d row(s) into %d period-row(s) by %s (%s).\\n', length(Y), nrow(a), UNIT, COMBF))");
+          // The period unit defaults to Month, so an already-weekly series is
+          // re-scaled here with nothing later in the run able to tell that it was:
+          // 104 weekly rows become 24 monthly ones, the 4-vs-5-week boundaries
+          // inject a sawtooth the fit reads as overdispersion, and a level change
+          // of 0.796 (0.680-0.931) becomes 0.884 (0.702-1.113). This is the largest
+          // single thing the tool does to the data, and it was a bare cat().
+          L.push("if(max(a$nrows)>1) cat(sprintf('RESULT_NOTE|%d row(s) in the file were combined into %d period-row(s)%s, by taking the %s of the rows falling in each period. The time axis of every estimate below is therefore one point per %s, not one point per row. A file that was already one row per period is unaffected; a file recorded more finely than the period unit - weekly data left on the default monthly unit, say - is re-scaled here, and nothing later in this run can tell that it was.\\n', length(Y), nrow(a), if(HASG) ' per series' else '', COMBF, if(UNIT=='none') 'distinct value in the time column' else UNIT))");
           L.push("");
           // Getting the order of the periods wrong does not blur the answer, it
           // reverses it: alphabetical "Apr-18, Apr-19, Aug-18 ..." turns a rise into
@@ -2391,11 +2414,17 @@ const DESIGNS = [
           L.push("if(npre<2 || npost<2) stop(sprintf('After aggregation there are only %d period(s) before and %d from the interruption onward. Segmented regression needs at least 2 of each, and really wants 8.', npre, npost))");
           L.push("counts<-all(abs(a$Y-round(a$Y))<1e-8) && all(a$Y>=0)");
           L.push("fam<-if(MODEL=='linear') 'linear' else if(MODEL=='poisson') 'poisson' else if(counts) 'poisson' else 'linear'");
-          L.push("if(fam=='poisson' && !counts) cat('The outcome is not whole counts; a Poisson/quasi-Poisson fit is still reported as requested.\\n')");
+          // Reachable only from MODEL=='poisson' chosen by hand: the auto branch
+          // picks linear when the outcome is not whole counts. So it IS a request,
+          // and is honoured — but the likelihood being wrong for the data is worth
+          // more than one line of debug output.
+          L.push("if(fam=='poisson' && !counts) cat('RESULT_NOTE|The outcome column does not hold whole non-negative counts, and a Poisson family was fitted anyway because you chose it. The estimates below are still exponentiated and labelled as rate ratios, but the likelihood is the wrong one for this outcome and the standard errors that come out of it are not trustworthy. If the column is already a rate or a mean, choose the linear model instead.\\n')");
           L.push("# A log offset only makes sense on a log link. For a linear fit the denominator");
           L.push("# is applied by modelling the rate itself rather than the count.");
           L.push("useoff<-FALSE; ratemode<-FALSE");
-          L.push("if(HASN){ if(fam=='poisson'){ a$logN<-log(a$N); useoff<-TRUE } else { a$Y<-a$Y/a$N; ratemode<-TRUE; cat('Linear model with a denominator: the outcome is modelled as a rate (value divided by the denominator), not with a log offset.\\n') } }");
+          // No cat() here: the `ratemode` note further down says the same thing on
+          // the notes channel, so promoting this one would print it twice.
+          L.push("if(HASN){ if(fam=='poisson'){ a$logN<-log(a$N); useoff<-TRUE } else { a$Y<-a$Y/a$N; ratemode<-TRUE } }");
           L.push("f<-as.formula(paste('Y ~',rhs, if(useoff) '+ offset(logN)' else ''))");
           L.push("if(fam=='poisson'){");
           L.push("  fit<-suppressWarnings(glm(f,family=poisson,data=a))");
@@ -2548,7 +2577,15 @@ const DESIGNS = [
           // told they had requested it.
           L.push("if(hacfail) cat(sprintf('RESULT_NOTE|The Newey-West correction could not be computed on this fit%s, so the model-based standard errors are reported instead. That is not a request you made; if the residuals are correlated from one period to the next these intervals are too narrow.\\n', if(AC=='newey') ' even though you asked for it' else ''))");
           L.push("if(expo && !useoff) cat('RESULT_NOTE|No denominator was mapped, so this models the count per period and assumes the population at risk is the same in every period. If your outcome is already a rate, map its denominator or choose the linear model - otherwise a changing population will be read as a trend.\\n')");
-          L.push("if(length(alias)>0) cat(sprintf('RESULT_NOTE|%d model term(s) could not be estimated because they are collinear with the rest of the model (%s), and were dropped. Over only a couple of complete cycles, calendar dummies and a linear time trend are not separately identifiable — shorten the seasonal terms, switch to harmonic terms, or lengthen the series.\\n', length(alias), paste(alias,collapse=', ')))");
+          // The explanation used to be one hard-coded sentence about seasonality,
+          // printed whatever had aliased. Both reviewers reached it only from the
+          // control-series terms, with Seasonality set to None — so the note named
+          // a cause that was not in the model, offered three remedies that could
+          // not help, and spent on the Seasonality dropdown the one sentence that
+          // could have told the reader their control series had collapsed. The
+          // cause has to be read off the names that aliased.
+          L.push("if(length(alias)>0){ asea<-any(grepl('^factor\\\\(seas\\\\)|^sin\\\\(|^cos\\\\(', alias)); ag<-any(grepl('^g($|:)', alias))");
+          L.push("  cat(sprintf('RESULT_NOTE|%d model term(s) could not be estimated because they are collinear with the rest of the model (%s), and were dropped.%s\\n', length(alias), paste(alias,collapse=', '), if(asea) ' Over only a couple of complete cycles, calendar dummies and a linear time trend are not separately identifiable - shorten the seasonal terms, switch to harmonic terms, or lengthen the series.' else if(ag) ' Every dropped term belongs to the control series, which means that series does not vary across the contrast the term describes: it may have collapsed to one series, or have no periods on one side of the interruption. The difference-in-differences estimates do not exist on this data and are not reported.' else ' This tool cannot say which of the terms listed is the redundant one - R drops whichever it reaches last, so read the list as naming a rank deficiency in the design matrix rather than as naming the culprit. A term taking the same value in every period, or one that is an exact multiple of another, is the usual cause.')) }");
           L.push("if(ratemode) cat('RESULT_NOTE|A denominator was mapped with a linear model, so the outcome is the rate (value divided by the denominator); the level and slope changes are on that rate scale.\\n')");
           L.push("if(npre<8) cat(sprintf('RESULT_NOTE|Only %d pre-intervention period(s) — the baseline trend, and therefore the counterfactual, is poorly estimated. Aim for at least 8 (ideally 12).\\n',npre))");
           L.push("if(npost<8) cat(sprintf('RESULT_NOTE|Only %d post-intervention period(s) — a slope change is hard to detect. Aim for at least 8 (ideally 12).\\n',npost))");
