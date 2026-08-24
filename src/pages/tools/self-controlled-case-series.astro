@@ -1008,13 +1008,24 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
       const citeEntries = () => Object.entries(pickedCitations)
         .map(([field, v]) => (v && typeof v === "object" && v.cite) ? { field, name: String(v.name || ""), cite: String(v.cite) } : { field, legacy: true })
         .filter(Boolean);
+      // The field a citation is keyed on is a form `name` attribute — `picoO`
+      // or `picoI`. That is a developer identifier, not a label a user has ever
+      // seen, and the lapse note below travels into the exported "Outstanding
+      // issues" section, so a protocol an IRB reads used to say a citation was
+      // dropped because "picoO" no longer names it. The sibling case-crossover
+      // builder reports this by quoting the field's CURRENT VALUE instead; this
+      // does the same, and names the field in the words on the form.
+      const FIELD_LABEL = { picoO: "the Outcome field", picoI: "the Exposure field" };
       const citeState = (s) => {
         const live = [], lapsed = [];
         for (const e of citeEntries()) {
-          if (e.legacy) { lapsed.push({ name: "(a phenotype picked before this page stored which field it filled)", field: e.field }); continue; }
+          // A record from a draft written before this page stored which field a
+          // pick filled: it cannot be checked against a field, so it is withheld
+          // and reported as such rather than described with a swapped-in name.
+          if (e.legacy) { lapsed.push({ legacy: true }); continue; }
           const val = String(s[e.field] || "");
           if (val && val.toLowerCase().includes(e.name.toLowerCase())) live.push(e.cite.trim());
-          else lapsed.push({ name: e.name, field: e.field });
+          else lapsed.push({ name: e.name, label: FIELD_LABEL[e.field] || "the field it was picked into", now: val });
         }
         return { live, lapsed };
       };
@@ -1639,9 +1650,11 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
         }
         const lapsed = citeState(s).lapsed;
         if (lapsed.length) {
-          out.push({ lvl: "info", t: "A validation citation is no longer attached", d:
-            lapsed.map((x) => "the study attached when you picked " + x.name + " is not in the reference list, because “" + x.field + "” no longer names it").join("; ") +
-            ". Nothing has been added or removed from your reference list on a guess: re-pick the phenotype from the library, or paste the citation into Key references yourself." });
+          out.push({ lvl: "warn", t: "A validation citation is no longer attached", d:
+            lapsed.map((x) => x.legacy
+              ? "A study attached to a phenotype picked before this page recorded which field it filled has been withheld from the reference list, rather than matched by guesswork"
+              : ("The study attached when you picked “" + x.name + "” has been withheld, because " + x.label + " now reads “" + (x.now || "(blank)") + "” and no longer names that phenotype")).join("; ") +
+            ". Nothing has been added to or removed from your reference list on a guess: re-pick the phenotype from the library, or paste the citation into Key references yourself." });
         }
         const dos = readDays(s.daysOfSupply), grc = readDays(s.grace);
         if (!dos.ok || !grc.ok) {
