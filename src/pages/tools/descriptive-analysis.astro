@@ -52,67 +52,134 @@ const SITES_BY_COUNTRY: Record<string, typeof SITES_DB> = SITES_DB.reduce((acc, 
 //   · exposures     drug classes (numerator of drug-utilisation metrics)
 //   · outcomes      diagnoses (numerator of incidence / prevalence)
 //   · mortalityCauses cause-of-death codes for cause-specific mortality
+// `validation` and `provenance` are two fields, deliberately, and the split is
+// load-bearing rather than cosmetic.
+//
+// They used to be one field called `validation`, and a picked entry's string
+// was appended verbatim to the exported protocol's numbered "Key references"
+// list — while the modal rendered only name, codes and definition, so the
+// string was never on screen at any point. Of the 23 strings in this file,
+// two were validation studies. The other 21 were a study that had merely USED
+// the definition, or a classification statement, or an instruction addressed
+// to the author, or a name with no year, journal or title. A protocol that an
+// ethics committee reads therefore carried numbered references reading
+// "WHO standard.", "Requires mortality linkage; see /databases feature matrix
+// for sites with `mortality` flag." and "Standard NHIRD / NHIS-NHID T2DM
+// definition; cite Wong MCS et al where applicable."
+//
+// So: `validation` is a study that measured how accurately this definition
+// finds the condition in routinely collected data, and it is the ONLY thing
+// that reaches the reference list. `provenance` is a "used in / see also"
+// note; it is shown in the modal and never becomes a numbered reference. An
+// entry with neither says so on screen, at the moment it is picked.
+//
+// Two rules were followed throughout and should be followed by anyone editing
+// this list. A study that used a definition has not validated it — the two
+// need different words. And a string shown to be wrong is WITHDRAWN, never
+// replaced from memory or from a search snippet: several entries below name
+// an author with no year or journal, and those are deleted rather than
+// completed, because inventing the completion is how a fabricated reference
+// entered this repository once already. `self-controlled-case-series.astro`
+// at :66-99 records that history and is the model this file now follows.
+//
+// WHAT WAS WITHDRAWN, so nobody reinstates it. This record lives here rather
+// than in the entries, because a user picking a phenotype needs to know what
+// is true of it now, not what a previous version of this file claimed —
+// narrating the history at them made the outcome rows so tall that only one
+// fitted in the picker. None of these needs a literature search to justify:
+// what is wrong with them is a property of the string.
+//
+//   Suicide / self-harm  "Man KKC et al Lancet Psychiatry 2024 (PMID
+//     39241791)." — that PMID is Luo H et al, a psychotropic-prescribing
+//     paper with no self-harm outcome.
+//   Hip fracture  "AsPEN hip-fracture multi-country work; Lai EC et al, BMJ
+//     Open 2021/2023." — the BMJ Open 2021 multi-country hip-fracture paper
+//     (11:e047258) is first-authored by Sing C-W and is a study PROTOCOL; the
+//     2023 output of that collaboration is in a different journal. Three
+//     things wrong, and a protocol cannot validate a phenotype anyway.
+//   Hypertension  "Cheng CL et al NHIRD validation" — the Cheng CL NHIRD
+//     validation studies that could be located are of myocardial infarction
+//     and of stroke. No hypertension validation was found.
+//   Diabetes (any)  "Lin CY et al, NHIRD diabetes definition" — no year, no
+//     journal, no title, and no such paper could be resolved.
+//   CKD  "Hsu CC et al; Shao SC et al CGRD CKD work."  |  Heart failure
+//     "Yeh JJ et al NHIRD HF definition."  |  AKI  "Shao SC et al CGRD AKI
+//     work."  |  Pregnancy  "Hwang HJ et al NHIS-NHID; CPRD mother-baby
+//     link." — author names with no year, journal or title. Unresolvable by
+//     any reader, and they were being printed as numbered references.
+//   T2DM  "cite Wong MCS et al where applicable." — an instruction to the
+//     author, printed in exported protocols as the author's own citation.
+//   Incident cancer survivors  "see /databases for which AsPEN sites carry
+//     it."  |  All-cause mortality denominator  "see /databases feature
+//     matrix for sites with `mortality` flag." — internal site paths, which
+//     mean nothing in a Word file. Kept as `notes`, which is what they are.
+//   All six mortality causes  "WHO standard." and variants — a claim about
+//     the classification, not a citation. The true half now sits in `codes`
+//     ("the WHO circulatory-system chapter"); the field is gone. One was not
+//     even true as labelled: I00-I99 is WHO's circulatory chapter, and WHO
+//     defines no category called "cardiovascular death".
+//   Infection death  "+ select J / N codes for sepsis-related deaths" — not
+//     an executable rule, and it overlapped the respiratory group.
 const PHENOTYPES = {
   populations: [
     {
       name: "All adults (≥18 y) continuously enrolled",
       codes: "Define by age at observation start; continuous enrolment ≥365 d before index date.",
       definition: "Base denominator for prevalence / drug-utilisation across age-eligible enrollees.",
-      validation: "Standard practice; cite the database-specific enrolment construct (e.g. Hsieh CY et al, Clin Epidemiol 2019;11:349-58 for the NHIRD; the full record is in the default reference list).",
+      provenance: "Enrolment is a data-availability construct, not a condition that can be measured against a reference standard, so no study validates this denominator as such."
     },
     {
       name: "Adults ≥65 y (older-adult cohort)",
       codes: "Age ≥65 at observation start; continuous enrolment ≥365 d.",
       definition: "Denominator for geriatric polypharmacy, falls, dementia-medication studies.",
-      validation: "Multinational polypharmacy work; Lee H et al, Age Ageing 2023;52(2):afad014 (PMID 36821644).",
+      provenance: "Used in Lee H et al, Age Ageing 2023;52(2):afad014 (PMID 36821644); that study used an age-based denominator, it did not validate one. Already in the default reference list."
     },
     {
       name: "Diabetes mellitus (any type)",
       codes: "ICD-10 E10.*, E11.*, E13.*, E14.* (≥1 inpatient or ≥2 outpatient claims ≥30 d apart) OR ≥1 antidiabetic dispensing (ATC A10*).",
       definition: "Adult diabetes cohort, sensitive case-finding combining diagnosis + dispensing.",
-      validation: "Lin CY et al, NHIRD diabetes definition; cross-walked with the antidiabetic-penetration work (Kubota K et al, PLoS One 2018;13(12):e0208796; PMID 30540837).",
+      provenance: "Used in Kubota K et al, PLoS One 2018;13(12):e0208796 (PMID 30540837); that study used a comparable claims definition, it did not validate one."
     },
     {
       name: "Type 2 diabetes (T2DM specifically)",
       codes: "ICD-10 E11.*; require ≥1 oral antidiabetic dispensing (ATC A10B*) before insulin (A10A).",
       definition: "T2DM-only cohort excluding T1; for comparative drug-utilisation across SGLT2 / DPP-4 / GLP-1 RAs etc.",
-      validation: "Standard NHIRD / NHIS-NHID T2DM definition; cite Wong MCS et al where applicable.",
+      provenance: "Asserts that T1DM is excluded without excluding E10; and requiring an oral antidiabetic BEFORE insulin drops insulin-first T2DM, who differ in age, comorbidity and mortality. Note also that A10B is \"excluding insulins\", not \"oral\" — it contains the injectable A10BJ and A10BX."
     },
     {
       name: "Hypertension",
       codes: "ICD-10 I10–I15 OR ≥1 antihypertensive dispensing (ATC C02 / C03 / C07 / C08 / C09).",
       definition: "Adult hypertension cohort, combining diagnosis + drug-based identification.",
-      validation: "Cheng CL et al NHIRD validation; widely used denominator.",
     },
     {
       name: "Chronic kidney disease (CKD stage ≥3)",
       codes: "eGFR <60 mL/min/1.73 m² on ≥2 measurements ≥90 d apart (where labs available) OR ICD-10 N18.3, N18.4, N18.5.",
       definition: "Reduced-kidney-function cohort; lab-based gold standard where linked, else diagnosis-based.",
-      validation: "Hsu CC et al; Shao SC et al CGRD CKD work.",
+      provenance: "The two arms select materially different populations — a lab-linked site captures silent CKD that a claims-only site cannot — so a cross-site comparison has to fix one arm. Name the eGFR equation; CKD-EPI 2009, CKD-EPI 2021 and MDRD do not agree on who is below 60."
     },
     {
       name: "Pregnant women (live-birth cohort)",
       codes: "Link via pregnancy / birth registry; pregnancy episodes defined by LMP estimated from delivery date − gestational age.",
       definition: "Live-birth cohort with mother-child linkage for pregnancy drug-utilisation studies.",
-      validation: "AsPEN Nature Medicine 3.6M mother-child paper (PMID 38589601); Hwang HJ et al NHIS-NHID; CPRD mother-baby link.",
+      provenance: "Used in the 3.6M mother-child linkage study, PMID 38589601; that study used a live-birth cohort, it did not validate one. Its sites are Nordic, not AsPEN."
     },
     {
       name: "Incident cancer survivors",
       codes: "Linked cancer registry: ICD-O-3 site codes; date of first cancer diagnosis becomes index date.",
       definition: "Cancer-survivor cohort for subsequent drug-utilisation / mortality / second-primary studies.",
-      validation: "Cancer-registry linkage validated per site; see /databases for which AsPEN sites carry it.",
+      notes: "Registry linkage and its accuracy are site-specific; the /databases feature matrix lists which sites carry a cancer registry. (This sentence used to sit in the citation field and was printed in exported protocols as a numbered reference.)"
     },
     {
       name: "Heart failure cohort",
       codes: "ICD-10 I50.* (≥1 inpatient or ≥2 outpatient) AND ≥1 HF-pathway dispensing (ATC C03DA, C07, C09, A10BK SGLT2, etc.).",
       definition: "Adult HF cohort for guideline-directed therapy uptake studies.",
-      validation: "Yeh JJ et al NHIRD HF definition.",
+      provenance: "Entry requires a dispensing from the same drug classes whose uptake this cohort is usually built to measure, so an untreated HF patient cannot enter it and a guideline-therapy uptake rate computed on it approaches 100% by construction."
     },
     {
       name: "All-cause mortality denominator",
       codes: "All cohort members contributing person-time until death / censoring (DB end / disenrolment).",
       definition: "Generic denominator structure for mortality-rate computation; cause-specific causes pulled from mortality library.",
-      validation: "Requires mortality linkage; see /databases feature matrix for sites with `mortality` flag.",
+      notes: "Requires mortality linkage; the /databases feature matrix lists which sites carry it. (This sentence used to sit in the citation field and was printed in exported protocols as a numbered reference.)"
     },
   ],
   exposures: [
@@ -140,32 +207,36 @@ const PHENOTYPES = {
     {
       name: "Myocardial infarction (MI)",
       codes: "ICD-10 I21.*, I22.* (primary discharge diagnosis)",
-      definition: "First hospitalisation with a primary discharge diagnosis of acute MI during the observation period. Note that I22 is SUBSEQUENT myocardial infarction (a recurrent event within 28 days) and so is not itself a first event: include it to identify prior MI or to define recurrence, and drop it from the numerator of an incident-MI rate.",
-      validation: "Cheng CL et al. J Epidemiol 2014;24(6):500-7.",
+      definition: "First hospitalisation with a primary discharge diagnosis of acute MI during the observation period.",
+      notes: "I22 is SUBSEQUENT myocardial infarction (a recurrent event within 28 days) and so is not itself a first event: include it to identify prior MI or to define recurrence, and drop it from the numerator of an incident-MI rate.",
+      validation: "Cheng CL et al. Validation of acute myocardial infarction cases in the National Health Insurance Research Database in Taiwan. J Epidemiol 2014;24(6):500-7 (PMID 25174915).",
+      provenance: "The validation was conducted on ICD-9-CM coding; the code set above is ICD-10. Taiwan's NHIRD coded in ICD-9-CM until 2016, so confirm the mapping for your study period.",
     },
     {
       name: "Ischemic stroke",
       codes: "ICD-10 I63.*, I64.* (primary discharge diagnosis)",
-      definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke. Note that I64 is stroke NOT SPECIFIED as haemorrhage or infarction, and the share of strokes coded I64 varies widely between countries and with imaging availability — so including it can dominate a cross-country comparison. Report the I64 share per site, or treat the I64-inclusive definition as a pre-specified sensitivity analysis.",
-      validation: "Hsieh CY et al, J Formos Med Assoc 2015;114(3):254-9.",
+      definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke.",
+      notes: "I64 is stroke NOT SPECIFIED as haemorrhage or infarction, and the share of strokes coded I64 varies widely between countries and with how much imaging is available — so including it can dominate a cross-country comparison. Report the I64 share per site, or treat the I64-inclusive definition as a pre-specified sensitivity analysis.",
+      validation: "Hsieh CY et al. Validating the diagnosis of acute ischemic stroke in a National Health Insurance claims database. J Formos Med Assoc 2015;114(3):254-9 (PMID 24140108).",
+      provenance: "The validation was conducted on ICD-9-CM coding; the code set above is ICD-10. It also says nothing about the I64 decision above, which is a separate choice you have to defend.",
     },
     {
       name: "Hip fracture",
       codes: "ICD-10 S72.0, S72.1, S72.2 (primary discharge diagnosis) paired with surgical-fixation procedure code.",
       definition: "First hospitalisation with primary discharge hip-fracture diagnosis.",
-      validation: "AsPEN hip-fracture multi-country work; Lai EC et al, BMJ Open 2021/2023.",
+      provenance: "The multi-country hip-fracture paper this entry used to cite is a study protocol, which declares a phenotype rather than validating one."
     },
     {
       name: "Acute kidney injury (AKI)",
       codes: "ICD-10 N17.* (primary discharge diagnosis); pair with creatinine criteria where lab linkage exists.",
       definition: "First hospitalisation with primary discharge AKI diagnosis.",
-      validation: "Shao SC et al CGRD AKI work.",
+      provenance: "Code-only AKI ascertainment is the weak point of this definition; pair it with creatinine criteria wherever lab linkage exists."
     },
     {
       name: "Dementia (any cause)",
       codes: "ICD-10 F00.*, F01.*, F02.*, F03, G30.*, G31.0, G31.1.",
       definition: "First record of dementia diagnosis in the observation period.",
-      validation: "Used in AsPEN NeuroGEN dementia infrastructure; Tsai DHT et al, Clin Epidemiol 2023 (PMID 38146486).",
+      provenance: "Used in the NeuroGEN dementia infrastructure work, Tsai DHT et al, Clin Epidemiol 2023 (PMID 38146486); that paper describes what the participating databases contain, it does not measure how accurately this code set finds dementia."
     },
     {
       name: "Suicide / self-harm",
@@ -192,51 +263,51 @@ const PHENOTYPES = {
       // (see its note at :66-99) and in `case-crossover` (:77-79) by earlier
       // runs. It survived here, and in `src/data/phenotypes.ts`, because
       // nothing checks the five copies of this list against each other.
-      provenance: "Self-harm codes have low sensitivity in claims data and mortality-registry linkage substantially improves capture — the single most important thing to say about this definition. No validation study is carried here.",
+      provenance: "Self-harm codes have low sensitivity in claims and mortality-registry linkage substantially improves capture — the most important thing to say about this definition. Note also that Y87.0 is SEQUELAE of intentional self-harm, so including it counts late effects of an old event inside a first-event numerator.",
     },
     {
       name: "COVID-19 infection (confirmed)",
       codes: "ICD-10 U07.1; lab-confirmed SARS-CoV-2 where linkage available.",
       definition: "First record of confirmed COVID-19 in observation period.",
-      validation: "AsPEN COVID multi-organ work (PMID 40626567); psychiatric sequelae paper (PMID 40055683).",
+      provenance: "Used in sequelae work (PMID 40626567, PMID 40055683); both used a confirmed-COVID definition, neither validated one."
     },
   ],
   mortalityCauses: [
     {
       name: "Cardiovascular death",
-      codes: "ICD-10 I00–I99 as underlying cause of death.",
-      definition: "Death attributable to circulatory-system diseases (CV death broadly).",
-      validation: "WHO standard cause-of-death grouping.",
+      codes: "ICD-10 I00–I99 (the WHO \"diseases of the circulatory system\" chapter) as underlying cause of death.",
+      definition: "Death attributable to circulatory-system diseases.",
+      notes: "I00–I99 is the whole circulatory chapter, which is broader than \"cardiovascular death\" as most cardiovascular trials and most CV epidemiology define it. Say which you mean, and do not place a rate built on this range beside a published CV-death rate without checking that the two used the same codes."
     },
     {
       name: "Cancer death (all sites)",
-      codes: "ICD-10 C00–C97 as underlying cause.",
+      codes: "ICD-10 C00–C97 (the WHO malignant-neoplasm block) as underlying cause.",
       definition: "Death from any malignant neoplasm.",
-      validation: "WHO standard; pair with cancer-registry linkage where available.",
+      notes: "Cause-of-death coding and cancer-registry linkage are different data assets; this definition needs only the first. Pair them where the registry exists, but do not require a registry for a cause-of-death rate."
     },
     {
       name: "External causes (injury / suicide / accident)",
-      codes: "ICD-10 V01–Y89 as underlying cause.",
-      definition: "Death from external causes; the usual comparison numerator in excess-mortality calculations, and the group most often excluded when a natural-cause rate is wanted.",
-      validation: "WHO standard.",
+      codes: "ICD-10 V01–Y89 (the WHO external-causes chapter) as underlying cause.",
+      definition: "Death from external causes.",
+      notes: "This is the usual comparison numerator in excess-mortality calculations, and the group most often excluded when a natural-cause rate is wanted."
     },
     {
       name: "Respiratory disease death",
-      codes: "ICD-10 J00–J99 as underlying cause.",
+      codes: "ICD-10 J00–J99 (the WHO respiratory chapter) as underlying cause.",
       definition: "Death from respiratory diseases including pneumonia, COPD, asthma.",
-      validation: "WHO standard.",
+      notes: "Overlaps \"Infection death\" below: a pneumonia death satisfies both. See the note there before reporting the two together."
     },
     {
       name: "Infection death",
-      codes: "ICD-10 A00–B99 + select J / N codes for sepsis-related deaths.",
+      codes: "ICD-10 A00–B99 (the WHO infectious-and-parasitic chapter) as underlying cause.",
       definition: "Death attributable to infectious / parasitic diseases.",
-      validation: "WHO standard; varies by site coding granularity.",
+      notes: "This entry used to add \"+ select J / N codes for sepsis-related deaths\", which is not an executable rule — two sites would implement it differently, and in a cross-country comparison that difference reads as epidemiology. It is removed rather than guessed at; if you want sepsis-related respiratory or renal deaths, name the codes yourself and say so. Note also that sepsis A40–A41 is already inside A00–B99, and that any added J code would overlap \"Respiratory disease death\" above. These six cause groups are NOT mutually exclusive and must not be summed."
     },
     {
       name: "Cerebrovascular death (stroke)",
-      codes: "ICD-10 I60–I69 as underlying cause.",
-      definition: "Death from cerebrovascular disease; narrower than 'CV death'.",
-      validation: "WHO standard.",
+      codes: "ICD-10 I60–I69 (the WHO cerebrovascular block) as underlying cause.",
+      definition: "Death from cerebrovascular disease.",
+      notes: "I60–I69 sits inside the I00–I99 circulatory chapter used by \"Cardiovascular death\" above, so the two overlap completely rather than partition. Report one or the other, not both as components of a total."
     },
   ],
 };
@@ -416,7 +487,14 @@ const TIMELINE_PRESETS: Record<string, string> = {
           <div class="px-5 pb-5 space-y-3">
             <div>
               <button type="button" data-open-library data-category="populations" data-target-def="populationDef" data-target-codes="populationCodes" data-target-name="populationName" class="text-[10px] uppercase tracking-widest font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2 py-1 rounded transition">📚 Pick population from library</button>
-              <span class="ml-2 text-[11px] text-slate-500">Validation citation auto-appends to References on export.</span>
+              {/* This used to read "Validation citation auto-appends to References
+                  on export." It was the only sentence on the page about the
+                  citation mechanism, it sat beside the one category where no
+                  entry carries a validation study, and the three pickers that
+                  could actually append one said nothing. The true statement is
+                  an invariant of the library rather than of this button, so it
+                  now sits once inside the modal, where it is read at the moment
+                  of choosing. */}
             </div>
             <label class="flex flex-col gap-1">
               <span class="text-xs uppercase tracking-widest text-brand-700 font-semibold">Population; name</span>
@@ -762,6 +840,20 @@ Shao SC, Chan YY, Kao Yang YH, Lin SJ, Hung MJ, Chien RN, Lai CC, Lai EC. The Ch
         </header>
         <div class="px-5 py-3 border-b border-slate-100">
           <input type="text" data-library-search placeholder="Filter…" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+          {/* What is true of EVERY row lives here, once. The row carries a short
+              "No validation study" marker; the paragraph explaining what that
+              means for this category belongs here, because it is the same
+              sentence on 40 of the 42 entries. Putting it on each row instead
+              was measured at 175-250px per row — one entry visible in the
+              outcome picker — which is the regression a sibling library had to
+              undo for the same reason. */}
+          <p class="mt-2 text-[11px] text-slate-500 leading-relaxed">
+            Each entry says whether a study has measured how well it identifies what it names.
+            Only a <strong class="font-semibold text-emerald-800">validation study</strong> is added to your
+            protocol's reference list, and only while that definition is still the one in the form; everything
+            else here is a note you cite yourself.
+            <span data-library-refusal-note></span>
+          </p>
         </div>
         <div data-library-list class="px-2 py-2 max-h-[60vh] overflow-y-auto"></div>
       </div>
@@ -2273,6 +2365,7 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
       const modalTitle = document.querySelector("[data-library-title]");
       const modalList = document.querySelector("[data-library-list]");
       const modalSearch = document.querySelector("[data-library-search]");
+      const modalRefusalNote = document.querySelector("[data-library-refusal-note]");
       let currentCategory = "populations";
       let currentTargets = {};
       const esc = (str) => String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -2285,21 +2378,40 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
         // commit — the thirty-third run shipped the mirror image of this in the
         // shared component (a field made visible, a filter left behind) and a
         // search for a word the user could plainly read returned nothing.
-        const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.notes || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f)) : items;
+        const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.notes || "").toLowerCase().includes(f) || (it.provenance || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f)) : items;
         if (filtered.length === 0) { modalList.innerHTML = '<p class="px-3 py-6 text-sm text-slate-500 italic text-center">No phenotype matches.</p>'; return; }
+        // Whether a definition has ever been measured against a reference
+        // standard is the single most important thing about it, and until now
+        // it was the one field this row did not show — while being the one
+        // field that silently travelled into the exported reference list. It
+        // is now on the row, at the moment of picking, in both directions.
         modalList.innerHTML = filtered.map((it, idx) => `
           <button type="button" data-phenotype-idx="${idx}" class="block w-full text-left px-4 py-3 rounded-lg border border-transparent hover:border-brand-300 hover:bg-brand-50/40 transition">
             <p class="font-semibold text-slate-900 text-sm">${esc(it.name)}</p>
             ${it.codes ? `<p class="mt-1 text-xs text-slate-700 font-mono leading-relaxed">${esc(it.codes)}</p>` : ""}
             ${it.definition ? `<p class="mt-1 text-xs text-slate-600 leading-relaxed">${esc(it.definition)}</p>` : ""}
             ${it.notes ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed">${esc(it.notes)}</p>` : ""}
+            ${it.validation
+              ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation study</span> · ${esc(it.validation)}</p>`
+              : `<p class="mt-1.5 text-[10px] font-bold uppercase tracking-widest text-amber-700">No validation study</p>`}
+            ${it.provenance ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">About this entry</span> · ${esc(it.provenance)}</p>` : ""}
           </button>
         `).join("");
         modalList.querySelectorAll("[data-phenotype-idx]").forEach((btn) => {
           btn.addEventListener("click", () => {
             const it = filtered[parseInt(btn.dataset.phenotypeIdx, 10)];
             if (!it) return;
-            const fill = (key, val) => { const fieldName = currentTargets[key]; if (!fieldName || val === undefined) return; const el = form.querySelector(`[name="${fieldName}"]`); if (el) el.value = val; };
+            // A missing value CLEARS the field; it must never be a no-op. When
+            // this returned early on `val === undefined`, an entry lacking a
+            // `definition` left the PREVIOUS phenotype's definition sitting in
+            // the form, so a protocol could carry one phenotype's name and
+            // codes over another's operational definition with no error and no
+            // warning. That was unreachable only because every entry in the two
+            // categories with a `def` target happened to have a definition —
+            // and this commit is exactly the kind that changes which fields an
+            // entry carries. `!fieldName` still returns: that means this
+            // category has no such control, which is a different thing.
+            const fill = (key, val) => { const fieldName = currentTargets[key]; if (!fieldName) return; const el = form.querySelector(`[name="${fieldName}"]`); if (el) el.value = val === undefined || val === null ? "" : val; };
             fill("name", it.name);
             fill("codes", it.codes);
             fill("def", it.definition);
@@ -2318,6 +2430,12 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
           outcomes: "Pick an outcome",
           mortalityCauses: "Pick a cause of death",
         })[category] || "Pick a phenotype";
+        // What "No validation study" means differs by category: a dispensing
+        // record identifies a drug directly, so there is no predictive value to
+        // quote for an exposure and the useful caution is a different one.
+        if (modalRefusalNote) modalRefusalNote.textContent = category === "exposures"
+          ? " None of the drug classes here carries one: a dispensing identifies the drug directly, so there is no predictive value to quote. Check the codes against your site's formulary, and where a wildcard is used, against your ATC version — what a wildcard covers changes as the index is revised."
+          : " Where an entry is marked “No validation study”, nothing here has measured how accurately its definition finds the condition in routinely collected data.";
         modalSearch.value = "";
         renderLibrary("");
         modal.classList.remove("hidden");
