@@ -334,9 +334,11 @@ const studioDesigns =
         changes later exposure, while a case-crossover looking only backwards never samples post-event exposure and is
         untouched by it — the bidirectional referent offered as a sensitivity analysis gives that immunity up. What
         breaks the case-crossover is a trend in exposure prevalence, and chronic exposure or insidious onset breaks it
-        outright. The cohort designs handle time-varying
-        confounding, but only for what you actually measured. Choose on the assumption you can defend, not on the
-        estimate you would prefer — and pre-specify the analysis that would show you were wrong.
+        outright. The cohort designs handle time-varying confounding, but only for what you actually measured — and
+        measuring it is not always enough: where a confounder is itself affected by earlier treatment, a baseline
+        propensity score is biased however well that confounder was recorded, and a g-method is needed. Choose on the
+        assumption you can defend, not on the estimate you would prefer — and pre-specify the analysis that would show
+        you were wrong.
       </p>
     </div>
 
