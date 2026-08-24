@@ -310,16 +310,16 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   uncontrolled), and so are the estimate label and the note under it. That run
   also found a wrong NUMBER on the same path, which no earlier run had:
   see its section at the bottom before touching this block.
+- **The SCCS builder's 8 outcome definitions all begin "First …" while event
+  handling defaults to "all events per person (recurrent)", and both export.**
+  A self-contradiction in every SCCS protocol; the checks panel is silent on it
+  for 7 of 8 outcomes and hidden entirely for 3. Two reviewers endorsed the fix
+  (rewrite the definitions to describe the event, NOT a `\bfirst\b` substring
+  check) — it is the thirty-sixth run's top-ranked leftover and the best next
+  target in `self-controlled-case-series.astro`. See that run's section at the
+  bottom; the neighbouring case-crossover/SCCS name-vs-code gaps it left ranked
+  (G04BD anticholinergics, clonazepam, K27/K28 GI-bleed digits) are there too.
 
-<!-- CLAIM 2026-08-24 (thirty-sixth run, CLAIMED): took the thirty-fourth run's
-     ranked item 3 and widened it to the whole area — the phenotype and
-     drug-class libraries in `self-controlled-case-series.astro` and
-     `case-crossover.astro`, the last two builders still carrying the
-     pre-correction ATC strings, examined end to end: the code sets, every
-     citation, and the pick → `pickedCitations` → reference-list path in both.
-     Deliberately NOT RWE Studio (the run above holds it) and not
-     `descriptive-analysis` / `phenotypes.ts` (the run below just did them).
-     Retired when this run's section lands at the bottom of this file. -->
 
 ### Found 2026-08-22, argued over by two reviewers, deliberately left
 
@@ -10149,3 +10149,200 @@ find a case where the diff produces a wrong output**. What it did find:
      (item 2, measured, with the obvious remedy already checked for regressions).
      Do not re-open the counterfactual wording or `Xc` — both were argued to a
      conclusion this run and the reasoning is above. -->
+
+### Found 2026-08-24 by a thirty-sixth run — the SCCS and case-crossover phenotype libraries, end to end
+
+The thirty-fourth run ranked its item 3 — the pre-correction ATC strings still
+live in the two self-controlled builders — as the best unclaimed target. This
+run took it and widened it to the whole library path in both
+`self-controlled-case-series.astro` and `case-crossover.astro`: every code set,
+every citation, and the pick → `pickedCitations` → exported-reference-list path.
+Two reviewers on disjoint briefs (a methodologist on the epidemiology and the
+citations, an applied analyst on the data flow), each then sent at the other's
+list, then a third sent at this run's own committed diff and found a
+**ship-blocker in it** — the fifth run in a row where that round found real
+damage. Five commits shipped.
+
+#### The mechanism, measured — which library field reaches the document
+
+Picking a phenotype writes `codes` and `definition` into the form and appends
+`validation` to the exported numbered reference list. `provenance` (SCCS) and
+`validationNote` (case-crossover) render in the modal and **reach no artefact at
+all**. Measured by picking each entry and grepping the exported Markdown
+(`reg/probe-fields.mjs`); the same result the thirty-fourth run found in
+descriptive-analysis. That fact decided most of the run.
+
+#### What shipped
+
+1. **Four caveats that never reached the document** (82ac130). The ICD-9-CM-vs-
+   ICD-10 caveat on the MI and stroke validation studies (both files), the I64
+   caveat on stroke (SCCS), and the I22-subsequent-MI caveat on MI (SCCS, absent
+   even from the modal) were all parked in `provenance`/`validationNote`. Moved
+   into `definition` and into the `validation` string, which travel. The falls
+   entry's "combined for higher specificity" (an intersection) over a definition
+   reading "fall-injury OR fracture" (a union) — two exported fields asserting
+   opposite operations — was rewritten to state the trade-off. The
+   "AsPEN multi-country hip-fracture work" attribution, withdrawn twice already
+   by the thirty-fourth run, was live here as a third copy; withdrawn.
+
+2. **Five drug classes whose exported code set is not the class in its name**
+   (760af09): tirzepatide falsely listed inside `A10BJ*` (SCCS); `N05A*`
+   sweeping in N05AN01 lithium (both); `N06BA` sweeping in atomoxetine and
+   modafinil (both); "Cholinesterase inhibitors" listing memantine N06DX01
+   (SCCS); "PPIs = A02BC*" sweeping in P-CABs (case-crossover). Every ATC code
+   was confirmed against the WHO index this run. Memantine was resolved by
+   **dropping N06DX01 and keeping the name**, not by renaming to "anti-dementia
+   drugs" as ACNU did — because this builder's exemplar (Wang GH BMJ 2021,
+   printed in its reference list) studies cholinesterase inhibitors as a class
+   distinct from memantine, so the ACNU rename would attach that citation to a
+   broader class than it covers. Two correctly-named different classes on two
+   pages is not the "one identifier, two verdicts" shape the repo forbids.
+
+3. **The refusal that fired on twelve rows with nothing to refuse** (827dd3e):
+   SCCS's "No validation study attached — supply one" banner was ungated and its
+   exposures carry no validation field, so it showed on all 12 drug-class rows —
+   a category error (an ATC list has no PPV) and signal destruction for the 6
+   outcome rows where the refusal is true. Gated on `"validation" in it` (as
+   case-crossover already was): 12→0 on exposures, 6 legitimate outcome refusals
+   unchanged. Both files' exposure rows now carry instead the thing that
+   actually threatens a self-controlled estimate — dispensing is not ingestion,
+   and the exposed windows rest on days-of-supply assumptions no code set
+   confirms. Also: both modals filtered on fields they rendered minus
+   `provenance`, so searching visible provenance text returned "No phenotype
+   matches"; `provenance` added to both predicates.
+
+4. **The ship-blocker the third reviewer caught** (0287064). Commit 2's PPI fix
+   excluded only A02BC08/09 and asserted those were the group's only P-CABs.
+   A02BC holds **four** P-CABs (08 vonoprazan, 09 tegoprazan, 10 fexuprazan, 12
+   zastaprazan) with 11 ilaprazole the one true PPI among them, so the fix left
+   fexuprazan and zastaprazan inside "PPIs" — the exact bug it was written
+   against, one code short of the enumerate-and-verify it did for 08/09.
+   Rewritten as a **positive list** of the eight true PPIs (A02BC01-07, 11),
+   which fails safe: a future P-CAB added as A02BC13 stays out rather than in.
+   Same commit added dexmethylphenidate N06BA11 (Focalin), a real stimulant the
+   explicit ADHD list had dropped along with atomoxetine/modafinil.
+
+5. **"picoO" printed into the exported protocol** (463d881). When a picked
+   citation lapses, SCCS's note — which travels into the exported "Outstanding
+   issues" section — interpolated the field's `name` attribute, so an IRB
+   document said a citation was dropped because "picoO" no longer named it.
+   case-crossover already quotes the field's current value instead; SCCS now
+   does, with a two-entry field→label map. Severity raised info→warn (matching
+   the twin) and the legacy-record branch's swapped-halves grammar fixed.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The substring-vs-equality citation match (analyst's top finding).** The
+  analyst wanted SCCS's `.includes()` match replaced with case-crossover's
+  trimmed-equality. The methodologist refuted it: equality *withholds* a real
+  validation study the moment you reword the outcome (the documented "normal
+  workflow"), which is a worse peer-review outcome than an extra reference to a
+  real study of a code set the protocol uses; and the analyst's own
+  negative-control reproduction is the tool getting it **right** — the reference
+  list belongs to the protocol, not only the primary outcome, and an NCO whose
+  PPV is unknown is a useless NCO. **Not shipped.** The residual is real but
+  narrower: `?seed=` writes form fields without touching the citation store, so
+  a citation can cross from your draft into a colleague's protocol (analyst's
+  repro C). Left, ranked below.
+- **The exposure banner (direct contradiction).** The methodologist first said
+  SCCS's 12 false banners were less bad than case-crossover's silence; the
+  analyst said the reverse. On round 2 the methodologist **withdrew** — a false
+  amber is not partial credit for the right one, and 18 ambers across the SCCS
+  library with 12 category-wrong is how a reader learns to skip the colour.
+  Both then agreed the real gap is that neither file warned about exposure
+  misclassification. Shipped as the exposure note.
+- **The citation titles (methodologist wanted them expanded; both later agreed
+  not to invent).** Two fuller titles were copied verbatim from
+  descriptive-analysis where an earlier run confirmed them, and re-confirmed
+  from search records here; PMIDs 25174915, 24140108, 21351304 were each
+  independently confirmed to resolve to the exact paper cited (the third
+  reviewer re-checked all three). Cheng CL PDS 2011 stays title-less because no
+  title for it was verified — its role is named in prose instead. **No citation
+  was written from memory.**
+- **The analyst's blocking objection was a false alarm, and worth recording
+  why.** The analyst ran against a build made before this run's own working-tree
+  changes and read the run's commit-1 edits as "a concurrent run", flagging two
+  of the three PMIDs as unsourced. They came from descriptive-analysis and this
+  file (line ~2621) and were re-confirmed. **When a reviewer reports a
+  concurrent run touched src/, check whether it was your own uncommitted diff.**
+
+#### Verification and its limits
+
+- Observed in Chromium against a local `astro build` + `http-server`.
+  `reg/dump.mjs` dumps every library row's rendered text in both categories,
+  both exports and the checks panel; `reg/probe-fields.mjs` measures which field
+  reaches the export; `reg/probe-atc.mjs` and `reg/probe-fix.mjs` assert the
+  corrected strings reach the export and the old ones are gone;
+  `reg/probe-lapse.mjs` reproduces the citation-lapse note. Diffed after every
+  commit — after the ATC and PPI commits the library dump showed exactly the
+  intended rows changed and nothing else.
+- All twelve tool pages: zero pageerrors, `window.PC` an object on all nine
+  builders, after every commit.
+- **Citations checked by `WebSearch` snippets only** — Crossref, PubMed, doi.org
+  all still blocked. Every ATC code (N05AN01, N06BA07/09/11, A10BX16, N06DA02/03/
+  04, N06DX01, A02BC08/09/10/11/12, N05AE03/04) was confirmed against the WHO
+  ATC/DDD index via search this run.
+- **The live site was not checked** — `danielhttsai.github.io` is blocked.
+  **No `.docx` was opened in Word**; `buildDocx` throws on the blocked CDN. The
+  reference-list findings reach the `.docx` by construction (same `refsOf` /
+  `Set` expression as the Markdown builder) but that was reasoned, not observed.
+
+#### Open, examined this run, deliberately left — ranked
+
+1. **The event-handling contradiction — best next target in these two files.**
+   All 8 SCCS outcome definitions begin "First …" while `name="eventHandling"`
+   defaults to "all events per person (recurrent)", and both statements export,
+   three sections apart. The checks panel is silent on the contradiction for 7
+   of 8 and **entirely hidden** for 3 (Falls, AKI, GI bleeding) on an untouched
+   form. Both reviewers endorsed **resolution (a): rewrite the definitions to
+   describe the event, not presuppose first-only, and let the Event-handling
+   line be the single place first-vs-all is decided** — NOT a `\bfirst\b`
+   substring check (this file's `.includes()` history is why). This run rewrote
+   only the falls definition (as a side effect of the AND/OR fix); the other 7
+   still say "First". Data-only; measured with `reg/probe-eventhandling.mjs`.
+2. **Anticholinergics (case-crossover) omits G04BD**, the bladder antimuscarinics
+   (oxybutynin G04BD04, solifenacin G04BD08, tolterodine G04BD07) — the class
+   carrying the most weight on every anticholinergic-burden scale and the most
+   studied for falls and dementia. Name/code mismatch, `G04BD` confirmed against
+   the WHO index this run. Also likely R06AB (chlorphenamine) — not verified.
+   Clean high-value addition; left only to bound this run's scope.
+3. **Benzodiazepines (case-crossover) omits clonazepam N03AE01**, filed under
+   antiepileptics but dispensed for anxiety/insomnia across the Asian sites.
+   N03AE contains only clonazepam, so `N05BA*, N05CD*, N03AE01` is a clean
+   complete fix. Name/code mismatch, code confirmed this run.
+4. **GI bleeding filters K25/K26 to the haemorrhage 4th digits (.0/.2/.4/.6) then
+   wildcards K27.*/K28.*** — counting uncomplicated and perforated-only peptic
+   ulcers as bleeds (both files). Internal contradiction in one exported string.
+   Verify the ICD-10 4th-digit structure of K27/K28 before applying the same
+   filter (the analyst asserted it but did not verify the K27/K28 digits).
+5. **The self-harm code set `X60-X84, Y87.0` is WHO ICD-10, not ICD-10-CM**
+   (which uses X71-X83 with self-poisoning in T36-T65, 6th char 2), and Y87.0 is
+   a sequela code. Both files. This is the thirty-fourth run's item-6 pattern: a
+   single harmonised cross-classification list does not exist, so **state the
+   classification the list assumes** rather than manufacturing one. Higher-value
+   than it looks because a US site loses most non-fatal self-harm silently.
+6. **The `?seed=` / citation-store uncoupling** (analyst repro C): a `?seed=`
+   link writes form fields but never touches `pickedCitations`, so your picked
+   citation can attach itself to a colleague's seeded protocol. Reproduced.
+   Distinct from the matching rule, which was examined and correctly left as
+   `.includes()` (see the disagreement above — do NOT "fix" it to equality).
+7. **The legacy citation-key prune (analyst B4/B9).** SCCS never prunes an
+   unknown `pickedCitations` key on load, so a name-keyed record from an older
+   build shows the withheld-citation note on every load until "Clear all"; this
+   run made that note coherent and correctly a refusal, but did not port
+   case-crossover's load-time prune. case-crossover's prune, in turn, deletes in
+   memory without calling `savePickedCitations()` (`:637`), so its dead key
+   persists too. Both harmless today; both latent.
+8. **Structural, stated not fixed:** these two builders' exposure entries are
+   `{name, codes}` with no `notes` field that renders or exports, which is why
+   every exposure correction this run made had to be folded into the `codes`
+   string; ACNU's `{name, codes, notes}` shape cannot be ported without a
+   renderer change. And the "shared phenotype library" comment (SCCS:50)
+   describes three divergent copies (SCCS, case-crossover, descriptive-analysis/
+   phenotypes.ts) — consolidation is a cross-file job, not a library-content one.
+9. **Code-set choices left as state-don't-fix**, per the thirty-fourth run's
+   item-6 reasoning: I21.A type-2 MI (ICD-10-CM only); the ICD-10-CM 7th
+   character counting aftercare as new events; fixed-dose combinations (A10BD,
+   C10BA/C10BX) missed by every single-branch wildcard; warfarin B01AA03 being
+   thin at the Dutch sites (the entry is named "warfarin", so the name matches
+   the codes — renaming to VKA is a scope change, not a mismatch fix).
