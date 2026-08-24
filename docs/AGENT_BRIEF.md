@@ -292,28 +292,24 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   the `dconst` global `all()`, the bare `cat()` sweep and the silently closed-up
   calendar periods, plus eight regressions its own round-3 reviewers found in
   that work. Nine items are still open there and are ranked at the bottom of
-  this file; **the end-of-follow-up counterfactual sentence and its chart
-  caption is the best next target in the tool**, and the printed coefficient
-  table's model-based p-values is second. The **decimal comma** on that list is
+  this file; ~~**the end-of-follow-up counterfactual sentence and its chart
+  caption is the best next target in the tool**~~ **done 2026-08-24
+  (thirty-fifth run)**, and the printed coefficient table's model-based
+  p-values is now the best next target there — it is still untouched, still
+  reproduces (a coefficient matrix of model-based SEs and p-values printed
+  directly under the sentence "Standard errors: the wider of the model-based
+  and the Newey-West HAC standard error"), and it is verifiable from this
+  sandbox. The **decimal comma** on that list is
   stale — `readWorkbook` now classifies a comma per column. Before proposing a
   remedy in that path, read the "Do NOT re-derive these" list in the
   thirty-first run's section: **two reviewer-proposed fixes were implemented,
   measured, and found worse than the bugs they were meant to fix.**
-- **`renderITSChart`'s caption asserts the dashed line "extrapolates the
-  pre-intervention trend forward as the counterfactual".** In a controlled run
-  it does not — it is the difference-in-differences counterfactual, and the
-  picture visibly contradicts the words. Named with a worked example at the
-  bottom of this file.
-
-<!-- CLAIM 2026-08-24 (thirty-fifth run, CLAIMED): took the item directly above
-     — the end-of-follow-up counterfactual sentence, the chart caption, and
-     whatever else in RWE Studio's ITS output describes the CONTROLLED
-     counterfactual as a pre-trend projection. The thirty-first run named this
-     as the best next target in the tool. Pick a different gap; the printed
-     coefficient table's model-based p-values (ranked second there) is the
-     obvious neighbouring one, but read the note below before taking it —
-     this run may reach it. Retired when this run's section lands at the
-     bottom of this file. -->
+- ~~**`renderITSChart`'s caption asserts the dashed line "extrapolates the
+  pre-intervention trend forward as the counterfactual".**~~ **Done 2026-08-24
+  (thirty-fifth run)** — the caption is now three-way (refused / controlled /
+  uncontrolled), and so are the estimate label and the note under it. That run
+  also found a wrong NUMBER on the same path, which no earlier run had:
+  see its section at the bottom before touching this block.
 
 <!-- CLAIM 2026-08-24 (thirty-sixth run, CLAIMED): took the thirty-fourth run's
      ranked item 3 and widened it to the whole area — the phenotype and
@@ -9052,8 +9048,13 @@ Ranked by damage. Everything here was executed by one or both reviewers.
   and the picture contradicts it**: the dashed counterfactual is drawn stepping
   from 200 to 100 under the words "extrapolates the pre-intervention trend
   forward". A drawn contradiction is worse than a sentence. Two strings and a
-  branch on `ctrl`. **Best next target in this file.**
+  branch on `ctrl`. ~~**Best next target in this file.**~~ **DONE 2026-08-24
+  (thirty-fifth run)** — and "two strings and a branch" was a bad estimate:
+  the same path held a wrong NUMBER neither this entry nor its reviewers had
+  seen. See that run's section at the bottom.
 - **The printed coefficient table contradicts the estimate table above it.**
+  **This is now the best next target in this file** — untouched, reproduced
+  again by the thirty-fifth run on its own baseline, and verifiable here.
   `print(summary(fit)$coefficients)` always prints model-based SEs and p-values
   whatever `semode` chose. On a 36-period AR(0.8) series with the shipped default
   `auto`: headline `Slope change +1.420 (−0.250 to +3.089)` sits directly above
@@ -9071,10 +9072,17 @@ Ranked by damage. Everything here was executed by one or both reviewers.
   unlabelled. **Do not "fix" the mean-combine case by rescaling** — under
   mean-combine the analysed series IS the period means, so the sum is meaningless
   either way; suppress the row instead.
-- **"End of follow-up" can name a date that is not the end of follow-up.** Four
-  trailing periods dropped for a blank population and the headline row becomes
-  "Fitted vs counterfactual at 2020-08-01 (end of follow-up)" on a file running
-  to December. A labelled estimand that is wrong, in the estimate table.
+- **"End of follow-up" can name a date that is not the end of follow-up.**
+  **Half done 2026-08-24 (thirty-fifth run).** The ARM-ASYMMETRY half is
+  closed: when the intervention arm's extract ends before the file does, the
+  row now reads "(last period of the intervention series)" and a note says the
+  comparator and the chart run on past it. The half in this entry — trailing
+  periods DROPPED for a blank denominator — is **still open and still reads
+  "(end of follow-up)"**, because `tn` is `max(a$t)` over what survived and
+  nothing downstream remembers what was dropped. Do not read the `eflab` line
+  as covering it: that run shipped an unreachable branch which looked as
+  though it did, had it pointed out, and deleted it. Closing this one needs a
+  pre-drop bound carried forward.
 - **The Durbin–Watson disclaimer is hard-coded to the GLM case** and prints on
   OLS fits, where both its clauses are false. Inert (DW drives nothing), so ride
   it along with anything else in that sentence.
@@ -9886,3 +9894,258 @@ pushes the stale local `main` ref and is rejected as non-fast-forward five times
 in a row — with `&& break`, the loop exits silently having pushed nothing. Run
 `git checkout -B main` before the first push, and check the loop actually
 printed a success.
+
+### Found 2026-08-24 by a thirty-fifth run — RWE Studio's controlled-ITS counterfactual, from the coefficient to the CSV
+
+The thirty-first run named this as the best next target and sized it at "two
+strings and a branch on `ctrl`". That estimate was wrong in the most useful
+way: the same path held **a wrong number** that three previous reviewers had
+walked past, and the wording defect turned out to reach six surfaces rather
+than two. Two reviewers on disjoint briefs, then each against the other's list,
+then one back at this run's own committed diff.
+
+#### The premise, established and not to be re-argued
+
+`Xc` (`:2810`) zeroes only the two `g:` columns, and `L0` (`:2789`) builds the
+end-of-follow-up contrast out of `g:level` and `g:tsince` alone. So in a
+controlled run the counterfactual is the **difference-in-differences**
+counterfactual — the intervention series changing the way the comparator
+changed — and the reported number is **correct**. Everything that was wrong was
+what the tool said about it. Written out and checked against real R:
+
+```
+uncontrolled  log(reported) = beta_level + s*beta_tsince        (a pre-trend projection)
+controlled    log(reported) = beta_{g:level} + s*beta_{g:tsince}  (a DiD contrast at time T)
+```
+
+A reviewer also executed the term-by-term question and the answer is that `Xc`
+is **right**: `g`, `g:t`, the seasonal terms and the offset are each correctly
+RETAINED (each is a baseline property of the arms or is shared by fit and
+counterfactual, and each cancels out of `ct`). Verified numerically, including
+a harmonic fit where `sin(2*pi*t/12)` carries the largest |z| in the model
+(17.08) and contributes exactly nothing to the reported ratio, and a run with
+different catchments per arm. **Do not "fix" `Xc`.**
+
+#### The wrong number, which no earlier pass had
+
+**A term R could not estimate is absent from `nmv`, so its slot in `L0` stays
+zero and the contrast silently loses that component while the label goes on
+promising a quantity accrued to the end of follow-up.** The reachable shape is
+ordinary — a comparator hospital whose extract ends at the month the policy
+started, which is the case the note at `:2782` was already written for. Then
+`g:tsince` aliases and the row prints the level step alone:
+
+```
+truth 0.9 * 0.93^17 = 0.262      intact comparator recovers 0.271
+printed: Fitted vs counterfactual at 2020-12-01 (end of follow-up) 0.986 (0.764-1.273)
+```
+
+"No difference" where there was a 74% reduction. The tell is that 0.986 is
+**byte-identical to the "Difference in level change" row two lines above it**,
+and that is also the argument that settled refuse-vs-relabel: a relabelled row
+would be a verbatim duplicate of a row already in the table, so suppressing it
+withholds no answer — only a false claim about what the number accrued to.
+
+Both aliasing states now refuse, visibly. The neighbouring one (BOTH `g:` terms
+alias — a comparator whose extract stops *before* the policy) was already
+suppressed by `vct == 0` and said nothing at all; a shorter table was the only
+signal.
+
+**The refusal is transported on `ITSMETA|cfok=`, not re-derived per surface.**
+A reviewer proposed gating the chart on "do not draw a dashed path numerically
+equal to the solid one". **That was measured and it fails**: in the single-alias
+case the withheld counterfactual sits **1.4% from the fitted value**, so the
+test passes and the line is drawn — one curve asserting the model expected the
+collapse, beside a note refusing to report that very comparison. A refusal the
+picture contradicts is worse than either alone.
+
+#### What each surface now does, and why the CSV forced a decision
+
+Six surfaces carry that number. The trace is worth keeping because it is the
+reason a note was not enough:
+
+| surface | before | now |
+|---|---|---|
+| estimate label | "Fitted vs counterfactual at X (end of follow-up)" — named no comparator, no series, and an endpoint that could be neither arm's | names the DiD contrast, carries `slab`, and names which endpoint |
+| note under it | the uncontrolled definition, printed in both branches | one note per branch |
+| chart caption | one string, false in controlled runs | three-way: refused / controlled / uncontrolled |
+| `report.md` / `.docx` | the false note, verbatim | the branched note, verbatim |
+| **fitted-series CSV (`#dlfitted`)** | a column headed `counterfactual`, **no prose anywhere** | `not estimable` in the refused cases |
+
+**`ITSMETA` reaches no export.** `:4316` strips it out of `display` before
+`LAST.out` is built and `LAST.meta` is read only by `renderITSChart`; the CSV
+button emits rows and nothing else. So a `RESULT_NOTE` — which does reach the
+`.md` and the `.docx` — cannot reach the CSV, and the cell value is the only
+refusal that can. That is why the R side writes `not estimable` rather than
+leaving the chart to decline on its own.
+
+**Three of the four things a reader needs are in the LABEL, not the note**,
+because the note does not follow the row onto a slide. The file already knew
+this — the comment above `slab` says exactly that — and had appended `slab` to
+three of the four surrounding rows and not to this one, which is the row most
+likely to be copied.
+
+#### The two files that make the wording defect a sign reversal rather than a magnitude error
+
+Keep both; they are cheap to rebuild and they are what makes this arguable.
+
+- **co-intervention on both arms** (control 200→100, intervention 200→80):
+  DiD 0.800, own-pretrend 0.400. The tool printed **0.820** under a sentence
+  defining 0.406.
+- **co-intervention on the COMPARATOR only** (intervention 200→160, a true 20%
+  fall): controlled row **1.637 (1.249–2.147)**; the same series fitted
+  uncontrolled gives **0.809 (0.668–0.980)**. Under the old note's own
+  definition the reader concludes the arm ended 64% ABOVE its own baseline
+  trend, where the described quantity is 19% below. **Pre-trends are exactly
+  parallel by construction, so no warning fires.**
+
+#### What the reviewers disagreed about, and who was right
+
+- **Refuse or relabel the incomplete contrast.** The methodologist offered
+  relabelling as an available second-best; the analyst killed it with the
+  duplicate-row observation above and was right. Recorded because the same
+  block *relabels* two rows higher up (the thirty-first run's "fall back and
+  name the surviving series") — that precedent does **not** transfer, because
+  there the relabelled row carried information no other row did.
+- **What the chart-suppression should key on.** The methodologist's numeric
+  equality test versus the analyst's flag. The analyst won on a measurement
+  (1.4%), and the methodologist then conceded while pointing out the analyst's
+  own flag (`all.equal(fv,cv)`) is **false in exactly the state that prints the
+  wrong number** — it fires on the both-alias case, where no number is printed,
+  and not on the single-alias case, where one is. **The right answer was the
+  methodologist's predicate on the analyst's transport**, which is what shipped.
+- **Is the "near but not equal" overplot generic?** The analyst said the
+  intervention's dashed counterfactual always lands ~2px from the comparator's
+  solid line in a controlled ITS. The methodologist built two counter-files:
+  on a COUNT scale with differently-sized sites they are 69px apart; matched on
+  a RATE scale they collide at 1.2px. So it recurs whenever the arms coincide
+  **on the plotted scale**, which the well-matched-comparator case does. Not
+  fixed — a redesign — but the caption now tells the reader that closeness
+  between the intervention arm's dashed and solid lines means a small effect
+  rather than a missing line, which was the actual misreading.
+- **A short comparator post-segment.** The methodologist filed this as "wording
+  only, ride it along". The analyst measured it and overturned that outright:
+  with the comparator's post segment at K periods (truth 0.262), K=2 gives
+  **0.071 (0.001–8.444)** and K=4 gives 0.216 excluding 1, with **no alias
+  note, no collinearity note and no short-series note** — because `npre`/`npost`
+  are counted off `a$g==gref`, the intervention arm, so neither guard can see
+  the comparator, and the fit sentence says "18 from 2019-07-01 onward" on a
+  file whose comparator has two. The intervals stay honest; the point estimate
+  does not. This is now its own note.
+- **Damage framing on the last row.** The methodologist argued a reader is
+  misled toward the null, since `0.820 (0.620–1.085)` sits under
+  `0.821 (0.695–0.971)`. The analyst showed it is **not directional** — on a
+  file where the intervention arm ends early the two rows flip the other way
+  (0.841 including 1 above 0.789 excluding it) — so there is no heuristic a
+  reader could learn. Neither proposed reordering or removing the row; both
+  said that is a design change and Daniel's call.
+
+#### The own-diff round, five for five — and this time it found no wrong number
+
+Worth recording as plainly as a wrong number would be: a reviewer sent back at
+this run's committed diff ran 13 battery cases and 9 fresh ones and **could not
+find a case where the diff produces a wrong output**. What it did find:
+
+- **A dead branch that advertised a gap it could not close.** `eflab` was
+  written to name the surviving series when the row's endpoint precedes the
+  file's, with an uncontrolled alternative. `!ctrl` means exactly one series
+  survives, so `tn == max(a$t)` always and the alternative is unreachable. No
+  wrong output was ever possible from it. It was deleted anyway, because it
+  told the next reader that the single-series dropped-trailing-periods case was
+  handled here when that case still prints "(end of follow-up)". **A branch
+  that looks like it covers a known open item is worse than no branch: it stops
+  the next person looking.** The proof it was dead is that all 18 battery
+  labels were byte-identical after deleting it.
+- **A missing mirror**, two unqualified sentences, and one word ("fall" on an
+  additive-scale fit). All four fixed in one commit.
+
+#### Verified this run, and how
+
+- Chromium against a local `astro build` + `http-server`, with the page's own
+  `buildScript()` output run under **real R 4.3.3** (`apt-get update` then
+  `apt-get install -y --no-install-recommends r-base-core`; run as root, no
+  `sudo` — `sudo apt-get` exits 100 here).
+- **An eighteen-case regression battery run before every commit and diffed
+  after it**, and it earned its cost twice: it is what lets the second and
+  third commits say "every RESULT_ESTIMATE value and every FITTED numeric cell
+  is byte-identical, so nothing here moved a number", and the byte-identical
+  LABELS after the third commit are the proof the deleted branch was dead
+  rather than believed to be. Eight of the eighteen cases came from the
+  reviewers and each is named for what it proves.
+- **The harness is cheap; rebuild it rather than working without it.**
+  `drive.mjs` runs the page twice: pass 1 stubs `window.RWEngine.run` to capture
+  the generated R script and master CSV, pass 2 feeds real Rscript output back
+  through the same stub so panel, chart SVG, Table 1 and `buildReport` are all
+  the page's own code. SheetJS (`cdnjs`) is blocked and must be `page.route`d to
+  an `npm pack xlsx@0.18.5` copy — **CSV upload goes through SheetJS too**, so
+  nothing can be uploaded without it. WebR's CDN is blocked; the stub is the
+  only way in.
+- The ITS role keys are `TIDX`, `YCOUNT`, `DENOM`, `SEAS`, `SERIES` — not the
+  obvious names. A mapping with the wrong keys silently falls through to
+  `suggestCol` and the run still succeeds, on a different mapping than intended.
+- **Zero `pageerror` on all twelve tool pages and `typeof window.PC === "object"`
+  on all nine builders, before every commit.**
+- **The live site was not checked** — `danielhttsai.github.io` is still blocked.
+  **Nobody has still opened one of these `.docx` files in Microsoft Word**; the
+  `.docx` was exercised by one reviewer through a routed `docx@8.5.0` and read
+  as XML, and was NOT re-exercised against the final diff (inferred from
+  `buildReportDocx` being untouched and fed the same arrays).
+- **WebR itself was never run**, by any of the three reviewers or by me. Every
+  number is Rscript 4.3.3 on the page's own generated script. If WebR's R
+  differs in how `glm` reports a rank-deficient fit, the `cfok` predicate could
+  behave differently there. Nobody in this sandbox can check that.
+- **No citation was read, added, or changed anywhere in this run.**
+
+#### Still open on this path — ranked, all reproduced, deliberately left
+
+1. **The printed coefficient table's model-based p-values.** Now the best next
+   target in this tool. Reproduced again on this run's own baseline: the matrix
+   from `print(summary(fit)$coefficients)` carries model-based SEs whatever
+   `semode` chose, and the very next line printed says "Standard errors: the
+   wider of the model-based and the Newey-West HAC standard error". Adjacent
+   lines contradicting each other, and that table is the only source of
+   p-values in the `.md` and the `.docx`.
+2. **The chart is illegible at a 390px viewport.** Measured: the SVG renders
+   **274 × 115 CSS px** with every `font-size="10"` label in a **4px line box**
+   — axis dates, the interruption annotation, both legend entries. The
+   container's `overflow-x-auto` is inert because the SVG is `width:100%`, so
+   it shrinks instead of overflowing. A reviewer's proposed remedy (drop
+   `max-width`, give it a `min-width` at its natural 760px) was checked for the
+   caption regression you would expect and **there isn't one** — container
+   scrollWidth 792 / clientWidth 306, caption stays 274px, the page body does
+   not scroll horizontally. Left because it is a layout change with nothing to
+   do with the counterfactual, not because it is wrong. Same species as the
+   1293-character `<option>`.
+3. **The line style is keyed nowhere but the caption.** Colour keys series;
+   nothing in the figure says what dashed means. With the caption now correct
+   this is smaller than it was, but a legend entry would be the real fix and
+   that is a design change.
+4. **`renderITSChart` is the only one of the three renderers not wrapped in
+   `try/catch`** (`:4455` bare, against `:4456`/`:4457` wrapped). No triggering
+   input was found and none is claimed. Recorded because the asymmetry is one
+   line — but note the trade runs the wrong way for a figure that has just been
+   taught to refuse: wrapping it would turn a loud failure into a silently
+   missing chart.
+5. **`:2890` — "the baseline trend, and therefore the counterfactual, is poorly
+   estimated"** is incomplete rather than wrong in a controlled run (the
+   comparator's post-intervention segments matter too). The comparator note
+   added this run covers the post side; this sentence still names only the pre
+   side. Two reviewers split on how bad it is and both agreed it is small.
+6. **The parallel-pre-trends note's scope clause says "the
+   difference-in-differences rows below".** Nothing is below it: the panel
+   collects every `RESULT_NOTE` into one block underneath the whole estimates
+   table (`:4319`), so the spatial word is an artefact of `cat()` ordering
+   inside the R script. Not acted on — but do not repeat the argument that this
+   clause EXCLUDES the end-of-follow-up row. One reviewer led a finding with
+   that reading and the other showed it is a coin flip and moot either way.
+7. The Table 1 "Total outcome" under `ratemode`, the GLM-hardcoded
+   Durbin–Watson disclaimer, `(rate ratio)` on the difference rows, the
+   empty-period note on a controlled run, and the ITS demo exercising no ITS
+   diagnostic are all unchanged from the thirty-first run's list.
+
+<!-- CLAIM 2026-08-24 (thirty-fifth run, RELEASED): finished. Best next targets:
+     the printed coefficient table's model-based p-values (item 1 above, in this
+     same file, verifiable from this sandbox), then the 390px chart viewport
+     (item 2, measured, with the obvious remedy already checked for regressions).
+     Do not re-open the counterfactual wording or `Xc` — both were argued to a
+     conclusion this run and the reasoning is above. -->
