@@ -118,23 +118,23 @@ const PHENOTYPES = {
   exposures: [
     { name: "SGLT2 inhibitors",            codes: "ATC A10BK* (canagliflozin A10BK02, dapagliflozin A10BK01, empagliflozin A10BK03, ertugliflozin A10BK04)" },
     { name: "DPP-4 inhibitors",            codes: "ATC A10BH* (sitagliptin A10BH01, vildagliptin A10BH02, saxagliptin A10BH03, linagliptin A10BH05, alogliptin A10BH04)" },
-    { name: "GLP-1 receptor agonists",     codes: "ATC A10BJ* (exenatide, liraglutide, dulaglutide, semaglutide, tirzepatide A10BX16)" },
+    { name: "GLP-1 receptor agonists",     codes: "ATC A10BJ* (exenatide A10BJ01, liraglutide A10BJ02, dulaglutide A10BJ05, semaglutide A10BJ06)", notes: "Tirzepatide is A10BX16, outside the A10BJ wildcard, and is a dual GIP/GLP-1 receptor agonist rather than a GLP-1 receptor agonist. Add A10BX16 explicitly if your class definition covers it — and say which definition you used." },
     { name: "Metformin",                   codes: "ATC A10BA02" },
     { name: "Sulphonylureas",              codes: "ATC A10BB*" },
     { name: "Insulins (any)",              codes: "ATC A10A*" },
-    { name: "Antipsychotics (any)",        codes: "ATC N05A*; Atypicals N05AH/N05AL/N05AX; typicals N05AA-N05AG" },
+    { name: "Antipsychotics (any)",        codes: "ATC N05A* excluding N05AN (lithium)", notes: "N05A* as a whole includes N05AN01 lithium, a mood stabiliser, so it is excluded above; state it either way. The atypicals are not a contiguous range — N05AH, N05AL and N05AX, plus sertindole and ziprasidone inside N05AE — so a first- versus second-generation split has to be by code, not by range." },
     { name: "Antidepressants (any)",       codes: "ATC N06A*" },
     { name: "Benzodiazepines / z-drugs",   codes: "ATC N05BA*, N05CD*, N05CF*" },
-    { name: "ADHD stimulants",             codes: "ATC N06BA; methylphenidate N06BA04, amphetamine N06BA01, lisdexamfetamine N06BA12" },
+    { name: "ADHD stimulants",             codes: "ATC N06BA01, N06BA02, N06BA04, N06BA12 (amphetamine, dexamfetamine, methylphenidate, lisdexamfetamine)", notes: "Listed by code rather than as N06BA*, which also contains atomoxetine (N06BA09) — a non-stimulant, and often the comparator rather than the exposure. Modafinil (N06BA07) is in the same group and is not an ADHD stimulant either." },
     { name: "Opioid analgesics",           codes: "ATC N02A* (excluding diamorphine where required)" },
-    { name: "NSAIDs",                      codes: "ATC M01A* (excluding M01AX)" },
+    { name: "NSAIDs",                      codes: "ATC M01A* excluding M01AX", notes: "M01AX is \"other anti-inflammatory and antirheumatic agents, non-steroids\" — systemic drugs including nabumetone (M01AX01), nimesulide (M01AX17) and glucosamine (M01AX05), not topical preparations; topical NSAIDs are M02AA and were never inside M01A. Excluding M01AX therefore drops several oral NSAIDs along with glucosamine. Say which you meant." },
     { name: "Gabapentinoids",              codes: "ATC N03AX12 (gabapentin), N03AX16 (pregabalin)" },
     { name: "Anticonvulsants (any)",       codes: "ATC N03A*" },
     { name: "Statins",                     codes: "ATC C10AA*" },
     { name: "Bisphosphonates",             codes: "ATC M05BA* / M05BB*" },
     { name: "Anticoagulants; DOACs",      codes: "ATC B01AE07 (dabigatran), B01AF01 (rivaroxaban), B01AF02 (apixaban), B01AF03 (edoxaban)" },
     { name: "Anticoagulants; warfarin",   codes: "ATC B01AA03" },
-    { name: "Cholinesterase inhibitors",   codes: "ATC N06DA; donepezil N06DA02, galantamine N06DA04, rivastigmine N06DA03; plus memantine N06DX01" },
+    { name: "Anti-dementia drugs",         codes: "ATC N06DA02, N06DA03, N06DA04, N06DX01 (donepezil, rivastigmine, galantamine, memantine)", notes: "Named \"anti-dementia drugs\", not \"cholinesterase inhibitors\": memantine (N06DX01) is an NMDA-receptor antagonist, and every sentence a protocol builds from this entry carries the NAME, not the code list — so a cohort headed \"new users of cholinesterase inhibitors\" that includes memantine initiators is wrong in the text a reader sees. Split the two if your question is about one of them. Listed by code rather than as N06D*, which also contains ginkgo (N06DX02) and the anti-amyloid antibodies aducanumab, lecanemab and donanemab (N06DX03-05)." },
   ],
   outcomes: [
     {
@@ -2280,13 +2280,19 @@ _Drafted with the Protocol Generator — descriptive analysis (${today})._
       const renderLibrary = (filter = "") => {
         const items = PHENOTYPES[currentCategory] || [];
         const f = filter.trim().toLowerCase();
-        const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f)) : items;
+        // The filter has to search what the row SHOWS. `notes` became visible
+        // in the same commit that added it, so it is searched here in the same
+        // commit — the thirty-third run shipped the mirror image of this in the
+        // shared component (a field made visible, a filter left behind) and a
+        // search for a word the user could plainly read returned nothing.
+        const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.notes || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f)) : items;
         if (filtered.length === 0) { modalList.innerHTML = '<p class="px-3 py-6 text-sm text-slate-500 italic text-center">No phenotype matches.</p>'; return; }
         modalList.innerHTML = filtered.map((it, idx) => `
           <button type="button" data-phenotype-idx="${idx}" class="block w-full text-left px-4 py-3 rounded-lg border border-transparent hover:border-brand-300 hover:bg-brand-50/40 transition">
             <p class="font-semibold text-slate-900 text-sm">${esc(it.name)}</p>
             ${it.codes ? `<p class="mt-1 text-xs text-slate-700 font-mono leading-relaxed">${esc(it.codes)}</p>` : ""}
             ${it.definition ? `<p class="mt-1 text-xs text-slate-600 leading-relaxed">${esc(it.definition)}</p>` : ""}
+            ${it.notes ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed">${esc(it.notes)}</p>` : ""}
           </button>
         `).join("");
         modalList.querySelectorAll("[data-phenotype-idx]").forEach((btn) => {
