@@ -11,7 +11,7 @@ import { PHENOTYPES } from "../data/phenotypes";
   <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full my-8">
     <div class="flex items-start justify-between p-5 border-b border-slate-200">
       <div>
-        <p class="text-xs uppercase tracking-widest text-brand-700 font-bold">Validated phenotype library</p>
+        <p class="text-xs uppercase tracking-widest text-brand-700 font-bold">Phenotype library</p>
         <h3 class="text-lg font-bold text-slate-900 mt-0.5" data-library-title>Pick a phenotype</h3>
       </div>
       <button type="button" data-library-close class="text-slate-400 hover:text-slate-700 text-2xl leading-none">×</button>
@@ -52,8 +52,21 @@ import { PHENOTYPES } from "../data/phenotypes";
       close();
     }
 
+    // Whether a definition has ever been measured against a chart review is the
+    // single most important thing about it, so it goes on the row, at the moment
+    // of picking, in BOTH directions — the ACNU builder's library already works
+    // this way and this one served five builders without it. Thirty of the
+    // forty-nine entries carry no validation study (every drug class and twelve
+    // of the thirteen indications), so a silent row is a claim of validation the
+    // data does not support.
+    //
+    // The wording deliberately does NOT promise the citation reaches the
+    // protocol: unlike the ACNU library, nothing here has a pickedCitations
+    // mechanism, so a picked entry's validation study is shown and then the user
+    // is on their own. Saying so is the honest version.
     function renderList() {
       const items = PHENOTYPES[current.category] || [];
+      const isDrug = current.category === "exposures";
       const q = (searchEl.value || "").toLowerCase().trim();
       const shown = items.filter((it) => !q || (it.name + " " + (it.codes || "") + " " + (it.definition || "")).toLowerCase().includes(q));
       listEl.innerHTML = shown.map((it) =>
@@ -61,6 +74,13 @@ import { PHENOTYPES } from "../data/phenotypes";
         '<p class="text-sm font-semibold text-slate-900">' + esc(it.name) + "</p>" +
         (it.codes ? '<p class="text-xs text-slate-500 mt-0.5">' + esc(it.codes) + "</p>" : "") +
         (it.definition ? '<p class="text-xs text-slate-600 mt-1">' + esc(it.definition) + "</p>" : "") +
+        (it.notes && it.notes.trim() ? '<p class="text-[11px] text-slate-500 mt-1 leading-relaxed">' + esc(it.notes) + "</p>" : "") +
+        (it.validation
+          ? '<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation study</span> · ' + esc(it.validation) +
+            ' <span class="text-slate-500">This builder does not add it to your reference list — cite it yourself.</span></p>'
+          : (isDrug
+            ? '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · Dispensing records identify a drug class directly, so there is no positive predictive value to quote — but nothing here has been checked against your site’s formulary, and a wildcard’s membership changes as the ATC index is revised.</p>'
+            : '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring how accurately this definition identifies the condition in routinely collected data. Cite your own source for its positive predictive value.</p>')) +
         "</button>"
       ).join("") || '<p class="text-sm text-slate-400 p-3">No matches.</p>';
       listEl.querySelectorAll("[data-idx]").forEach((b) => b.addEventListener("click", () => fillFrom(items[+b.dataset.idx])));

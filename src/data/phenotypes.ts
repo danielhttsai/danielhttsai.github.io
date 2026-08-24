@@ -1,6 +1,12 @@
-// Validated phenotype library — curated, published code sets, extracted from the
-// AsPEN ACNU builder so the local CCW / Sequential-Trial builders can reuse it.
+// Phenotype library — curated code sets, extracted from the AsPEN ACNU builder
+// so the local CCW / Sequential-Trial builders can reuse it.
 // Categories: indications, exposures, outcomes. Kept as data only.
+//
+// NOT all of these are validated, and the name of this file used to say they
+// were: 19 of the 49 entries carry a `validation` study and 30 do not — all 18
+// drug classes and 12 of the 13 indications. `PhenotypeLibrary.astro` now shows
+// which is which on every row, so if you add an entry, either give it a
+// `validation` or expect the modal to say out loud that it has none.
 
 export interface Phenotype { name: string; codes?: string; notes?: string; definition?: string; validation?: string; }
 
