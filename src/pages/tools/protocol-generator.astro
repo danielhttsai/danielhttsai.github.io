@@ -49,7 +49,7 @@ const questions = [
       // sufficient: the two conditions below rule SCCS out no matter how
       // complete the data are, and on national claims every reader answers
       // "whole period", so without the note this branch swallows them.
-      { if: "If yes, and you can lay out the whole observation period", to: ["SCCS"], note: "but only if the event neither ends observation nor changes later exposure — a fatal outcome, or a drug that gets stopped once the event happens, rules SCCS out however complete your data are." },
+      { if: "If yes, and you can lay out the whole observation period", to: ["SCCS"], note: "but only if the event neither ends observation nor changes later exposure — a fatal outcome, or a drug that gets stopped once the event happens, rules out the standard SCCS however complete your data are. Extensions exist for both, and the SCCS template here offers the Farrington one; neither is the model you get by default." },
       { if: "If yes, but you can only look back a short way", to: ["CCO"] },
       { if: "If no", to: [], note: "no self-controlled design applies — the other questions are the ones that route you." },
     ],
@@ -58,7 +58,7 @@ const questions = [
     q: "Is the confounding you are worried about fixed, or does it change over time?",
     a: "Genetics, lifelong habits, stable frailty — self-controlled designs remove all of these by construction, and trend-in-trend removes them through the trend contrast, in both cases without your ever having to measure them. That is a genuinely strong property. It does not extend to time-varying confounding: ageing, season, worsening disease and calendar trends in prescribing all survive, and must still be modelled explicitly.",
     routes: [
-      { if: "If it is fixed", to: ["SCCS", "CCO", "TIT"], note: "and this branch is about confounding you cannot measure — removing it unmeasured is what these three do. A fixed confounder you did record is handled perfectly well by any of the cohort designs, so answering “fixed” is not a reason to leave them." },
+      { if: "If it is fixed", to: ["SCCS", "CCO", "TIT"], note: "and this branch is about confounding you cannot measure — removing it unmeasured is what these three do. A fixed confounder you did record is ordinary work for any of the cohort designs, so answering “fixed” is not on its own a reason to leave them." },
       { if: "If it changes over time", to: ["ACNU", "CCW", "ST"], note: "and you must have measured it — none of these removes a time-varying confounder you did not record. Where the confounder is itself affected by earlier treatment, a baseline propensity score is not enough and a g-method is needed." },
     ],
   },
@@ -156,7 +156,7 @@ const designs = [
     short: "ST",
     title: "Sequential Trial Emulation",
     plain: "Run the same small trial again and again — once at every date a patient becomes eligible — then pool the results.",
-    when: "Use when eligibility is time-varying and a single index date discards everyone who qualifies later. Whether a patient can appear in more than one trial depends on which version you are running: where the control arm is those not yet treated, a patient who stays eligible enters a trial at every origin until they initiate, so no eligible person-time is wasted; where both arms initiate at the origin, each patient sits in the single trial they initiate in. Either way the prevalent-user problem is handled trial by trial.",
+    when: "Use when eligibility is time-varying and a single index date discards everyone who qualifies later. Whether a patient can appear in more than one trial depends on which version you are running: where the control arm is those not yet treated, a patient who stays eligible enters a trial at every origin until they initiate or have the outcome, so no eligible person-time is wasted; where both arms initiate at the origin, each patient sits in the single trial they initiate in. Either way the prevalent-user problem is handled trial by trial.",
     assumes: "Exchangeability, positivity and consistency within each nested trial — the last two assessed trial by trial, not only in the pooled data. Whether a patient can appear in more than one trial depends on which version you are running, and the two are different studies: if the control arm is those not yet treated, a patient enters a trial at every origin until they initiate, the trials are not independent samples, and the uncertainty must account for the re-use; if both arms initiate at the origin, each patient sits in one trial and it does not arise. The correction for re-use is an analysis requirement rather than an identifying assumption, and the builder will not guess which version you mean.",
     fails: "Eligibility does not actually vary over time, so every patient has one possible origin and the design collapses back to a single-origin new-user study; positivity fails within trial, because at some origins there are too few initiators for the propensity score to have support; or the confounders are themselves affected by earlier treatment, in which case a baseline propensity score fitted at each origin is not enough and a g-method is needed.",
     example: "Benzodiazepine vs no use in pregnancy, a trial at each gestational week",

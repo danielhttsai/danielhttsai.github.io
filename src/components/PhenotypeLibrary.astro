@@ -68,7 +68,11 @@ import { PHENOTYPES } from "../data/phenotypes";
       const items = PHENOTYPES[current.category] || [];
       const isDrug = current.category === "exposures";
       const q = (searchEl.value || "").toLowerCase().trim();
-      const shown = items.filter((it) => !q || (it.name + " " + (it.codes || "") + " " + (it.definition || "")).toLowerCase().includes(q));
+      // Search what is on screen. `notes` and `validation` were not searched
+      // before because they were not rendered either; now that they are, a user
+      // who can read "Cheng" or "T1DM" on a row and gets no match when they type
+      // it would be reading a search box that lies about its own list.
+      const shown = items.filter((it) => !q || (it.name + " " + (it.codes || "") + " " + (it.definition || "") + " " + (it.notes || "") + " " + (it.validation || "")).toLowerCase().includes(q));
       listEl.innerHTML = shown.map((it) =>
         '<button type="button" data-idx="' + items.indexOf(it) + '" class="block w-full text-left rounded-lg border border-slate-200 p-3 hover:border-brand-400 hover:bg-brand-50/40 transition">' +
         '<p class="text-sm font-semibold text-slate-900">' + esc(it.name) + "</p>" +
