@@ -315,6 +315,16 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
      this run may reach it. Retired when this run's section lands at the
      bottom of this file. -->
 
+<!-- CLAIM 2026-08-24 (thirty-sixth run, CLAIMED): took the thirty-fourth run's
+     ranked item 3 and widened it to the whole area — the phenotype and
+     drug-class libraries in `self-controlled-case-series.astro` and
+     `case-crossover.astro`, the last two builders still carrying the
+     pre-correction ATC strings, examined end to end: the code sets, every
+     citation, and the pick → `pickedCitations` → reference-list path in both.
+     Deliberately NOT RWE Studio (the run above holds it) and not
+     `descriptive-analysis` / `phenotypes.ts` (the run below just did them).
+     Retired when this run's section lands at the bottom of this file. -->
+
 ### Found 2026-08-22, argued over by two reviewers, deliberately left
 
 Both reviewers agreed these are real. They are listed with what each is, so the
