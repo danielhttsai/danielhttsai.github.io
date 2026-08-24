@@ -17,7 +17,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const questions = [
   {
     q: "Do you have an active comparator — another drug, not 'nobody'?",
-    a: "That means a drug used for the same indication, at the same point in the treatment pathway, with no a-priori link to your outcome. If one exists, a cohort design is available and is usually the better choice: people who get drug A and people who get drug B are far more alike than people who get a drug and people who get nothing, so confounding by indication is much smaller to begin with. If no such comparator exists, a self-controlled or calendar-time design is the usual destination — but not the only one, because a comparator arm need not be a comparator drug, and question 2 is where that is decided.",
+    a: "That means a drug used for the same indication, at the same point in the treatment pathway, with no a-priori link to your outcome. If one exists, a cohort design is available and is usually the better choice: people who get drug A and people who get drug B are far more alike than people who get a drug and people who get nothing, so confounding by indication is much smaller to begin with. If no such comparator exists, a self-controlled or calendar-time design is the usual destination — but not the only one, because a comparator arm need not be a comparator drug.",
     routes: [
       { if: "If yes", to: ["ACNU", "CCW", "ST"] },
       // The two designs missing from this branch are missing on purpose. CCW's
@@ -28,14 +28,14 @@ const questions = [
       // drug-vs-nothing reader with point-in-time initiation that cloning is
       // available, and both builders refuse exactly that reader. So the
       // condition is named in prose and the routing is left to Q2.
-      { if: "If no", to: ["SCCS", "CCO", "ITS", "TIT"], note: "and questions 2 and 6 still apply — a strategy that only declares itself later, such as “start within 90 days” against an untreated arm, is still a cloning or sequential-trial question, and a rare outcome or a purely descriptive aim does not need a comparator either." },
+      { if: "If no", to: ["SCCS", "CCO", "ITS", "TIT"], note: "and questions 2 and 6 still apply. Two of the cohort designs can run against an untreated arm rather than a comparator drug: cloning, where the strategies only declare themselves later — “start within 90 days” — which is question 2; and sequential trial emulation, where eligibility itself varies over time and the not-yet-treated at each origin form the control arm. A rare outcome or a purely descriptive aim does not need a comparator either." },
     ],
   },
   {
     q: "Can you tell the two strategies apart on day one?",
     a: "If your strategies are 'start within 90 days', 'stay on treatment', or 'treat to target', then on day one nobody has yet declared which arm they are in. Sorting patients by what they later did credits one arm with follow-up during which they could not yet have had the event — immortal time — and that alone can manufacture a protective effect. Cloning every patient into both strategies, or emulating a fresh trial at each eligible date, is what prevents it.",
     routes: [
-      { if: "If yes — each arm is declared at time zero", to: [], note: "this question does not narrow anything on its own: an ordinary new-user cohort is available, but only if question 1 found you a comparator." },
+      { if: "If yes — each arm is declared at time zero", to: [], note: "this question does not narrow anything on its own: an ordinary new-user cohort is available, but only if question 1 found you a comparator. A sequential trial emulation is also available here, and does not need one — it is triggered by eligibility varying over time rather than by the arms being indistinguishable on day one, and at each origin the initiators and the not-yet-treated are perfectly distinguishable." },
       { if: "If no — they only diverge later", to: ["CCW", "ST"] },
     ],
   },
@@ -64,11 +64,11 @@ const questions = [
   },
   {
     q: "Was there a date — or a gradual change over the years?",
-    a: "A policy, reimbursement or label change with a clear start date makes interrupted time series available: the outcome's own pre-intervention trend, extrapolated forward, becomes the counterfactual. If uptake was gradual rather than a step, there is no date to interrupt at, and trend-in-trend uses the gradient of uptake instead.",
+    a: "A policy, reimbursement or label change with a clear start date makes interrupted time series available: the outcome's own pre-intervention trend, extrapolated forward, becomes the counterfactual. If the change was gradual rather than a step, there is no date to interrupt at, and trend-in-trend uses the gradient instead — a drug's use falling away after a safety warning serves as well as one climbing.",
     routes: [
       { if: "If there was a date", to: ["ITS"] },
-      { if: "If uptake was gradual", to: ["TIT"] },
-      { if: "If neither — no date, and no marked trend in uptake", to: [], note: "this question does not route you: both calendar-time designs read the effect off a change over calendar time, and with neither there is nothing for either to read. Almost every drug's use climbs over its first decade, so answer this on whether that climb is the contrast you mean to rely on — not on whether it happened." },
+      { if: "If use rose or fell gradually", to: ["TIT"] },
+      { if: "If neither — no date, and no marked trend either way", to: [], note: "this question does not route you: both calendar-time designs read the effect off a change over calendar time, and with neither there is nothing for either to read. Almost every drug's use moves over a decade, so answer this on whether that movement is the contrast you mean to rely on — not on whether it happened." },
     ],
   },
   {
@@ -93,7 +93,7 @@ const families = [
   {
     id: "cohort",
     name: "Cohort designs with a comparator",
-    plain: "Follow two groups of patients forward in time from a common starting point, defined the same way for both.",
+    plain: "Follow two groups of patients forward in time from a starting point that is defined the same way for both groups.",
     lede: "You can define a common time zero and follow comparable groups forward. Strongest when a genuine active comparator exists; all three are framed as target-trial emulations, which forces you to state the trial you would have run.",
   },
   {
@@ -142,7 +142,7 @@ const designs = [
     slug: "clone-censor-weight",
     short: "CCW",
     title: "Clone-Censor-Weight",
-    plain: "The strategies differ only in what happens after the clock starts, so everyone is counted in both — then dropped when they stop matching.",
+    plain: "The strategies differ only in what happens after follow-up starts, so everyone is counted in both — then dropped when they stop matching.",
     when: "Use when the strategies cannot be distinguished at time zero: grace periods ('start within X days'), sustained use, or treat-to-target. Each patient is cloned into every strategy at time zero, censored when their data stop matching the assigned strategy, and reweighted by inverse-probability-of-censoring weights to recover the per-protocol effect.",
     assumes: "Exchangeability, positivity and consistency — plus, because the artificial censoring is informative by design, no unmeasured predictors of deviation. It also requires you to give up the hazard ratio as a causal contrast: the arms hold the same patients at time zero by construction and separate only as patients act, so the contrast begins at no difference and emerges over follow-up; proportional hazards is violated by design, and Maringe et al. advise reporting an absolute contrast — a difference in survival at the end of follow-up, or in restricted mean survival time — rather than reading a Cox hazard ratio causally. And because every patient is cloned into both arms, the dataset holds twice as many rows as it does patients, so model-based standard errors are too small: the interval has to come from a non-parametric bootstrap that re-runs cloning, censoring and weighting inside each replicate.",
     fails: "The grace period is zero — the strategies are then already distinguishable at time zero, which is the situation cloning exists to avoid: each patient's two clones split at once, no person-time is shared between the arms, and an active-comparator new-user cohort is the design you want instead. It also fails if the grace period swallows most of the follow-up, or if deviation is driven by something you never measured, in which case the weights cannot repair it.",
@@ -157,7 +157,7 @@ const designs = [
     title: "Sequential Trial Emulation",
     plain: "Run the same small trial again and again — once at every date a patient becomes eligible — then pool the results.",
     when: "Use when eligibility is time-varying and a single index date discards everyone who qualifies later. Whether a patient can appear in more than one trial depends on which version you are running: where the control arm is those not yet treated, a patient who stays eligible enters a trial at every origin until they initiate or have the outcome, so no eligible person-time is wasted; where both arms initiate at the origin, each patient sits in the single trial they initiate in. Either way the prevalent-user problem is handled trial by trial.",
-    assumes: "Exchangeability, positivity and consistency within each nested trial — the last two assessed trial by trial, not only in the pooled data. Whether a patient can appear in more than one trial depends on which version you are running, and the two are different studies: if the control arm is those not yet treated, a patient enters a trial at every origin until they initiate, the trials are not independent samples, and the uncertainty must account for the re-use; if both arms initiate at the origin, each patient sits in one trial and it does not arise. The correction for re-use is an analysis requirement rather than an identifying assumption, and the builder will not guess which version you mean.",
+    assumes: "Exchangeability, positivity and consistency within each nested trial — the last two assessed trial by trial, not only in the pooled data. Where a patient can appear in more than one trial — the not-yet-treated control arm described above — those trials are not independent samples, and the uncertainty must account for the re-use; where each patient sits in a single trial, it does not arise. The correction for re-use is an analysis requirement rather than an identifying assumption, and the builder will not guess which version you mean.",
     fails: "Eligibility does not actually vary over time, so every patient has one possible origin and the design collapses back to a single-origin new-user study; positivity fails within trial, because at some origins there are too few initiators for the propensity score to have support; or the confounders are themselves affected by earlier treatment, in which case a baseline propensity score fitted at each origin is not enough and a g-method is needed.",
     example: "Benzodiazepine vs no use in pregnancy, a trial at each gestational week",
     cite: "Hernán MA, Alonso A, Logan R, et al. Epidemiology 2008;19:766–779.",
@@ -213,7 +213,7 @@ const designs = [
     plain: "Something changed on a known date — did the outcome jump, or bend away from where it was already heading?",
     when: "Use for a population-level intervention or policy with a clear date. Segmented regression separates an immediate change in level from a change in slope, using the extrapolated pre-intervention trend as the counterfactual. A control series turns it into a controlled ITS.",
     assumes: "The pre-intervention trend would have continued unchanged had the intervention not happened; there are enough points either side to estimate that trend (the ITS template asks for at least 8 on each side of the interruption, ideally 12 — a conventional minimum, not a threshold from the tutorial cited below); and seasonality and autocorrelation are handled rather than ignored.",
-    fails: "A co-intervention or secular change coincides with the interruption — a control series differences that out, but only one that affects both series; a co-intervention hitting the intervention series alone survives the control untouched. Too few pre-period points, or unmodelled seasonality, and the level and slope estimates are not trustworthy even when they look clean.",
+    fails: "A co-intervention or secular change coincides with the interruption. A control series differences that out only if the co-intervention affects both series; one that hits the intervention series alone survives the control untouched. Too few pre-period points, or unmodelled seasonality, and the level and slope estimates are not trustworthy even when they look clean.",
     example: "Effect of a 2019 reimbursement policy on monthly SGLT2-inhibitor initiation rates",
     cite: "Lopez Bernal J, Cummins S, Gasparrini A. Int J Epidemiol 2017;46:348–355.",
     doi: "10.1093/ije/dyw098",
@@ -295,7 +295,7 @@ const studioDesigns =
 
 <BaseLayout
   title="Protocol Generator — Daniel Tsai"
-  description="A free, in-browser protocol generator for multi-national pharmacoepidemiology study designs — nine designs, a guide to choosing between them, a phenotype library that says which definitions carry a validation study, and one-click Word / Markdown export."
+  description="A free, in-browser protocol generator for multi-national pharmacoepidemiology study designs — nine designs, a guide to choosing between them, a phenotype library flagging which definitions are validated, and one-click Word / Markdown export."
 >
   <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
     <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-14">
@@ -303,8 +303,8 @@ const studioDesigns =
       <h1 class="text-4xl md:text-5xl font-bold text-slate-900">Protocol Generator</h1>
       <p class="mt-4 text-lg text-slate-600 max-w-3xl">
         Nine pharmacoepidemiology study designs, each with a guided form that drafts a multi-country protocol —
-        a phenotype library of published code sets that says which definitions carry a validation study and which
-        do not, feasibility checks across Asian databases, consistency checks that flag
+        a phenotype library that flags which definitions carry a validation study, feasibility checks across Asian
+        databases, consistency checks that flag
         design errors as you type, and one-click Word / Markdown export. Everything runs in your browser; nothing
         is uploaded.
       </p>
@@ -380,8 +380,9 @@ const studioDesigns =
         untouched by it — the bidirectional referent offered as a sensitivity analysis gives that immunity up. What
         breaks the case-crossover is a trend in exposure prevalence, and chronic exposure or insidious onset breaks it
         outright. The cohort designs handle time-varying confounding, but only for what you actually measured — and
-        measuring it is not always enough: where a confounder is itself affected by earlier treatment, a baseline
-        propensity score is biased however well that confounder was recorded, and a g-method is needed. Choose on the
+        measuring it is not always enough: where a confounder is itself affected by earlier treatment, the estimate a
+        baseline propensity score gives is biased however well that confounder was recorded, and a g-method is needed
+        — clone-censor-weight's inverse-probability-of-censoring weighting is the one on this page. Choose on the
         assumption you can defend, not on the estimate you would prefer — and pre-specify the analysis that would show
         you were wrong.
       </p>

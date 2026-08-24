@@ -102,11 +102,13 @@ import { PHENOTYPES } from "../data/phenotypes";
     }
     searchEl.addEventListener("input", renderList);
 
-    const LABELS = { indications: "population / indication", exposures: "drug (exposure or comparator)", outcomes: "outcome" };
+    // Full phrase including the article — "Pick a " + "outcome" rendered
+    // "Pick a outcome" on every outcome pick.
+    const LABELS = { indications: "a population / indication", exposures: "a drug (exposure or comparator)", outcomes: "an outcome" };
     document.querySelectorAll("[data-open-library]").forEach((btn) => {
       btn.addEventListener("click", () => {
         current = { category: btn.dataset.category || "exposures", trigger: btn };
-        titleEl.textContent = "Pick a " + (LABELS[current.category] || "phenotype");
+        titleEl.textContent = "Pick " + (LABELS[current.category] || "a phenotype");
         searchEl.value = ""; renderList();
         modal.classList.remove("hidden"); searchEl.focus();
       });
