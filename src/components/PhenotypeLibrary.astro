@@ -17,7 +17,14 @@ import { PHENOTYPES } from "../data/phenotypes";
       <button type="button" data-library-close class="text-slate-400 hover:text-slate-700 text-2xl leading-none">×</button>
     </div>
     <div class="p-5">
-      <input type="text" data-library-search placeholder="Filter… (e.g. 'MI', 'SGLT2', 'suicide')" class="w-full rounded-lg border border-slate-300 p-2 text-sm mb-4" />
+      <input type="text" data-library-search placeholder="Filter… (e.g. 'MI', 'SGLT2', 'suicide')" class="w-full rounded-lg border border-slate-300 p-2 text-sm mb-2" />
+      <!-- The two things that are true of EVERY row live here, once. Repeating
+           them per row cost this list half its visible height — measured at 2-3
+           entries visible instead of 5-6 — for no per-row information. -->
+      <p class="text-[11px] text-slate-500 leading-relaxed mb-3">
+        Each entry says whether a study has measured how well it identifies what it names. Nothing here is added to
+        your protocol's reference list — this builder has no mechanism for that, so cite what you use yourself.
+      </p>
       <div data-library-list class="space-y-2 max-h-[55vh] overflow-y-auto"></div>
     </div>
   </div>
@@ -79,12 +86,16 @@ import { PHENOTYPES } from "../data/phenotypes";
         (it.codes ? '<p class="text-xs text-slate-500 mt-0.5">' + esc(it.codes) + "</p>" : "") +
         (it.definition ? '<p class="text-xs text-slate-600 mt-1">' + esc(it.definition) + "</p>" : "") +
         (it.notes && it.notes.trim() ? '<p class="text-[11px] text-slate-500 mt-1 leading-relaxed">' + esc(it.notes) + "</p>" : "") +
+        // The drug wording used to say "a drug class" and warn about "a
+        // wildcard's membership". Four of the eighteen exposures are a single
+        // fully-specified ATC code with no wildcard at all — Metformin is
+        // A10BA02 — so that sentence described a property the row in front of
+        // the reader did not have. It is now keyed on the codes themselves.
         (it.validation
-          ? '<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation study</span> · ' + esc(it.validation) +
-            ' <span class="text-slate-500">This builder does not add it to your reference list — cite it yourself.</span></p>'
+          ? '<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation study</span> · ' + esc(it.validation) + '</p>'
           : (isDrug
-            ? '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · Dispensing records identify a drug class directly, so there is no positive predictive value to quote — but nothing here has been checked against your site’s formulary, and a wildcard’s membership changes as the ATC index is revised.</p>'
-            : '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring how accurately this definition identifies the condition in routinely collected data. Cite your own source for its positive predictive value.</p>')) +
+            ? '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · A dispensing identifies the drug directly, so there is no predictive value to quote — but check these codes against your site’s formulary' + ((it.codes || "").includes("*") ? ' and ATC version: what the wildcard covers changes as the index is revised.' : '.') + '</p>'
+            : '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · Nothing here measures how accurately this definition finds the condition in routine data. Cite your own source for its predictive value.</p>')) +
         "</button>"
       ).join("") || '<p class="text-sm text-slate-400 p-3">No matches.</p>';
       listEl.querySelectorAll("[data-idx]").forEach((b) => b.addEventListener("click", () => fillFrom(items[+b.dataset.idx])));
