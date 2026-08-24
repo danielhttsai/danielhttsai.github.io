@@ -98,25 +98,42 @@ const PHENOTYPES = {
   // reaches the reference list. `provenance` is a "used in / see also" note; it
   // is shown in the modal and never becomes a numbered reference. An entry with
   // no validation study says so, on screen, at the moment it is picked.
+  //
+  // WHICH FIELD REACHES THE DOCUMENT, measured 2026-08-24 by picking each entry
+  // and grepping the exported Markdown. This decides where a caveat may live:
+  //
+  //   codes       -> `outcomeCodes`  -> exported Section 3 table   REACHES
+  //   definition  -> `outcomeDef`    -> exported Section 3 table   REACHES
+  //   validation  -> pickedCitations -> exported reference list    REACHES
+  //   provenance  -> nothing at all                                MODAL ONLY
+  //
+  // Two caveats were parked in `provenance` and therefore reached no artefact:
+  // that both Taiwanese validation studies were carried out in ICD-9-CM against
+  // an ICD-10 code set, and that I64 is unspecified stroke. A qualification
+  // parked beside a citation it cannot travel with is not a disclosure; it is
+  // visible for as long as the modal is open. So: a caveat a SITE needs in
+  // order to execute the definition goes in `definition`, and a caveat about
+  // the validation study goes INSIDE the `validation` string. `provenance` is
+  // for what is worth knowing before you pick and nothing that qualifies a
+  // claim the document makes. descriptive-analysis.astro:70-88 records the same
+  // rule, reached independently; this file now follows it.
   outcomes: [
     {
       name: "Myocardial infarction (MI)",
       codes: "ICD-10 I21.*, I22.* (primary discharge diagnosis)",
-      definition: "First hospitalisation with a primary discharge diagnosis of acute MI within the observation period.",
-      validation: "Cheng CL et al. Validation of acute MI cases in the NHIRD. J Epidemiol 2014;24(6):500-7.",
-      provenance: "The validation study was conducted on ICD-9-CM coding; the code set above is ICD-10. Taiwan's NHIRD coded in ICD-9-CM until 2016, so confirm the mapping for your own study period.",
+      definition: "First hospitalisation with a primary discharge diagnosis of acute MI during the observation period. Note that I22 is SUBSEQUENT myocardial infarction (a recurrent event within 28 days) and so is not itself a first event: include it to identify prior MI or to define recurrence, and drop it from the numerator of an incident-MI rate.",
+      validation: "Cheng CL et al. Validation of acute myocardial infarction cases in the National Health Insurance Research Database in Taiwan. J Epidemiol 2014;24(6):500-7 (PMID 25174915). Conducted on ICD-9-CM coding, against the ICD-10 code set above; Taiwan's NHIRD coded in ICD-9-CM until 2016, so confirm the mapping for your study period.",
     },
     {
       name: "Ischemic stroke",
       codes: "ICD-10 I63.*, I64.* (primary discharge diagnosis)",
-      definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke.",
-      validation: "Cheng CL et al. Pharmacoepidemiol Drug Saf 2011;20(3):236-42. Hsieh CY et al. J Formos Med Assoc 2015;114(3):254-9.",
-      provenance: "Both validation studies were conducted on ICD-9-CM coding; the code set above is ICD-10. Note also that I64 is stroke not specified as haemorrhage or infarction, and its share varies widely by country and imaging availability.",
+      definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke. Note that I64 is stroke NOT SPECIFIED as haemorrhage or infarction, and its share varies widely between countries and with local diagnostic practice — so including it can dominate a cross-country comparison. Report the I64 share per site, or treat the I64-inclusive definition as a pre-specified sensitivity analysis.",
+      validation: "Hsieh CY et al. Validating the diagnosis of acute ischemic stroke in a National Health Insurance claims database. J Formos Med Assoc 2015;114(3):254-9 (PMID 24140108). A second validation of the same construct is Cheng CL et al. Pharmacoepidemiol Drug Saf 2011;20(3):236-42 (PMID 21351304). Both were conducted on ICD-9-CM coding, against the ICD-10 code set above, and neither says anything about the I64 decision, which is a separate choice you have to defend.",
     },
     {
       name: "Falls and/or fractures",
-      codes: "Falls ICD-10 W00-W19; fracture ICD-10 S02/S12/S22/S32/S42/S52/S62/S72/S82/S92; combined for higher specificity.",
-      definition: "First ED / hospital encounter with fall-injury or fracture code during the observation period.",
+      codes: "Falls ICD-10 W00-W19 (external cause); fracture ICD-10 S02/S12/S22/S32/S42/S52/S62/S72/S82/S92.",
+      definition: "ED / hospital encounter carrying a fall-injury or fracture code during the observation period. State which operation you mean and use it consistently: the UNION of the two code sets captures more events at lower specificity, and it is requiring a fall code AND an injury code on the same encounter that raises specificity — the opposite trade-off, not a stronger version of the same one.",
       validation: "",
       provenance: "Used as the primary outcome in Wang GH, Man KKC, Chang WH, Liao TC, Lai ECC. BMJ 2021;374:n1925 (PMID 34503972), a Taiwan NHIRD self-controlled case series. That study used this outcome; it did not validate the code set.",
     },
@@ -125,7 +142,16 @@ const PHENOTYPES = {
       codes: "ICD-10 S72.0, S72.1, S72.2 (primary discharge diagnosis), ideally paired with surgical-fixation procedure code.",
       definition: "First hospitalisation with primary discharge hip-fracture diagnosis.",
       validation: "",
-      provenance: "Used in AsPEN multi-country hip-fracture work. No specific validation record is attached to this definition here.",
+      // "Used in AsPEN multi-country hip-fracture work" was withdrawn here on
+      // 2026-08-24. The thirty-fourth run traced that attribution to a paper
+      // first-authored by Sing C-W which is a study protocol — a protocol
+      // declares a phenotype rather than measuring one — and withdrew it from
+      // descriptive-analysis and then, after its own reviewer caught the second
+      // copy, from src/data/phenotypes.ts. This was the third copy. It named no
+      // study, site, year or number, so nobody relying on it could look it up.
+      // Withdrawn, not replaced: inventing the replacement is how a fabricated
+      // reference entered this repository once already.
+      provenance: "Pairing the diagnosis with a surgical-fixation procedure code is what raises specificity here; nothing in this library measures how well the pair performs.",
     },
     {
       name: "Acute kidney injury (AKI)",

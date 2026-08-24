@@ -88,20 +88,35 @@ const PHENOTYPES = {
   // be looked up by the person relying on it, so it does not travel as a
   // reference either. Those entries now say plainly, in the modal, that no
   // validation study is attached.
+  //
+  // There used to be a third field, `validationNote`, holding the caveat that
+  // both Taiwanese validation studies were carried out in ICD-9-CM against an
+  // ICD-10 code set. It is gone. Measured 2026-08-24 by picking each entry and
+  // grepping the exported Markdown:
+  //
+  //   codes          -> `outcomeCodes`  -> exported table            REACHES
+  //   definition     -> `outcomeDef`    -> exported table            REACHES
+  //   validation     -> pickedCitations -> exported reference list   REACHES
+  //   validationNote -> nothing at all                               MODAL ONLY
+  //
+  // Only `it.validation` is ever stored in `pickedCitations`, so the note
+  // rendered here beside the citation and then failed to travel with it: the
+  // exported reference list carried a bare PPV citation and the document said
+  // nowhere that the PPV was measured in a different coding system. A caveat
+  // about a validation study now lives INSIDE the `validation` string, which is
+  // the field that travels. Same rule as descriptive-analysis.astro:78-82.
   outcomes: [
     {
       name: "Myocardial infarction (MI)",
       codes: "ICD-10 I21.*, I22.* (primary discharge diagnosis)",
       definition: "First hospitalisation with a primary discharge diagnosis of acute MI within the case-ascertainment window. Note that I22 is a SUBSEQUENT myocardial infarction and is by definition not a first event; drop it if the case must be incident.",
-      validation: "Cheng CL et al. Validation of acute MI cases in the NHIRD. J Epidemiol 2014;24(6):500-7.",
-      validationNote: "Validated ICD-9-CM coding; the code set above is ICD-10. Taiwan's NHIRD moved to ICD-10-CM in 2016.",
+      validation: "Cheng CL et al. Validation of acute myocardial infarction cases in the National Health Insurance Research Database in Taiwan. J Epidemiol 2014;24(6):500-7 (PMID 25174915). Conducted on ICD-9-CM coding, against the ICD-10 code set above; Taiwan's NHIRD coded in ICD-9-CM until 2016, so confirm the mapping for your study period.",
     },
     {
       name: "Ischemic stroke",
       codes: "ICD-10 I63.*, I64.* (primary discharge diagnosis)",
       definition: "First hospitalisation with primary discharge diagnosis of ischemic stroke. I64 is stroke NOT specified as haemorrhage or infarction; its share varies widely by country and imaging availability, so including it can dominate a cross-country comparison.",
-      validation: "Cheng CL et al. Pharmacoepidemiol Drug Saf 2011;20(3):236-42. Hsieh CY et al. J Formos Med Assoc 2015;114(3):254-9.",
-      validationNote: "Both validated ICD-9-CM coding; the code set above is ICD-10.",
+      validation: "Hsieh CY et al. Validating the diagnosis of acute ischemic stroke in a National Health Insurance claims database. J Formos Med Assoc 2015;114(3):254-9 (PMID 24140108). A second validation of the same construct is Cheng CL et al. Pharmacoepidemiol Drug Saf 2011;20(3):236-42 (PMID 21351304). Both were conducted on ICD-9-CM coding, against the ICD-10 code set above, and neither says anything about the I64 decision, which is a separate choice you have to defend.",
     },
     {
       name: "Hip fracture",
@@ -1689,7 +1704,16 @@ _Drafted with the AsPEN case-crossover builder (${today})._
             ${it.codes ? `<p class="mt-1 text-xs text-slate-700 font-mono leading-relaxed">${esc(it.codes)}</p>` : ""}
             ${it.definition ? `<p class="mt-1 text-xs text-slate-600 leading-relaxed">${esc(it.definition)}</p>` : ""}
             ${"validation" in it ? (it.validation
-              ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation study</span> · ${esc(it.validation)}${it.validationNote ? " " + esc(it.validationNote) : ""} <span class="text-slate-500">Added to the protocol's reference list.</span></p>`
+              // `validationNote` used to hang off the end of this line. It is
+              // gone, and deliberately: it rendered here and reached NO
+              // artefact — only `it.validation` is stored in pickedCitations
+              // and only that string becomes a numbered reference — so the
+              // qualification that turned "validated" into "validated in a
+              // different coding system" was visible while the modal was open
+              // and absent from the document the reference list went into.
+              // Measured, both entries. The caveat now lives INSIDE
+              // `validation`, which is the field that travels.
+              ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation study</span> · ${esc(it.validation)} <span class="text-slate-500">Added to the protocol's reference list.</span></p>`
               : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring the accuracy of this definition. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`) : ""}
             ${it.provenance ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Used in</span> · ${esc(it.provenance)}</p>` : ""}
           </button>
