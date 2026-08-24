@@ -9532,6 +9532,13 @@ treatments" while the branch above had just been re-cut on "causal contrast".
 
 #### Open, examined, deliberately left — ranked
 
+<!-- CLAIM 2026-08-24 (thirty-fourth run, CLAIMED): took item 1 below — the
+     descriptive-analysis local phenotype library, end to end: the 42 entries,
+     what the `validation` field actually holds, the renderer at :2260 that shows
+     none of it, and the `pickedCitations` path that puts those strings into the
+     exported "Key references" section unseen. Pick a different gap. This marker
+     is retired when this run's section lands at the bottom of this file. -->
+
 1. **`descriptive-analysis.astro` has its own local phenotype library (23
    `validation:` fields) and its renderer at `:2260` shows no validation status
    at all.** Its heading is now honest; its rows are not. This is the same
