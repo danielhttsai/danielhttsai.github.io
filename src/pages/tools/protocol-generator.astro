@@ -251,6 +251,28 @@ const byFamily = families.map((f) => ({
   items: designs.filter((d) => d.family === f.id),
 }));
 
+// Two guards for the two ways this data can break without the build noticing.
+// The existence check further down catches a route naming a design that is not
+// defined; neither of these is visible to it, and both fail silently — the
+// build stays green and the page merely loses something.
+//
+//  - Two designs sharing a `short` collapse `titleOf` to a single entry AND
+//    emit a duplicate DOM id, so every chip for the loser scrolls to the winner.
+//    `CC`, `CCO` and `CCW` differ by one suffix character, so this is the
+//    likelier typo here than a name that does not exist at all.
+//  - A design whose `family` matches no family id is dropped by the filter
+//    directly above, so its card renders NOWHERE on the page, and every chip
+//    pointing at its `#SHORT` anchor then scrolls to nothing.
+const shorts = designs.map((d) => d.short);
+const dupShort = shorts.find((s, i) => shorts.indexOf(s) !== i);
+if (dupShort) throw new Error(`protocol-generator: two designs share the short code "${dupShort}", which would collapse the title map and duplicate the "#${dupShort}" anchor.`);
+
+const familyIds = new Set(families.map((f) => f.id));
+for (const d of designs) {
+  if (!familyIds.has(d.family)) throw new Error(`protocol-generator: design "${d.short}" is in family "${d.family}", which is not one of ${[...familyIds].join(", ")} — its card would render nowhere and every chip naming it would scroll to a missing anchor.`);
+}
+if (byFamily.reduce((n, f) => n + f.items.length, 0) !== designs.length) throw new Error("protocol-generator: the family grid does not hold every design.");
+
 // One map, derived from the cards themselves, so a chip can never name a design
 // the page does not define — the failure this codebase keeps finding is a
 // hand-kept lookup drifting away from the list it was copied from. Build-time,
