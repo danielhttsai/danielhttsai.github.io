@@ -2855,7 +2855,15 @@ const DESIGNS = [
           //    six months early the row read "at 2020-06-01 (end of follow-up)"
           //    beside a chart whose axis ran to 2020-12-01, with no note.
           L.push("cflab<-if(ctrl) 'difference-in-differences counterfactual' else 'counterfactual'");
-          L.push("eflab<-if(tn<max(a$t)) (if(ctrl) 'last period of the intervention series' else 'last period analysed') else 'end of follow-up'");
+          // Gated on `ctrl` and not only on the endpoint, because the uncontrolled
+          // alternative this first carried was DEAD and read as though it covered a
+          // case it cannot: `!ctrl` means exactly one series survives the drops, so
+          // `a$g` is constant, `tn` is `max(a$t)` and the guard is never true. A
+          // single-series file whose trailing periods were dropped still says
+          // "(end of follow-up)" on a date before the file ends — that is a
+          // different mechanism, it is on the open list, and a branch that looks
+          // like it handles it is worse than no branch at all.
+          L.push("eflab<-if(ctrl && tn<max(a$t)) 'last period of the intervention series' else 'end of follow-up'");
           L.push("if(!is.na(sct)){ if(expo) cat(sprintf('RESULT_ESTIMATE|Fitted vs %s at %s (%s)%s|%.3f (95%% CI %.3f-%.3f)\\n',cflab,endlab,eflab,slab,exp(ct),exp(ct-crit*sct),exp(ct+crit*sct)))");
           L.push("  else cat(sprintf('RESULT_ESTIMATE|Fitted minus %s at %s (%s)%s|%s (95%% CI %s to %s)\\n',cflab,endlab,eflab,slab,fmt(ct),fmt(ct-crit*sct),fmt(ct+crit*sct))) }");
           // The uncontrolled sentence was correct and is kept verbatim; what was
@@ -2879,7 +2887,7 @@ const DESIGNS = [
           // "Fitted MINUS counterfactual". One sentence serving two branches, twice.
           L.push("dvb<-if(expo) 'divided by' else 'minus'");
           L.push("if(!is.na(sct) && !ctrl) cat(sprintf('RESULT_NOTE|The fitted-vs-counterfactual row compares the model%s fitted value at %s with the counterfactual the model projects from the pre-intervention trend. It is not the observed value at that period %s the counterfactual - a single period%s observation carries its own noise, which is why the model value is used.\\n', \"'s\", endlab, dvb, \"'s\"))");
-          L.push("if(!is.na(sct) && ctrl) cat(sprintf('RESULT_NOTE|The fitted-vs-counterfactual row is a DIFFERENCE-IN-DIFFERENCES quantity. Its counterfactual is not a projection of the pre-intervention trend of the intervention series: it is what the model says that series would have done had it changed the way the CONTROL series changed from %s onward. So anything that moved both series - a co-intervention, a coding change, an epidemic - stays inside the counterfactual and is differenced out rather than counted as effect, and the fall of the intervention series against its own baseline trend is a different number that is not reported here. The comparison rests on the assumption that the control series shows what the intervention series would have done, which parallel pre-intervention trends support but do not establish. Its interval is wider than the level-change and slope-change rows above because it carries the difference in slope change multiplied by the %d period(s) from the interruption to %s. It is not the observed value at that period %s the counterfactual - a single observed period carries its own noise, which is why the model value is used. In the fitted series below, the counterfactual column equals the fitted column on every control-series row: under this design the comparator was not intervened on, so its counterfactual is its own fitted value.\\n', ukey[t0], tsn, endlab, dvb))");
+          L.push("if(!is.na(sct) && ctrl) cat(sprintf('RESULT_NOTE|The fitted-vs-counterfactual row is a DIFFERENCE-IN-DIFFERENCES quantity. Its counterfactual is not a projection of the pre-intervention trend of the intervention series: it is what the model says that series would have done had it changed the way the CONTROL series changed from %s onward. So anything that moved both series - a co-intervention, a coding change, an epidemic - stays inside the counterfactual and is differenced out rather than counted as effect, and the change in the intervention series against its own baseline trend is a different number that is not reported here. The comparison rests on the assumption that the control series shows what the intervention series would have done, which parallel pre-intervention trends support but do not establish - and where the pre-intervention slopes differ, as any note above will have said, do not support either. It carries the difference in slope change multiplied by the %d period(s) from the interruption to %s, which is usually what makes its interval wider than the level-change and slope-change rows above. It is not the observed value at that period %s the counterfactual - a single observed period carries its own noise, which is why the model value is used. In the fitted series below, the counterfactual column equals the fitted column on every control-series row: under this design the comparator was not intervened on, so its counterfactual is its own fitted value.\\n', ukey[t0], tsn, endlab, dvb))");
           // How much comparator there is AFTER the interruption is the single fact
           // the controlled counterfactual depends on most, and it was reported
           // nowhere. `npre` and `npost` are counted off `a$g==gref`, which is the
@@ -2899,7 +2907,15 @@ const DESIGNS = [
           L.push("if(ctrl && !is.na(sct)){ cpost<-sum(a$g!=gref & a$t>=t0); cmax<-max(a$t[a$g!=gref])");
           L.push("  cex<-if(cmax<tn) sprintf(' The row above is evaluated at %s, %d period(s) after the last period the comparator was observed in, so beyond %s its counterfactual is an extrapolation of the comparator rather than a comparison with it.', endlab, tn-cmax, ukey[cmax]) else ''");
           L.push("  cfew<-if(cpost<8) sprintf(' A difference in slope change estimated from %d comparator period(s) and then multiplied by %d is the least stable quantity in this table - it moves the point estimate and not only the interval - so read that row as indicative and the level-change rows as the firmer ones.', cpost, tsn) else ''");
-          L.push("  if(cex!='' || cfew!='') cat(sprintf('RESULT_NOTE|The comparator has %d period(s) before the interruption and %d from %s onward, ending at %s. The before/from-onward counts in the fit note are the intervention series and do not describe the comparator.%s%s\\n', sum(a$g!=gref & a$t<t0), cpost, ukey[t0], ukey[cmax], cex, cfew)) }");
+          // The mirror of `cex`, and it needs saying for the same reason. When the
+          // INTERVENTION arm is the short one the row is evaluated at that arm's last
+          // period, so the date in the label is earlier than the last period in the
+          // file and earlier than the last tick on the chart. The label suffix names
+          // it, but the note beside it quotes the same date while counting periods
+          // to it, and a reader of the note alone has no way to learn why the series
+          // apparently stops early.
+          L.push("  cend<-if(tn<max(a$t)) sprintf(' The row above stops at %s because that is the last period the INTERVENTION series was observed in; the comparator, and the chart, run on to %s. The comparison is about the intervention series, so it is evaluated where that series ends rather than where the file does.', endlab, ukey[max(a$t)]) else ''");
+          L.push("  if(cex!='' || cfew!='' || cend!='') cat(sprintf('RESULT_NOTE|The comparator has %d period(s) before the interruption and %d from %s onward, ending at %s. The before/from-onward counts in the fit note are the intervention series and do not describe the comparator.%s%s%s\\n', sum(a$g!=gref & a$t<t0), cpost, ukey[t0], ukey[cmax], cend, cex, cfew)) }");
           L.push("");
           L.push("# --- fitted and counterfactual series ---");
           L.push("X<-model.matrix(fit); Xc<-X");
