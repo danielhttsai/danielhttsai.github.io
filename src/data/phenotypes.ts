@@ -46,7 +46,7 @@ export const PHENOTYPES = {
     { name: "Antipsychotics (any)", codes: "ATC N05A* excluding N05AN (lithium)", notes: "N05A* as a whole includes N05AN01 lithium, a mood stabiliser, so it is excluded above; state it either way. The atypicals are not a contiguous range — N05AH, N05AL and N05AX, plus sertindole and ziprasidone inside N05AE — so a first- versus second-generation split has to be by code, not by range." },
     { name: "ADHD stimulants", codes: "ATC N06BA01, N06BA02, N06BA04, N06BA12 (amphetamine, dexamfetamine, methylphenidate, lisdexamfetamine)", notes: "Listed by code rather than as N06BA*, which also contains atomoxetine (N06BA09) — a non-stimulant, and often the comparator rather than the exposure. Modafinil (N06BA07) is in the same group and is not an ADHD stimulant either." },
     { name: "Opioid analgesics", codes: "ATC N02A* (excluding diamorphine where required)", notes: "Consider OMEDD calculation for dose comparison across sites." },
-    { name: "NSAIDs", codes: "ATC M01A* (excluding M01AX, the topical / non-systemic)", notes: "" },
+    { name: "NSAIDs", codes: "ATC M01A* excluding M01AX", notes: "M01AX is \"other anti-inflammatory and antirheumatic agents, non-steroids\" — systemic drugs including nabumetone (M01AX01), nimesulide (M01AX17) and glucosamine (M01AX05), not topical preparations; topical NSAIDs are M02AA and were never inside M01A. Excluding M01AX therefore drops several oral NSAIDs along with glucosamine. Say which you meant." },
     { name: "Bisphosphonates", codes: "ATC M05BA* / M05BB*", notes: "" },
     { name: "Anticoagulants; DOACs", codes: "ATC B01AE07 (dabigatran), B01AF01 (rivaroxaban), B01AF02 (apixaban), B01AF03 (edoxaban)", notes: "" },
     { name: "Anticoagulants; warfarin", codes: "ATC B01AA03", notes: "" },
@@ -110,7 +110,14 @@ export const PHENOTYPES = {
       name: "Hip fracture",
       codes: "ICD-10 S72.0, S72.1, S72.2 (primary discharge diagnosis); paired with surgical procedure code for highest PPV",
       definition: "First hospitalisation with primary discharge diagnosis of hip fracture (typically also requiring surgical-fixation code).",
-      validation: "High PPV reported across multiple AsPEN-network sites; see also AsPEN multi-country hip-fracture study (Lai EC et al, BMJ Open 2021/2023; protocol & epidemiology papers).",
+      // Withdrawn 2026-08-24. The multi-country hip-fracture paper this cited
+      // in BMJ Open 2021 (11:e047258) is first-authored by Sing C-W, not Lai,
+      // and is a study PROTOCOL — which declares a phenotype rather than
+      // measuring one; the 2023 output of that collaboration is in a different
+      // journal. "High PPV reported across multiple AsPEN-network sites" named
+      // no study, no site and no number, so no reader could check it either.
+      // Withdrawn, not replaced.
+      notes: "Pairing the diagnosis with a surgical-fixation procedure code is what raises specificity here; nothing in this library measures how well the pair performs.",
     },
     {
       name: "Any fracture",
@@ -122,7 +129,11 @@ export const PHENOTYPES = {
       name: "Falls",
       codes: "ICD-10 W00-W19 (external cause); R29.6 (history of falling); injury-by-fall codes",
       definition: "First ED or hospital encounter with a fall code (often combined with fall-related injury for higher capture).",
-      validation: "Used as a primary outcome in the AsPEN antipsychotic-cholinesterase falls/fractures BMJ study (Wang GH et al, BMJ 2021;PMID 34503972); defined as fall + injury composite for specificity.",
+      // "Used as a primary outcome in" is provenance, not validation: that
+      // study used this definition, it did not measure it. This component has
+      // no `provenance` field, so the note carries it and the row correctly
+      // shows the "No validation study" refusal.
+      notes: "Used as a primary outcome in Wang GH et al, BMJ 2021 (PMID 34503972), an AsPEN antipsychotic / cholinesterase-inhibitor falls-and-fractures study; that study used this definition, it did not validate it. It combined fall with injury for specificity.",
     },
     {
       name: "Pneumonia hospitalisation",
@@ -167,13 +178,20 @@ export const PHENOTYPES = {
       // promoted from invisible to advertised. The same string was withdrawn
       // from `self-controlled-case-series` and `case-crossover` by earlier
       // runs; nothing checks the copies of this list against each other.
-      notes: "Codes have low sensitivity in claims data; mortality-registry linkage substantially improves capture.",
+      notes: "Self-harm codes have low sensitivity in claims and mortality-registry linkage substantially improves capture — the most important thing to say about this definition. Note also that Y87.0 is SEQUELAE of intentional self-harm, so including it counts late effects of an old event inside a first-event numerator.",
     },
     {
       name: "Dementia (incident)",
       codes: "ICD-10 F00-F03, G30.*, G31.0, G31.83; OR ≥1 dispensing of donepezil / galantamine / rivastigmine / memantine",
       definition: "First diagnosis of dementia OR first dispensing of a dementia medication, whichever earlier.",
-      validation: "AsPEN dementia work uses this combined definition; see Tsai DHT et al CNS Drugs 2025 (PMID 40437158, NHIRD dementia survival) and the AsPEN 2023 NeuroGEN infrastructure paper (Tsai DHT et al Clinical Epidemiology 2023;PMID 38146486).",
+      // "uses this combined definition" is provenance. PMID 38146486 is the
+      // NeuroGEN infrastructure paper, which describes what the participating
+      // databases contain; it does not measure how accurately this code set
+      // finds dementia. It was labelled "Validation study" here while the
+      // descriptive-analysis library declared the same identifier
+      // non-validating — the same PMID carrying opposite verdicts on six pages
+      // of one site.
+      notes: "Used in AsPEN dementia work — Tsai DHT et al, CNS Drugs 2025 (PMID 40437158) and the NeuroGEN infrastructure paper, Tsai DHT et al, Clin Epidemiol 2023 (PMID 38146486). Those studies used this combined definition; neither measured how accurately it finds dementia.",
     },
     {
       name: "Thyroid cancer",
