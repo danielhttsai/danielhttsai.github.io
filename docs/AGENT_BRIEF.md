@@ -9356,11 +9356,241 @@ Ranked by the applied analyst's axis — silently wrong beats loudly broken.
   in groups, `diff` against the copy to prove the end state is identical).
   Cheap to avoid: commit before you start the next thing.
 
-<!-- CLAIM 2026-08-23 (thirty-third run, IN PROGRESS): taking
-     `src/pages/tools/protocol-generator.astro` — the hub, second pass, which
-     the thirty-first run's released marker names as "still the tool nobody has
-     opened since the fifteenth run". Scope is the six routing questions, the
-     nine cards, the five family ledes, the caution box and the build guard,
-     plus whichever builder line a card is checked against. A concurrent run
-     should take RWE Studio's ITS counterfactual sentence or the checker
-     instead. -->
+### Found 2026-08-24 by a thirty-third run — the Protocol Generator hub, second pass, and the claim it advertises
+
+The thirty-first run's released marker ended by naming the hub as "still the
+tool nobody has opened since the fifteenth run". That was seventeen runs and one
+drive-by commit ago, so this run took it.
+
+Two reviewers on disjoint briefs — a methodologist on the nine cards, the five
+family ledes and the citations; an applied analyst on the six routing questions,
+the prose boxes and the guard — then **each sent at the other's list**, then a
+third sent at this run's own committed diff. **The cross-critique round changed
+the most, and it changed it by subtraction**: it killed two of the analyst's
+five findings outright and re-aimed a third at a different part of the page.
+
+#### The thread that ran through the whole run
+
+Nearly every real finding had one shape: **a claim this repo had already
+adjudicated somewhere else, still live on the hub or in a shared component.**
+The hub is downstream of nine builders and a data file, and nothing checks it
+when one of them changes its mind. Three instances, all found this run:
+
+- "Validated" over the phenotype library — withdrawn by the thirty-second run
+  inside ACNU, still live in the shared component, the hub blurb, the hub's meta
+  description, the tools index, the homepage and four builders.
+- The amber box's "only for what you actually measured" — withdrawn from Q4 by
+  the fifteenth run's own round-two reviewer, still live four inches away.
+- The sequential-trial card's unconditional multi-trial-entry claim — withdrawn
+  from that card's `assumes` by the fifteenth run, still live in the `when`
+  directly above it.
+
+**If you fix a claim in a builder, grep the hub, `src/pages/tools/index.astro`
+and `src/pages/index.astro` for it before you finish.** Cheapest lesson here.
+
+#### The biggest thing found, and it was not on the hub
+
+Following "a library of validated phenotypes" to its source found
+`src/components/PhenotypeLibrary.astro`, mounted by **five builders**
+(`case-control`, `clone-censor-weight`, `interrupted-time-series`,
+`sequential-trial`, `trend-in-trend`).
+
+- Header read **"Validated phenotype library"**. Of the 49 entries in
+  `src/data/phenotypes.ts`, **19 carry a `validation` study and 30 do not** —
+  indications 1/13, exposures **0/18**, outcomes 18/18. Same list and same
+  numbers the thirty-second run measured inside ACNU.
+- **`renderList` never rendered `validation` at all**, so even the 19 that have
+  one were invisible and a user could not tell which was which — under chrome
+  saying all 49 were validated. `notes` went the same way, which is how "Exclude
+  T1DM (E10.*) separately in the exclusion section" reached nobody.
+
+Fixed: header, validation on the row, notes on the row, an amber **No validation
+study** refusal where there is none, and the search box taught to search the two
+fields that had just become visible. One deliberate difference from the ACNU
+precedent: **these five builders have no `pickedCitations` mechanism** (grep
+returns 0 in all five), so the modal says the citation is *not* added to the
+reference list rather than borrowing a promise it cannot keep.
+
+#### Checked and clean — do not re-derive
+
+- **The fifteenth run's "clearest hand-off" is stale and done.**
+  `interrupted-time-series.astro:798-799` both now end "Both figures are
+  conventional minima, not thresholds taken from any source cited below."
+- **The "every clone deviates immediately" line the fifteenth run flagged as
+  "still live" at `clone-censor-weight.astro:501` is gone.** Don't hunt it.
+- The case-crossover and descriptive-analysis cards and families 2-5 were
+  checked clause by clause against their builders and are faithful.
+- All nine citations resolve, and five were additionally checked for whether the
+  paper supports the *specific claim* the card attaches to it. **Snippet
+  evidence only — Crossref, PubMed and doi.org are all still 403.**
+- Rendered battery after every commit: chip anchors resolve, no duplicate ids,
+  9 cards reachable, no overflow at **320**/390/768/1024/1440px, zero
+  `pageerror` on twelve tool pages, `window.PC` an object on all nine builders.
+- **Chips were never moved. 21 chips before and after; route branches 13 → 15.**
+
+#### What the reviewers disagreed about, and who was right
+
+- **The analyst wanted CCW and ST chipped onto Q1's "if no" branch**, since
+  their worked examples are "statin vs no statin" and "benzodiazepine vs no
+  use". **The methodologist refuted it and won.** What licenses those designs is
+  a grace period or time-varying eligibility, not the absence of a comparator
+  drug, so chipping them tells the plain drug-vs-nothing reader with
+  point-in-time initiation that cloning is available — which
+  `clone-censor-weight.astro:600` and ST's own `fails` both refuse. **Third time
+  this page has been asked to make that misroute, second time it was talked out
+  of it.** Only prose changed.
+- **The analyst wanted Q3 re-cut** from "how much observation can you
+  reconstruct" onto event-dependent exposure and fatality. **Refuted, and the
+  refutation is worth keeping**: fatality does not license the case-crossover,
+  it removes the bidirectional variant (`case-crossover.astro:1300`); immunity
+  to *post-event* exposure is not immunity to pre-event reverse causation, which
+  is why case-case-time-control exists; and the look-back split is a real
+  estimand split. **The fix was additive — a note — not a re-cut.**
+- **The analyst filed the g-method contradiction against Q4, the one place on
+  the page that has it exactly right.** The methodologist re-aimed it at the
+  amber box, where the withdrawn version actually was. Implementing it as filed
+  would have made the page worse. All three of us reached the amber box
+  independently — the only three-way convergence of the run.
+- **The methodologist's "pseudo-period" finding was reversed by the analyst,
+  correctly.** The TIT card names a falsification check absent from
+  `trend-in-trend.astro`. A wanted it deleted from the card; B pointed out that
+  if the card correctly states what defending the design requires, **the gap is
+  the builder's**. Not deleted.
+- **A reviewer's verification was circular and it said so when challenged.** The
+  analyst reported "the header blurb is accurate" about the validated-phenotype
+  claim, having grepped the built HTML for the string `"Validated phenotype
+  library"`, found it everywhere, and treated its presence as evidence of its
+  truth. Its own metric had the tell — five pages scored 3 and four scored
+  14-21, and the 3s were the component's own strings. **Checking that a disputed
+  label exists is not checking that it is true.**
+- **A reviewer's least-confident inference was settleable in one grep and held.**
+  B guessed ST's trial-interval control is a constrained `<select>` (which is
+  why "once at every date a patient becomes eligible" cannot seed a build
+  error) but had inferred it from A's description. `sequential-trial.astro:114`
+  is a `<select>`; the finding was dropped on that basis. **Name your
+  uncertainty precisely enough that someone can settle it in one command.**
+
+#### Round three: nine for nine, and it found five executed defects
+
+A third reviewer was given only this run's commits and told to break them. **All
+five of its executed findings reproduced.** Worth reading in full in
+`git show` for the two that are new species:
+
+- **This run rewrote the ST `when` and duplicated a passage already in the same
+  card's `assumes`, nearly verbatim, five lines apart** — invisible in the diff,
+  unmissable on the page. And this run's *own fix commit* had added "or have the
+  outcome" to the `when` copy only, leaving the entry rule stated twice with the
+  surviving copy being the one the run had just declared wrong. **A fix that
+  half-applies is worse than one that does not apply: it certifies the version
+  it left behind.**
+- **A new note promised a route that did not exist.** Q1's prose said "question
+  2 is where that is decided" and named sequential trial emulation. Walked with
+  ST's own example, the reader answers Q2 *yes* (initiators and the
+  not-yet-treated are perfectly distinguishable at each origin), lands on Q2's
+  yes-note, and is told an ordinary cohort needs the comparator Q1 just denied
+  them. Nothing on the page routed anyone to ST on the ground ST's card gives.
+  **When you write a note that delegates to another question, go and read that
+  question's branches.**
+- **A new dead-end branch swallowed the reader it was meant to help.** Q5's new
+  third branch and the branch above it were both cut on "uptake" while the TIT
+  card says "rises **or falls** markedly", so a drug whose use collapsed after a
+  safety warning matched "no marked trend in uptake" and was authoritatively
+  routed nowhere. Before the branch existed that reader would have approximated
+  onto TIT. **A dead-end branch is a positive claim; check it against the card
+  it is denying.**
+- The library rows: an amber warning about "a drug class" and "a wildcard's
+  membership" rendered on the four exposures that are a single fully-specified
+  ATC code (Metformin is A10BA02). Now keyed on whether `codes` contains `*`.
+- The library rows again: two sentences invariant across all 49 entries were
+  put on every row, costing the picker half its visible height — measured
+  64→124px per row, 6 visible entries down to 3. Both invariants now sit once,
+  above the list; re-measured at 106px and 4.7 visible.
+
+#### Four more this run found in its own diff before round three arrived
+
+Method worth copying: render the strings, read them cold, then attack your own
+new absolute claims the way you spent the day attacking the page's.
+
+- Q3's new note said event-dependent exposure "rules SCCS out however complete
+  your data are" — but `self-controlled-case-series.astro` offers a **Farrington
+  SCCS-EDE** extension and says "do not silently keep the standard model". The
+  note contradicted the page its own chip routes to.
+- Q4's new note said a recorded fixed confounder is "handled **perfectly well**".
+  Measurement error and positivity do not go away because a confounder is fixed.
+- The ST `when` sentence this run wrote dropped the builder's "or have the
+  outcome". A had raised it against `assumes` and B had talked me out of it as
+  fair hub compression — which it was, **until I authored a new sentence
+  carrying the same phrase.**
+- The library search filter still searched only name/codes/definition after
+  `notes` and `validation` became visible: "Cheng" returned 0 rows of text the
+  user could see. Now 4.
+
+Also caught mid-edit by reading rendered strings: a `that` breaking the ACNU
+assumption list's parallel; "twice the rows and the same people"; a TIT sentence
+my own parenthetical pushed to three clauses; a Q6 branch worded on "comparing
+treatments" while the branch above had just been re-cut on "causal contrast".
+
+#### Open, examined, deliberately left — ranked
+
+1. **`descriptive-analysis.astro` has its own local phenotype library (23
+   `validation:` fields) and its renderer at `:2260` shows no validation status
+   at all.** Its heading is now honest; its rows are not. This is the same
+   defect the shared component had, in the last library still carrying it, and
+   it is the **best next target in this area**. `case-crossover` and
+   `self-controlled-case-series` already render a refusal; ACNU does; the shared
+   component now does.
+2. **CCW and ST sit in a family called "Cohort designs with a comparator" and
+   both worked examples are drug-versus-nothing studies.** The fifteenth run
+   logged this for CCW alone as editorial; it is **two of three cards**, which
+   makes it Q1 gating a family whose majority do not need what Q1 asks. Both
+   reviewers agreed the remedy is **not** to move chips. Changing the two
+   examples or renaming the family are visible choices — **Daniel's call.**
+3. **`trend-in-trend.astro` has no pseudo-period falsification check** though
+   the hub card correctly names it. The gap is the builder's; adding it is a
+   feature.
+4. **`PhenotypeLibrary.astro` has no `provenance` field**, so it cannot make the
+   split `case-crossover.astro:65-89` and `self-controlled-case-series.astro:66-97`
+   document — "a study that used an outcome has not validated it". **If a future
+   run audits the 19 `validation` strings in `phenotypes.ts` for that
+   distinction, expect some to be provenance wearing a validation label**: the
+   thirty-second run found sixteen of eighteen such in ACNU's list, and two
+   fabricated references among them.
+5. **The Prentice clause on the case-control card is an unverified attribution,
+   not a known-wrong one.** Snippet evidence supports Vandenbroucke & Pearce
+   2012 for the risk-set and cumulative clauses; none was found for case-cohort
+   with Prentice weighting, and the builder is more careful than the hub.
+   **No replacement citation was proposed and none should be** without a record.
+6. **The five builders' library still cannot carry a citation into the exported
+   protocol.** ACNU can. The row now says so honestly; building it is a feature.
+7. **A duplicate-suffix typo between `CC`, `CCO` and `CCW` still passes the
+   guards** — all three exist, so an existence check cannot catch a route
+   pointing at the wrong one. A reviewer proposed a per-question expected-count
+   assertion; **rejected as brittle.** The browser battery's chip dump is what
+   would show it.
+8. The amber box still says nothing about trend-in-trend although Q4's fixed
+   branch chips it. Small; the box is already long.
+
+Unchanged and still as previously described: the `applySeed` lone-`<input>`
+array item, the `?seed=` whitespace trim on five builders, the 320px SVG
+overflow on two builders, the double `render()` per amendment keystroke.
+
+#### Verification and its limits
+
+- Everything above was observed in Chromium against a local `astro build` +
+  `http-server`. A regression battery (`reg/dump.mjs`) dumped the rendered text
+  of every card, route, chip and box plus anchor/reachability/overflow/pageerror,
+  and **its output was diffed after every commit** — which is what let each
+  commit message say "these lines moved and nothing else did". It caught nothing
+  unintended, which is itself the useful result.
+- The **three build guards were each tested by planting the defect** (a second
+  `CC`, a family of `"cohorts"`, a route to `"CCX"`) and confirming the build
+  fails naming it, then restoring.
+- **The live site was not checked** — `danielhttsai.github.io` is still blocked
+  from this sandbox. **Nobody has still opened one of these `.docx` files in
+  Microsoft Word.**
+- **No citation was added, changed or expanded anywhere in this run.**
+- `package.json` was untouched; `git diff package.json` checked before staging.
+- One process note: **backticks in a `git commit -m` string are shell command
+  substitution.** A commit message here silently lost the word `renderList` to
+  it. Use `git commit -F <file>` with a quoted heredoc for anything containing
+  code identifiers.
