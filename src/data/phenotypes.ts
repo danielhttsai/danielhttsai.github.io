@@ -146,7 +146,28 @@ export const PHENOTYPES = {
       name: "Suicide / self-harm",
       codes: "ICD-10 X60-X84 (suicide attempts), Y87.0 (sequelae); T-codes for intentional poisoning; combined with mortality-record cause of death",
       definition: "First ED or hospital encounter with suicide / intentional self-harm code, or mortality with intentional-injury cause.",
-      validation: "Used in AsPEN psychotropic-COVID work (e.g., Man KKC et al Lancet Psychiatry 2024;PMID 39241791). Codes have low sensitivity; mortality linkage substantially improves capture.",
+      // No `validation` field, deliberately, so the row renders the amber
+      // "No validation study" refusal — which is the true state of this entry.
+      // It used to read: "Used in AsPEN psychotropic-COVID work (e.g., Man KKC
+      // et al Lancet Psychiatry 2024;PMID 39241791). Codes have low
+      // sensitivity; mortality linkage substantially improves capture."
+      // Two things were wrong with it. "Used in" is provenance, not
+      // validation — a study that used a definition has not measured it. And
+      // the citation is false: PMID 39241791 is Luo H, Chai Y, Li S, et al,
+      // "Psychotropic drug prescribing before and during the COVID-19
+      // pandemic among people with depressive and anxiety disorders: a
+      // multinational network study", Lancet Psychiatry 2024;11(10):807-817 —
+      // first author not Man, and a prescribing-trends paper that defines no
+      // self-harm outcome. Withdrawn, not replaced.
+      //
+      // This matters more here than anywhere else it was found: this file
+      // feeds `PhenotypeLibrary.astro`, which five builders mount, and the
+      // thirty-third run had just made `validation` visible on the row under
+      // the label "Validation study" — so the false attribution had been
+      // promoted from invisible to advertised. The same string was withdrawn
+      // from `self-controlled-case-series` and `case-crossover` by earlier
+      // runs; nothing checks the copies of this list against each other.
+      notes: "Codes have low sensitivity in claims data; mortality-registry linkage substantially improves capture.",
     },
     {
       name: "Dementia (incident)",

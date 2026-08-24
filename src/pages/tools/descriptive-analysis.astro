@@ -171,7 +171,28 @@ const PHENOTYPES = {
       name: "Suicide / self-harm",
       codes: "ICD-10 X60-X84, Y87.0; T-codes for intentional poisoning; mortality cause-of-death codes.",
       definition: "First ED / hospital / mortality record with suicide / intentional self-harm code.",
-      validation: "Man KKC et al Lancet Psychiatry 2024 (PMID 39241791).",
+      // No `validation` field, deliberately. This entry used to carry
+      // "Man KKC et al Lancet Psychiatry 2024 (PMID 39241791)." — and because
+      // a picked entry's `validation` string is appended verbatim to the
+      // exported protocol's numbered "Key references" list, that citation
+      // reached documents as the validation evidence for a self-harm
+      // phenotype. PMID 39241791 is Luo H, Chai Y, Li S, et al, "Psychotropic
+      // drug prescribing before and during the COVID-19 pandemic among people
+      // with depressive and anxiety disorders: a multinational network study",
+      // Lancet Psychiatry 2024;11(10):807-817. Its first author is not Man,
+      // and it is a prescribing-trends study that defines no self-harm outcome
+      // and measures no code set against a reference standard. A real
+      // identifier welded to a false claim is the most dangerous shape a
+      // citation can have, because the PMID resolves and the reader stops
+      // checking. Withdrawn, NOT replaced: removing a claim shown to be false
+      // is safe, and reconstructing its substitute from memory is how a
+      // fabricated reference entered this repository once already.
+      //
+      // The same string was found and withdrawn in `self-controlled-case-series`
+      // (see its note at :66-99) and in `case-crossover` (:77-79) by earlier
+      // runs. It survived here, and in `src/data/phenotypes.ts`, because
+      // nothing checks the five copies of this list against each other.
+      provenance: "Self-harm codes have low sensitivity in claims data and mortality-registry linkage substantially improves capture — the single most important thing to say about this definition. No validation study is carried here.",
     },
     {
       name: "COVID-19 infection (confirmed)",
