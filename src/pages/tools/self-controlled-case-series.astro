@@ -2218,21 +2218,43 @@ _Drafted with the AsPEN SCCS protocol builder (${today})._
       const renderLibrary = (filter = "") => {
         const items = PHENOTYPES[currentCategory] || [];
         const f = filter.trim().toLowerCase();
-        const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f)) : items;
+        // `provenance` is in the predicate because it is rendered on the row:
+        // a search that returns "No phenotype matches" over text the user can
+        // see on the same screen is a false statement, not a filter.
+        const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f) || (it.provenance || "").toLowerCase().includes(f)) : items;
         if (filtered.length === 0) { modalList.innerHTML = '<p class="px-3 py-6 text-sm text-slate-500 italic text-center">No phenotype matches.</p>'; return; }
         // The validation citation used to be hidden here and appended silently
         // to the reference list at export. Under a modal captioned "Validated
         // phenotype library" that is the wrong way round: the one thing a user
         // picking a validated definition needs to see is what the validation
         // actually is, and — more often than not — that there isn't one.
+        //
+        // The "No validation study attached" banner is gated on the entry
+        // actually HAVING a validation field ("validation" in it). It did not
+        // used to be, and the exposures array carries no validation key at all,
+        // so all twelve drug-class rows showed "supply a validation study
+        // before relying on this definition" — a category error, because an ATC
+        // code list has no positive predictive value to validate, and 12 amber
+        // refusals over 12 rows is how a reader learns to stop reading the
+        // colour on the outcome rows where "no validation study" is true and
+        // load-bearing. case-crossover already gates this; SCCS now matches.
+        //
+        // The exposure rows say instead the thing that IS worth checking about
+        // a drug class in a self-controlled design, and it is not a PPV: a
+        // dispensing record is not evidence of ingestion, and the exposed
+        // windows are drawn from days-of-supply and grace-period assumptions
+        // that no code set can confirm. That is the dominant threat to a
+        // self-controlled estimate, and neither builder said it anywhere.
         modalList.innerHTML = filtered.map((it, idx) => `
           <button type="button" data-phenotype-idx="${idx}" class="block w-full text-left px-4 py-3 rounded-lg border border-transparent hover:border-brand-300 hover:bg-brand-50/40 transition">
             <p class="font-semibold text-slate-900 text-sm">${esc(it.name)}</p>
             ${it.codes ? `<p class="mt-1 text-xs text-slate-700 font-mono leading-relaxed">${esc(it.codes)}</p>` : ""}
             ${it.definition ? `<p class="mt-1 text-xs text-slate-600 leading-relaxed">${esc(it.definition)}</p>` : ""}
-            ${it.validation
-              ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation</span> · ${esc(it.validation)} <span class="text-slate-500">(added to your reference list)</span></p>`
-              : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study attached</span> · nothing is added to your reference list; supply one before relying on this definition.</p>`}
+            ${"validation" in it
+              ? (it.validation
+                ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation</span> · ${esc(it.validation)} <span class="text-slate-500">(added to your reference list)</span></p>`
+                : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study attached</span> · nothing is added to your reference list; supply one before relying on this definition.</p>`)
+              : `<p class="mt-1.5 text-[11px] text-slate-500 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Exposure, not a case definition</span> · not validated the way an outcome is — a dispensing record is not proof of ingestion, and this design's exposed windows come from days-of-supply and grace-period assumptions no code set confirms. State those assumptions and vary them in a sensitivity analysis.</p>`}
             ${it.provenance ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed">${esc(it.provenance)}</p>` : ""}
           </button>
         `).join("");

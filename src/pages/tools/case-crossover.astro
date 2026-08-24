@@ -1691,7 +1691,11 @@ _Drafted with the AsPEN case-crossover builder (${today})._
       const renderLibrary = (filter = "") => {
         const items = PHENOTYPES[currentCategory] || [];
         const f = filter.trim().toLowerCase();
-        const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f)) : items;
+        // `provenance` is in the predicate because it is rendered on the row
+        // (e.g. the Falls entry's "Wang GH et al. BMJ 2021" note): a search
+        // that returns "No phenotype matches" over text visible on the same
+        // screen is a false statement, not a filter.
+        const filtered = f ? items.filter((it) => (it.name || "").toLowerCase().includes(f) || (it.codes || "").toLowerCase().includes(f) || (it.definition || "").toLowerCase().includes(f) || (it.validation || "").toLowerCase().includes(f) || (it.provenance || "").toLowerCase().includes(f)) : items;
         if (filtered.length === 0) { modalList.innerHTML = '<p class="px-3 py-6 text-sm text-slate-500 italic text-center">No phenotype matches.</p>'; return; }
         // The validation citation used to be hidden here and appended silently
         // to the exported reference list. Whether a definition has been
@@ -1714,7 +1718,8 @@ _Drafted with the AsPEN case-crossover builder (${today})._
               // Measured, both entries. The caveat now lives INSIDE
               // `validation`, which is the field that travels.
               ? `<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation study</span> · ${esc(it.validation)} <span class="text-slate-500">Added to the protocol's reference list.</span></p>`
-              : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring the accuracy of this definition. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`) : ""}
+              : `<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · This library carries no study measuring the accuracy of this definition. Nothing is added to the reference list; cite your own source for its positive predictive value.</p>`)
+              : `<p class="mt-1.5 text-[11px] text-slate-500 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Exposure, not a case definition</span> · not validated the way an outcome is — a dispensing record is not proof of ingestion, and a case-crossover rests on exposure being transient and discordant across the windows, with those windows drawn from days-of-supply assumptions no code set confirms. State the assumptions and report the share of exposure-discordant cases.</p>`}
             ${it.provenance ? `<p class="mt-1 text-[11px] text-slate-500 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Used in</span> · ${esc(it.provenance)}</p>` : ""}
           </button>
         `).join("");
