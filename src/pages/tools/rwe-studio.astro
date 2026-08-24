@@ -2833,9 +2833,73 @@ const DESIGNS = [
           // one. On the cohort demo the last period's observed count is 16 and its
           // fitted value 18.73, so the row labelled "observed vs counterfactual"
           // was 0.655 where observed/counterfactual is 0.559.
-          L.push("if(!is.na(sct)){ if(expo) cat(sprintf('RESULT_ESTIMATE|Fitted vs counterfactual at %s (end of follow-up)|%.3f (95%% CI %.3f-%.3f)\\n',endlab,exp(ct),exp(ct-crit*sct),exp(ct+crit*sct)))");
-          L.push("  else cat(sprintf('RESULT_ESTIMATE|Fitted minus counterfactual at %s (end of follow-up)|%s (95%% CI %s to %s)\\n',endlab,fmt(ct),fmt(ct-crit*sct),fmt(ct+crit*sct))) }");
-          L.push("if(!is.na(sct)) cat(sprintf('RESULT_NOTE|The end-of-follow-up row compares the model%s fitted value at %s with the counterfactual the model projects from the pre-intervention trend. It is not the observed value at that period divided by the counterfactual - a single period%s observation carries its own noise, which is why the model value is used.\\n', \"'s\", endlab, \"'s\"))");
+          // Three things about this row have to be in the LABEL rather than in the
+          // note beneath it, because the label is what survives being copied into a
+          // slide. The file already knows this: the comment above `slab` says the
+          // number and its provenance cannot be separated by copying one line out
+          // of the table. This was the one estimate row that carried none of them.
+          //
+          // 1. WHICH counterfactual. In a controlled run this is the
+          //    difference-in-differences contrast, and it was the only row in the
+          //    table whose label contained neither "control" nor "difference" —
+          //    i.e. the only one that did not disclose what it was a contrast
+          //    against, while sitting last, where a reader takes the summary from.
+          // 2. WHICH series, when only one survived. `slab` is appended to the
+          //    pre-intervention-slope, level-change and slope-change rows and was
+          //    not appended here. On a file whose comparator arm loses every period
+          //    to a missing denominator, three rows read "intervention series only"
+          //    and this one read nothing.
+          // 3. WHICH endpoint. "(end of follow-up)" is a claim about the data, not
+          //    about this row, and `tn` is the last period of the arm the row is
+          //    about — not of the file. With the intervention site's extract ending
+          //    six months early the row read "at 2020-06-01 (end of follow-up)"
+          //    beside a chart whose axis ran to 2020-12-01, with no note.
+          L.push("cflab<-if(ctrl) 'difference-in-differences counterfactual' else 'counterfactual'");
+          L.push("eflab<-if(tn<max(a$t)) (if(ctrl) 'last period of the intervention series' else 'last period analysed') else 'end of follow-up'");
+          L.push("if(!is.na(sct)){ if(expo) cat(sprintf('RESULT_ESTIMATE|Fitted vs %s at %s (%s)%s|%.3f (95%% CI %.3f-%.3f)\\n',cflab,endlab,eflab,slab,exp(ct),exp(ct-crit*sct),exp(ct+crit*sct)))");
+          L.push("  else cat(sprintf('RESULT_ESTIMATE|Fitted minus %s at %s (%s)%s|%s (95%% CI %s to %s)\\n',cflab,endlab,eflab,slab,fmt(ct),fmt(ct-crit*sct),fmt(ct+crit*sct))) }");
+          // The uncontrolled sentence was correct and is kept verbatim; what was
+          // wrong is that it was printed in BOTH branches. `Xc` zeroes only the two
+          // `g:` terms when a control series was fitted, so the counterfactual keeps
+          // the comparator's own level and slope change — it is not a projection of
+          // any pre-intervention trend, and on a file where a co-intervention halves
+          // both arms the tool printed 0.820 directly under a sentence defining
+          // 0.406. Worse than a factor of two: with the co-intervention hitting the
+          // comparator only, the controlled row is 1.637 and the quantity the
+          // sentence describes is 0.809 — the reader is told a 64% rise where the
+          // described quantity is a 19% fall.
+          //
+          // The controlled branch also has to state the assumption, because the one
+          // place in the file that states it — the parallel-pre-trends note — fires
+          // only when that test REJECTS, so it is absent from exactly the runs that
+          // pass and go on to be believed. Parallel pre-trends are necessary and
+          // nowhere near sufficient: the 1.637 file has exactly parallel pre-trends.
+          //
+          // And "divided by" was printed on the additive branch, under a row reading
+          // "Fitted MINUS counterfactual". One sentence serving two branches, twice.
+          L.push("dvb<-if(expo) 'divided by' else 'minus'");
+          L.push("if(!is.na(sct) && !ctrl) cat(sprintf('RESULT_NOTE|The fitted-vs-counterfactual row compares the model%s fitted value at %s with the counterfactual the model projects from the pre-intervention trend. It is not the observed value at that period %s the counterfactual - a single period%s observation carries its own noise, which is why the model value is used.\\n', \"'s\", endlab, dvb, \"'s\"))");
+          L.push("if(!is.na(sct) && ctrl) cat(sprintf('RESULT_NOTE|The fitted-vs-counterfactual row is a DIFFERENCE-IN-DIFFERENCES quantity. Its counterfactual is not a projection of the pre-intervention trend of the intervention series: it is what the model says that series would have done had it changed the way the CONTROL series changed from %s onward. So anything that moved both series - a co-intervention, a coding change, an epidemic - stays inside the counterfactual and is differenced out rather than counted as effect, and the fall of the intervention series against its own baseline trend is a different number that is not reported here. The comparison rests on the assumption that the control series shows what the intervention series would have done, which parallel pre-intervention trends support but do not establish. Its interval is wider than the level-change and slope-change rows above because it carries the difference in slope change multiplied by the %d period(s) from the interruption to %s. It is not the observed value at that period %s the counterfactual - a single observed period carries its own noise, which is why the model value is used. In the fitted series below, the counterfactual column equals the fitted column on every control-series row: under this design the comparator was not intervened on, so its counterfactual is its own fitted value.\\n', ukey[t0], tsn, endlab, dvb))");
+          // How much comparator there is AFTER the interruption is the single fact
+          // the controlled counterfactual depends on most, and it was reported
+          // nowhere. `npre` and `npost` are counted off `a$g==gref`, which is the
+          // intervention arm, so neither short-series guard can see the comparator;
+          // the fit note says "18 before and 18 from 2019-07-01 onward" on a file
+          // whose comparator has two periods after the interruption. Table 1 does
+          // print a "Control-series periods" row, but inferring an extrapolation
+          // from a count is the same "you may work it out yourself" signal that was
+          // already judged inadequate once in this file.
+          //
+          // The mechanism is why it matters rather than being a completeness point.
+          // The endpoint contrast is g:level + tsn*g:tsince, so its variance carries
+          // tsn^2 times the variance of the slope difference. A slope difference
+          // estimated from a handful of comparator periods and then multiplied by
+          // tsn is the least stable number in the table, and it moves the point
+          // estimate, not only the interval.
+          L.push("if(ctrl && !is.na(sct)){ cpost<-sum(a$g!=gref & a$t>=t0); cmax<-max(a$t[a$g!=gref])");
+          L.push("  cex<-if(cmax<tn) sprintf(' The row above is evaluated at %s, %d period(s) after the last period the comparator was observed in, so beyond %s its counterfactual is an extrapolation of the comparator rather than a comparison with it.', endlab, tn-cmax, ukey[cmax]) else ''");
+          L.push("  cfew<-if(cpost<8) sprintf(' A difference in slope change estimated from %d comparator period(s) and then multiplied by %d is the least stable quantity in this table - it moves the point estimate and not only the interval - so read that row as indicative and the level-change rows as the firmer ones.', cpost, tsn) else ''");
+          L.push("  if(cex!='' || cfew!='') cat(sprintf('RESULT_NOTE|The comparator has %d period(s) before the interruption and %d from %s onward, ending at %s. The before/from-onward counts in the fit note are the intervention series and do not describe the comparator.%s%s\\n', sum(a$g!=gref & a$t<t0), cpost, ukey[t0], ukey[cmax], cex, cfew)) }");
           L.push("");
           L.push("# --- fitted and counterfactual series ---");
           L.push("X<-model.matrix(fit); Xc<-X");
@@ -3791,8 +3855,12 @@ const DESIGNS = [
     $("applyclean").addEventListener("click", buildMaster);
     document.querySelectorAll('[name="design"]').forEach((r) => r.addEventListener("change", () => { MAP = {}; COVS = []; COVROLE = {}; MASTER = null; LAST = null; $("anacard").classList.add("hidden"); hideResults(); renderMap(); }));
 
-    // The core ITS figure: observed points, the fitted pre/post segments, and the
-    // pre-trend extrapolated forward as the counterfactual.
+    // The core ITS figure: observed points, the fitted pre/post segments, and a
+    // dashed counterfactual line whose meaning depends on whether a comparator was
+    // fitted — in a controlled run it is the difference-in-differences
+    // counterfactual (below), and in an uncontrolled run it is the pre-intervention
+    // trend projected forward. The caption branches on the same `meta.controlled`
+    // that ITSMETA already carries.
     const SERIES_COLOR = ["#0e7490", "#b45309", "#4338ca"];
     function fittedRows(rows) {
       const head = rows[0].map((h) => String(h).toLowerCase());
@@ -3816,6 +3884,16 @@ const DESIGNS = [
       // beside a note refusing to report that very comparison. A refusal the
       // picture contradicts is worse than either alone.
       const cfOk = meta.cfok !== "no";
+      // A controlled ITS is not what this caption used to say it was. Xc zeroes only
+      // the two `g:` columns, so the drawn counterfactual keeps the comparator's own
+      // level and slope change — it is the difference-in-differences counterfactual,
+      // not a projection of the pre-intervention trend. On a file where a co-
+      // intervention halved BOTH arms, the intervention arm's dashed line stepped
+      // from 199 straight to 98 at the interruption, under the words "extrapolates
+      // the pre-intervention trend forward". The picture drew the picture; the
+      // words asserted the other one. Branch on `meta.controlled`, which was already
+      // being parsed off ITSMETA and unused.
+      const controlled = meta.controlled === "yes";
       const W = 760, H = 320, ml = 56, mr = 14, mt = 14, mb = 40;
       const ts = data.map((r) => r.t), all = [];
       data.forEach((r) => { all.push(v(r, "o"), v(r, "f"), v(r, "c")); });
@@ -3887,9 +3965,11 @@ const DESIGNS = [
       $("itschart").innerHTML =
         '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-1">Observed series, fitted segments, and the counterfactual</div>' +
         '<p class="text-[11px] text-slate-500 mb-2">Points are the observed ' + ylab + "; the solid line is the fitted segmented model" +
-        (cfOk
-          ? "; the dashed line extrapolates the pre-intervention trend forward as the counterfactual."
-          : ". <strong>No counterfactual is drawn.</strong> A term the counterfactual is built from could not be estimated on this data, so this run has no counterfactual to show — see the note beside the estimates. Read the solid lines as a description of what happened, not as a comparison with what would have happened.") + "</p>" +
+        (!cfOk
+          ? ". <strong>No counterfactual is drawn.</strong> A term the counterfactual is built from could not be estimated on this data, so this run has no counterfactual to show — see the note beside the estimates. Read the solid lines as a description of what happened, not as a comparison with what would have happened."
+          : (controlled
+            ? "; the dashed line is the <strong>difference-in-differences counterfactual</strong> — what the model says the intervention series would have done had it changed the way the control series changed from the interruption onward. Under this design the comparator was not intervened on, so its counterfactual is its own fitted value and the two lines coincide on the control-series rows by construction. Where the intervention arm's dashed and solid lines are close (or coincide), the estimated effect is small (or null), not missing."
+            : "; the dashed line extrapolates the pre-intervention trend forward as the counterfactual.")) + "</p>" +
         '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Interrupted time series chart">' + g + "</svg>";
     }
 
