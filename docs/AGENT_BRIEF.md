@@ -9542,20 +9542,16 @@ treatments" while the branch above had just been re-cut on "causal contrast".
 
 #### Open, examined, deliberately left — ranked
 
-<!-- CLAIM 2026-08-24 (thirty-fourth run, CLAIMED): took item 1 below — the
-     descriptive-analysis local phenotype library, end to end: the 42 entries,
-     what the `validation` field actually holds, the renderer at :2260 that shows
-     none of it, and the `pickedCitations` path that puts those strings into the
-     exported "Key references" section unseen. Pick a different gap. This marker
-     is retired when this run's section lands at the bottom of this file. -->
-
-1. **`descriptive-analysis.astro` has its own local phenotype library (23
+1. ~~**`descriptive-analysis.astro` has its own local phenotype library (23
    `validation:` fields) and its renderer at `:2260` shows no validation status
    at all.** Its heading is now honest; its rows are not. This is the same
    defect the shared component had, in the last library still carrying it, and
    it is the **best next target in this area**. `case-crossover` and
    `self-controlled-case-series` already render a refusal; ACNU does; the shared
-   component now does.
+   component now does.~~ **Done 2026-08-24 (thirty-fourth run)** — see that
+   run's section at the bottom of this file. Two of the 23 were validation
+   studies; the field is now split `validation` / `provenance` and only the
+   former reaches the reference list.
 2. **CCW and ST sit in a family called "Cohort designs with a comparator" and
    both worked examples are drug-versus-nothing studies.** The fifteenth run
    logged this for CCW alone as editorial; it is **two of three cards**, which
@@ -9611,3 +9607,272 @@ overflow on two builders, the double `render()` per amendment keystroke.
   substitution.** A commit message here silently lost the word `renderList` to
   it. Use `git commit -F <file>` with a quoted heredoc for anything containing
   code identifiers.
+
+### Found 2026-08-24 by a thirty-fourth run — the descriptive-analysis phenotype library, end to end
+
+The thirty-third run ranked this first and called it the best next target in
+the area. Two reviewers on disjoint briefs — a methodologist on the 42 entries'
+epidemiology and every citation, an applied analyst on the interaction and the
+data flow — then **each sent at the other's list**, then a third sent at this
+run's own committed diff and found nine defects in three commits.
+
+#### The mechanism that was wrong, and it was one mechanism
+
+Picking a phenotype appended its `validation` string **verbatim** to the
+exported protocol's numbered "Key references" list (`:2279` → `activeCitations`
+→ `:1525`/`:2071`). The modal rendered name, codes and definition only, so
+**that string was never on screen at any point** — and the "Key references"
+textarea the user edits held nine lines while the exported file held twelve.
+Reproduced; a protocol whose only library actions were three picks shipped:
+
+```
+10. Requires mortality linkage; see /databases feature matrix for sites with `mortality` flag.
+11. WHO standard cause-of-death grouping.
+12. AsPEN hip-fracture multi-country work; Lai EC et al, BMJ Open 2021/2023.
+```
+
+**Of the 23 `validation` strings, two were validation studies.** Both reviewers
+and the orchestrator classified independently and agreed. The other 21 were
+provenance ("Used in …"), a claim about a classification ("WHO standard."), an
+instruction to the author ("cite Wong MCS et al where applicable"), or a
+surname with no year, journal or title.
+
+Fixed by adopting the split `self-controlled-case-series.astro:66-99` already
+settled: `validation` = a study that measured the definition and the ONLY thing
+reaching the reference list; `provenance` = everything else worth knowing,
+shown and never numbered; an entry with neither says so on the row. Measured
+after: **reference lines a pick can inject fell from 23 to 2** (populations
+0/10, exposures 0/19, mortality causes 0/6, outcomes 2/7); all 42 rows show a
+validation study or a visible refusal.
+
+#### The lesson, which is the thirty-third run's own, repeating twice in one run
+
+**A claim this repo already adjudicated, still live in a copy nobody diffed.**
+
+`descriptive-analysis.astro:174` carried `"Man KKC et al Lancet Psychiatry 2024
+(PMID 39241791)."` on Suicide / self-harm. That PMID is **Luo H, Chai Y, Li S,
+et al**, Lancet Psychiatry 2024;11(10):807-817, a psychotropic-prescribing
+paper with no self-harm outcome. `sccs:66-99` and `case-crossover:77-79` already
+record this; confirmed independently again here, making it the **third**
+confirmation. It was live in two more places — here, reaching exported
+reference lists unseen, and `src/data/phenotypes.ts:149`, where the
+thirty-third run had just made `validation` visible on the row under the label
+"Validation study", **promoting the false attribution from invisible to
+advertised** across five builders.
+
+**Then this run did the same thing to itself.** Its first commit withdrew a
+false hip-fracture attribution from `descriptive-analysis` and left the same
+claim in `phenotypes.ts:113`, green, on five pages — while writing the
+withdrawal record. It also declared PMID 38146486 non-validating in one library
+while the other labelled it a validation study: **one identifier, opposite
+verdicts, both on screen in one site.** And its ATC commit said "this ports
+them" having ported four of five. All three were found only by the third
+reviewer. **Grep for the string you are withdrawing. Every time.**
+
+#### One list, five copies, three defects already fixed in one of them
+
+The methodologist's grep across `src/` was the highest-leverage act of the run.
+The drug-exposure list is copy-pasted into **five files**, and
+`active-comparator-new-user.astro` had **already corrected three of the defects
+found here, in prose, in this repository**:
+
+| defect | already correct at |
+|---|---|
+| tirzepatide A10BX16 asserted inside `A10BJ*`, which excludes it | ACNU:303 |
+| `N05A*` sweeps in N05AN01 lithium; atypicals are not a contiguous range | ACNU:310 |
+| `N06BA` sweeps in atomoxetine N06BA09 and modafinil N06BA07 | ACNU:311 |
+
+The tirzepatide one is not cosmetic: the string lands in the exported DDD
+metric's **numerator** as an executable instruction, so every site runs
+`A10BJ%`, returns no tirzepatide, and the sites agree with each other.
+
+Also fixed, no in-repo precedent: **"Cholinesterase inhibitors" listed
+memantine**, an NMDA antagonist. N06DX01 is the correct ATC *for memantine*,
+which is why it survived — the damage is in the **name**, because downstream
+prose carries the name and not the codes ("New users of Cholinesterase
+inhibitors" over a cohort containing memantine initiators). Renamed to
+"Anti-dementia drugs", listed by molecule since `N06D*` also holds ginkgo
+(N06DX02) and the anti-amyloid antibodies (N06DX03-05).
+
+**Ported to `descriptive-analysis.astro` and `src/data/phenotypes.ts` only.
+`self-controlled-case-series.astro:55-57,64` and `case-crossover.astro:53-55`
+still carry the old strings** — ranked below.
+
+#### What the reviewers disagreed about, and who was right
+
+- **The analyst reported both the incidence and initiation checks as disarmed;
+  the methodologist showed only one is, and the distinction decides the fix.**
+  `:1709` (initiation) asks an **availability** question that `indexDateRule`
+  genuinely answers. `:1707` (incidence) asks a **selection** question and is
+  satisfied by a string about enrolment duration. Availability is necessary for
+  exclusion and nowhere near sufficient.
+- **The orchestrator measured the wrong artefact and had to be corrected by the
+  analyst.** Checking whether these warnings fire, it grepped the exported
+  Markdown, found nothing in any condition, and briefly concluded the analyst
+  had overstated it. **These checks render to an on-screen panel and never
+  reach the Markdown at all.** Confirm which artefact carries a thing before
+  concluding it is absent from it.
+- **The analyst framed the 19 unvalidated exposures as missing evidentiary
+  fields; the methodologist pointed out three of the nineteen carry wrong
+  codes.** Adding nineteen empty provenance fields would have shipped the wrong
+  codes with a tidier UI.
+- **The analyst called the six mortality definitions "dead content"; executing
+  it refuted the framing.** All six render and are what a user reads to choose.
+  They are *unexported*: no `mortCauseDef` control exists. Right conclusion,
+  wrong diagnosis, and the wrong one sends a fixer to the wrong place.
+- **The methodologist wanted `mortalityCauses` to carry no citation field at
+  all, against the run's plan to demote all six to `provenance`. It was right.**
+  "WHO standard." is a claim about the classification — true of three groups,
+  **false as labelled for one** (WHO's I00-I99 is the circulatory-system
+  chapter; WHO defines no category called "cardiovascular death"), and
+  meaningless for the ad-hoc union. Filing it as provenance would have
+  laundered it. The true half moved into `codes`; the field is gone.
+- **A reviewer's proposed regression metric would have passed the worst string
+  in the file.** "15 of 23 contain no four-digit year" scores PMID 39241791
+  clean: it has a year, a journal, an author and a resolving identifier.
+  **Useful as triage, never as the acceptance test.**
+
+#### New: a field's audience decides where a caveat can live
+
+The run moved the I22 and I64 caveats out of `definition` into a note, to stop
+`definition` tripping the site-feasibility engine's `imaging` scan. The third
+reviewer caught what that cost: **`definition` travels into the exported
+Section 4 table; `notes` and `provenance` are modal-only.** The caveats a site
+most needs in order to execute the definition stopped reaching the document
+while the codes cell still exported `I21.*, I22.*`. Worse, both ICD-9-CM-era
+qualifications sat in `provenance` — so the run found a real mismatch and
+routed the disclosure to the one place it could never reach the citation it
+qualified. **Before moving a string between fields, ask which of them reaches
+the artefact.** Now: caveats are back in `definition`, each validation string
+carries its own caveat inside it, and only the clause with the word "imaging"
+stays behind, with the reason recorded beside it.
+
+#### Open, examined, deliberately left — ranked
+
+1. **The incidence check is disarmed in the default configuration and cannot
+   be re-armed by a user who writes the truth.** `popBlob` (`:1665`) includes
+   `indexDateRule`, whose shipped default (`:422`) contains "washout" and
+   "365", and `:1707` suppresses on `/washout|prior|history|…/`. Measured
+   against the `#checks` panel, population = Hypertension, default metrics:
+
+   | indexDateRule | incidence | initiation |
+   |---|---|---|
+   | shipped default | suppressed | suppressed |
+   | same, without "washout"/"365" | FIRES | FIRES |
+   | "index = date of cohort entry; **no washout applied**" | suppressed | suppressed |
+   | "…after a 365 d washout with no prior outcome" | suppressed | suppressed (correct) |
+
+   **The methodologist's ruling, which is the point:** a continuous-enrolment
+   washout is a *data-availability* condition and prevalent-case exclusion is a
+   *cohort-selection* condition; the first never licenses the second. So the
+   incidence suppression is wrong **on the epidemiology**, not merely on the
+   string matching — and `:1709` (initiation) is NOT broken, because it asks an
+   availability question. Ranked remedy: **(a) drop `indexDateRule` from the
+   incidence test only** (after which the warning correctly fires on a default
+   page — expect that, it is a true positive), **plus (c) make suppression
+   visible**, quoting the phrase that silenced it, through the escaper and
+   length-capped, and following `:1688-1693`'s precedent so it reaches the
+   export too. **(b) "treat an untouched default as empty" and (d) negation
+   handling were both examined and rejected** — (b) creates a false positive on
+   the check that works and needs a second copy of the default string; (d) is
+   unbounded in free text and would make a known-unreliable check look reliable.
+   Deferred deliberately: all three shipped commits withdrew a false assertion,
+   and this is a missing warning; folding an engine change into a library run is
+   how a run ships eight defects in five commits.
+2. **`FEATURE_TRIGGERS` reads the library's hedges as requirements — six
+   instances, five still live.** `:802-812` is a bare substring scan with no
+   negation or scope handling. Measured hits where the entry's own text marks
+   the data optional: COVID "**lab**-confirmed … where linkage available",
+   AKI "pair with **creatinine** criteria where lab linkage exists", CKD
+   "**eGFR** … where labs available" → all force **labs**; "Cancer-survivor
+   cohort for … **mortality** … studies" (a menu of example uses) forces
+   **mortality-linkage**; "Cancer death" forces **cancer-registry linkage** for
+   a study needing only cause-of-death coding. The stroke/`imaging` instance is
+   worked around, not fixed. This is one bug in six places and it names specific
+   sites as unable to run studies they can run.
+3. **`sccs:55-57,64` and `case-crossover:53-55` still carry the pre-correction
+   ATC strings** (tirzepatide inside `A10BJ*`, bare `N05A*`, `N06BA`,
+   cholinesterase-inhibitors-with-memantine). ACNU's corrected text is at
+   `:303,310,311`; this run's is in `descriptive-analysis` and `phenotypes.ts`.
+   **Copy, do not paraphrase.** Check each file's renderer shows `notes` first.
+4. **A citation survives the edit that invalidates it.** Pick MI, then rewrite
+   `outcomeCodes` to I21-only and rewrite `outcomeDef` — Cheng CL is still
+   cited. `activeCitations` (`:1386`) keys on the four *name* fields only. The
+   modal now says so honestly ("it stays for as long as this entry's *name* is
+   the one in the form"), but the mechanism is still wrong. **ACNU already
+   solved this** at `:4814`: `libraryPicks[k] = {wrote, cite, fields, check}`,
+   where the citation holds only while every field the pick wrote is unchanged.
+   Port it. Related: `pickedCitations` has its own localStorage key, so typing
+   a library name by hand into a fresh protocol attaches a citation the user
+   never picked (reproduced), and any of the four name fields matches any
+   stored key regardless of category.
+5. **`mortCauseDef` does not exist**, so six carefully written cause-of-death
+   definitions are read in the modal and never reach the protocol; the exported
+   document gets a bare ICD range. **If you add the field, do NOT add it to
+   `FEATURE_TEXT_FIELDS`** — the analyst's sweep found seven inert regex hits
+   that would go live at once, including `cancer` matching "Death from any
+   malignant neoplasm", which would demand cancer-registry linkage from every
+   site. Fix the export path only.
+6. **Code-set defects examined and deliberately NOT changed**, because the codes
+   are not wrong so much as wrong *for an unstated classification*, and this
+   builder is explicitly multi-country: `E14` is valid WHO ICD-10 and absent
+   from ICD-10-CM while `E08`/`E09` are the reverse (`:71`); `X60-X84` likewise
+   (ICD-10-CM uses X71-X83 with poisonings in T36-T65); `F00` in the dementia
+   list. **A single harmonised list across WHO ICD-10, ICD-10-CM, KCD and
+   ICD-10-AM does not exist, and manufacturing one is the guess this file
+   forbids** — state the classification the list assumes instead. Also left:
+   `N18.3` is not a leaf code in ICD-10-CM (expanded to N18.30/.31/.32 in FY2021)
+   and `N18.6` is missing from a "stage ≥3" cohort; `A10BD*` fixed-dose
+   combinations are missed by every antidiabetic wildcard, biased differently by
+   country. The HF-cohort circularity and the CKD lab-OR-claims split are now
+   *stated on the row* rather than fixed, because which arm to keep is Daniel's
+   call.
+7. **Rows are taller.** Median row height, baseline → now: populations 93→172,
+   exposures 70→91, outcomes 93→172, mortality 93→172; fully-visible entries at
+   1440px fell from ~4/5/3/4 to 2/3/2/2, and at 320-390px three of four pickers
+   show one entry. Two drafts were worse and were measured back down (see
+   below). Judged worth it — the rows now carry the validation status, which is
+   the most important fact about a definition — but if a future run wants the
+   density back, the lever is a collapsed "About this entry" disclosure.
+
+#### Caught in this run's own diff, before the third reviewer arrived
+
+- **The first draft of the field split made the picker unusable** — provenance
+  strings narrating withdrawal history took outcome rows to 175-250px, **one
+  entry visible**, down from three. The history moved to a comment; the refusal
+  explanation, the same sentence on 40 of 42 rows, was hoisted above the list.
+  **This is the regression the thirty-third run undid in the shared component,
+  re-committed by the run that had just read about it.** The third reviewer then
+  found five rows still narrating their history anyway.
+
+#### Verification and its limits
+
+- Observed in Chromium against a local `astro build` + `http-server`.
+  `reg/dump-lib.mjs` dumps every row's rendered text in all four categories, row
+  heights, search probes, a fixture's form fields and exported reference
+  section, overflow at five viewports and pageerrors; **diffed after every
+  commit.** After the ATC commit it showed exactly five rows changed.
+- All twelve tool pages: zero pageerrors, `window.PC` an object on all nine
+  builders. The 320px `scrollWidth` 359 overflow is the pre-existing SVG one,
+  measured identically before and after.
+- **Citations were checked by `WebSearch` snippets only** — Crossref, PubMed and
+  doi.org are all still blocked. Two were confirmed to resolve *and* to support
+  the claim attached to them (Cheng CL, J Epidemiol 2014;24(6):500-7, PMID
+  25174915, chart-review PPV 0.88; Hsieh CY, J Formos Med Assoc 2015;114(3):254-9,
+  PMID 24140108). Their titles and PMIDs were expanded in the data from those
+  same snippets. **No new citation was added anywhere.** One new factual claim
+  the run *did* write from a reviewer's snippet — that PMID 38589601's sites are
+  "Nordic, not AsPEN" — was wrong, and was caught by the third reviewer and
+  withdrawn. That is the species this run existed to remove, authored by the run.
+- **The live site was not checked** — `danielhttsai.github.io` is still blocked.
+  **Nobody has still opened one of these `.docx` files in Microsoft Word**;
+  `buildDocx` throws on both builds because the UMD bundle is CDN-hosted.
+- `package.json` untouched; checked before staging.
+
+#### Process trap, new
+
+**The sandbox starts in detached HEAD.** The ship loop's `git push -q origin main`
+pushes the stale local `main` ref and is rejected as non-fast-forward five times
+in a row — with `&& break`, the loop exits silently having pushed nothing. Run
+`git checkout -B main` before the first push, and check the loop actually
+printed a success.
