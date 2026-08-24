@@ -305,6 +305,16 @@ The cloud sandbox's egress proxy is far more restrictive than it looks.
   picture visibly contradicts the words. Named with a worked example at the
   bottom of this file.
 
+<!-- CLAIM 2026-08-24 (thirty-fifth run, CLAIMED): took the item directly above
+     — the end-of-follow-up counterfactual sentence, the chart caption, and
+     whatever else in RWE Studio's ITS output describes the CONTROLLED
+     counterfactual as a pre-trend projection. The thirty-first run named this
+     as the best next target in the tool. Pick a different gap; the printed
+     coefficient table's model-based p-values (ranked second there) is the
+     obvious neighbouring one, but read the note below before taking it —
+     this run may reach it. Retired when this run's section lands at the
+     bottom of this file. -->
+
 ### Found 2026-08-22, argued over by two reviewers, deliberately left
 
 Both reviewers agreed these are real. They are listed with what each is, so the
