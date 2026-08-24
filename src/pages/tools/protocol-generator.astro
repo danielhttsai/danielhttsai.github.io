@@ -17,10 +17,18 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const questions = [
   {
     q: "Do you have an active comparator — another drug, not 'nobody'?",
-    a: "That means a drug used for the same indication, at the same point in the treatment pathway, with no a-priori link to your outcome. If one exists, a cohort design is available and is usually the better choice: people who get drug A and people who get drug B are far more alike than people who get a drug and people who get nothing, so confounding by indication is much smaller to begin with. If no such comparator exists, you are pushed towards a self-controlled or calendar-time design.",
+    a: "That means a drug used for the same indication, at the same point in the treatment pathway, with no a-priori link to your outcome. If one exists, a cohort design is available and is usually the better choice: people who get drug A and people who get drug B are far more alike than people who get a drug and people who get nothing, so confounding by indication is much smaller to begin with. If no such comparator exists, a self-controlled or calendar-time design is the usual destination — but not the only one, because a comparator arm need not be a comparator drug, and question 2 is where that is decided.",
     routes: [
       { if: "If yes", to: ["ACNU", "CCW", "ST"] },
-      { if: "If no", to: ["SCCS", "CCO", "ITS", "TIT"], note: "and question 6 still applies — a rare outcome or a purely descriptive aim does not need a comparator either." },
+      // The two designs missing from this branch are missing on purpose. CCW's
+      // and ST's own worked examples are drug-versus-nothing studies, so the
+      // temptation is to chip them here — but what makes them available is a
+      // grace period or time-varying eligibility, which is question 2's
+      // subject, not this one. Chipping them would tell the plain
+      // drug-vs-nothing reader with point-in-time initiation that cloning is
+      // available, and both builders refuse exactly that reader. So the
+      // condition is named in prose and the routing is left to Q2.
+      { if: "If no", to: ["SCCS", "CCO", "ITS", "TIT"], note: "and questions 2 and 6 still apply — a strategy that only declares itself later, such as “start within 90 days” against an untreated arm, is still a cloning or sequential-trial question, and a rare outcome or a purely descriptive aim does not need a comparator either." },
     ],
   },
   {
@@ -35,7 +43,13 @@ const questions = [
     q: "Is the exposure short-lived and the outcome sudden?",
     a: "A transient exposure plus an acute, datable onset is what makes a self-controlled design work: exposed and unexposed time both exist within the same person, so the comparison can be made inside them. Choose SCCS if you can lay out each case's whole observation period as exposed and unexposed person-time; choose case-crossover if you can only look back a short way from the event.",
     routes: [
-      { if: "If yes, and you can lay out the whole observation period", to: ["SCCS"] },
+      // This branch splits SCCS from CCO on how much observation you can
+      // reconstruct, which is a real estimand split and is kept. What it could
+      // not see is that having the whole period is necessary and not
+      // sufficient: the two conditions below rule SCCS out no matter how
+      // complete the data are, and on national claims every reader answers
+      // "whole period", so without the note this branch swallows them.
+      { if: "If yes, and you can lay out the whole observation period", to: ["SCCS"], note: "but only if the event neither ends observation nor changes later exposure — a fatal outcome, or a drug that gets stopped once the event happens, rules SCCS out however complete your data are." },
       { if: "If yes, but you can only look back a short way", to: ["CCO"] },
       { if: "If no", to: [], note: "no self-controlled design applies — the other questions are the ones that route you." },
     ],
@@ -44,7 +58,7 @@ const questions = [
     q: "Is the confounding you are worried about fixed, or does it change over time?",
     a: "Genetics, lifelong habits, stable frailty — self-controlled designs remove all of these by construction, and trend-in-trend removes them through the trend contrast, in both cases without your ever having to measure them. That is a genuinely strong property. It does not extend to time-varying confounding: ageing, season, worsening disease and calendar trends in prescribing all survive, and must still be modelled explicitly.",
     routes: [
-      { if: "If it is fixed", to: ["SCCS", "CCO", "TIT"] },
+      { if: "If it is fixed", to: ["SCCS", "CCO", "TIT"], note: "and this branch is about confounding you cannot measure — removing it unmeasured is what these three do. A fixed confounder you did record is handled perfectly well by any of the cohort designs, so answering “fixed” is not a reason to leave them." },
       { if: "If it changes over time", to: ["ACNU", "CCW", "ST"], note: "and you must have measured it — none of these removes a time-varying confounder you did not record. Where the confounder is itself affected by earlier treatment, a baseline propensity score is not enough and a g-method is needed." },
     ],
   },
@@ -54,6 +68,7 @@ const questions = [
     routes: [
       { if: "If there was a date", to: ["ITS"] },
       { if: "If uptake was gradual", to: ["TIT"] },
+      { if: "If neither — no date, and no marked trend in uptake", to: [], note: "this question does not route you: both calendar-time designs read the effect off a change over calendar time, and with neither there is nothing for either to read. Almost every drug's use climbs over its first decade, so answer this on whether that climb is the contrast you mean to rely on — not on whether it happened." },
     ],
   },
   {
@@ -61,7 +76,15 @@ const questions = [
     a: "These are two separate questions that happen to point the same way. For a rare outcome, following an entire cohort spends most of its effort on people who never have the event; sampling controls from the source population instead is far more efficient for the same precision. And if what you want is a rate, a trend or a utilisation pattern rather than an effect, that is a descriptive analysis — legitimate and often the most useful output, provided it is not written up as though it were causal.",
     routes: [
       { if: "If the outcome is rare", to: ["CC"], note: "though a rare outcome with a good active comparator is often still a cohort study, with case-control sampling inside it for efficiency." },
-      { if: "If you are not comparing treatments", to: ["DA"] },
+      // "Not comparing treatments" was too loose to be the criterion: an
+      // interrupted time series of a reimbursement change compares no
+      // treatments either, and that reader ticking this branch lands on a card
+      // whose Assumes forbids the causal reading they came for. The `a` text
+      // above already cuts it on "rather than an effect"; the branch label now
+      // matches, and matches the descriptive family lede's "No causal contrast
+      // is attempted" too.
+      { if: "If no causal contrast is intended", to: ["DA"] },
+      { if: "If the outcome is common and you do intend a causal contrast", to: [], note: "neither half of this question applies, which is the ordinary case rather than a problem — questions 1 to 5 are the ones that route you." },
     ],
   },
 ];
