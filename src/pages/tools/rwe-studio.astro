@@ -2788,14 +2788,46 @@ const DESIGNS = [
           L.push("L0<-setNames(rep(0,length(nmv)),nmv)");
           L.push("zn<-if(ctrl) c('g:level','g:tsince') else c('level','tsince')");
           L.push("if(zn[1] %in% nmv) L0[zn[1]]<-1; if(zn[2] %in% nmv) L0[zn[2]]<-tsn");
+          // A term R could not estimate is absent from `nmv`, so its slot in L0 stays
+          // 0 and the contrast QUIETLY LOSES that component — while the label goes on
+          // promising a quantity accrued to the end of follow-up. Measured on a file
+          // whose comparator's extract ends at the interruption month (an ordinary
+          // shape; the note at the level/slope rows was written for it): `g:tsince`
+          // aliases, and the row printed 0.986 (0.764-1.273) — "no difference" —
+          // where the construction truth is 0.262 and an intact comparator recovers
+          // 0.271.
+          //
+          // Refused rather than relabelled, and the reason is specific rather than a
+          // preference for refusals: 0.986 is byte-identical to the "Difference in
+          // level change" row two lines above it, because with the slope difference
+          // gone that is all the contrast contains. A relabelled row would be a
+          // verbatim duplicate of a row already in the table under a second name, so
+          // suppression withholds no answer — it withholds a false
+          // "(end of follow-up)" promise attached to one already given.
+          //
+          // `tsn>0` guards the one case where the absence is not a loss: a slope term
+          // that would be multiplied by zero contributes nothing whether it was
+          // estimable or not.
+          L.push("zmiss<-character(0); if(!(zn[1] %in% nmv)) zmiss<-c(zmiss,zn[1]); if(tsn>0 && !(zn[2] %in% nmv)) zmiss<-c(zmiss,zn[2])");
+          L.push("cfok<-length(zmiss)==0");
           L.push("cfv<-cf[nmv]; cfv[is.na(cfv)]<-0");
           // The contrast is a linear combination, so "the wider of the two" has to
           // be applied to the two quadratic forms, not to the two diagonals.
           L.push("ct<-sum(L0*cfv)");
           L.push("vm0<-as.numeric(t(L0)%*%Vm%*%L0); vh0<-if(is.null(Vh)) vm0 else as.numeric(t(L0)%*%Vh%*%L0)");
           L.push("vct<-if(semode=='model') vm0 else if(semode=='hac') vh0 else max(vm0,vh0)");
-          L.push("sct<-if(is.finite(vct) && vct>0) sqrt(vct) else NA_real_");
+          L.push("sct<-if(cfok && is.finite(vct) && vct>0) sqrt(vct) else NA_real_");
           L.push("endlab<-ukey[tn]");
+          // The refusal has to be louder than the row it replaces, or it is the
+          // invisible kind: when BOTH terms alias the row was already absent (vct is
+          // 0, so sct was already NA) and nothing on the page said a comparison had
+          // been declined — the reader simply got a shorter table.
+          L.push("if(!cfok){ zwhat<-if(ctrl) 'the difference in level change and the difference in slope change between the two series' else 'the level change and the slope change'");
+          L.push("  zrest<-if(length(zmiss)==2) 'there would be nothing left of the comparison to print at all' else sprintf('what is left is the %s component on its own, which is the number already printed above under its own name', if(zmiss[1]==zn[1]) 'slope-change' else 'level-change')");
+          L.push("  cat(sprintf('RESULT_NOTE|NO END-OF-FOLLOW-UP COMPARISON IS REPORTED, and no counterfactual series is drawn or exported. That comparison is built from %s, and %s could not be estimated on this data - the collinear-terms note below says why. Reporting it anyway would drop the missing part in silence and put the remainder under a label promising a quantity accrued to %s: %s. Every other row is unaffected - each is printed only when its own term was estimable.\\n', zwhat, paste(zmiss,collapse=' and '), endlab, zrest)) }");
+          // Distinct from the above: every term was estimable and the variance still
+          // came back non-finite or non-positive. Rare, but it used to be silent too.
+          L.push("if(cfok && is.na(sct)) cat(sprintf('RESULT_NOTE|The end-of-follow-up comparison was not reported: its terms were all estimable, but the variance of the contrast came back as %s, so no interval could be put on it. A point estimate with no interval is not something this tool prints.\\n', if(is.finite(vct)) sprintf('%.3g',vct) else 'not finite'))");
           // "Observed" was wrong: ct is built from the model's own coefficients, so
           // this is the FITTED value against the counterfactual, not the observed
           // one. On the cohort demo the last period's observed count is 16 and its
@@ -2814,8 +2846,16 @@ const DESIGNS = [
           L.push("inv<-if(inherits(fit,'glm')) fit$family$linkinv else function(z) z");
           L.push("fv<-inv(as.numeric(X%*%bb)+off); cv<-inv(as.numeric(Xc%*%bb)+off)");
           L.push("cat('FITTED|series|period|t|observed|denominator|fitted|counterfactual\\n')");
-          L.push("for(i in seq_len(nrow(a))) cat(sprintf('FITTED|%s|%s|%d|%.6g|%s|%.6g|%.6g\\n', if(HASG) (if(a$g[i]>0) 'intervention' else 'control') else 'series', a$key[i], a$t[i], a$Y[i], if(useoff) sprintf('%.6g',a$N[i]) else '', fv[i], cv[i]))");
-          L.push("cat(sprintf('ITSMETA|t0=%d|cutlabel=%s|np=%d|pre=%d|post=%d|controlled=%s\\n',t0,ukey[t0],np,npre,npost,if(ctrl) 'yes' else 'no'))");
+          // The counterfactual column is withheld on the same condition as the row.
+          // It has to be withheld HERE and not only in the chart, because this table
+          // is the one surface that carries no prose at all: "⬇ Fitted series (CSV)"
+          // emits these rows and nothing else — no note, no `controlled=`, no
+          // preamble — so an empty cell is the only refusal that can reach the file
+          // an analyst opens in Excel. Leaving the number would have exported a
+          // column headed `counterfactual` whose every row is a comparison this run
+          // has just declined to make.
+          L.push("for(i in seq_len(nrow(a))) cat(sprintf('FITTED|%s|%s|%d|%.6g|%s|%.6g|%s\\n', if(HASG) (if(a$g[i]>0) 'intervention' else 'control') else 'series', a$key[i], a$t[i], a$Y[i], if(useoff) sprintf('%.6g',a$N[i]) else '', fv[i], if(cfok) sprintf('%.6g',cv[i]) else 'not estimable'))");
+          L.push("cat(sprintf('ITSMETA|t0=%d|cutlabel=%s|np=%d|pre=%d|post=%d|controlled=%s|cfok=%s\\n',t0,ukey[t0],np,npre,npost,if(ctrl) 'yes' else 'no',if(cfok) 'yes' else 'no'))");
           L.push("");
           // A series should describe itself before it is modelled.
           L.push("pre<-a$g==gref & a$t<t0; pst<-a$g==gref & a$t>=t0");
@@ -3767,6 +3807,15 @@ const DESIGNS = [
       const hasD = data.every((r) => r.d != null && isFinite(r.d) && r.d > 0);
       const v = (r, k) => (hasD ? (r[k] / r.d) * 1000 : r[k]);
       const t0 = parseInt(meta.t0) || 0;
+      // The R side withholds the counterfactual column when a term the contrast is
+      // built from could not be estimated, and says so on `cfok`. The figure has to
+      // decline on the SAME condition and not on a numeric test: in the case that
+      // motivated this the withheld counterfactual was 1.4% from the fitted value,
+      // so "do not draw a dashed line identical to the solid one" would have drawn
+      // it — one amber curve asserting the model expected a 74% collapse, directly
+      // beside a note refusing to report that very comparison. A refusal the
+      // picture contradicts is worse than either alone.
+      const cfOk = meta.cfok !== "no";
       const W = 760, H = 320, ml = 56, mr = 14, mt = 14, mb = 40;
       const ts = data.map((r) => r.t), all = [];
       data.forEach((r) => { all.push(v(r, "o"), v(r, "f"), v(r, "c")); });
@@ -3800,7 +3849,7 @@ const DESIGNS = [
         const pre = rs.filter((r) => r.t < t0), post = rs.filter((r) => r.t >= t0);
         if (pre.length > 1) g += '<path d="' + path(pre, "f") + '" fill="none" stroke="' + col + '" stroke-width="2"/>';
         if (post.length > 1) g += '<path d="' + path(post, "f") + '" fill="none" stroke="' + col + '" stroke-width="2"/>';
-        if (post.length > 1) g += '<path d="' + path(post, "c") + '" fill="none" stroke="' + col + '" stroke-width="1.6" stroke-dasharray="6 4" opacity="0.75"/>';
+        if (cfOk && post.length > 1) g += '<path d="' + path(post, "c") + '" fill="none" stroke="' + col + '" stroke-width="1.6" stroke-dasharray="6 4" opacity="0.75"/>';
         rs.forEach((r) => { g += '<circle cx="' + X(r.t).toFixed(1) + '" cy="' + Y(v(r, "o")).toFixed(1) + '" r="2.6" fill="' + col + '" opacity="0.55"/>'; });
         g += '<text x="' + (ml + 4 + si * 190) + '" y="' + (H - 8) + '" font-size="10" fill="' + col + '" font-weight="600">' + esc(sn) + "</text>";
       });
@@ -3837,7 +3886,10 @@ const DESIGNS = [
       $("itschart").classList.remove("hidden");
       $("itschart").innerHTML =
         '<div class="text-xs uppercase tracking-widest text-brand-700 font-semibold mb-1">Observed series, fitted segments, and the counterfactual</div>' +
-        '<p class="text-[11px] text-slate-500 mb-2">Points are the observed ' + ylab + "; the solid line is the fitted segmented model; the dashed line extrapolates the pre-intervention trend forward as the counterfactual.</p>" +
+        '<p class="text-[11px] text-slate-500 mb-2">Points are the observed ' + ylab + "; the solid line is the fitted segmented model" +
+        (cfOk
+          ? "; the dashed line extrapolates the pre-intervention trend forward as the counterfactual."
+          : ". <strong>No counterfactual is drawn.</strong> A term the counterfactual is built from could not be estimated on this data, so this run has no counterfactual to show — see the note beside the estimates. Read the solid lines as a description of what happened, not as a comparison with what would have happened.") + "</p>" +
         '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Interrupted time series chart">' + g + "</svg>";
     }
 
