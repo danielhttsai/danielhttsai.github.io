@@ -8,6 +8,11 @@ dist-*/
 # repo — they run to tens of megabytes of regenerable artefacts. The harnesses
 # worth keeping are described in docs/AGENT_BRIEF.md so the next run rebuilds them.
 scratch/
+# the regression battery, same species and same reasoning: a run builds one
+# before its first commit, diffs its OUTPUT after each one, and describes what
+# it asserted in docs/AGENT_BRIEF.md. It has never been tracked; the thirty-third
+# run's reg/dump.mjs and the thirty-fourth's reg/dump-lib.mjs both stayed local.
+reg/
 # generated types
 .astro/
 # dependencies
