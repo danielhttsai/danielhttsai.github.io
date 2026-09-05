@@ -251,6 +251,14 @@ const fwList = Object.values(FRAMEWORKS);
       // with MAX_CHARS in workers/target-checker/worker.js.
       const MAX_CHARS = 60000;
 
+      // A PDF's figures live in the page's picture, not its text layer, so the
+      // text extraction below cannot see them. This many pages are ALSO
+      // rendered to a JPEG and sent to the model, so it can look at a study
+      // design diagram, a flow chart or a plot directly. Capped so a long
+      // protocol does not blow the free-tier request size or quota. Keep in
+      // lock-step with MAX_IMAGES in workers/target-checker/worker.js.
+      const MAX_IMAGE_PAGES = 20;
+
       // The planned-outputs list the worker asks the model about, mirrored here
       // ONLY so the page can tell "the model judged this absent" apart from
       // "the model never answered about this". Keep in lock-step with
@@ -289,8 +297,11 @@ const fwList = Object.values(FRAMEWORKS);
       const tteEl = $("tte"), tteReason = $("ttereason"), alsoTargetBtn = $("alsotarget");
       const staleBar = $("stalebar"), staleReasonsEl = $("stalereasons");
       // `loadedNotes` carries everything the extractor could NOT read, so it can
-      // be shown next to the score instead of quietly disappearing.
-      let loadedText = "", loadedName = "", loadedNotes = [], lastReport = null;
+      // be shown next to the score instead of quietly disappearing. `loadedImages`
+      // is a PDF's pages rendered as JPEGs (base64, no data: prefix) so the model
+      // can look at figures the text extraction cannot — empty for every other
+      // input type.
+      let loadedText = "", loadedName = "", loadedNotes = [], loadedImages = [], lastReport = null;
       // Reading a file is asynchronous. If a second file is chosen before the
       // first finishes, the slower read must not write its result — or its error
       // — over the newer one. Seen live: a success message and a failure message
@@ -452,18 +463,66 @@ const fwList = Object.values(FRAMEWORKS);
           throw new Error("This file could not be opened as a PDF" + (e && e.message ? " (" + e.message + ")" : "") + ".");
         }
         const notes = [];
-        let out = "", emptyPages = 0;
+        let out = "", emptyPageNums = [];
         for (let i = 1; i <= pdf.numPages; i++) {
           const tc = await (await pdf.getPage(i)).getTextContent();
           const page = tc.items.map((t) => t.str).join(" ").trim();
-          if (!page) emptyPages++;
+          if (!page) emptyPageNums.push(i);
           out += page + "\n";
         }
         const perPage = out.trim().length / Math.max(1, pdf.numPages);
-        if (emptyPages) notes.push(emptyPages + " of " + pdf.numPages + " page(s) contained no text layer at all — those pages are images to this tool and were not assessed.");
-        if (perPage < 200) notes.push("Only about " + Math.round(perPage) + " characters per page were readable across " + pdf.numPages + " page(s). This usually means a scanned document; run OCR or paste the text instead.");
-        notes.push("A PDF's figures cannot be read. Anything that exists only as a diagram is invisible to this check.");
-        return { text: out, notes, detail: pdf.numPages + " page(s)" };
+
+        // The text layer above cannot see a page's picture. Rendering pages to a
+        // JPEG lets the model actually look at a study design diagram, a flow
+        // chart, a plot — or, for a page with no text layer at all, the page
+        // itself. Capped so a long protocol does not blow the free-tier request
+        // size or quota (see MAX_IMAGE_PAGES).
+        //
+        // pdf.js paints progressively via requestAnimationFrame, which the
+        // browser suspends while the tab is backgrounded — a slow or stalled
+        // page must not be allowed to eat the whole 90-second read budget and
+        // throw away text that already extracted cleanly. Each page gets its
+        // own timeout, and a running wall-clock budget stops the loop early
+        // (keeping whatever images already rendered) rather than pushing
+        // through every page regardless of how long it has already taken.
+        step("Rendering pages for figures…");
+        const pagesToRender = Math.min(pdf.numPages, MAX_IMAGE_PAGES);
+        const RENDER_BUDGET_MS = 45000, PAGE_TIMEOUT_MS = 15000;
+        const renderStart = Date.now();
+        const images = [];
+        let renderedThrough = 0;
+        for (let i = 1; i <= pagesToRender; i++) {
+          if (Date.now() - renderStart > RENDER_BUDGET_MS) break;
+          try {
+            const p = await pdf.getPage(i);
+            const fullWidth = p.getViewport({ scale: 1 }).width;
+            const vp = p.getViewport({ scale: Math.min(1.6, 1400 / fullWidth) });
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(vp.width);
+            canvas.height = Math.round(vp.height);
+            const task = p.render({ canvasContext: canvas.getContext("2d"), viewport: vp });
+            await Promise.race([
+              task.promise,
+              new Promise((_, rej) => setTimeout(() => { task.cancel(); rej(new Error("page render timed out")); }, PAGE_TIMEOUT_MS)),
+            ]);
+            images.push(canvas.toDataURL("image/jpeg", 0.72).split(",")[1]);
+            renderedThrough = i;
+          } catch (e) { break; /* this page and any after it are skipped; already-extracted text is untouched */ }
+        }
+
+        const emptyUncovered = emptyPageNums.filter((n) => n > renderedThrough).length;
+        if (emptyUncovered) notes.push(emptyUncovered + " of " + pdf.numPages + " page(s) had no text layer and " +
+          "were not covered by a page image either — those pages were not assessed at all.");
+        if (perPage < 200) notes.push("Only about " + Math.round(perPage) + " characters per page were readable across " +
+          pdf.numPages + " page(s) — likely a scanned document. Page images were still sent" +
+          (renderedThrough < pdf.numPages ? " for the first " + renderedThrough + " page(s)" : "") +
+          ", so the model can often read scanned text directly from them, but this is less reliable than a real text layer; OCR gives better results.");
+        if (!images.length) {
+          notes.push("A PDF's figures cannot be read. Anything that exists only as a diagram is invisible to this check.");
+        } else if (renderedThrough < pdf.numPages) {
+          notes.push("Figures were read from the first " + renderedThrough + " of " + pdf.numPages + " page(s) only; diagrams on later pages are not assessed.");
+        }
+        return { text: out, notes, detail: pdf.numPages + " page(s)", images };
       }
 
       // A .txt is the only upload with no parser behind it, so it is the only one
@@ -514,7 +573,7 @@ const fwList = Object.values(FRAMEWORKS);
         // exporters recompute staleness at click time, so a screen that still
         // believed in the old file would disagree with a download taken during
         // the read, and the input note would go on naming a file already dropped.
-        loadedText = ""; loadedName = ""; loadedNotes = [];
+        loadedText = ""; loadedName = ""; loadedNotes = []; loadedImages = [];
         refreshInputNote();
         // Say which STEP is running, not just "Reading…". A stalled CDN fetch
         // for a reader this page has not needed before is indistinguishable
@@ -550,12 +609,13 @@ const fwList = Object.values(FRAMEWORKS);
             throw new Error("Only " + txt.length + " characters of text could be read from this file, which is not enough to assess." +
               (name.endsWith(".pdf") ? " If it is a scanned PDF, run OCR on it or paste the text instead." : " Paste the text instead."));
           }
-          loadedText = txt; loadedName = f.name; loadedNotes = res.notes || [];
-          fileMetaEl.textContent = txt.length.toLocaleString() + " characters extracted" + (res.detail ? " from " + res.detail : "") + " · ready to check";
+          loadedText = txt; loadedName = f.name; loadedNotes = res.notes || []; loadedImages = res.images || [];
+          fileMetaEl.textContent = txt.length.toLocaleString() + " characters extracted" + (res.detail ? " from " + res.detail : "") +
+            (loadedImages.length ? " · " + loadedImages.length + " page image(s) for figures" : "") + " · ready to check";
           fileNotesEl.innerHTML = loadedNotes.map((n) => '<li class="flex gap-1.5"><span>⚠</span><span>' + escapeHtml(n) + "</span></li>").join("");
         } catch (e) {
           if (stale()) return;
-          loadedText = ""; loadedName = ""; loadedNotes = [];
+          loadedText = ""; loadedName = ""; loadedNotes = []; loadedImages = [];
           fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
           drop.classList.remove("hidden");
           fileErr.textContent = (e && e.message) ? e.message : String(e); fileErr.classList.remove("hidden");
@@ -600,7 +660,7 @@ const fwList = Object.values(FRAMEWORKS);
       // removed, silently queued for checking behind a hidden chip.
       function resetFileInput() {
         fileSeq++;
-        loadedText = ""; loadedName = ""; loadedNotes = [];
+        loadedText = ""; loadedName = ""; loadedNotes = []; loadedImages = [];
         fileChip.classList.add("hidden"); fileChip.classList.remove("flex");
         fileNotesEl.innerHTML = "";
         fileMetaEl.textContent = "";
@@ -671,6 +731,7 @@ const fwList = Object.values(FRAMEWORKS);
       const stampSource = (fwKey, text) => ({
         text, name: loadedName, label: sourceLabel(), fwKey,
         notes: loadedNotes.slice(),
+        images: loadedImages.slice(),
         date: new Date().toISOString().slice(0, 10),
       });
 
@@ -1691,14 +1752,14 @@ const fwList = Object.values(FRAMEWORKS);
       }
 
       // ── Network (with retry on transient overload) ──
-      async function postCheck(text, framework) {
+      async function postCheck(text, framework, images) {
         let lastErr = null;
         // One retry only — every attempt costs a request against the free daily
         // quota (the worker also retries transient errors server-side).
         for (let attempt = 0; attempt < 2; attempt++) {
           if (attempt > 0) { setStatus("The AI model was busy — retrying…"); await new Promise((s) => setTimeout(s, 1500)); }
           let r;
-          try { r = await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, framework }) }); }
+          try { r = await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, framework, images }) }); }
           catch (e) { lastErr = new Error("Network error — check your connection and try again."); continue; }
           const data = await r.json().catch(() => ({}));
           if (r.ok) return data;
@@ -1716,11 +1777,12 @@ const fwList = Object.values(FRAMEWORKS);
         // fails — it reads as the answer to the question just asked.
         resultsEl.classList.add("hidden");
         runErrEl.classList.add("hidden");
-        // Captured now, from the text this request is built from.
+        // Captured now, from the text (and any page images) this request is
+        // built from — same reasoning as `notes` above, applied to `images`.
         const stamp = stampSource(framework, text);
         runInFlight = true; syncCheckBtn();
         setStatus("Checking against " + fwOf(framework).name + " — this can take 10–20 seconds…");
-        try { const data = await postCheck(text, framework); setStatus(""); render(data, framework, stamp); }
+        try { const data = await postCheck(text, framework, stamp.images); setStatus(""); render(data, framework, stamp); }
         catch (e) {
           setStatus("", false);
           showRunError((e && e.message ? e.message : "Something went wrong.") +

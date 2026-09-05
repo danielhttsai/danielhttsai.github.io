@@ -2,9 +2,11 @@
  * TARGET checker — Cloudflare Worker
  * ----------------------------------
  * A thin, trusted proxy in front of the Google Gemini API. The browser sends a
- * protocol's text; this Worker pairs it with the TARGET checklist + a fixed
- * rubric and asks Gemini to judge, item by item, whether the protocol meets
- * each TARGET reporting principle. The API key never reaches the browser.
+ * protocol's text — and, for a PDF, each page rendered as a JPEG so figures a
+ * text extraction cannot see reach the model too — and this Worker pairs it
+ * with the TARGET checklist + a fixed rubric and asks Gemini to judge, item by
+ * item, whether the protocol meets each TARGET reporting principle. The API
+ * key never reaches the browser.
  *
  * Why a Worker at all: the site is static (GitHub Pages), so there is nowhere
  * else to hide the key. The Worker also locks CORS to the site, caps the input
@@ -23,6 +25,13 @@
 const DEFAULT_MODEL = "gemini-flash-latest";
 const DEFAULT_ORIGIN = "https://danielhttsai.github.io";
 const MAX_CHARS = 60000; // ~15k tokens; protocols above this are truncated
+// Page images (the client renders each PDF page to a JPEG so figures a text
+// extraction cannot see reach the model). Capped again here, server-side —
+// the client caps too, but this is the trust boundary. 20 pages keeps a
+// multi-page request well under Gemini's inline-payload limit; each roughly
+// 1400px-wide JPEG is a few hundred KB of base64 at most.
+const MAX_IMAGES = 20;
+const MAX_IMAGE_B64_TOTAL = 18 * 1024 * 1024; // ~18MB of base64, well inside the API's 20MB inline cap
 
 // The TARGET checklist, inlined so the Worker is self-contained and the prompt
 // is trusted (callers cannot inject their own checklist). Kept in lock-step
@@ -136,7 +145,15 @@ ${DELIVERABLES.map(([n, d]) => `${n} | ${d}`).join("\n")}
 
 ALSO judge whether this study is a target-trial emulation — an observational study explicitly designed to emulate a specified hypothetical randomized trial (explicit "target trial" framing, an emulation table, or a deliberate one-to-one design-to-data mapping). Return targetTrialEmulation.likely (boolean) and a one-sentence reason. Judge this independently of which guideline is being checked.`;
 
-function buildSystemPrompt(fwKey) {
+// A PDF's text layer never contains its figures — a flow diagram, a study
+// design schematic, a Love plot, are pixels, not characters. When the client
+// has rendered pages to images, this is appended so the model actually looks
+// at them rather than treating everything visual as absent.
+const IMAGE_NOTE = (n) => `
+
+You are ALSO given the document's pages rendered as images, in the order they appear in the document (there may be fewer images than pages — later pages beyond what was rendered are text-only to you). Use them together with the extracted text, and rely on them specifically for anything that exists only as a picture: a study design diagram, a participant flow diagram, a Love plot or covariate-balance plot, a forest plot, a Kaplan–Meier or cumulative-incidence curve, or a table that is itself an image. A deliverable or design element you can SEE in an image counts as present even if the surrounding text never describes it in words — say so in the evidence (e.g. "shown in the Figure 2 flow diagram") rather than treating a picture-only element as absent. ${n} page image(s) were provided.`;
+
+function buildSystemPrompt(fwKey, imageCount) {
   const fw = FRAMEWORKS[fwKey] || FRAMEWORKS.harper;
   return `You are a methodological reviewer assessing whether a research protocol or manuscript conforms to ${fw.intro}.
 
@@ -156,7 +173,7 @@ Rules:
 - Return a verdict for ALL items, in the order given, using the exact item ids.
 - ${fw.emphasis}
 
-${SHARED_EXTRACTION}
+${SHARED_EXTRACTION}${imageCount ? IMAGE_NOTE(imageCount) : ""}
 
 The ${fw.name} items (id | section | what it asks):
 ${fw.items.map(([id, sec, label]) => `${id} | ${sec} | ${label}`).join("\n")}`;
@@ -506,6 +523,22 @@ export default {
       truncated = true;
     }
 
+    // Page images: the client renders a PDF's pages so the model can actually
+    // see figures a text extraction cannot. Re-validated here rather than
+    // trusted — a base64-ish string and a running byte budget, dropped in
+    // order once either the count or the size cap is hit.
+    const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+    const rawImages = Array.isArray(payload && payload.images) ? payload.images : [];
+    const images = [];
+    let imageBytes = 0;
+    for (const im of rawImages) {
+      if (images.length >= MAX_IMAGES) break;
+      if (typeof im !== "string" || im.length < 100 || !B64_RE.test(im)) continue;
+      if (imageBytes + im.length > MAX_IMAGE_B64_TOTAL) break;
+      images.push(im);
+      imageBytes += im.length;
+    }
+
     if (env.TURNSTILE_SECRET) {
       const ok = await verifyTurnstile(env.TURNSTILE_SECRET, payload.turnstileToken, request.headers.get("CF-Connecting-IP"));
       if (!ok) return json({ error: "Bot check failed. Please reload and try again." }, 403, origin);
@@ -516,9 +549,12 @@ export default {
     const model = env.GEMINI_MODEL || DEFAULT_MODEL;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
 
+    const userParts = [{ text: "STUDY DOCUMENT TO ASSESS:\n\n" + text }];
+    for (const im of images) userParts.push({ inlineData: { mimeType: "image/jpeg", data: im } });
+
     const geminiBody = {
-      system_instruction: { parts: [{ text: buildSystemPrompt(framework) }] },
-      contents: [{ role: "user", parts: [{ text: "STUDY DOCUMENT TO ASSESS:\n\n" + text }] }],
+      system_instruction: { parts: [{ text: buildSystemPrompt(framework, images.length) }] },
+      contents: [{ role: "user", parts: userParts }],
       generationConfig: {
         temperature: 0.2,
         responseMimeType: "application/json",
@@ -588,6 +624,6 @@ export default {
       return json({ error: "The AI returned an unreadable result. Please try again." }, 502, origin);
     }
 
-    return json({ ...parsed, framework, truncated }, 200, origin);
+    return json({ ...parsed, framework, truncated, imagesUsed: images.length }, 200, origin);
   },
 };
