@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>KM / CIF × N：到底漏掉了誰？</title>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --text:#15171a; --muted:#666b73;
+  --border:#d9dde3; --accent:#111827; --warn:#b45309; --ok:#166534;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC",Arial,sans-serif;background:var(--bg);color:var(--text)}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 18px 56px}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--muted);margin-bottom:22px;line-height:1.6}
+.grid{display:grid;grid-template-columns:340px 1fr;gap:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.03)}
+.control{margin:14px 0}
+label{display:flex;justify-content:space-between;gap:12px;font-weight:650}
+input[type=range]{width:100%}
+input[type=number]{width:110px;padding:7px;border:1px solid var(--border);border-radius:8px}
+.small{font-size:13px;color:var(--muted);line-height:1.45}
+.eq{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f3f4f6;border-radius:10px;padding:10px 12px;margin-top:8px}
+.results{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.metric{padding:14px;border:1px solid var(--border);border-radius:14px;background:#fff}
+.metric b{display:block;font-size:24px;margin-top:5px}
+.metric .cap{font-size:12px;color:var(--muted);line-height:1.35}
+.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:stretch;margin-top:12px}
+.node{border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center;min-height:106px;display:flex;flex-direction:column;justify-content:center}
+.node strong{font-size:20px;margin:4px 0}
+.bar{height:26px;border-radius:7px;overflow:hidden;display:flex;border:1px solid var(--border);margin:16px 0 8px;background:#eee}
+.seg{height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:13px;color:var(--muted)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
+.explain{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.box{border:1px solid var(--border);border-radius:14px;padding:15px;line-height:1.6}
+.bad{border-left:5px solid var(--warn)}
+.good{border-left:5px solid var(--ok)}
+h2{font-size:20px;margin:8px 0 10px}
+h3{font-size:16px;margin:0 0 8px}
+.kicker{font-weight:700;margin-top:8px}
+.footer{margin-top:16px;font-size:13px;color:var(--muted);line-height:1.6}
+@media(max-width:860px){
+  .grid{grid-template-columns:1fr}
+  .results{grid-template-columns:1fr}
+  .flow{grid-template-columns:1fr 1fr}
+  .explain{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>KM / CIF × N：到底漏掉了誰？</h1>
+  <div class="sub">用同一批病人直接比較：<b>N × KM survival</b>、<b>N × (1 − CIF)</b>，以及真正的 risk set 為什麼不是同一件事。</div>
+  <div class="grid">
+    <div class="card">
+      <h2>輸入條件</h2>
+      <div class="control">
+        <label>起始人數 N <input id="N" type="number" min="10" max="1000000" step="10" value="1000"></label>
+      </div>
+      <div class="control">
+        <label>KM survival probability <span id="spv">0.90</span></label>
+        <input id="sp" type="range" min="0.40" max="1" step="0.01" value="0.90">
+        <div class="small">這是「target outcome 尚未發生」的 KM probability，不是還在追蹤的人數比例。</div>
+      </div>
+      <div class="control">
+        <label>Target outcome CIF <span id="cifv">0.10</span></label>
+        <input id="cif" type="range" min="0" max="0.50" step="0.01" value="0.10">
+      </div>
+      <div class="control">
+        <label>Competing event CIF <span id="deathv">0.30</span></label>
+        <input id="death" type="range" min="0" max="0.70" step="0.01" value="0.30">
+        <div class="small">例如研究癌症時的死亡。</div>
+      </div>
+      <div class="control">
+        <label>仍在資料庫追蹤比例 G(t) <span id="retv">0.70</span></label>
+        <input id="ret" type="range" min="0.10" max="1" step="0.01" value="0.70">
+        <div class="small">近似理解成「到這個時間點還沒有 ordinary censoring 的比例」。</div>
+      </div>
+      <div class="eq">真正 risk set ≈ N × [1 − CIF<sub>target</sub> − CIF<sub>competing</sub>] × G(t)</div>
+      <div class="small">這只是教學近似。若 follow-up time 已混入 outcome / death，不能直接把它當純 censoring distribution。</div>
+    </div>
+    <div>
+      <div class="results">
+        <div class="metric">
+          <div class="cap">直接用 N × KM survival</div>
+          <b id="kmN">900</b>
+          <div class="cap">看起來像「還剩 900 人」，但其實不是 number at risk。</div>
+        </div>
+        <div class="metric">
+          <div class="cap">直接用 N × (1 − CIF)</div>
+          <b id="cifN">900</b>
+          <div class="cap">把「沒發生 target outcome」的人都留下，包含已死者。</div>
+        </div>
+        <div class="metric">
+          <div class="cap">近似真正 risk set</div>
+          <b id="riskN">420</b>
+          <div class="cap">要同時排除 target event、competing event、ordinary censoring。</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>人到底去哪裡了？</h2>
+        <div class="flow">
+          <div class="node">
+            <div class="small">起始 cohort</div>
+            <strong id="fN">1000</strong>
+            <div class="small">所有人</div>
+          </div>
+          <div class="node">
+            <div class="small">Target event</div>
+            <strong id="fTarget">100</strong>
+            <div class="small">例如癌症</div>
+          </div>
+          <div class="node">
+            <div class="small">Competing event</div>
+            <strong id="fDeath">300</strong>
+            <div class="small">例如死亡</div>
+          </div>
+          <div class="node">
+            <div class="small">仍真正 at risk</div>
+            <strong id="fRisk">420</strong>
+            <div class="small">且仍被觀察</div>
+          </div>
+        </div>
+        <div class="bar">
+          <div id="segTarget" class="seg"></div>
+          <div id="segDeath" class="seg"></div>
+          <div id="segCens" class="seg"></div>
+          <div id="segRisk" class="seg"></div>
+        </div>
+        <div class="legend">
+          <span><span class="dot" style="background:#9ca3af"></span>Target event</span>
+          <span><span class="dot" style="background:#6b7280"></span>Competing event</span>
+          <span><span class="dot" style="background:#d1d5db"></span>Ordinary censoring</span>
+          <span><span class="dot" style="background:#111827"></span>Still at risk</span>
+        </div>
+        <div class="explain">
+          <div class="box bad">
+            <h3>為什麼 N × KM survival 會錯？</h3>
+            <div>KM 的 <b>S(t)</b> 是經過 product-limit 計算的 event-free probability。</div>
+            <div class="kicker">它沒有告訴你「有多少人已經被 censor 掉」。</div>
+            <div class="eq">S(t) ≠ N<sub>risk</sub>(t) / N<sub>0</sub></div>
+          </div>
+          <div class="box bad">
+            <h3>為什麼 N × (1 − CIF) 更麻煩？</h3>
+            <div><b>1 − CIF<sub>target</sub></b> 只代表「還沒發生 target outcome」。</div>
+            <div class="kicker">已經發生 competing event 的人也還在這一群裡。</div>
+            <div class="eq">1 − CIF<sub>target</sub> ≠ still at risk</div>
+          </div>
+        </div>
+        <div class="explain">
+          <div class="box good">
+            <h3>Survival curve 的核心</h3>
+            <div class="eq">S<sub>KM</sub>(t)=∏(1−d<sub>j</sub>/n<sub>j</sub>)</div>
+            <div>censoring 不會讓曲線當場下降，但會讓後續 risk set 的分母變小。</div>
+          </div>
+          <div class="box good">
+            <h3>Cumulative incidence 的核心</h3>
+            <div class="eq">F<sub>k</sub>(t)=Σ S<sub>all</sub>(t−) × d<sub>k</sub>/n</div>
+            <div>它會記住前面已有多少人被其他 competing events 帶走。</div>
+          </div>
+        </div>
+        <div class="footer">
+          <b>一句話：</b>知道 follow-up time distribution 仍不一定足夠。真正 number at risk 需要知道「每個人何時、因什麼原因離開 risk set」。
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const els = ["N","sp","cif","death","ret"].map($);
+function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+function update(){
+  const N = +$("N").value;
+  const sp = +$("sp").value;
+  let cif = +$("cif").value;
+  let death = +$("death").value;
+  const ret = +$("ret").value;
+  if(cif + death > 0.95){
+    death = Math.max(0,0.95-cif);
+    $("death").value = death.toFixed(2);
+  }
+  $("spv").textContent = sp.toFixed(2);
+  $("cifv").textContent = cif.toFixed(2);
+  $("deathv").textContent = death.toFixed(2);
+  $("retv").textContent = ret.toFixed(2);
+  const kmN = Math.round(N*sp);
+  const cifN = Math.round(N*(1-cif));
+  const eventFree = clamp(1-cif-death,0,1);
+  const riskN = Math.round(N*eventFree*ret);
+  const targetN = Math.round(N*cif);
+  const deathN = Math.round(N*death);
+  const notEventN = Math.max(0,N-targetN-deathN);
+  const censN = Math.max(0,Math.round(notEventN*(1-ret)));
+  $("kmN").textContent = kmN.toLocaleString();
+  $("cifN").textContent = cifN.toLocaleString();
+  $("riskN").textContent = riskN.toLocaleString();
+  $("fN").textContent = N.toLocaleString();
+  $("fTarget").textContent = targetN.toLocaleString();
+  $("fDeath").textContent = deathN.toLocaleString();
+  $("fRisk").textContent = riskN.toLocaleString();
+  const pT = N ? 100*targetN/N : 0;
+  const pD = N ? 100*deathN/N : 0;
+  const pC = N ? 100*censN/N : 0;
+  const pR = N ? 100*riskN/N : 0;
+  $("segTarget").style.width = pT+"%";
+  $("segDeath").style.width = pD+"%";
+  $("segCens").style.width = pC+"%";
+  $("segRisk").style.width = pR+"%";
+  $("segTarget").style.background="#9ca3af";
+  $("segDeath").style.background="#6b7280";
+  $("segCens").style.background="#d1d5db";
+  $("segRisk").style.background="#111827";
+}
+els.forEach(el => el.addEventListener("input", update));
+update();
+</script>
+</body>
+</html>
