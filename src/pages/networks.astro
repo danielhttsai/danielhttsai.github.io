@@ -6,7 +6,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // Networks, centres, and collaborations Daniel works within. Modelled on the
 // AsPEN site's "open source / friendship links" page. `image` is a path under
-// public/images/ (omit for the NeuroGEN styled wordmark). `heightClass` tunes
+// public/images/. `heightClass` tunes
 // each logo so they read at a similar visual scale despite different aspects.
 const networks = [
   {
@@ -28,7 +28,8 @@ const networks = [
   {
     name: "NeuroGEN",
     href: "https://neurogen.hku.hk/",
-    wordmark: true,
+    image: "networks/neurogen.png",
+    heightClass: "max-h-20",
     tagline:
       "The Neurological and mental health Global Epidemiology Network — a multi-database platform spanning Asia, Oceania, Europe, and North America, where Daniel is an active member.",
   },
@@ -59,15 +60,7 @@ const networks = [
         <a href={n.href} target="_blank" rel="noopener noreferrer"
            class="group flex flex-col border border-slate-200 rounded-2xl p-8 bg-white hover:shadow-md hover:border-brand-400 transition">
           <div class="h-36 flex items-center">
-            {n.wordmark ? (
-              <h2
-                class="text-5xl sm:text-6xl font-black tracking-tight leading-none"
-                style={`background:url('${base}/images/networks/neurogen-name.png') center / 100% 100% no-repeat; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; -webkit-text-stroke:1.4px #21443e;`}
-                title="NeuroGEN partner regions: Taiwan, South Korea, Hong Kong, Australia, United Kingdom, Scotland, Netherlands, Finland, United States"
-              >NeuroGEN</h2>
-            ) : (
-              <img src={`${base}/images/${n.image}`} alt={n.name} class:list={[n.heightClass, "w-auto object-contain"]} />
-            )}
+            <img src={`${base}/images/${n.image}`} alt={n.name} class:list={[n.heightClass, "w-auto max-w-full object-contain"]} />
           </div>
           <p class="mt-6 text-sm text-slate-700 leading-relaxed flex-1">{n.tagline}</p>
           <p class="mt-4 text-xs text-brand-700 font-semibold group-hover:underline">
