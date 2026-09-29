@@ -1,6 +1,18 @@
 [
   {
     "year": "2026",
+    "doi": "10.1186/s13011-026-00760-3",
+    "citation": "Shih ECC, Tsai DHT, Lin SJ, Chen YY, Li TF, Lai ECC. Novel weighing approach for improved management of methadone stock inventory. Substance Abuse Treatment, Prevention, and Policy. 2026 Aug 20.",
+    "isOA": true,
+    "oaUrl": "https://doi.org/10.1186/s13011-026-00760-3",
+    "pmid": "",
+    "pmcid": "",
+    "ris": "TY  - JOUR\r\nTI  - Novel weighing approach for improved management of methadone stock inventory\r\nAU  - Shih, Eric Cheng-Chan\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Lin, Swu-Jane\r\nAU  - Chen, Yueh-Yin\r\nAU  - Li, Tsuey-Fong\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - Substance Abuse Treatment, Prevention, and Policy\r\nT2  - Substance Abuse Treatment, Prevention, and Policy\r\nPY  - 2026\r\nDO  - 10.1186/s13011-026-00760-3\r\nUR  - https://doi.org/10.1186/s13011-026-00760-3\r\nER  - \r\n",
+    "date": 20260820,
+    "cover": "papers/methadone.jpg"
+  },
+  {
+    "year": "2026",
     "doi": "10.1007/s00210-026-05793-w",
     "citation": "Lee WJA, Tsai DHT, Lai ECC. Real-world safety of aflibercept 8 mg in neovascular age-related macular degeneration. Naunyn-Schmiedeberg's Archives of Pharmacology. 2026 Aug 11.",
     "isOA": false,
