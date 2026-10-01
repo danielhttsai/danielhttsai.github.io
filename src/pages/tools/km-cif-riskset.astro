@@ -49,6 +49,48 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       </div>
     </div>
 
+    <div class="grid gap-4 md:grid-cols-2">
+      <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">1 · How do I estimate number at risk?</p>
+        <h2 class="mt-1 text-lg font-bold text-slate-900">先用 follow-up distribution 找出「還看得到的人」</h2>
+        <div class="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700 leading-relaxed">
+          <p>例如一開始 <strong>1,000</strong> 人。</p>
+          <p class="mt-2">到了 5 年，根據每個人的 database follow-up duration，還有 <strong>600</strong> 人的 follow-up ≥ 5 年。</p>
+          <p class="mt-2">TriNetX 同一時間點的 survival probability 是 <strong>0.87</strong>。</p>
+          <p class="mt-3 text-base font-bold text-slate-900">那可以先估：600 × 0.87 ≈ 522 人還在 risk set。</p>
+        </div>
+        <p class="mt-3 text-xs text-slate-500 leading-relaxed">
+          這是 <strong>approximate number at risk</strong>，不是平台直接提供的 observed risk table。
+          沒有重要 competing event、且 database retention 與 outcome process 可合理視為 independent 時，這個近似最有意義。
+        </p>
+      </div>
+
+      <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">2 · What should the Y-axis say?</p>
+        <h2 class="mt-1 text-lg font-bold text-slate-900">原始 KM 圖：Y 軸就寫 Survival probability</h2>
+        <div class="mt-4 space-y-3">
+          <div class="rounded-xl border border-brand-200 bg-brand-50 p-4">
+            <p class="text-sm font-bold text-brand-900">原始 TriNetX survival curve</p>
+            <p class="mt-1 text-sm text-brand-900">
+              Y-axis: <strong>Survival probability</strong>
+            </p>
+            <p class="mt-1 text-xs text-brand-800">從 1 開始往下掉。</p>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4">
+            <p class="text-sm font-bold text-slate-900">如果你把它轉成 1 − survival probability</p>
+            <p class="mt-1 text-sm text-slate-700">
+              Y-axis: <strong>Cumulative risk (1 − KM survival)</strong>
+            </p>
+            <p class="mt-1 text-xs text-slate-500">從 0 開始往上升。</p>
+          </div>
+        </div>
+        <p class="mt-3 text-xs text-rose-700 leading-relaxed">
+          如果存在重要 competing event，不建議把 1 − KM survival 的 Y 軸直接寫成 <strong>Cumulative incidence function (CIF)</strong>；
+          這時它只是 KM-derived failure / cumulative risk。
+        </p>
+      </div>
+    </div>
+
     <div class="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
       <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
         <div>
@@ -78,7 +120,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
             <span id="spv" class="text-brand-700">0.87</span>
           </span>
           <input id="sp" type="range" min="0.40" max="1" step="0.01" value="0.87" class="mt-2 w-full accent-[#2e5a52]" />
-          <span class="mt-1 block text-xs text-slate-500">這是 TriNetX survival curve 在時間 t 的高度。</span>
+          <span class="mt-1 block text-xs text-slate-500">這是 TriNetX survival curve 在時間 t 的高度；原始圖的 Y 軸就寫 <strong>Survival probability</strong>。</span>
         </label>
 
         <label class="block">
@@ -147,7 +189,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
             </div>
 
             <div id="riskBox" class="rounded-xl border border-brand-200 bg-brand-50 p-4">
-              <p id="riskLabel" class="text-xs font-semibold text-brand-700">Approx. at risk at 5 years</p>
+              <p id="riskLabel" class="text-xs font-semibold text-brand-700">Approx. number at risk at 5 years</p>
               <p id="riskN" class="mt-1 text-2xl font-bold text-brand-900">522</p>
               <p id="riskSmall" class="mt-1 text-xs text-brand-800">600 × 0.87</p>
             </div>
