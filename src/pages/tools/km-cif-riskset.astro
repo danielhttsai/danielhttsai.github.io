@@ -4,17 +4,19 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
 
 <BaseLayout
-  title="KM / CIF Risk-set Explainer — Daniel Tsai"
-  description="An interactive teaching tool showing why multiplying Kaplan–Meier survival or one minus cumulative incidence by baseline N does not recover the number at risk."
+  title="TriNetX Survival Probability & Cumulative Incidence — Daniel Tsai"
+  description="A plain-language interactive guide to when 1 minus Kaplan–Meier survival can be interpreted as cumulative incidence, and how TriNetX database follow-up can help approximate the number at risk."
 >
   <header class="relative bg-gradient-to-br from-brand-50 via-white to-brand-100/40 border-b border-slate-200 overflow-hidden">
     <div class="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-14">
-      <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">RWE Tools</p>
-      <h1 class="text-4xl md:text-5xl font-bold text-slate-900">KM / CIF × N：到底漏掉了誰？</h1>
+      <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-2">RWE Tools · TriNetX</p>
+      <h1 class="text-4xl md:text-5xl font-bold text-slate-900">
+        1 − Survival Probability 可以當 Cumulative Incidence 嗎？
+      </h1>
       <p class="mt-4 text-lg text-slate-600 max-w-3xl leading-relaxed">
-        用同一批病人拆解 <strong>N × Kaplan–Meier survival</strong>、
-        <strong>N × (1 − cumulative incidence)</strong>，以及真正的
-        <strong>number at risk</strong> 為什麼不是同一件事。
+        TriNetX 常直接提供 survival probability。很多分析會用 <strong>1 − survival probability</strong>
+        當作事件的累積風險。這在某些情況是合理的；但如果有 competing event，意思就會改變。
+        TriNetX 另外提供的 <strong>database follow-up duration</strong>，則可以幫我們估計某個時間點大約還有多少人在 risk set。
       </p>
     </div>
   </header>
@@ -26,18 +28,23 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     </div>
 
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">先記這一句</p>
-          <h2 class="mt-1 text-xl font-bold text-slate-900">Probability 不是 risk-set proportion</h2>
-          <p class="mt-2 text-sm text-slate-600 leading-relaxed max-w-3xl">
-            KM survival 與 CIF 都是機率估計；真正的 number at risk 則是「到了時間 t，尚未發生任何會終止風險的事件，
-            而且仍然被觀察的人數」。所以不能只看曲線高度就把人數乘回來。
+      <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Short answer</p>
+      <h2 class="mt-1 text-xl font-bold text-slate-900">先問：有沒有會讓 outcome 永遠不可能再發生的 competing event？</h2>
+
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <div class="rounded-xl border border-brand-200 bg-brand-50 p-5">
+          <p class="text-sm font-bold text-brand-900">沒有重要 competing event</p>
+          <p class="mt-2 text-sm text-brand-900 leading-relaxed">
+            通常可以把 <strong>1 − KM survival</strong> 解讀成到這個時間點為止的 cumulative risk / cumulative incidence，
+            前提是一般 censoring 可以合理視為 non-informative。
           </p>
         </div>
-        <div class="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900">
-          <span class="font-semibold">Observed 真值：</span>
-          <span class="font-mono">R(t)=N−D<sub>target</sub>−D<sub>comp</sub>−C</span>
+        <div class="rounded-xl border border-rose-200 bg-rose-50 p-5">
+          <p class="text-sm font-bold text-rose-950">有 competing event</p>
+          <p class="mt-2 text-sm text-rose-900 leading-relaxed">
+            要小心。若 death 等 competing event 在 KM 裡只是被當 censoring，
+            <strong>1 − KM survival 就不是真實世界的 cumulative incidence function (CIF)</strong>。
+          </p>
         </div>
       </div>
     </div>
@@ -45,8 +52,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     <div class="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
       <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Scenario</p>
-          <h2 class="mt-1 text-lg font-bold text-slate-900">調整你的情境</h2>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Try a TriNetX-like scenario</p>
+          <h2 class="mt-1 text-lg font-bold text-slate-900">輸入你在平台上看得到的資訊</h2>
         </div>
 
         <label class="block">
@@ -57,228 +64,232 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           </span>
         </label>
 
-        <div class="rounded-xl border border-brand-200 bg-brand-50/60 p-4 space-y-3">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wider text-brand-700">Ground truth at time t</p>
-            <p class="mt-1 text-xs text-brand-900 leading-relaxed">這三個是「真的觀察到有多少人已離開 risk set」，用來直接算真值。</p>
-          </div>
-          <label class="flex items-center justify-between gap-3 text-sm font-semibold text-slate-700">
-            Target event
-            <input id="obsTarget" type="number" min="0" step="1" value="350"
-              class="w-24 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-right text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
-          </label>
-          <label class="flex items-center justify-between gap-3 text-sm font-semibold text-slate-700">
-            Competing event
-            <input id="obsDeath" type="number" min="0" step="1" value="0"
-              class="w-24 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-right text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
-          </label>
-          <label class="flex items-center justify-between gap-3 text-sm font-semibold text-slate-700">
-            Ordinary censoring
-            <input id="obsCens" type="number" min="0" step="1" value="130"
-              class="w-24 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-right text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
-          </label>
-          <div class="border-t border-brand-200 pt-3 flex items-center justify-between">
-            <span class="text-sm font-bold text-brand-900">Observed number at risk</span>
-            <span id="truthMini" class="text-xl font-bold text-brand-900">520</span>
-          </div>
-          <p id="truthWarn" class="hidden text-xs text-rose-700"></p>
-        </div>
-
-        <div class="border-t border-slate-100 pt-5">
-          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Reported curve values</p>
-          <p class="mt-1 text-xs text-slate-500 leading-relaxed">下面是你從 KM / CIF / follow-up summary 看到的數字；它們和上面的 observed counts 是不同資訊。</p>
-        </div>
-
         <label class="block">
           <span class="flex items-center justify-between text-sm font-semibold text-slate-700">
-            KM survival probability <span id="spv" class="text-brand-700">0.72</span>
+            時間點 t（年）
+            <input id="time" type="number" min="0.1" max="50" step="0.5" value="5"
+              class="w-28 rounded-lg border border-slate-300 px-3 py-1.5 text-right text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
           </span>
-          <input id="sp" type="range" min="0.40" max="1" step="0.01" value="0.72" class="mt-2 w-full accent-[#2e5a52]" />
-          <span class="mt-1 block text-xs text-slate-500 leading-relaxed">曲線沒有掉，不代表那個人還留在 risk set。</span>
         </label>
 
         <label class="block">
           <span class="flex items-center justify-between text-sm font-semibold text-slate-700">
-            Target-outcome CIF <span id="cifv" class="text-brand-700">0.35</span>
+            Survival probability S(t)
+            <span id="spv" class="text-brand-700">0.87</span>
           </span>
-          <input id="cif" type="range" min="0" max="0.50" step="0.01" value="0.35" class="mt-2 w-full accent-[#2e5a52]" />
+          <input id="sp" type="range" min="0.40" max="1" step="0.01" value="0.87" class="mt-2 w-full accent-[#2e5a52]" />
+          <span class="mt-1 block text-xs text-slate-500">這是 TriNetX survival curve 在時間 t 的高度。</span>
         </label>
 
         <label class="block">
-          <span class="flex items-center justify-between text-sm font-semibold text-slate-700">
-            Competing-event CIF <span id="deathv" class="text-brand-700">0.00</span>
+          <span class="flex items-center justify-between gap-3 text-sm font-semibold text-slate-700">
+            t 時仍可在 database 被觀察的人
+            <input id="observable" type="number" min="0" max="1000000" step="10" value="600"
+              class="w-28 rounded-lg border border-slate-300 px-3 py-1.5 text-right text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
           </span>
-          <input id="death" type="range" min="0" max="0.70" step="0.01" value="0.00" class="mt-2 w-full accent-[#2e5a52]" />
-          <span class="mt-1 block text-xs text-slate-500">例如研究癌症時的死亡。</span>
-        </label>
-
-        <label class="block">
-          <span class="flex items-center justify-between text-sm font-semibold text-slate-700">
-            Censoring survival G(t) <span id="retv" class="text-brand-700">0.80</span>
+          <span class="mt-1 block text-xs text-slate-500 leading-relaxed">
+            由每個人的 database follow-up duration 直接數：follow-up ≥ t 的人數。
           </span>
-          <input id="ret" type="range" min="0.10" max="1" step="0.01" value="0.80" class="mt-2 w-full accent-[#2e5a52]" />
-          <span class="mt-1 block text-xs text-slate-500">G(t)=到 t 還沒有 ordinary censoring 的比例。</span>
         </label>
 
         <fieldset class="border-t border-slate-100 pt-5">
-          <legend class="text-sm font-bold text-slate-800">你手上的 follow-up distribution 是哪一種？</legend>
-          <div class="mt-3 space-y-2">
-            <label class="flex gap-3 rounded-xl border border-slate-200 p-3 cursor-pointer hover:bg-slate-50">
-              <input type="radio" name="fuType" value="censor" checked class="mt-0.5 accent-[#2e5a52]" />
-              <span>
-                <span class="block text-sm font-semibold text-slate-700">純 censoring / database retention</span>
-                <span class="block text-xs text-slate-500 mt-0.5">知道何時因失訪、資料庫結束等退出。</span>
+          <legend class="text-sm font-bold text-slate-800">這個 outcome 有重要 competing event 嗎？</legend>
+          <div class="mt-3 grid grid-cols-2 gap-2">
+            <label class="cursor-pointer">
+              <input type="radio" name="competing" value="no" checked class="peer sr-only" />
+              <span class="block rounded-xl border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-600 peer-checked:border-brand-500 peer-checked:bg-brand-50 peer-checked:text-brand-700">
+                沒有 / 可忽略
               </span>
             </label>
-            <label class="flex gap-3 rounded-xl border border-slate-200 p-3 cursor-pointer hover:bg-slate-50">
-              <input type="radio" name="fuType" value="overall" class="mt-0.5 accent-[#2e5a52]" />
-              <span>
-                <span class="block text-sm font-semibold text-slate-700">Overall observed follow-up</span>
-                <span class="block text-xs text-slate-500 mt-0.5">追蹤可能因 outcome、death 或 censoring 任一原因結束。</span>
+            <label class="cursor-pointer">
+              <input type="radio" name="competing" value="yes" class="peer sr-only" />
+              <span class="block rounded-xl border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-600 peer-checked:border-rose-400 peer-checked:bg-rose-50 peer-checked:text-rose-700">
+                有
               </span>
             </label>
           </div>
+          <p class="mt-2 text-xs text-slate-500 leading-relaxed">
+            例如研究 CRC 時，death 會讓之後的 CRC 永遠不可能再發生。
+          </p>
         </fieldset>
       </div>
 
       <div class="space-y-6">
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div class="rounded-2xl border-2 border-brand-600 bg-brand-50 p-5">
-            <p class="text-xs font-semibold uppercase tracking-wider text-brand-700">Observed number at risk · 真值</p>
-            <p id="trueRiskN" class="mt-2 text-4xl font-bold text-brand-900">520</p>
-            <p class="mt-2 text-xs text-brand-900 leading-relaxed">
-              直接用個人層級退出資訊計算：N − target event − competing event − ordinary censoring。
+        <div id="interpretCard" class="rounded-2xl border border-brand-200 bg-brand-50 p-6">
+          <p class="text-xs font-semibold uppercase tracking-wider text-brand-700">Can I call 1 − S(t) cumulative incidence?</p>
+          <div class="mt-2 flex flex-wrap items-end gap-x-4 gap-y-2">
+            <p id="failureProb" class="text-4xl font-bold text-brand-900">13.0%</p>
+            <p id="interpretBadge" class="mb-1 rounded-full bg-white px-3 py-1 text-xs font-bold text-brand-700 border border-brand-200">
+              Usually acceptable
             </p>
           </div>
-          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">N × KM survival</p>
-            <p id="kmN" class="mt-2 text-3xl font-bold text-slate-900">720</p>
-            <p class="mt-2 text-xs text-slate-500 leading-relaxed">把 survival probability 誤當成仍在 risk set 的比例；不是 observed risk set。</p>
-          </div>
-          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">N × (1 − CIF)</p>
-            <p id="cifN" class="mt-2 text-3xl font-bold text-slate-900">650</p>
-            <p class="mt-2 text-xs text-slate-500 leading-relaxed">「沒有 target event」不等於「還在 target risk set」。</p>
-          </div>
-          <div class="rounded-2xl border border-brand-200 bg-white p-5 shadow-sm">
-            <p class="text-xs font-semibold uppercase tracking-wider text-brand-700">Assumption-based estimate</p>
-            <p id="riskN" class="mt-2 text-3xl font-bold text-slate-900">520</p>
-            <p id="riskNote" class="mt-2 text-xs text-slate-500 leading-relaxed">若 G(t) 是純 censoring survival，且 independent censoring，才可作教學近似。</p>
-          </div>
-        </div>
-
-        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div class="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Flow</p>
-              <h2 class="mt-1 text-lg font-bold text-slate-900">一開始的人，到時間 t 去哪裡了？</h2>
-            </div>
-            <p class="text-xs text-slate-500">拖動左側參數，下面會即時變化。</p>
-          </div>
-
-          <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-              <p class="text-xs text-slate-500">起始 cohort</p>
-              <p id="fN" class="mt-1 text-xl font-bold text-slate-900">1,000</p>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-white p-4 text-center">
-              <p class="text-xs text-slate-500">Target event</p>
-              <p id="fTarget" class="mt-1 text-xl font-bold text-slate-900">350</p>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-white p-4 text-center">
-              <p class="text-xs text-slate-500">Competing event</p>
-              <p id="fDeath" class="mt-1 text-xl font-bold text-slate-900">0</p>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-white p-4 text-center">
-              <p class="text-xs text-slate-500">Ordinary censoring</p>
-              <p id="fCens" class="mt-1 text-xl font-bold text-slate-900">130</p>
-            </div>
-            <div class="rounded-xl border-2 border-brand-600 bg-brand-50 p-4 text-center">
-              <p class="text-xs font-semibold text-brand-700">Still at risk · 真值</p>
-              <p id="fRisk" class="mt-1 text-xl font-bold text-brand-900">520</p>
-            </div>
-          </div>
-
-          <div class="mt-5 h-3 w-full overflow-hidden rounded-full bg-slate-100 flex" aria-label="Cohort disposition">
-            <div id="segTarget" class="h-full bg-slate-400"></div>
-            <div id="segDeath" class="h-full bg-slate-600"></div>
-            <div id="segCens" class="h-full bg-slate-300"></div>
-            <div id="segRisk" class="h-full bg-brand-600"></div>
-          </div>
-          <div class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
-            <span><i class="inline-block h-2.5 w-2.5 rounded-full bg-slate-400 mr-1.5"></i>Target event</span>
-            <span><i class="inline-block h-2.5 w-2.5 rounded-full bg-slate-600 mr-1.5"></i>Competing event</span>
-            <span><i class="inline-block h-2.5 w-2.5 rounded-full bg-slate-300 mr-1.5"></i>Ordinary censoring</span>
-            <span><i class="inline-block h-2.5 w-2.5 rounded-full bg-brand-600 mr-1.5"></i>Still at risk</span>
-          </div>
-        </div>
-
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-            <p class="text-xs font-semibold uppercase tracking-wider text-amber-700">KM</p>
-            <h3 class="mt-1 text-base font-bold text-amber-950">N × S<sub>KM</sub>(t) 漏了什麼？</h3>
-            <p class="mt-2 text-sm text-amber-900 leading-relaxed">
-              KM 會用 censoring 資訊來更新後續 risk set，但 <strong>S(t) 本身不是「還被觀察的人數比例」</strong>。
-              所以你只拿曲線高度乘 N，沒有把實際 censoring pattern 還原回來。
-            </p>
-            <div class="mt-3 rounded-lg border border-amber-200 bg-white/70 px-3 py-2 font-mono text-xs text-amber-950">
-              S<sub>KM</sub>(t) ≠ R(t) / N₀
-            </div>
-          </div>
-
-          <div class="rounded-2xl border border-rose-200 bg-rose-50 p-5">
-            <p class="text-xs font-semibold uppercase tracking-wider text-rose-700">CIF</p>
-            <h3 class="mt-1 text-base font-bold text-rose-950">N × [1 − CIF(t)] 又多漏了什麼？</h3>
-            <p class="mt-2 text-sm text-rose-900 leading-relaxed">
-              1 − CIF<sub>target</sub> 只表示「尚未發生 target outcome」。
-              <strong>已經發生 competing event 的人也屬於『沒有 target outcome』</strong>，但他們早已不在 target risk set。
-            </p>
-            <div class="mt-3 rounded-lg border border-rose-200 bg-white/70 px-3 py-2 font-mono text-xs text-rose-950">
-              1 − CIF<sub>target</sub>(t) ≠ P(still at risk at t)
-            </div>
-          </div>
-        </div>
-
-        <div id="followupInterpretation" class="rounded-2xl border border-brand-200 bg-brand-50 p-6">
-          <p class="text-xs font-semibold uppercase tracking-wider text-brand-700">Your follow-up data</p>
-          <h2 id="fuTitle" class="mt-1 text-lg font-bold text-brand-900">如果你知道的是純 censoring distribution，資訊有幫助</h2>
-          <p id="fuText" class="mt-2 text-sm text-brand-900 leading-relaxed">
-            若 G(t) 真的是 censoring survival，且 censoring 與事件過程可視為獨立，則在教學上可寫成
-            N × S<sub>all-event-free</sub>(t) × G(t) 來理解「仍然 event-free 且仍被觀察」的人數。
-            但精確 risk-set table 仍應由個人層級的 exit times 直接計算。
+          <p id="interpretText" class="mt-3 text-sm text-brand-900 leading-relaxed">
+            沒有重要 competing event 時，1 − KM survival 可以作為到 5 年為止的 cumulative risk，
+            前提是 ordinary censoring 可以合理視為 non-informative。
           </p>
         </div>
 
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Formula map</p>
-          <div class="mt-4 space-y-4 text-sm text-slate-700">
-            <div class="grid gap-2 sm:grid-cols-[11rem_1fr]">
-              <strong class="text-slate-900">KM survival</strong>
-              <div>
-                <div class="font-mono rounded-lg bg-slate-50 px-3 py-2">Ŝ<sub>KM</sub>(t)=∏(1−dⱼ/nⱼ)</div>
-                <p class="mt-1 text-xs text-slate-500">Censoring 不算 event，但會從後續 nⱼ 移除。</p>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">What the follow-up distribution gives you</p>
+          <h2 class="mt-1 text-lg font-bold text-slate-900">它先告訴你：時間 t 還有多少人「看得到」</h2>
+
+          <div class="mt-5 grid gap-4 sm:grid-cols-3">
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p class="text-xs text-slate-500">Baseline</p>
+              <p id="baselineN" class="mt-1 text-2xl font-bold text-slate-900">1,000</p>
+              <p class="mt-1 text-xs text-slate-500">一開始全部的人</p>
+            </div>
+
+            <div class="rounded-xl border border-slate-200 bg-white p-4">
+              <p id="observableLabel" class="text-xs text-slate-500">Observable at 5 years</p>
+              <p id="observableN" class="mt-1 text-2xl font-bold text-slate-900">600</p>
+              <p id="retentionP" class="mt-1 text-xs text-slate-500">database retention = 60.0%</p>
+            </div>
+
+            <div id="riskBox" class="rounded-xl border border-brand-200 bg-brand-50 p-4">
+              <p id="riskLabel" class="text-xs font-semibold text-brand-700">Approx. at risk at 5 years</p>
+              <p id="riskN" class="mt-1 text-2xl font-bold text-brand-900">522</p>
+              <p id="riskSmall" class="mt-1 text-xs text-brand-800">600 × 0.87</p>
+            </div>
+          </div>
+
+          <div class="mt-6">
+            <div class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+              <span>Baseline</span><span>→</span><span>Still observable</span><span>→</span><span>Still event-free</span>
+            </div>
+            <div class="mt-3 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 text-center">
+              <div class="rounded-xl bg-slate-100 px-3 py-5">
+                <p id="flowN" class="text-xl font-bold text-slate-900">1,000</p>
+              </div>
+              <span class="text-slate-400">→</span>
+              <div class="rounded-xl bg-slate-100 px-3 py-5">
+                <p id="flowObs" class="text-xl font-bold text-slate-900">600</p>
+              </div>
+              <span class="text-slate-400">→</span>
+              <div id="flowRiskBox" class="rounded-xl bg-brand-50 border border-brand-200 px-3 py-5">
+                <p id="flowRisk" class="text-xl font-bold text-brand-900">≈522</p>
               </div>
             </div>
-            <div class="grid gap-2 sm:grid-cols-[11rem_1fr]">
-              <strong class="text-slate-900">Target CIF</strong>
-              <div>
-                <div class="font-mono rounded-lg bg-slate-50 px-3 py-2">F̂<sub>k</sub>(t)=Σ Ŝ<sub>all</sub>(t−) · d<sub>k</sub>/n</div>
-                <p class="mt-1 text-xs text-slate-500">Competing event 會降低後續仍可能發生 target outcome 的 population。</p>
+          </div>
+
+          <p id="riskExplanation" class="mt-5 text-sm text-slate-600 leading-relaxed">
+            如果 database follow-up duration 是「這個人在資料庫還能被觀察多久」，而且 outcome 發生後仍會繼續累積 follow-up，
+            那 600 是可以直接由 follow-up distribution 數出來的。再乘上 event-free probability，可在 independent censoring
+            的假設下近似 5 年時的 risk set。
+          </p>
+        </div>
+
+        <div class="grid gap-4 md:grid-cols-2">
+          <div class="rounded-2xl border border-brand-200 bg-brand-50 p-5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-brand-700">When 1 − S(t) is reasonable</p>
+            <h3 class="mt-1 text-base font-bold text-brand-950">可以這樣用的情況</h3>
+            <ul class="mt-3 space-y-2 text-sm text-brand-900 leading-relaxed">
+              <li>• 主要只有一種會終止 outcome risk 的 event。</li>
+              <li>• 沒有重要 competing event，或它幾乎不會影響結果。</li>
+              <li>• 一般 loss to follow-up / database end 可合理視為 non-informative censoring。</li>
+              <li>• 你只是把 KM survival 轉成同一個 endpoint 的 cumulative risk。</li>
+            </ul>
+          </div>
+
+          <div class="rounded-2xl border border-rose-200 bg-rose-50 p-5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-rose-700">When it can mislead</p>
+            <h3 class="mt-1 text-base font-bold text-rose-950">不應直接叫 CIF 的情況</h3>
+            <ul class="mt-3 space-y-2 text-sm text-rose-900 leading-relaxed">
+              <li>• Death 或其他 event 會讓 target outcome 永遠不可能再發生。</li>
+              <li>• 這些 competing events 在 KM 中被當作 censoring。</li>
+              <li>• 離開資料庫的人和留下的人，outcome risk 明顯不同。</li>
+              <li>• 你要報的是現實世界 absolute incidence，而不是 cause-specific KM failure。</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">A subtle but important point</p>
+          <h2 class="mt-1 text-lg font-bold text-slate-900">Database follow-up ≠ outcome follow-up</h2>
+          <div class="mt-4 rounded-xl bg-slate-50 p-4 font-mono text-sm text-slate-700 overflow-x-auto">
+            Index ───── outcome ───────────────── last observable record<br/>
+            &nbsp;0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2 years&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5 years
+          </div>
+          <p class="mt-3 text-sm text-slate-600 leading-relaxed">
+            這個人可能在第 2 年就已經不再屬於 target-outcome risk set，但他的 TriNetX database follow-up 仍然可以是 5 年。
+            所以 follow-up distribution 很適合拿來估「還有多少人能被觀察」，卻不能單獨告訴你「還有多少人尚未發生 outcome」。
+          </p>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Bottom line for TriNetX</p>
+          <div class="mt-4 grid gap-3">
+            <div class="rounded-xl border border-slate-200 px-4 py-3">
+              <p class="text-sm font-bold text-slate-900">1 − survival probability</p>
+              <p class="mt-1 text-sm text-slate-600">
+                可以是 cumulative risk；但有 competing event 時，不要直接稱為 competing-risk CIF。
+              </p>
+            </div>
+            <div class="rounded-xl border border-slate-200 px-4 py-3">
+              <p class="text-sm font-bold text-slate-900">Database follow-up distribution</p>
+              <p class="mt-1 text-sm text-slate-600">
+                可以直接告訴你某時間點還有多少人可被資料庫觀察。
+              </p>
+            </div>
+            <div class="rounded-xl border border-slate-200 px-4 py-3">
+              <p class="text-sm font-bold text-slate-900">Observable × survival probability</p>
+              <p class="mt-1 text-sm text-slate-600">
+                沒有重要 competing event、且 censoring reasonably independent 時，可以作為 number at risk 的近似；不是 observed risk table。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Formulas — only if you want the math</p>
+          <div class="mt-4 space-y-5 text-sm text-slate-700">
+            <div>
+              <p class="font-bold text-slate-900">1. Kaplan–Meier survival</p>
+              <div class="mt-2 font-mono rounded-lg bg-slate-50 px-3 py-2">
+                Ŝ<sub>KM</sub>(t) = ∏<sub>tⱼ≤t</sub> (1 − dⱼ / nⱼ)
               </div>
             </div>
-            <div class="grid gap-2 sm:grid-cols-[11rem_1fr]">
-              <strong class="text-slate-900">True risk set</strong>
-              <div>
-                <div class="font-mono rounded-lg bg-slate-50 px-3 py-2">R(t)=Σ I(no target event, no competing event, no censoring before t)</div>
-                <p class="mt-1 text-xs text-slate-500">這需要知道每個人何時、因什麼原因離開 risk set。</p>
+
+            <div>
+              <p class="font-bold text-slate-900">2. 沒有 competing risk 時</p>
+              <div class="mt-2 font-mono rounded-lg bg-slate-50 px-3 py-2">
+                Cumulative risk(t) = 1 − Ŝ<sub>KM</sub>(t)
               </div>
+            </div>
+
+            <div>
+              <p class="font-bold text-slate-900">3. Database retention from individual follow-up durations</p>
+              <div class="mt-2 font-mono rounded-lg bg-slate-50 px-3 py-2">
+                Ĝ(t) = #{ follow-upᵢ ≥ t } / N
+              </div>
+              <p class="mt-1 text-xs text-slate-500">因此 N × Ĝ(t) 就是時間 t 仍可在 database 被觀察的人數。</p>
+            </div>
+
+            <div>
+              <p class="font-bold text-slate-900">4. 沒有重要 competing risk、且 independent censoring 時的 risk-set 近似</p>
+              <div class="mt-2 font-mono rounded-lg bg-slate-50 px-3 py-2">
+                E[R(t)] ≈ N × Ĝ(t) × Ŝ<sub>KM</sub>(t)
+              </div>
+              <p class="mt-1 text-xs text-slate-500">
+                等價地：Estimated risk set ≈ N<sub>observable</sub>(t) × Ŝ<sub>KM</sub>(t)。
+              </p>
+            </div>
+
+            <div>
+              <p class="font-bold text-slate-900">5. 有 competing risk 時</p>
+              <div class="mt-2 font-mono rounded-lg bg-slate-50 px-3 py-2">
+                1 − Ŝ<sub>KM,target</sub>(t) ≠ CIF<sub>target</sub>(t)
+              </div>
+              <p class="mt-1 text-xs text-slate-500">
+                真正的 target risk set 需要同時知道：尚未 target event、尚未 competing event、而且仍可被觀察。只靠 target KM survival + database follow-up 無法唯一重建。
+              </p>
             </div>
           </div>
         </div>
 
         <p class="text-xs text-slate-400 leading-relaxed">
-          This is a teaching visualisation, not a replacement for direct risk-set reconstruction from individual-level data.
-          When follow-up end mixes outcome, competing events and censoring, the censoring distribution is not separately identified from follow-up duration alone.
+          Teaching note: this page treats TriNetX database follow-up as observation availability beyond the target outcome.
+          The risk-set reconstruction is therefore explicitly labelled an approximation and depends on the stated censoring assumptions.
         </p>
       </div>
     </div>
@@ -286,95 +297,89 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   <script is:inline>
     const $ = (id) => document.getElementById(id);
-    const clamp = (x,a,b) => Math.max(a,Math.min(b,x));
 
     function update() {
-      const N = Math.max(0, Math.round(+$("N").value || 0));
-      const sp = +$("sp").value;
-      let cif = +$("cif").value;
-      let death = +$("death").value;
-      const g = +$("ret").value;
-      const fuType = document.querySelector('input[name="fuType"]:checked')?.value || "censor";
+      const N = Math.max(1, Math.round(+$("N").value || 1));
+      const t = Math.max(0, +$("time").value || 0);
+      const S = +$("sp").value;
+      const obsRaw = Math.max(0, Math.round(+$("observable").value || 0));
+      const observable = Math.min(obsRaw, N);
+      const competing = document.querySelector('input[name="competing"]:checked')?.value === "yes";
 
-      let obsTarget = Math.max(0, Math.round(+$("obsTarget").value || 0));
-      let obsDeath = Math.max(0, Math.round(+$("obsDeath").value || 0));
-      let obsCens = Math.max(0, Math.round(+$("obsCens").value || 0));
+      $("spv").textContent = S.toFixed(2);
 
-      // Ground truth comes from observed exit counts, not from curve probabilities.
-      const totalExited = obsTarget + obsDeath + obsCens;
-      let trueRisk = N - totalExited;
-      const invalidTruth = totalExited > N;
-      if (invalidTruth) trueRisk = 0;
+      const failure = Math.max(0, 1 - S);
+      const retention = observable / N;
+      const naiveRisk = Math.round(observable * S);
+      const tLabel = Number.isInteger(t) ? String(t) : t.toFixed(1);
 
-      if (cif + death > 0.95) {
-        death = Math.max(0, 0.95 - cif);
-        $("death").value = death.toFixed(2);
-      }
+      $("failureProb").textContent = (failure * 100).toFixed(1) + "%";
+      $("baselineN").textContent = N.toLocaleString();
+      $("observableN").textContent = observable.toLocaleString();
+      $("retentionP").textContent = "database retention = " + (retention * 100).toFixed(1) + "%";
+      $("observableLabel").textContent = "Observable at " + tLabel + " years";
+      $("flowN").textContent = N.toLocaleString();
+      $("flowObs").textContent = observable.toLocaleString();
 
-      $("spv").textContent = sp.toFixed(2);
-      $("cifv").textContent = cif.toFixed(2);
-      $("deathv").textContent = death.toFixed(2);
-      $("retv").textContent = g.toFixed(2);
+      if (!competing) {
+        $("interpretCard").className = "rounded-2xl border border-brand-200 bg-brand-50 p-6";
+        $("interpretBadge").className = "mb-1 rounded-full bg-white px-3 py-1 text-xs font-bold text-brand-700 border border-brand-200";
+        $("interpretBadge").textContent = "Usually acceptable";
+        $("failureProb").className = "text-4xl font-bold text-brand-900";
+        $("interpretText").className = "mt-3 text-sm text-brand-900 leading-relaxed";
+        $("interpretText").innerHTML =
+          "沒有重要 competing event 時，<strong>1 − KM survival</strong> 可以作為到 " + tLabel +
+          " 年為止的 cumulative risk，前提是 ordinary censoring 可以合理視為 non-informative。";
 
-      const kmN = Math.round(N * sp);
-      const oneMinusCifN = Math.round(N * (1 - cif));
+        $("riskBox").className = "rounded-xl border border-brand-200 bg-brand-50 p-4";
+        $("riskLabel").className = "text-xs font-semibold text-brand-700";
+        $("riskLabel").textContent = "Approx. at risk at " + tLabel + " years";
+        $("riskN").className = "mt-1 text-2xl font-bold text-brand-900";
+        $("riskN").textContent = naiveRisk.toLocaleString();
+        $("riskSmall").className = "mt-1 text-xs text-brand-800";
+        $("riskSmall").textContent = observable.toLocaleString() + " × " + S.toFixed(2);
 
-      // Assumption-based reconstruction from marginal probabilities.
-      const eventFree = clamp(1 - cif - death, 0, 1);
-      const estimatedRisk = Math.round(N * eventFree * g);
+        $("flowRiskBox").className = "rounded-xl bg-brand-50 border border-brand-200 px-3 py-5";
+        $("flowRisk").className = "text-xl font-bold text-brand-900";
+        $("flowRisk").textContent = "≈" + naiveRisk.toLocaleString();
 
-      $("trueRiskN").textContent = invalidTruth ? "—" : trueRisk.toLocaleString();
-      $("truthMini").textContent = invalidTruth ? "—" : trueRisk.toLocaleString();
-      $("truthWarn").classList.toggle("hidden", !invalidTruth);
-      $("truthWarn").textContent = invalidTruth
-        ? "Target event + competing event + censoring 不能超過起始 N。"
-        : "";
-
-      $("kmN").textContent = kmN.toLocaleString();
-      $("cifN").textContent = oneMinusCifN.toLocaleString();
-      $("fN").textContent = N.toLocaleString();
-      $("fTarget").textContent = obsTarget.toLocaleString();
-      $("fDeath").textContent = obsDeath.toLocaleString();
-      $("fCens").textContent = obsCens.toLocaleString();
-      $("fRisk").textContent = invalidTruth ? "—" : trueRisk.toLocaleString();
-
-      if (fuType === "censor") {
-        $("riskN").textContent = estimatedRisk.toLocaleString();
-        const diff = invalidTruth ? null : estimatedRisk - trueRisk;
-        $("riskNote").textContent = invalidTruth
-          ? "先修正上方 ground-truth counts。"
-          : diff === 0
-            ? "這個 toy scenario 中剛好等於真值；仍是 assumption-based reconstruction。"
-            : `比 observed 真值 ${diff > 0 ? "高" : "低"} ${Math.abs(diff).toLocaleString()} 人；這就是用 marginal probabilities 重建的誤差。`;
-        $("fuTitle").textContent = "純 censoring distribution 可以幫你『估』，但真值仍來自 observed risk set";
-        $("fuText").innerHTML =
-          '若 <strong>G(t)</strong> 真的是 censoring survival，且 censoring 與事件過程可視為獨立，' +
-          '可用 <strong>N × S<sub>all-event-free</sub>(t) × G(t)</strong> 做 assumption-based reconstruction。' +
-          '上方綠框的 observed number at risk 才是這個 toy cohort 的真值。';
+        $("riskExplanation").innerHTML =
+          "如果 database follow-up duration 是「這個人在資料庫還能被觀察多久」，而且 outcome 發生後仍會繼續累積 follow-up，" +
+          "那 <strong>" + observable.toLocaleString() + "</strong> 是可以直接由 follow-up distribution 數出來的。" +
+          "再乘上 event-free probability，可在 <strong>independent censoring</strong> 的假設下近似 " + tLabel + " 年時的 risk set。";
       } else {
-        $("riskN").textContent = "無法辨識";
-        $("riskNote").textContent = "Overall follow-up 混合了 event、death 與 censoring，不能把 G(t) 單獨還原。";
-        $("fuTitle").textContent = "只有 overall follow-up distribution 時，估計值也無法唯一決定";
-        $("fuText").innerHTML =
-          '同樣的 follow-up duration 可能因 <strong>target outcome、competing event 或 ordinary censoring</strong> 結束。' +
-          '因此只知道 overall follow-up 分布，不能從它唯一反推出 censoring process；但若你有個人層級 exit reason，仍可直接數出上方的 observed truth。';
+        $("interpretCard").className = "rounded-2xl border border-rose-200 bg-rose-50 p-6";
+        $("interpretBadge").className = "mb-1 rounded-full bg-white px-3 py-1 text-xs font-bold text-rose-700 border border-rose-200";
+        $("interpretBadge").textContent = "Do not call this CIF";
+        $("failureProb").className = "text-4xl font-bold text-rose-950";
+        $("interpretText").className = "mt-3 text-sm text-rose-900 leading-relaxed";
+        $("interpretText").innerHTML =
+          "有 competing event 時，這個 <strong>" + (failure * 100).toFixed(1) +
+          "%</strong> 是 KM-derived failure probability。若 competing event 被當作 censoring，" +
+          "它不是現實世界真正的 target cumulative incidence function。";
+
+        $("riskBox").className = "rounded-xl border border-rose-200 bg-rose-50 p-4";
+        $("riskLabel").className = "text-xs font-semibold text-rose-700";
+        $("riskLabel").textContent = "Naive S(t) × observable";
+        $("riskN").className = "mt-1 text-2xl font-bold text-rose-950";
+        $("riskN").textContent = "≈" + naiveRisk.toLocaleString();
+        $("riskSmall").className = "mt-1 text-xs text-rose-800";
+        $("riskSmall").textContent = "不能當真正 target risk set";
+
+        $("flowRiskBox").className = "rounded-xl bg-rose-50 border border-rose-200 px-3 py-5";
+        $("flowRisk").className = "text-xl font-bold text-rose-950";
+        $("flowRisk").textContent = "≈" + naiveRisk.toLocaleString() + "*";
+
+        $("riskExplanation").innerHTML =
+          "Follow-up distribution 仍然可以告訴你 <strong>" + observable.toLocaleString() +
+          "</strong> 人在 " + tLabel + " 年時還能被 database 觀察；但 target KM survival 如果把 competing event 當 censoring，" +
+          "那再乘出來的 <strong>" + naiveRisk.toLocaleString() +
+          "</strong> 只是 naive reconstruction。真正 target risk set 還必須排除已經發生 competing event 的人，單靠這兩個資訊無法唯一知道。";
       }
-
-      const denom = N || 1;
-      const targetForBar = Math.min(obsTarget, N);
-      const deathForBar = Math.min(obsDeath, Math.max(0, N - targetForBar));
-      const censForBar = Math.min(obsCens, Math.max(0, N - targetForBar - deathForBar));
-      const riskForBar = Math.max(0, N - targetForBar - deathForBar - censForBar);
-
-      $("segTarget").style.width = (100 * targetForBar / denom) + "%";
-      $("segDeath").style.width = (100 * deathForBar / denom) + "%";
-      $("segCens").style.width = (100 * censForBar / denom) + "%";
-      $("segRisk").style.width = (100 * riskForBar / denom) + "%";
-      $("segRisk").style.opacity = invalidTruth ? "0.25" : "1";
     }
 
-    ["N","obsTarget","obsDeath","obsCens","sp","cif","death","ret"].forEach(id => $(id)?.addEventListener("input", update));
-    document.querySelectorAll('input[name="fuType"]').forEach(el => el.addEventListener("change", update));
+    ["N","time","sp","observable"].forEach(id => $(id)?.addEventListener("input", update));
+    document.querySelectorAll('input[name="competing"]').forEach(el => el.addEventListener("change", update));
     update();
   </script>
 </BaseLayout>
