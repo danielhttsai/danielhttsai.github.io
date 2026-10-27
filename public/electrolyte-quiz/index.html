@@ -27,7 +27,7 @@
     .brandmark{width:41px;height:41px;border-radius:13px;display:grid;place-items:center;background:var(--ink);color:#fff;font-size:17px;box-shadow:0 8px 20px #0f344521}
     .navright{display:flex;align-items:center;gap:15px;color:#617584;font-size:12px;font-weight:700;letter-spacing:.03em}
     .navright a{text-decoration:none;border-bottom:1px solid #a0b2b3;padding-bottom:2px}
-    .hero{display:grid;grid-template-columns:1.18fr .82fr;gap:20px;align-items:center;min-height:338px;padding:14px 0 26px}
+    .hero{display:grid;grid-template-columns:1.18fr .82fr;gap:20px;align-items:center;min-height:300px;padding:14px 0 24px}
     .eyebrow{display:inline-flex;gap:10px;align-items:center;padding:7px 12px;border-radius:100px;background:#e6f3ed;color:#157666;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
     .pulse{width:8px;height:8px;border-radius:50%;background:#3ab77a;box-shadow:0 0 0 4px #3ab77a25}
     h1{font-size:clamp(33px,5vw,62px);letter-spacing:-.055em;line-height:1.21;margin:21px 0 17px;font-weight:900}
@@ -40,7 +40,7 @@
     .hero-art{position:relative;min-width:0;display:grid;place-items:center}
     .hero-art::before{content:"";width:85%;height:82%;position:absolute;inset:6% 5% auto auto;border-radius:49% 51% 60% 40%;background:linear-gradient(135deg,#e3f6e6,#caeceb);transform:rotate(-10deg);z-index:-1}
     .figure{width:min(100%,420px);filter:drop-shadow(0 21px 18px #264e4140);overflow:visible}
-    .game-layout{display:grid;grid-template-columns:minmax(0,1.66fr) minmax(275px,.83fr);gap:26px;align-items:start}
+    .game-layout{display:block;max-width:800px;margin:0 auto;}
     .surface{background:#fff;border:1px solid #e1e9e5;box-shadow:0 16px 48px #173d3b0c;border-radius:26px}
     .game{padding:26px 28px 24px;overflow:hidden}
     .section-tag{color:#118e7e;font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase}
@@ -88,7 +88,7 @@
     .brand-line{display:flex;align-items:center;gap:14px}
     .brand-line img{width:95px;height:auto;max-height:80px;object-fit:contain;mix-blend-mode:multiply}
     .brand-line span{font-size:12px;color:#5f7480}
-    .results{margin:28px auto 55px;padding:34px 36px;background:linear-gradient(135deg,#fff,#f3fcf6);border:1px solid #d7ebe2;border-radius:27px;box-shadow:0 14px 36px #296d5810}
+    .results{margin:22px auto 55px;padding:34px 36px;background:linear-gradient(135deg,#fff,#f3fcf6);border:1px solid #d7ebe2;border-radius:27px;box-shadow:0 14px 36px #296d5810}
     .solved-head{display:flex;gap:24px;align-items:center;justify-content:space-between;flex-wrap:wrap}
     .results h2{font-size:clamp(26px,3.3vw,36px);margin:7px 0 7px}
     .results h2 span{color:#13917c}
@@ -109,23 +109,17 @@
     .toast.show{transform:translate(-50%,0)}
     .particle{position:fixed;z-index:200;width:12px;height:17px;border-radius:3px;top:-40px;pointer-events:none;animation:fall var(--duration,1700ms) cubic-bezier(.18,.7,.36,.95) forwards;left:var(--x);background:var(--c);transform:rotate(var(--r))}
     @keyframes fall{to{transform:translate(var(--dx),105vh) rotate(840deg);opacity:0}}
-    @media(max-width:850px){.hero{grid-template-columns:1fr .7fr}.game-layout{grid-template-columns:1fr}.side{grid-template-columns:1fr 1fr}.papers{grid-template-columns:1fr}}
-    @media(max-width:640px){.topbar{padding:16px 0}.navright span{display:none}.wrap{width:min(100% - 26px,1140px)}.hero{display:flex;flex-direction:column;align-items:flex-start;padding:4px 0 16px;gap:0}.hero-art{align-self:center;width:min(90%,280px);margin-top:-7px;margin-bottom:-11px}.hero p{font-size:14px}.stats{margin-top:17px}.stat{font-size:11px}.hero h1{font-size:37px}.game{padding:22px 14px 21px;border-radius:20px}.game-heading{align-items:flex-start}.help{font-size:12px}.board{gap:8px}.tile{min-height:108px;padding:9px 8px;border-radius:13px}.tile-top{margin-bottom:12px}.letter{font-size:12px}.ion{font-size:10px;padding:5px 6px}.phrase{font-size:clamp(12px,3.35vw,18px);letter-spacing:-.065em}.plug{right:8px;bottom:7px;transform:scale(.8)}.side{grid-template-columns:1fr}.mini-card{padding:21px}.results{padding:24px 20px}.paper{padding:19px}}
+    @media(max-width:850px){.hero{grid-template-columns:1fr .7fr}.papers{grid-template-columns:1fr}}
+    @media(max-width:640px){.wrap{width:min(100% - 26px,1140px)}.hero{display:flex;flex-direction:column;align-items:flex-start;padding:16px 0 10px;gap:0;min-height:0}.hero-art{align-self:center;width:min(52%,185px);margin-top:-8px;margin-bottom:-16px}.hero p{font-size:14px}.hero h1{font-size:32px;margin:8px 0 13px}.game{padding:22px 14px 21px;border-radius:20px}.game-heading{align-items:flex-start}.help{font-size:12px}.board{gap:8px}.tile{min-height:108px;padding:9px 8px;border-radius:13px}.tile-top{margin-bottom:12px}.letter{font-size:12px}.ion{font-size:10px;padding:5px 6px}.phrase{font-size:clamp(12px,3.35vw,18px);letter-spacing:-.065em}.plug{right:8px;bottom:7px;transform:scale(.8)}.results{padding:24px 20px}.paper{padding:19px}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <nav class="topbar" aria-label="主要導覽">
-      <a class="brand" href="/" aria-label="回到 Daniel Tsai 首頁"><span class="brandmark">DT</span><span>Daniel Tsai <span style="font-weight:500;color:#8fa4a6">/ Playground</span></span></a>
-      <div class="navright"><span>RESEARCH, BUT MAKE IT FUN.</span><a href="#papers" id="papers-nav">研究論文 ↗</a></div>
-    </nav>
     <header class="hero">
       <div>
-        <span class="eyebrow"><span class="pulse"></span>SGLT2i · ELECTROLYTE SERIES · 2025–2026</span>
         <h1>SGLT2i 除了降血糖，<br><span class="stroke">還能「降低」什麼？</span></h1>
         <p><strong>SGLT2 inhibitors</strong> 已知具有降血糖與心腎保護效益；但它們和<strong>電解質異常風險</strong>有什麼關係？從鈣、磷，到鎂、鈉，我們陸續用真實世界資料探索這個問題。先來玩個九宮格：<strong>降低低血鎂？降低高血磷？</strong> 哪四個說法有研究支持？</p>
-        <div class="stats"><span class="stat"><b>09</b> 個選項</span><span class="stat"><b>04</b> 個研究發現</span><span class="stat"><b>03</b> 篇論文</span></div>
       </div>
       <div class="hero-art" aria-label="樂高風格研究員與 SGLT2i 相關的電解質研究插畫" role="img">
         <svg class="figure" viewBox="0 0 430 350" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -160,9 +154,8 @@
 
     <div class="game-layout">
       <main class="game surface" aria-labelledby="game-title">
-        <div class="section-tag">01 / THE PUZZLE</div>
         <div class="game-heading"><h2 id="game-title">SGLT2i 與哪四種異常風險較低有關？</h2><span class="counter" id="counter" aria-live="polite">0 / 4</span></div>
-        <p class="help">點選積木卡片，或在手機上按住滑過四個格子。選錯可再次點選取消；依三篇研究中 SGLT2i 的比較結果作答。</p>
+        <p class="help">點選或滑過四個選項，按「確認答案」揭曉結果。</p>
         <div class="progress" aria-hidden="true"><i class="stud"></i><i class="stud"></i><i class="stud"></i><i class="stud"></i></div>
         <div class="board" id="board" role="group" aria-label="九宮格電解質研究選擇題">
           <button type="button" class="tile" data-i="0" aria-pressed="false"><span class="tile-top"><span class="letter">A</span><span class="ion">Mg</span></span><span class="phrase">降低高血<em>鎂</em></span><span class="plug"><span></span><span></span></span></button>
@@ -184,21 +177,6 @@
         <p id="feedback" class="feedback" role="status" aria-live="polite">準備好了嗎？選出四個在 SGLT2i 比較研究中有支持的答案。</p>
       </main>
 
-      <aside class="side" aria-label="遊戲說明">
-        <section class="surface mini-card">
-          <span class="section-tag">HOW TO PLAY</span><h3>遊戲只有三步</h3>
-          <div class="step"><div class="stepnum">1</div><p><strong>觀察九宮格</strong>：哪些電解質異常，曾在 SGLT2i 的比較研究中出現較低的發生風險？</p></div>
-          <div class="step"><div class="stepnum">2</div><p><strong>選出四格</strong>：點選卡片，讓連線沿著你的選擇延伸。</p></div>
-          <div class="step"><div class="stepnum">3</div><p><strong>揭曉論文</strong>：找對四個選項，看看它們來自哪三篇研究，以及各自比較的是什麼藥物。</p></div>
-          <div class="note" style="margin-top:18px">小提醒：題目中的「降低低血鎂」指的是<strong>降低發生低血鎂的風險</strong>，不是讓血鎂數值更低。</div>
-        </section>
-        <section class="side-quote"><div class="quote-icon">“</div><p>除了血糖與心腎，<br>電解質也是 SGLT2i 研究中值得追問的一環。</p><small>THREE PAPERS · ONE RESEARCH THREAD</small></section>
-        <section class="surface mini-card">
-          <span class="section-tag">THE SCIENCE</span><h3>為什麼研究 SGLT2i？</h3>
-          <p style="color:#607681;font-size:13px;line-height:1.85;margin:6px 0 14px">SGLT2 抑制劑作用於腎臟近端腎小管，減少葡萄糖再吸收。除了降血糖，相關的腎臟及體液生理變化，也讓電解質安全性值得進一步研究。</p>
-          <div class="note">比較對象並不相同：<strong>CMAJ：SGLT2i vs GLP-1 RAs</strong>；<strong>PLOS Medicine、CPT：SGLT2i vs DPP-4 inhibitors</strong>。不能直接把三篇效果量視為相同的治療比較。</div>
-        </section>
-      </aside>
     </div>
 
     <section class="results" id="results" hidden aria-live="polite">
@@ -337,7 +315,6 @@
       document.querySelector('#reset').addEventListener('click',restart);
       document.querySelector('#again').addEventListener('click',()=>{restart();board.scrollIntoView({behavior:'smooth',block:'center'})});
       document.querySelector('#hint').addEventListener('click',()=>toast('提示：答案涵蓋鎂、鈣、磷、鈉；注意是高血還是低血。'));
-      document.querySelector('#papers-nav').addEventListener('click',e=>{if(results.hidden){e.preventDefault();board.scrollIntoView({behavior:'smooth',block:'center'});toast('先解開九宮格，才能看到完整研究成果！')}});
       const url='https://danielhttsai.github.io/electrolyte-quiz/';
       const shareText='SGLT2i 除了降血糖，還與哪些電解質異常風險有關？一起挑戰九宮格：降低低血鎂？降低高血磷？';
       const copyText=async(t)=>{
