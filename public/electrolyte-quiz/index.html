@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5faf8">
+  <meta name="description" content="PHDc 電解質研究連連看：降低低血鎂、降低低血鈣、降低高血磷、降低低血鈉。九宮格互動小遊戲，解鎖三篇真實世界研究。">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="降低低血鎂？電解質研究連連看｜PHDc">
+  <meta property="og:description" content="9 個選項、4 個研究發現。你能把正確答案連成 PHDc 的三角形嗎？">
+  <meta property="og:url" content="https://danielhttsai.github.io/electrolyte-quiz/">
+  <meta property="og:image" content="https://danielhttsai.github.io/og.png">
+  <title>電解質研究連連看｜PHDc × Daniel Tsai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root{--ink:#102938;--deep:#143847;--sub:#5a7180;--teal:#137b70;--green:#60ab5d;--mint:#daf3e8;--cream:#f9fcfa;--ring:#acd9c8;--line:#e0eae6;--yellow:#ffe090}
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:radial-gradient(circle at 90% 13%,#d9f5e94f 0 16%,transparent 34%),radial-gradient(circle at 0% 57%,#d6eafa6b 0 10%,transparent 34%),#f7faf8;color:var(--ink);font-family:"DM Sans","Noto Sans TC",system-ui,sans-serif;line-height:1.65}
+    a{color:inherit}button{font:inherit}button:focus-visible,a:focus-visible{outline:3px solid #34b59f;outline-offset:4px}
+    [hidden]{display:none!important}
+    .wrap{width:min(1140px,calc(100% - 36px));margin-inline:auto}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:22px 0}
+    .brand{display:inline-flex;align-items:center;gap:12px;text-decoration:none;font-size:14px;font-weight:800;color:var(--ink)}
+    .brandmark{width:41px;height:41px;border-radius:13px;display:grid;place-items:center;background:var(--ink);color:#fff;font-size:17px;box-shadow:0 8px 20px #0f344521}
+    .navright{display:flex;align-items:center;gap:15px;color:#617584;font-size:12px;font-weight:700;letter-spacing:.03em}
+    .navright a{text-decoration:none;border-bottom:1px solid #a0b2b3;padding-bottom:2px}
+    .hero{display:grid;grid-template-columns:1.18fr .82fr;gap:20px;align-items:center;min-height:338px;padding:14px 0 26px}
+    .eyebrow{display:inline-flex;gap:10px;align-items:center;padding:7px 12px;border-radius:100px;background:#e6f3ed;color:#157666;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+    .pulse{width:8px;height:8px;border-radius:50%;background:#3ab77a;box-shadow:0 0 0 4px #3ab77a25}
+    h1{font-size:clamp(33px,5vw,62px);letter-spacing:-.055em;line-height:1.21;margin:21px 0 17px;font-weight:900}
+    .stroke{color:#138577;position:relative;white-space:nowrap}
+    .stroke:after{content:"";height:11px;position:absolute;left:0;right:0;bottom:-9px;background:#9ce1bd7a;transform:skewX(-15deg);border-radius:100%;z-index:-1}
+    .hero p{font-size:clamp(14px,1.65vw,17px);line-height:1.95;color:#576f7a;max-width:570px;margin:0}
+    .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+    .stat{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border:1px solid #d7e4df;background:#fff;border-radius:12px;font-size:12px;font-weight:750;color:#3c6871}
+    .stat b{font-size:16px;color:#0e816f}
+    .hero-art{position:relative;min-width:0;display:grid;place-items:center}
+    .hero-art::before{content:"";width:85%;height:82%;position:absolute;inset:6% 5% auto auto;border-radius:49% 51% 60% 40%;background:linear-gradient(135deg,#e3f6e6,#caeceb);transform:rotate(-10deg);z-index:-1}
+    .figure{width:min(100%,420px);filter:drop-shadow(0 21px 18px #264e4140);overflow:visible}
+    .game-layout{display:grid;grid-template-columns:minmax(0,1.66fr) minmax(275px,.83fr);gap:26px;align-items:start}
+    .surface{background:#fff;border:1px solid #e1e9e5;box-shadow:0 16px 48px #173d3b0c;border-radius:26px}
+    .game{padding:26px 28px 24px;overflow:hidden}
+    .section-tag{color:#118e7e;font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase}
+    .game-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}
+    h2{font-size:clamp(20px,2.6vw,27px);letter-spacing:-.028em;line-height:1.35;margin:6px 0 7px}
+    .help{color:#73858c;font-size:13px;margin:2px 0 22px}
+    .counter{font-weight:800;color:#0b766d;font-size:13px;white-space:nowrap;background:#e8f5ee;padding:5px 10px;border-radius:12px}
+    .progress{display:flex;gap:8px;margin:5px 0 20px}
+    .stud{height:6px;flex:1;background:#edf1ee;border-radius:100px;transition:background .25s}
+    .stud.on{background:#29ac8b}
+    .board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;position:relative;touch-action:none;user-select:none}
+    .tile{appearance:none;text-align:left;position:relative;min-width:0;min-height:128px;padding:15px 15px 13px;border:2px solid #e5eeeb;background:linear-gradient(145deg,#fdfefe,#f4f8f6);border-radius:17px;color:var(--ink);cursor:pointer;box-shadow:0 4px 0 #dce7e1;transition:transform .18s,border-color .18s,background .18s,box-shadow .18s}
+    .tile:active{transform:translateY(2px)}
+    .tile:not(.picked):hover{transform:translateY(-2px);border-color:#a8d8cb}
+    .tile.picked{background:linear-gradient(135deg,#ddf8e9,#d9f2f2);border-color:#1e9f87;box-shadow:0 3px 0 #45a694,0 0 0 4px #28a98b19}
+    .tile-top{display:flex;justify-content:space-between;align-items:center;gap:5px;margin-bottom:13px}
+    .letter{color:#5c777b;font-weight:800;font-size:14px}
+    .ion{font:800 12px/1 "DM Sans",sans-serif;letter-spacing:.02em;color:#177e74;border:1px solid #d5eae1;background:#edf8f1;padding:6px 8px;border-radius:9px}
+    .phrase{display:block;font-size:clamp(15px,1.8vw,20px);font-weight:900;letter-spacing:-.035em;line-height:1.4;white-space:nowrap}
+    .phrase em{font-style:normal;color:#0c8c80}
+    .tile.picked .ion{background:#198d7e;color:#fff;border-color:#198d7e}
+    .plug{position:absolute;bottom:10px;right:11px;display:grid;grid-template-columns:repeat(2,7px);gap:3px;opacity:.45}
+    .plug span{width:7px;height:5px;background:#a8beb6;border-radius:4px 4px 1px 1px}
+    .tile.picked .plug span{background:#219888}
+    .connector{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;overflow:visible}
+    .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:24px}
+    .btn{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;min-height:44px;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;transition:transform .14s,filter .14s;border:1px solid #c8d9d2;text-decoration:none}
+    .btn:hover{transform:translateY(-1px)}.btn.primary{background:#103c44;color:#fff;border-color:#103c44;box-shadow:0 7px 20px #123c441f}
+    .btn.outline{background:#fff;color:#42676b}
+    .btn.textlike{border-color:transparent;background:transparent;color:#397e76;padding-inline:7px}
+    .feedback{margin:14px 0 0;color:#416d70;font-weight:700;font-size:13px;min-height:23px}
+    .feedback.warn{color:#b16d36}.feedback.win{color:#13815d}
+    .side{display:grid;gap:17px}
+    .mini-card{padding:24px 23px}
+    .mini-card h3{margin:8px 0 12px;font-size:18px;letter-spacing:-.025em}
+    .step{display:flex;gap:12px;margin-top:15px;align-items:flex-start}
+    .stepnum{flex:none;width:29px;height:29px;display:grid;place-items:center;border-radius:10px;font-size:13px;font-weight:900;color:#197c74;background:#ddf4eb}
+    .step p{margin:1px 0 0;font-size:13px;line-height:1.7;color:#607681}
+    .note{border:1px solid #dfeae5;background:#f1f8f5;border-radius:12px;padding:13px 15px;color:#506d68;font-size:12px;line-height:1.8}
+    .side-quote{background:#123946;color:#f1fff9;border-radius:24px;padding:24px 24px 22px;position:relative;overflow:hidden}
+    .side-quote:after{content:"";position:absolute;width:150px;height:150px;border-radius:35px;border:18px solid #6ac4a21d;transform:rotate(35deg);right:-80px;top:-85px}
+    .quote-icon{font-weight:900;font-size:30px;line-height:1;color:#82dab0}
+    .side-quote p{font-size:17px;font-weight:700;margin:12px 0 14px;line-height:1.65}
+    .side-quote small{color:#a6d2ca;font-size:11px}
+    .brand-line{display:flex;align-items:center;gap:14px}
+    .brand-line img{width:95px;height:auto;max-height:80px;object-fit:contain;mix-blend-mode:multiply}
+    .brand-line span{font-size:12px;color:#5f7480}
+    .results{margin:28px auto 55px;padding:34px 36px;background:linear-gradient(135deg,#fff,#f3fcf6);border:1px solid #d7ebe2;border-radius:27px;box-shadow:0 14px 36px #296d5810}
+    .solved-head{display:flex;gap:24px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    .results h2{font-size:clamp(26px,3.3vw,36px);margin:7px 0 7px}
+    .results h2 span{color:#13917c}
+    .result-intro{max-width:740px;color:#5e7580;font-size:14px;line-height:1.85}
+    .result-logo{width:154px;background:#fff;padding:10px;border-radius:18px;border:1px solid #e2ede8}
+    .papers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:25px}
+    .paper{padding:22px;border:1px solid #d9e9e2;background:#fff;border-radius:17px;display:flex;flex-direction:column;gap:8px}
+    .paper-label{font-size:11px;font-weight:800;color:#20937f;letter-spacing:.06em}
+    .paper h3{font-size:18px;line-height:1.45;letter-spacing:-.025em;margin:1px 0}
+    .paper p{font-size:12px;color:#657982;line-height:1.8;margin:0;flex:1}
+    .paper strong{color:#144b4b}
+    .paper a{font-size:13px;font-weight:800;color:#0c806e;text-decoration:none;margin-top:6px;align-self:flex-start;border-bottom:1px solid #76bbaa}
+    .caveat{font-size:12px;color:#6c8188;line-height:1.7;padding-top:17px}
+    .share-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:20px}
+    footer{border-top:1px solid #e3ebe7;padding:23px 0 39px;color:#788b91;font-size:12px;display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap}
+    footer a{text-decoration:none;color:#557979}
+    .toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,130px);background:#123b43;color:#fff;padding:11px 18px;border-radius:13px;box-shadow:0 15px 32px #153b4352;font-size:13px;font-weight:700;z-index:100;transition:transform .22s;white-space:nowrap;max-width:calc(100vw - 30px);overflow:hidden;text-overflow:ellipsis}
+    .toast.show{transform:translate(-50%,0)}
+    .particle{position:fixed;z-index:200;width:12px;height:17px;border-radius:3px;top:-40px;pointer-events:none;animation:fall var(--duration,1700ms) cubic-bezier(.18,.7,.36,.95) forwards;left:var(--x);background:var(--c);transform:rotate(var(--r))}
+    @keyframes fall{to{transform:translate(var(--dx),105vh) rotate(840deg);opacity:0}}
+    @media(max-width:850px){.hero{grid-template-columns:1fr .7fr}.game-layout{grid-template-columns:1fr}.side{grid-template-columns:1fr 1fr}.papers{grid-template-columns:1fr}}
+    @media(max-width:640px){.topbar{padding:16px 0}.navright span{display:none}.wrap{width:min(100% - 26px,1140px)}.hero{display:flex;flex-direction:column;align-items:flex-start;padding:4px 0 16px;gap:0}.hero-art{align-self:center;width:min(90%,280px);margin-top:-7px;margin-bottom:-11px}.hero p{font-size:14px}.stats{margin-top:17px}.stat{font-size:11px}.hero h1{font-size:37px}.game{padding:22px 14px 21px;border-radius:20px}.game-heading{align-items:flex-start}.help{font-size:12px}.board{gap:8px}.tile{min-height:108px;padding:9px 8px;border-radius:13px}.tile-top{margin-bottom:12px}.letter{font-size:12px}.ion{font-size:10px;padding:5px 6px}.phrase{font-size:clamp(12px,3.35vw,18px);letter-spacing:-.065em}.plug{right:8px;bottom:7px;transform:scale(.8)}.side{grid-template-columns:1fr}.mini-card{padding:21px}.results{padding:24px 20px}.paper{padding:19px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="topbar" aria-label="主要導覽">
+      <a class="brand" href="/" aria-label="回到 Daniel Tsai 首頁"><span class="brandmark">DT</span><span>Daniel Tsai <span style="font-weight:500;color:#8fa4a6">/ Playground</span></span></a>
+      <div class="navright"><span>RESEARCH, BUT MAKE IT FUN.</span><a href="#papers" id="papers-nav">研究論文 ↗</a></div>
+    </nav>
+    <header class="hero">
+      <div>
+        <span class="eyebrow"><span class="pulse"></span>PHDc · ELECTROLYTE LAB · 2026</span>
+        <h1>降低低血鎂？<br><span class="stroke">電解質連連看！</span></h1>
+        <p>「降低低血鎂」到底要多低？「降低高血磷」又是什麼意思？把 9 個繞口令裡的 <strong>4 個研究發現</strong>找出來，解鎖我們的電解質論文系列。</p>
+        <div class="stats"><span class="stat"><b>09</b> 個選項</span><span class="stat"><b>04</b> 個答案</span><span class="stat"><b>03</b> 篇論文</span></div>
+      </div>
+      <div class="hero-art" aria-label="樂高風格積木研究員插畫" role="img">
+        <svg class="figure" viewBox="0 0 430 350" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs><linearGradient id="coat" x1="0" x2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#d7eae9"/></linearGradient><linearGradient id="pants" x1="0" x2="1"><stop stop-color="#1d6364"/><stop offset="1" stop-color="#143c52"/></linearGradient></defs>
+          <ellipse cx="219" cy="324" rx="145" ry="18" fill="#1b735d" opacity=".12"/>
+          <g transform="translate(20 237) rotate(-10)"><rect x="0" y="38" width="104" height="51" rx="8" fill="#e69a62"/><rect x="8" y="24" width="18" height="20" rx="4" fill="#f0b27e"/><rect x="42" y="24" width="18" height="20" rx="4" fill="#f0b27e"/><rect x="76" y="24" width="18" height="20" rx="4" fill="#f0b27e"/></g>
+          <g transform="translate(305 224) rotate(12)"><rect x="0" y="28" width="90" height="55" rx="8" fill="#93c887"/><rect x="8" y="14" width="18" height="20" rx="4" fill="#a7d896"/><rect x="38" y="14" width="18" height="20" rx="4" fill="#a7d896"/><rect x="68" y="14" width="18" height="20" rx="4" fill="#a7d896"/></g>
+          <g transform="translate(114 19)">
+            <rect x="84" y="270" width="66" height="43" rx="13" fill="#204d63"/><rect x="164" y="270" width="66" height="43" rx="13" fill="#204d63"/>
+            <rect x="85" y="236" width="65" height="52" rx="9" fill="url(#pants)"/><rect x="165" y="236" width="64" height="52" rx="9" fill="url(#pants)"/>
+            <path d="M65 149h182l13 110-92 12-99-12Z" fill="url(#coat)" stroke="#a4c2be" stroke-width="4"/>
+            <path d="M145 149l22 34 21-34v119h-45Z" fill="#137d76"/><path d="M135 151l-22 19 27 26-20 11 26 49" fill="none" stroke="#a4c6bd" stroke-width="4"/><path d="M194 151l22 19-23 26 17 11-24 49" fill="none" stroke="#a4c6bd" stroke-width="4"/>
+            <rect x="197" y="201" width="38" height="19" rx="4" fill="#deefe4"/><text x="216" y="214" text-anchor="middle" fill="#19786e" font-size="10" font-weight="bold">PHDc</text>
+            <path d="M71 162 39 187 26 224 55 234 86 190Z" fill="#eff7f6" stroke="#a4c2be" stroke-width="4"/><circle cx="41" cy="233" r="19" fill="#ffcc42" stroke="#e7a72d" stroke-width="3"/>
+            <path d="M242 164 277 190 291 223 260 233 234 193Z" fill="#eff7f6" stroke="#a4c2be" stroke-width="4"/><circle cx="275" cy="236" r="19" fill="#ffcc42" stroke="#e7a72d" stroke-width="3"/>
+            <rect x="154" y="124" width="27" height="37" rx="6" fill="#ffc843"/>
+            <rect x="92" y="31" width="153" height="120" rx="38" fill="#ffd34c" stroke="#e2b42d" stroke-width="4"/>
+            <path d="M93 80q-17-52 27-62 9-30 54-17 53-20 73 32v38l-17-20-13 10-12-20-32 14-23-21-18 24-39 8Z" fill="#173b49"/>
+            <path d="M96 65q-6-12-1-22m152 8q1-18-13-32" fill="none" stroke="#2a5260" stroke-width="8" stroke-linecap="round"/>
+            <circle cx="143" cy="94" r="6" fill="#26363a"/><circle cx="207" cy="94" r="6" fill="#26363a"/>
+            <path d="M155 121q18 15 37 0" stroke="#9d5e24" stroke-width="5" stroke-linecap="round" fill="none"/>
+            <circle cx="120" cy="116" r="12" fill="#f8b947" opacity=".8"/><circle cx="226" cy="116" r="12" fill="#f8b947" opacity=".8"/>
+            <g transform="translate(280 164) rotate(13)"><path d="M0 0h52v42q-26 10-52 0Z" fill="#24a8a0"/><path d="M52 9h14v20q-3 10-14 6" fill="none" stroke="#24a8a0" stroke-width="8"/><path d="M10 0h32" stroke="#126d74" stroke-width="5"/><text x="26" y="29" fill="#fff" font-size="12" font-weight="bold" text-anchor="middle">RWE</text></g>
+          </g>
+          <g transform="translate(43 38) rotate(-16)"><rect width="82" height="53" rx="10" fill="#d8f1ed" stroke="#8dc7b4" stroke-width="2"/><text x="41" y="34" text-anchor="middle" font-size="23" font-weight="800" fill="#168a80">Mg</text></g>
+          <g transform="translate(331 56) rotate(11)"><rect width="63" height="45" rx="9" fill="#fff0c8" stroke="#e2c987" stroke-width="2"/><text x="31" y="29" text-anchor="middle" font-size="21" font-weight="800" fill="#a57727">Na</text></g>
+          <g transform="translate(344 142) rotate(15)"><rect width="56" height="45" rx="9" fill="#e4ebff" stroke="#c4d4e7" stroke-width="2"/><text x="28" y="29" text-anchor="middle" font-size="20" font-weight="800" fill="#5b82aa">Ca</text></g>
+        </svg>
+      </div>
+    </header>
+
+    <div class="game-layout">
+      <main class="game surface" aria-labelledby="game-title">
+        <div class="section-tag">01 / THE PUZZLE</div>
+        <div class="game-heading"><h2 id="game-title">你能選出四個正確的「降低」嗎？</h2><span class="counter" id="counter" aria-live="polite">0 / 4</span></div>
+        <p class="help">點選積木卡片，或在手機上按住並滑過想連接的格子。選錯可再點一次取消。</p>
+        <div class="progress" aria-hidden="true"><i class="stud"></i><i class="stud"></i><i class="stud"></i><i class="stud"></i></div>
+        <div class="board" id="board" role="group" aria-label="九宮格電解質研究選擇題">
+          <button type="button" class="tile" data-i="0" aria-pressed="false"><span class="tile-top"><span class="letter">A</span><span class="ion">Mg</span></span><span class="phrase">降低高血<em>鎂</em></span><span class="plug"><span></span><span></span></span></button>
+          <button type="button" class="tile" data-i="1" aria-pressed="false"><span class="tile-top"><span class="letter">B</span><span class="ion">Na</span></span><span class="phrase">降低高血<em>鈉</em></span><span class="plug"><span></span><span></span></span></button>
+          <button type="button" class="tile" data-i="2" aria-pressed="false"><span class="tile-top"><span class="letter">C</span><span class="ion">Mg</span></span><span class="phrase">降低低血<em>鎂</em></span><span class="plug"><span></span><span></span></span></button>
+          <button type="button" class="tile" data-i="3" aria-pressed="false"><span class="tile-top"><span class="letter">D</span><span class="ion">P</span></span><span class="phrase">降低高血<em>磷</em></span><span class="plug"><span></span><span></span></span></button>
+          <button type="button" class="tile" data-i="4" aria-pressed="false"><span class="tile-top"><span class="letter">E</span><span class="ion">Na</span></span><span class="phrase">降低低血<em>鈉</em></span><span class="plug"><span></span><span></span></span></button>
+          <button type="button" class="tile" data-i="5" aria-pressed="false"><span class="tile-top"><span class="letter">F</span><span class="ion">Ca</span></span><span class="phrase">降低高血<em>鈣</em></span><span class="plug"><span></span><span></span></span></button>
+          <button type="button" class="tile" data-i="6" aria-pressed="false"><span class="tile-top"><span class="letter">G</span><span class="ion">K</span></span><span class="phrase">降低高血<em>鉀</em></span><span class="plug"><span></span><span></span></span></button>
+          <button type="button" class="tile" data-i="7" aria-pressed="false"><span class="tile-top"><span class="letter">H</span><span class="ion">Ca</span></span><span class="phrase">降低低血<em>鈣</em></span><span class="plug"><span></span><span></span></span></button>
+          <button type="button" class="tile" data-i="8" aria-pressed="false"><span class="tile-top"><span class="letter">I</span><span class="ion">P</span></span><span class="phrase">降低低血<em>磷</em></span><span class="plug"><span></span><span></span></span></button>
+          <svg class="connector" id="connector" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <div class="actions">
+          <button type="button" id="check" class="btn primary">確認答案 →</button>
+          <button type="button" id="reset" class="btn outline">重新連線 ↺</button>
+          <button type="button" id="hint" class="btn textlike">給我一點提示 ✳</button>
+        </div>
+        <p id="feedback" class="feedback" role="status" aria-live="polite">準備好了嗎？選出四個符合已發表主要研究結果的選項。</p>
+      </main>
+
+      <aside class="side" aria-label="遊戲說明">
+        <section class="surface mini-card">
+          <span class="section-tag">HOW TO PLAY</span><h3>遊戲只有三步</h3>
+          <div class="step"><div class="stepnum">1</div><p><strong>觀察九宮格</strong>：哪些「降低」是團隊已發表的主要研究結果？</p></div>
+          <div class="step"><div class="stepnum">2</div><p><strong>選出四格</strong>：點選卡片，讓連線沿著你的選擇延伸。</p></div>
+          <div class="step"><div class="stepnum">3</div><p><strong>解鎖 PHDc</strong>：正確的四格會組成三角形的線索，並公開論文。</p></div>
+          <div class="note" style="margin-top:18px">小提醒：題目中的「降低低血鎂」指的是<strong>降低發生低血鎂的風險</strong>，不是讓血鎂數值更低。</div>
+        </section>
+        <section class="side-quote"><div class="quote-icon">“</div><p>從鈣、磷到鎂、鈉，<br>一個研究問題，變成一系列故事。</p><small>Population Health Data Center · NCKU</small></section>
+        <section class="surface mini-card">
+          <span class="section-tag">THE TEAM</span><h3>這個三角形，你認得嗎？</h3>
+          <div class="brand-line"><img src="./phdc-logo.webp" alt="PHDc Population Health Data Center 官方標誌" width="220" height="187" loading="lazy"><span>我們的標誌是一把三角板，象徵測量、量化與因果推論。<br><a href="https://phdcenter.org.tw/about/" target="_blank" rel="noopener noreferrer" style="color:#0c8370;font-weight:800">認識 PHDc ↗</a></span></div>
+        </section>
+      </aside>
+    </div>
+
+    <section class="results" id="results" hidden aria-live="polite">
+      <div class="solved-head">
+        <div><span class="section-tag">PUZZLE SOLVED · C / D / E / H</span><h2>解鎖成功！<span> 是 PHDc！</span></h2><p class="result-intro">你找到了：<strong>降低低血鎂、降低高血磷、降低低血鈉、降低低血鈣</strong>。這不是直接降低電解質濃度，而是我們在特定患者族群與藥物比較下，觀察到相關「電解質異常的發生風險」較低。</p></div>
+        <img class="result-logo" src="./phdc-logo.webp" alt="PHDc 官方三角形標誌" width="220" height="187">
+      </div>
+      <div class="papers" id="papers">
+        <article class="paper"><span class="paper-label">01 · CMAJ · 2025</span><h3>鈣 &amp; 磷<br>Calcium &amp; Phosphate</h3><p>台灣 9 家醫院的 T2D + CKD 1–3 期患者，SGLT2 inhibitors 相較 GLP-1 RAs，與較低的<strong>低血鈣（HR 0.82）</strong>及<strong>高血磷（HR 0.83）</strong>發生風險有關。</p><a href="https://doi.org/10.1503/cmaj.240922" target="_blank" rel="noopener noreferrer">閱讀 CMAJ 論文 ↗</a></article>
+        <article class="paper"><span class="paper-label">02 · PLOS MEDICINE · 2026</span><h3>鎂<br>Magnesium</h3><p>全球多機構 T2D 新使用者比較：相較 DPP-4 inhibitors，SGLT2 inhibitors 與 GLP-1 RAs 分別與較低的<strong>低血鎂風險</strong>有關（HR 0.80、0.89）。</p><a href="https://doi.org/10.1371/journal.pmed.1004968" target="_blank" rel="noopener noreferrer">閱讀 PLOS Medicine 論文 ↗</a></article>
+        <article class="paper"><span class="paper-label">03 · CLIN PHARMACOL THER · 2026</span><h3>鈉<br>Sodium</h3><p>最新的多中心 TTE：相較 DPP-4 inhibitors，SGLT2 inhibitors 與 GLP-1 RAs 均與約 <strong>15% 較低的低血鈉發生風險</strong>有關（HR 0.850、0.847）。</p><a href="https://search.crossref.org/?q=Use%20of%20SGLT2%20Inhibitors%20GLP-1%20Receptor%20Agonists%20Hyponatremia" target="_blank" rel="noopener noreferrer">搜尋 CPT 論文 ↗</a></article>
+      </div>
+      <p class="caveat">研究解讀：以上為觀察性研究的相對風險估計，仍可能受殘餘混雜與偵測差異影響，不應直接解讀為確定的因果效果；各篇研究的比較藥物及研究族群不完全相同。CPT 的 DOI 待正式出版社頁面可核對後更新。</p>
+      <div class="share-row"><button class="btn primary" id="share">分享給朋友 ↗</button><button class="btn outline" id="copy">複製網站連結</button><button class="btn textlike" id="again">再玩一次 ↺</button></div>
+    </section>
+    <footer><div>© 2026 Daniel Tsai · PHDc · NCKU　<span style="opacity:.6">/　Designed for curious minds</span></div><div><a href="/">回到首頁</a>　·　<a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener noreferrer">PHDc</a></div></footer>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+  <script>
+    (() => {
+      'use strict';
+      const board = document.querySelector('#board');
+      const tiles = [...board.querySelectorAll('.tile')];
+      const line = document.querySelector('#connector');
+      const feedback = document.querySelector('#feedback');
+      const counter = document.querySelector('#counter');
+      const results = document.querySelector('#results');
+      const selected = [];
+      const answer = [2,3,4,7];
+      const studs = [...document.querySelectorAll('.stud')];
+      let solved = false;
+      let dragging = false;
+      let enteredThisDrag = new Set();
+      let toastTimer;
+      const names = 'ABCDEFGHI';
+      const toast = (s) => {
+        const box = document.querySelector('#toast');
+        box.textContent = s;
+        box.classList.add('show');
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => box.classList.remove('show'), 2400);
+      };
+      const point = i => {
+        const r = tiles[i].getBoundingClientRect();
+        const b = board.getBoundingClientRect();
+        return [(r.left-b.left+r.width/2), (r.top-b.top+r.height/2)];
+      };
+      const draw = () => {
+        const r = board.getBoundingClientRect();
+        line.setAttribute('viewBox', '0 0 ' + r.width + ' ' + r.height);
+        line.replaceChildren();
+        const add = (tag, attrs) => {
+          const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+          for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
+          line.append(el); return el;
+        };
+        if (selected.length >= 2) {
+          const path = selected.map((i,k) => (k?'L':'M') + point(i).join(' ')).join(' ');
+          add('path',{d:path,stroke: solved ? '#0d806c' : '#32a78b', 'stroke-width':'5', fill:'none','stroke-linecap':'round','stroke-linejoin':'round',opacity:'.8'});
+        }
+        if (solved) {
+          const outline=[2,3,7,2].map((i,k)=>(k?'L':'M')+point(i).join(' ')).join(' ');
+          add('path',{d:outline,stroke:'#087b69','stroke-width':'7',fill:'#44bd9319','stroke-linejoin':'round','stroke-dasharray':'7 0'});
+          const [x,y]=point(4);
+          add('circle',{cx:x,cy:y,r:21,fill:'#fff','fill-opacity':'.66',stroke:'#087b69','stroke-width':4});
+          add('path',{d:'M'+(x-9)+' '+(y-4)+' L'+(x-1)+' '+(y+6)+' L'+(x+14)+' '+(y-13),fill:'none',stroke:'#087b69','stroke-width':5,'stroke-linecap':'round','stroke-linejoin':'round'});
+        } else {
+          selected.forEach(i => {const [x,y]=point(i);add('circle',{cx:x,cy:y,r:6,fill:'#168c7e',stroke:'#fff','stroke-width':2})});
+        }
+      };
+      const update = () => {
+        tiles.forEach((tile,i)=>{const yes=selected.includes(i);tile.classList.toggle('picked',yes);tile.setAttribute('aria-pressed',yes?'true':'false')});
+        counter.textContent=selected.length+' / 4';
+        studs.forEach((s,i)=>s.classList.toggle('on',i<selected.length));
+        draw();
+      };
+      const choose = (i) => {
+        if(solved) return;
+        const idx=selected.indexOf(i);
+        if(idx!==-1) selected.splice(idx,1);
+        else if(selected.length<4) selected.push(i);
+        else { toast('只能選四格；先取消一格再試試！');return; }
+        feedback.className='feedback';
+        feedback.textContent=selected.length===4?'四個都選好了！按「確認答案」看看。':'已選 '+selected.length+' 格，再選 '+(4-selected.length)+' 格。';
+        update();
+      };
+      board.addEventListener('pointerdown', e => {
+        const tile=e.target.closest('.tile');
+        if (!tile || (e.pointerType==='mouse'&&e.button!==0)) return;
+        dragging=true;enteredThisDrag=new Set();
+        choose(Number(tile.dataset.i));
+        enteredThisDrag.add(Number(tile.dataset.i));
+        try {board.setPointerCapture(e.pointerId);}catch(err){}
+        e.preventDefault();
+      });
+      board.addEventListener('pointermove', e => {
+        if(!dragging || solved) return;
+        const el=document.elementFromPoint(e.clientX,e.clientY);
+        const tile=el && el.closest('.tile');
+        if(!tile || !board.contains(tile)) return;
+        const i=Number(tile.dataset.i);
+        if(!enteredThisDrag.has(i)){enteredThisDrag.add(i);choose(i)}
+      });
+      const endDrag=()=>{dragging=false;enteredThisDrag.clear()};
+      board.addEventListener('pointerup',endDrag);
+      board.addEventListener('pointercancel',endDrag);
+      tiles.forEach((tile,i)=>{
+        tile.addEventListener('click',e=>{if(e.detail===0) choose(i)});
+        tile.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();choose(i)}});
+      });
+      const confetti=()=>{
+        if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+        const colors=['#17a883','#77c36b','#ffd26b','#51a4bb','#e6a875'];
+        for(let i=0;i<38;i++){
+          const el=document.createElement('i');el.className='particle';
+          el.style.setProperty('--x',Math.round(Math.random()*100)+'vw');
+          el.style.setProperty('--dx',Math.round((Math.random()-.5)*270)+'px');
+          el.style.setProperty('--c',colors[i%colors.length]);
+          el.style.setProperty('--r',Math.round(Math.random()*360)+'deg');
+          el.style.setProperty('--duration',(1150+Math.random()*1100)+'ms');
+          document.body.append(el);setTimeout(()=>el.remove(),2500);
+        }
+      };
+      document.querySelector('#check').addEventListener('click',()=>{
+        if(solved){results.scrollIntoView({behavior:'smooth',block:'start'});return;}
+        if(selected.length<4){toast('還差 '+(4-selected.length)+' 格！');return;}
+        const hits=selected.filter(x=>answer.includes(x)).length;
+        if(hits===4){
+          solved=true;update();feedback.className='feedback win';feedback.textContent='🎉 恭喜！C・D・E・H 解鎖成功，你畫出了 PHDc 的三角形線索！';
+          document.querySelector('#check').textContent='查看研究成果 ↘';
+          confetti();setTimeout(()=>{results.hidden=false;results.scrollIntoView({behavior:'smooth',block:'start'})},700);
+        }else{feedback.className='feedback warn';feedback.textContent='答對了 '+hits+' / 4 格。再想想：主要研究聚焦哪四種電解質異常？';toast('差一點！這次答對 '+hits+' 格');}
+      });
+      const restart=()=>{
+        solved=false;selected.splice(0);results.hidden=true;document.querySelector('#check').textContent='確認答案 →';feedback.className='feedback';feedback.textContent='重新開始！選出四個正確的研究結果。';update();
+      };
+      document.querySelector('#reset').addEventListener('click',restart);
+      document.querySelector('#again').addEventListener('click',()=>{restart();board.scrollIntoView({behavior:'smooth',block:'center'})});
+      document.querySelector('#hint').addEventListener('click',()=>toast('提示：答案涵蓋鎂、鈣、磷、鈉；注意是高血還是低血。'));
+      document.querySelector('#papers-nav').addEventListener('click',e=>{if(results.hidden){e.preventDefault();board.scrollIntoView({behavior:'smooth',block:'center'});toast('先解開九宮格，才能看到完整研究成果！')}});
+      const url='https://danielhttsai.github.io/electrolyte-quiz/';
+      const shareText='降低低血鎂？降低高血磷？來玩 PHDc 電解質九宮格，找出四個正確研究結果！';
+      const copyText=async(t)=>{
+        try{await navigator.clipboard.writeText(t);toast('已複製，分享出去吧！')}catch(e){toast('無法直接複製，請使用瀏覽器分享功能。')}
+      };
+      document.querySelector('#copy').addEventListener('click',()=>copyText(url));
+      document.querySelector('#share').addEventListener('click',async()=>{
+        if(navigator.share){try{await navigator.share({title:'PHDc 電解質連連看',text:shareText,url})}catch(e){if(e.name!=='AbortError')copyText(shareText+'\n'+url)}}
+        else copyText(shareText+'\n'+url);
+      });
+      window.addEventListener('resize',draw);
+      update();
+    })();
+  </script>
+</body>
+</html>
