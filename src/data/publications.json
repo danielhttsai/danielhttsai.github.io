@@ -1,6 +1,30 @@
 [
   {
     "year": "2026",
+    "doi": "10.1002/cpt.70536",
+    "citation": "Lin YH, Tsai DHT, Hsieh MHC, Lee CC, Tseng CC, Wang MC, Lai ECC, Liu KH. Use of SGLT2 Inhibitors, GLP-1 Receptor Agonists, and DPP-4 Inhibitors in Incident Hyponatremia in Patients with Type 2 Diabetes: Multicenter Target Trial Emulations. Clinical Pharmacology & Therapeutics. 2026 Oct 26.",
+    "isOA": true,
+    "oaUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13710830/pdf/CPT-9999-0.pdf",
+    "pmid": "42935015",
+    "pmcid": "PMC13710830",
+    "ris": "TY  - JOUR\r\nTI  - Use of SGLT2 Inhibitors, GLP -1 Receptor Agonists, and DPP -4 Inhibitors in Incident Hyponatremia in Patients with Type 2 Diabetes: Multicenter Target Trial Emulations\r\nAU  - Lin, Ying-Hsuan\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Hsieh, Miyuki Hsing-Chun\r\nAU  - Lee, Chia-Chun\r\nAU  - Tseng, Chin-Chung\r\nAU  - Wang, Ming-Cheng\r\nAU  - Lai, Edward Chia-Cheng\r\nAU  - Liu, Kuan-Hung\r\nJO  - Clinical Pharmacology & Therapeutics\r\nT2  - Clinical Pharmacology & Therapeutics\r\nPY  - 2026\r\nDO  - 10.1002/cpt.70536\r\nUR  - https://doi.org/10.1002/cpt.70536\r\nAN  - 42935015\r\nER  - \r\n",
+    "date": 20261026,
+    "cover": "papers/sglt2-hyponatremia.jpg"
+  },
+  {
+    "year": "2026",
+    "doi": "10.1002/cpt.70514",
+    "citation": "Liao KYC, Tsai DHT, Cheng MC, Mu HW, Su KW, Shao SC, Lai ECC. SGLT2 Inhibitors and Asthma Exacerbation Risk Among Patients With Type 2 Diabetes and Asthma: A Target Trial Emulation. Clinical Pharmacology & Therapeutics. 2026 Oct 6.",
+    "isOA": true,
+    "oaUrl": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/cpt.70514",
+    "pmid": "42839355",
+    "pmcid": "PMC13643014",
+    "ris": "TY  - JOUR\r\nTI  - SGLT2 Inhibitors and Asthma Exacerbation Risk Among Patients With Type 2 Diabetes and Asthma: A Target Trial Emulation\r\nAU  - Liao, Kevin Yi-Chen\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Cheng, Michael Chun-Yuan\r\nAU  - Mu, Han-Wei\r\nAU  - Su, Kuan-Wen\r\nAU  - Shao, Shih-Chieh\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - Clinical Pharmacology & Therapeutics\r\nT2  - Clinical Pharmacology & Therapeutics\r\nPY  - 2026\r\nDO  - 10.1002/cpt.70514\r\nUR  - https://doi.org/10.1002/cpt.70514\r\nAN  - 42839355\r\nER  - \r\n",
+    "date": 20261006,
+    "cover": "papers/sglt2-asthma.jpg"
+  },
+  {
+    "year": "2026",
     "doi": "10.1186/s13011-026-00760-3",
     "citation": "Shih ECC, Tsai DHT, Lin SJ, Chen YY, Li TF, Lai ECC. Novel weighing approach for improved management of methadone stock inventory. Substance Abuse Treatment, Prevention, and Policy. 2026 Aug 20.",
     "isOA": true,
@@ -26,7 +50,7 @@
   {
     "year": "2026",
     "doi": "10.1192/bjp.2026.10700",
-    "citation": "Tsai DHT, Yang ASH, Wong ZX, Chuang ATM, Cheng MCY, Shen CY, Shao SC, Lai ECC. Methodological considerations of suicide risk following antipsychotic therapy in treatment-resistant depression. British Journal of Psychiatry. 2026 Jun 25:1.",
+    "citation": "Tsai DHT, Yang ASH, Wong ZX, Chuang ATM, Cheng MCY, Shen CY, Shao SC, Lai ECC. Methodological considerations of suicide risk following antipsychotic therapy in treatment-resistant depression. British Journal of Psychiatry. 2026 Oct;229(4):476.",
     "isOA": false,
     "oaUrl": "",
     "pmid": "42343883",
@@ -38,7 +62,7 @@
   {
     "year": "2026",
     "doi": "10.1038/s41433-026-04459-4",
-    "citation": "Lee WJA, Tsai DHT, Cheng MCY, Lin YS, Lee CY, Shao SC, Lai ECC. Comparison of adverse renal events between ranibizumab and aflibercept in patients with diabetic macular oedema: A global network study. Eye. 2026 Apr 22.",
+    "citation": "Lee WJA, Tsai DHT, Cheng MCY, Lin YS, Lee CY, Shao SC, Lai ECC. Comparison of adverse renal events between ranibizumab and aflibercept in patients with diabetic macular oedema: A global network study. Eye. 2026 Jul;40(10):1446-1453.",
     "isOA": true,
     "oaUrl": "https://www.nature.com/articles/s41433-026-04459-4.pdf",
     "pmid": "42020540",
@@ -99,7 +123,7 @@
   {
     "year": "2026",
     "doi": "10.1007/s40123-026-01327-y",
-    "citation": "Chuang LH, Tsai DHT, Chan YH, Shao SC, Lai CC, Lai ECC. Trends in First-Line Glaucoma Treatment from 2013 to 2024: A Multi-institutional and Multinational Cohort Study. Ophthalmology and Therapy. 2026 Feb 4.",
+    "citation": "Chuang LH, Tsai DHT, Chan YH, Shao SC, Lai CC, Lai ECC. Trends in First-Line Glaucoma Treatment from 2013 to 2024: A Multi-institutional and Multinational Cohort Study. Ophthalmology and Therapy. 2026 Mar;15(3):1083-1094.",
     "isOA": true,
     "oaUrl": "https://link.springer.com/content/pdf/10.1007/s40123-026-01327-y.pdf",
     "pmid": "41636973",
@@ -111,7 +135,7 @@
   {
     "year": "2026",
     "doi": "10.1007/s00210-025-04931-0",
-    "citation": "Lee WJA, Tsai DHT, Shao SC, Lai ECC. Intraocular inflammation incidence and real-world safety of intravitreal faricimab treatment across retinal indications. Naunyn-Schmiedeberg's Archives of Pharmacology. 2026 Jan 20.",
+    "citation": "Lee WJA, Tsai DHT, Shao SC, Lai ECC. Intraocular inflammation incidence and real-world safety of intravitreal faricimab treatment across retinal indications. Naunyn-Schmiedeberg's Archives of Pharmacology. 2026 Mar;399(6):9267-9273.",
     "isOA": false,
     "oaUrl": "",
     "pmid": "41557066",

@@ -17,9 +17,14 @@ const education = [
 
 const experience = [
   {
-    role: "Research Fellow & Operations/Technology Lead",
+    role: "Research Fellow & Operations Lead",
     org: "Population Health Data Center, NCKU, Taiwan",
-    when: "May 2024 – present",
+    when: "Feb 2026 – present",
+  },
+  {
+    role: "Technology Lead",
+    org: "Population Health Data Center, NCKU, Taiwan",
+    when: "May 2024 – Jan 2026",
   },
   {
     role: "Research Data Analyst",
@@ -65,13 +70,14 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
     <section>
       <h2 class="text-2xl font-bold text-slate-900">BIO</h2>
       <p class="mt-4 text-slate-600 leading-relaxed">
-        Daniel Tsai is a postdoctoral research fellow at the Population Health Data Center, NCKU. He specialises in
-        comparative effectiveness research and policy research. His expertise includes triangulating claims databases,
-        electronic health records, and biomedical databases to inform causal inference. He is also actively involved in
-        the intersection of artificial intelligence and geriatric medicine. Daniel serves as an educational co-lead of
-        the Asian Pharmacoepidemiology Network (AsPEN) and is an active member of the Neurological and Mental Health
-        Global Epidemiology Network (NeuroGEN), where he contributes to fostering international research collaboration
-        and advancing pharmacoepidemiology.
+        Daniel Tsai is a postdoctoral research fellow and operations lead at the Population Health Data Center, NCKU.
+        He specialises in comparative effectiveness research and policy research. His expertise includes triangulating
+        claims databases, electronic health records, and biomedical databases to inform causal inference, and
+        operationalising infrastructure to support real-world evidence generation. He is involved in the intersection
+        of artificial intelligence and geriatric medicine. Daniel serves as an educational co-lead of the Asian
+        Pharmacoepidemiology Network (AsPEN) and is a member of the Neurological and Mental Health Global Epidemiology
+        Network (NeuroGEN), where he contributes to international research collaboration and the advancement of
+        pharmacoepidemiology.
       </p>
       <div class="mt-6 flex flex-wrap gap-3">
         <a href={`${base}/Daniel-Tsai-CV.pdf`} target="_blank" rel="noopener" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2.5 rounded-lg transition text-sm">
@@ -144,9 +150,15 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
           Contributor to projects funded by industry (Amgen, Clarivate, Prospection) and government (Taiwan's National
           Science and Technology Council, National Institutes of Health, Ministry of Education), focused on real-world
           evidence, pharmacoepidemiology, and causal inference. Recognised by multiple ISPE travel/registration
-          scholarships for ICPE (2021–2023), ISPE (2024–2025), and ACPE (2021–2025).
+          scholarships for ICPE (2021–2023), ISPE (2024–2026), and ACPE (2021–2026).
         </p>
-        <p><strong class="text-slate-800">Award:</strong> ISPE-Asian Conference on Pharmacoepidemiology 15 — Rising Star.</p>
+        <p><strong class="text-slate-800">Awards</strong></p>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>2026 ISPE Annual Meeting — Stanley A. Edlavitch Award</li>
+          <li>2025 ISPE Annual Meeting — Spotlight Poster Award</li>
+          <li>2025 NCKU Research Day — Oral and Poster Competition, Big Data Analysis Group</li>
+          <li>2023 ISPE-Asian Conference on Pharmacoepidemiology 15 — Rising Star</li>
+        </ul>
       </div>
     </section>
 

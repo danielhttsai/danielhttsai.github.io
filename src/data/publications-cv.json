@@ -1,11 +1,13 @@
 {
   "_comment": "DOIs listed in Daniel's CV — the source of truth for which papers appear on the site. Regenerate with: node scripts/cv-publications.mjs",
-  "source": "20260822 CV.docx",
-  "count": 33,
+  "source": "20261104 DT CV.docx",
+  "count": 35,
   "dois": [
     "10.1001/jamanetworkopen.2024.0946",
     "10.1002/bcp.70373",
     "10.1002/cpt.70027",
+    "10.1002/cpt.70514",
+    "10.1002/cpt.70536",
     "10.1007/s00210-025-04931-0",
     "10.1007/s00210-026-05793-w",
     "10.1007/s40123-026-01327-y",
