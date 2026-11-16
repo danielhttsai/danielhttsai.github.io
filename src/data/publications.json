@@ -1,6 +1,18 @@
 [
   {
     "year": "2026",
+    "doi": "10.1016/j.lanwpc.2026.102014",
+    "citation": "Zhang R, Lam ICH, Chai Y, Liu X, Tan GSQ, Ilomäki J, Bell JS, Tsai DHT, Lai ECC, Shen CY, Cheng MCY, Harrison J, Chan AHY, Hong B, Shin JY, Abtahi S, Klungel OH, Chui CSL, Li X, Chan EWY, Wong ICK, Wan EYF. Short-, medium- and long-term sequelae following COVID-19 infection: a network cohort study across multiple Asia-Pacific regions. The Lancet Regional Health – Western Pacific. 2026 Nov 11;76:102014.",
+    "isOA": true,
+    "oaUrl": "https://doi.org/10.1016/j.lanwpc.2026.102014",
+    "pmid": "",
+    "pmcid": "",
+    "ris": "TY  - JOUR\r\nTI  - Short-, medium- and long-term sequelae following COVID-19 infection: a network cohort study across multiple Asia–Pacific regions\r\nAU  - Zhang, Ran\r\nAU  - Lam, Ivan Chun Hang\r\nAU  - Chai, Yi\r\nAU  - Liu, Xinyi\r\nAU  - Tan, George S.Q.\r\nAU  - Ilomäki, Jenni\r\nAU  - Bell, J. Simon\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Lai, Edward Chia-Cheng\r\nAU  - Shen, Chin-Yao\r\nAU  - Cheng, Michael Chun-Yuan\r\nAU  - Harrison, Jeff\r\nAU  - Chan, Amy Hai Yan\r\nAU  - Hong, Bin\r\nAU  - Shin, Ju-Young\r\nAU  - Abtahi, Shahab\r\nAU  - Klungel, Olaf H.\r\nAU  - Chui, Celine Sze Ling\r\nAU  - Li, Xue\r\nAU  - Chan, Esther Wai Yin\r\nAU  - Wong, Ian Chi Kei\r\nAU  - Wan, Eric Yuk Fai\r\nJO  - The Lancet Regional Health - Western Pacific\r\nT2  - The Lancet Regional Health - Western Pacific\r\nPY  - 2026\r\nVL  - 76\r\nSP  - 102014\r\nDO  - 10.1016/j.lanwpc.2026.102014\r\nUR  - https://doi.org/10.1016/j.lanwpc.2026.102014\r\nER  - \r\n",
+    "date": 20261111,
+    "cover": "papers/long-covid.jpg"
+  },
+  {
+    "year": "2026",
     "doi": "10.1002/cpt.70536",
     "citation": "Lin YH, Tsai DHT, Hsieh MHC, Lee CC, Tseng CC, Wang MC, Lai ECC, Liu KH. Use of SGLT2 Inhibitors, GLP-1 Receptor Agonists, and DPP-4 Inhibitors in Incident Hyponatremia in Patients with Type 2 Diabetes: Multicenter Target Trial Emulations. Clinical Pharmacology & Therapeutics. 2026 Oct 26.",
     "isOA": true,
@@ -10,6 +22,18 @@
     "ris": "TY  - JOUR\r\nTI  - Use of SGLT2 Inhibitors, GLP -1 Receptor Agonists, and DPP -4 Inhibitors in Incident Hyponatremia in Patients with Type 2 Diabetes: Multicenter Target Trial Emulations\r\nAU  - Lin, Ying-Hsuan\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Hsieh, Miyuki Hsing-Chun\r\nAU  - Lee, Chia-Chun\r\nAU  - Tseng, Chin-Chung\r\nAU  - Wang, Ming-Cheng\r\nAU  - Lai, Edward Chia-Cheng\r\nAU  - Liu, Kuan-Hung\r\nJO  - Clinical Pharmacology & Therapeutics\r\nT2  - Clinical Pharmacology & Therapeutics\r\nPY  - 2026\r\nDO  - 10.1002/cpt.70536\r\nUR  - https://doi.org/10.1002/cpt.70536\r\nAN  - 42935015\r\nER  - \r\n",
     "date": 20261026,
     "cover": "papers/sglt2-hyponatremia.jpg"
+  },
+  {
+    "year": "2026",
+    "doi": "10.1186/s42238-026-00520-x",
+    "citation": "Mu HW, Cheah LW, Tsai DHT, Hung DZ, Lai ECC. Cannabis use disorder and risk of venous thromboembolism: a retrospective cohort study. Journal of Cannabis Research. 2026 Oct 19.",
+    "isOA": true,
+    "oaUrl": "https://doi.org/10.1186/s42238-026-00520-x",
+    "pmid": "",
+    "pmcid": "",
+    "ris": "TY  - JOUR\r\nTI  - Cannabis use disorder and risk of venous thromboembolism: a retrospective cohort study\r\nAU  - Mu, Han-Wei\r\nAU  - Cheah, Li-Wei\r\nAU  - Tsai, Daniel Hsiang-Te\r\nAU  - Hung, Dong-Zong\r\nAU  - Lai, Edward Chia-Cheng\r\nJO  - Journal of Cannabis Research\r\nT2  - Journal of Cannabis Research\r\nPY  - 2026\r\nDO  - 10.1186/s42238-026-00520-x\r\nUR  - https://doi.org/10.1186/s42238-026-00520-x\r\nER  - \r\n",
+    "date": 20261019,
+    "cover": "papers/cud-vte.jpg"
   },
   {
     "year": "2026",
