@@ -3,13 +3,13 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const path = Astro.url.pathname.replace(/\/$/, "") || "/";
 
 const nav = [
-  { label: "Home", href: `${base}/` || "/" },
-  { label: "About", href: `${base}/about` },
-  { label: "Publications", href: `${base}/publications` },
-  { label: "Writing", href: `${base}/writing` },
-  { label: "Talks", href: `${base}/talks` },
-  { label: "RWE Tools", href: `${base}/tools` },
-  { label: "Networks", href: `${base}/networks` },
+  { label: "Home", zh: "首頁", href: `${base}/` || "/" },
+  { label: "About", zh: "關於我", href: `${base}/about` },
+  { label: "Publications", zh: "論文", href: `${base}/publications` },
+  { label: "Writing", zh: "方法筆記", href: `${base}/writing` },
+  { label: "Talks", zh: "演講", href: `${base}/talks` },
+  { label: "RWE Tools", zh: "RWE 工具", href: `${base}/tools` },
+  { label: "Networks", zh: "合作網絡", href: `${base}/networks` },
 ];
 
 const isActive = (href: string) => {
@@ -39,9 +39,16 @@ const isActive = (href: string) => {
           ]}
           aria-current={isActive(item.href) ? "page" : undefined}
         >
-          {item.label}
+          <span class="l-en">{item.label}</span><span class="l-zh">{item.zh}</span>
         </a>
       ))}
+    </div>
+
+    <!-- Language switch: two buttons so the current language is always visible
+         and the other one is one tap away, on phones too. -->
+    <div class="flex items-center gap-1 ml-auto md:ml-0" role="group" aria-label="Language 語言">
+      <button type="button" data-set-lang="en" aria-pressed="true" class="lang-btn px-2 py-1 rounded-md text-xs font-bold transition">EN</button>
+      <button type="button" data-set-lang="zh" aria-pressed="false" lang="zh-Hant" class="lang-btn px-2 py-1 rounded-md text-xs font-bold transition">中文</button>
     </div>
 
     <!-- Mobile hamburger -->
@@ -70,14 +77,57 @@ const isActive = (href: string) => {
           ]}
           aria-current={isActive(item.href) ? "page" : undefined}
         >
-          {item.label}
+          <span class="l-en">{item.label}</span><span class="l-zh">{item.zh}</span>
         </a>
       ))}
     </div>
   </div>
 </header>
 
+<style>
+  .lang-btn { color: #64748b; }
+  .lang-btn:hover { color: var(--color-brand-700); background: #f1f5f9; }
+  .lang-btn[aria-pressed="true"] { color: var(--color-brand-700); background: var(--color-brand-50); }
+</style>
+
 <script is:inline>
+  // Language switch. The head script in BaseLayout has already set <html lang>
+  // from the saved choice; this keeps the buttons in step and handles clicks.
+  (function () {
+    var h = document.documentElement;
+    var btns = document.querySelectorAll("[data-set-lang]");
+    function current() { return h.lang === "zh-Hant" ? "zh" : "en"; }
+    function paint() {
+      var l = current();
+      btns.forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-set-lang") === l)); });
+      var t = l === "zh" ? h.dataset.titleZh : h.dataset.titleEn;
+      if (t) document.title = t;
+      var d = l === "zh" ? h.dataset.descZh : h.dataset.descEn;
+      var m = document.querySelector('meta[name="description"]');
+      if (m && d) m.setAttribute("content", d);
+      // Attributes cannot be doubled up the way text can, so elements carry
+      // data-zh-<attr> / data-en-<attr> and get the right one written in.
+      document.querySelectorAll("[data-i18n-attr]").forEach(function (el) {
+        el.getAttribute("data-i18n-attr").split(",").forEach(function (a) {
+          var v = el.getAttribute("data-" + l + "-" + a);
+          if (v !== null) el.setAttribute(a, v);
+        });
+      });
+    }
+    window.setLang = function (l) {
+      h.lang = l === "zh" ? "zh-Hant" : "en";
+      try { localStorage.setItem("lang", l === "zh" ? "zh" : "en"); } catch (e) {}
+      paint();
+      document.dispatchEvent(new CustomEvent("langchange", { detail: current() }));
+    };
+    window.getLang = current;
+    btns.forEach(function (b) { b.addEventListener("click", function () { window.setLang(b.getAttribute("data-set-lang")); }); });
+    paint();
+    // This script runs while the header is being parsed, before the rest of
+    // the page exists, so translated attributes further down are set once the
+    // document is complete.
+    document.addEventListener("DOMContentLoaded", paint);
+  })();
   (function () {
     var btn = document.querySelector("[data-menu-btn]");
     var panel = document.querySelector("[data-menu-panel]");

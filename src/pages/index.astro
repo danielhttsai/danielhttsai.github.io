@@ -1,9 +1,12 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import ResearchMap from "../components/ResearchMap.astro";
 import type { Pub } from "../components/PublicationItem.astro";
 import { getCollection } from "astro:content";
 import pubs from "../data/publications.json";
 import metrics from "../data/metrics.json";
+import { PHENOTYPES } from "../data/phenotypes";
+import { countBy, DESIGNS, MAP_STATS, MULTI_COUNTRY, paperTitle, paperJournal } from "../data/research";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -11,79 +14,63 @@ const latestPosts = (await getCollection("posts", ({ data }) => !data.draft))
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
   .slice(0, 2);
 
-// Featured paper for the home "Latest" band — the flagship first-author study.
+// Featured paper for the Methods pillar — the flagship first-author study.
 // Pulled live from publications.json so its links/format stay in sync.
 const FEATURED_DOI = "10.1192/bjp.2024.283";
 const featured = (pubs as Pub[]).find((p) => p.doi.toLowerCase() === FEATURED_DOI);
 
-const skills = [
-  { group: "Statistical computing", items: ["SAS", "Stata", "SPSS", "R"] },
-  { group: "Methods", items: ["Comparative effectiveness", "Causal inference", "Target trial emulation", "Self-controlled designs"] },
-  { group: "Data", items: ["Claims databases (NHIRD, 20M+)", "Electronic health records", "Biomedical / registry linkage"] },
-  { group: "Domains", items: ["Pharmacoepidemiology", "Policy research", "AI × geriatric medicine"] },
+// The page is built on the three things the work rests on: tools, methods,
+// networks. Each pillar opens with something a visitor can use or click, and
+// the numbers in it are counted from the site's own data at build time.
+const nDesign = countBy((t) => t.design);
+const designLinks = ["tte", "acnu", "ccw", "cctc", "cco", "ncc", "descriptive"].filter((d) => nDesign[d]);
+const phenotypeAll = Object.values(PHENOTYPES).flat() as { validation?: string }[];
+const nPhenotypes = phenotypeAll.length;
+const nValidated = phenotypeAll.filter((p) => p.validation).length;
+
+const pillars = [
+  { id: "tools", n: "01", en: "Tools", zh: "工具", lineEn: "Open tools that run in your browser", lineZh: "打開瀏覽器就能用的開放工具" },
+  { id: "methods", n: "02", en: "Methods", zh: "方法", lineEn: `${nDesign.tte} target trial emulations, and notes on how they work`, lineZh: `${nDesign.tte} 篇 target trial emulation，以及方法怎麼運作的筆記` },
+  { id: "networks", n: "03", en: "Networks", zh: "網絡", lineEn: `${MAP_STATS.countries} countries and regions, ${MAP_STATS.databases} data sources`, lineZh: `${MAP_STATS.countries} 個國家與地區、${MAP_STATS.databases} 個資料來源` },
 ];
 
-const tools = [
-  {
-    name: "Protocol Generator",
-    blurb:
-      "Build a publication-ready pharmacoepidemiology protocol (ACNU, case-crossover, descriptive, or self-controlled case-series) with a phenotype library that says which definitions carry a validation study, feasibility checks across Asian databases, and one-click Word / Markdown export.",
-    href: `${base}/tools/protocol-generator`,
-    cta: "Open the tool",
-    external: false,
-    tag: "Design Infrastructure",
-  },
+const secondaryTools = [
   {
     name: "Protocol Checker",
-    blurb:
-      "The flip side of the generator: upload an existing protocol and get an AI-assisted, item-by-item read on whether it conforms to HARPER (the ISPE/ISPOR protocol template) or TARGET — with an auto-drawn study-design scheme, a planned-outputs review, and fixes for anything missing.",
     href: `${base}/tools/protocol-checker`,
-    cta: "Open the checker",
-    external: false,
-    tag: "Design Infrastructure",
+    en: "Upload a protocol and get an item-by-item read against HARPER or TARGET.",
+    zh: "上傳研究計畫書，逐項對照 HARPER 或 TARGET 檢查。",
   },
   {
     name: "RWE Studio",
-    blurb:
-      "Upload a small, messy hospital dataset and — entirely in your browser — profile and clean it into a tidy master file, map columns to a study design (with AI causal-covariate triage), and run the analysis in real R via WebR. Nothing is uploaded.",
     href: `${base}/tools/rwe-studio`,
-    cta: "Open RWE Studio",
-    external: false,
-    tag: "Analysis Infrastructure",
-  },
-  {
-    name: "PHDc RWE Toolbox",
-    blurb:
-      "A real-world-evidence utility from the Population Health Data Center for exploring and operationalising claims-based study designs.",
-    href: `${base}/tools/phdc-rwe-tool`,
-    cta: "Launch the toolbox",
-    external: false,
-    tag: "RWE utility",
-  },
-  {
-    name: "NHIRD Data Dictionary",
-    blurb:
-      "A searchable codebook for Taiwan's NHIRD and Health & Welfare Data Center datasets — variables, formats, and cross-dataset linkages, structured on the DIVERSE data-source framework.",
-    href: "https://danielhttsai.github.io/nhird-data-dictionary/",
-    cta: "Open the dictionary",
-    external: false,
-    tag: "Data Infrastructure",
+    en: "Clean a small hospital dataset and run the analysis in real R, without uploading anything.",
+    zh: "清理小型醫院資料並直接用 R 分析，資料不會離開你的電腦。",
   },
   {
     name: "ACB Calculator",
-    blurb:
-      "Scores a patient's total anticholinergic burden across 6 international scales and quantifies 30-day risk of cardiovascular events, pneumonia, and out-of-hospital cardiac arrest — with OCR drug-history capture and printable reports. Built on three Taiwan NHI studies (BMJ, Clin Epidemiol, Eur Heart J).",
     href: `${base}/tools/acb-calculator`,
-    cta: "Open ACB calculator",
-    external: false,
-    tag: "Clinical tool",
+    en: "Score a patient's anticholinergic burden on six scales, with 30-day risks from three Taiwan NHI studies.",
+    zh: "用六種量表計算病人的 anticholinergic burden，並依三篇台灣健保研究估計 30 天風險。",
   },
+];
+
+const builders = [
+  { name: "ACNU", href: `${base}/tools/active-comparator-new-user` },
+  { name: "Clone-censor-weight", href: `${base}/tools/clone-censor-weight` },
+  { name: "Sequential trial", href: `${base}/tools/sequential-trial` },
+  { name: "Case-crossover / CCTC", href: `${base}/tools/case-crossover` },
+  { name: "SCCS", href: `${base}/tools/self-controlled-case-series` },
+  { name: "Interrupted time series", href: `${base}/tools/interrupted-time-series` },
 ];
 ---
 
-<BaseLayout tint={true}>
-  <!-- Hero -->
-  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-20 pb-16">
+<BaseLayout
+  tint={true}
+  descriptionZh="蔡相德（Daniel Tsai）是成大群體健康數據中心（PHDc）的博士後研究員，專長為 comparative effectiveness research、因果推論，以及 real-world evidence 的工具與基礎建設。"
+>
+  <!-- Hero: who, the one statement the site is built on, and the three pillars -->
+  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-16 sm:pt-20 pb-10">
     <div class="grid md:grid-cols-[1fr_auto] gap-8 md:gap-12 items-center">
       <img
         src={`${base}/images/daniel-cartoon.png`}
@@ -93,26 +80,20 @@ const tools = [
       />
       <div class="order-2 md:order-1">
         <p class="uppercase tracking-widest text-xs text-brand-600 font-semibold mb-3">
-          Pharmacoepidemiology · Real-World Evidence
+          <span class="l-en">Pharmacoepidemiology · Real-World Evidence</span><span class="l-zh">藥物流行病學 · Real-World Evidence</span>
         </p>
         <h1 class="text-4xl md:text-6xl font-extrabold text-slate-900 leading-tight">
-          Daniel Tsai
+          <span class="l-en">Daniel Tsai</span><span class="l-zh">蔡相德 <span class="text-slate-500 font-bold text-2xl md:text-3xl align-middle">Daniel Tsai</span></span>
         </h1>
-        <p class="mt-5 text-lg md:text-xl text-slate-700 max-w-2xl leading-relaxed font-medium">
-          Building the <strong class="text-brand-700">infrastructure for real-world evidence</strong> — the tools, methods, and multi-country data networks that turn routine health data into causal answers.
+        <p class="mt-5 text-xl md:text-2xl text-slate-800 max-w-2xl leading-snug font-semibold">
+          <span class="l-en">Real-world evidence is settled before the first line of analysis code: by the <a href="#tools" class="text-brand-700 underline decoration-brand-100 decoration-4 underline-offset-4 hover:decoration-brand-500">tools</a> at hand, the <a href="#methods" class="text-brand-700 underline decoration-brand-100 decoration-4 underline-offset-4 hover:decoration-brand-500">methods</a> that hold up, and the <a href="#networks" class="text-brand-700 underline decoration-brand-100 decoration-4 underline-offset-4 hover:decoration-brand-500">data networks</a> that reach past one country. I build all three.</span>
+          <span class="l-zh">Real-world evidence 的品質，在寫下第一行分析程式之前就決定了：手邊有沒有能直接用的<a href="#tools" class="text-brand-700 underline decoration-brand-100 decoration-4 underline-offset-4 hover:decoration-brand-500">工具</a>、站得住腳的<a href="#methods" class="text-brand-700 underline decoration-brand-100 decoration-4 underline-offset-4 hover:decoration-brand-500">方法</a>，和跨得出國界的<a href="#networks" class="text-brand-700 underline decoration-brand-100 decoration-4 underline-offset-4 hover:decoration-brand-500">資料網絡</a>。這三件事，我都在做。</span>
         </p>
         <p class="mt-4 text-base text-slate-600 max-w-2xl leading-relaxed">
-          Postdoctoral research fellow at the <a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener" class="text-brand-700 font-semibold hover:underline">Population Health Data Center (PHDc), NCKU</a>, specialising in comparative effectiveness and policy research. Chair of <strong class="text-slate-800">AsPEN</strong> and active member of <strong class="text-slate-800">NeuroGEN</strong>.
+          <span class="l-en">Postdoctoral research fellow and operations lead at the <a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener" class="text-brand-700 font-semibold hover:underline">Population Health Data Center (PHDc), NCKU</a>, working on comparative effectiveness and policy research. Chair of <strong class="text-slate-800">AsPEN</strong> and member of <strong class="text-slate-800">NeuroGEN</strong>.</span>
+          <span class="l-zh"><a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener" class="text-brand-700 font-semibold hover:underline">成大群體健康數據中心（PHDc）</a>博士後研究員暨營運負責人，研究 comparative effectiveness 與政策評估。現任 <strong class="text-slate-800">AsPEN</strong> Chair，也是 <strong class="text-slate-800">NeuroGEN</strong> 的成員。</span>
         </p>
-        <div class="mt-8 flex flex-wrap gap-3">
-          <a href={`${base}/tools/protocol-generator`} class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-6 py-3 rounded-xl transition shadow-sm">
-            Try the Protocol Generator →
-          </a>
-          <a href={`${base}/about`} class="bg-white border border-slate-300 text-slate-700 hover:border-brand-600 hover:text-brand-700 font-semibold px-6 py-3 rounded-xl transition">
-            About me &amp; publications
-          </a>
-        </div>
-        <div class="mt-8 flex items-center gap-5">
+        <div class="mt-6 flex items-center gap-5">
           <a href="mailto:danielhttsai@gmail.com" aria-label="Email" title="Email" class="text-[#EA4335] hover:opacity-75 transition">
             <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/></svg>
           </a>
@@ -128,130 +109,269 @@ const tools = [
         </div>
       </div>
     </div>
+
+    <!-- The three pillars, as the way into the rest of the page -->
+    <nav class="mt-10 grid gap-3 sm:grid-cols-3" aria-label="Sections" data-i18n-attr="aria-label" data-en-aria-label="Sections" data-zh-aria-label="頁面段落">
+      {pillars.map((p) => (
+        <a href={`#${p.id}`} class="group flex items-baseline gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm hover:border-brand-400 hover:shadow-md transition">
+          <span class="text-sm font-extrabold text-accent-500 tabular-nums">{p.n}</span>
+          <span>
+            <span class="block text-lg font-extrabold text-slate-900 group-hover:text-brand-700"><span class="l-en">{p.en}</span><span class="l-zh">{p.zh}</span></span>
+            <span class="block text-sm text-slate-600 leading-snug"><span class="l-en">{p.lineEn}</span><span class="l-zh">{p.lineZh}</span></span>
+          </span>
+        </a>
+      ))}
+    </nav>
+
+    <!-- Metrics -->
+    <dl class="mt-3 grid grid-cols-3 gap-3">
+      {[
+        { n: String(pubs.length), en: "Publications", zh: "論文", href: `${base}/publications` },
+        { n: String(metrics.citations), en: "Citations", zh: "被引用次數", href: "https://scholar.google.com/citations?user=3IxiZOoAAAAJ" },
+        { n: String(metrics.hIndex), en: "h-index", zh: "h-index", href: "https://scholar.google.com/citations?user=3IxiZOoAAAAJ" },
+      ].map((s) => (
+        <a href={s.href} target={s.href.startsWith("http") ? "_blank" : undefined} rel={s.href.startsWith("http") ? "noopener" : undefined} class="rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 text-center hover:border-brand-400 transition">
+          <dd class="text-2xl font-extrabold text-brand-700">{s.n}</dd>
+          <dt class="text-[11px] uppercase tracking-wide text-slate-500 mt-0.5"><span class="l-en">{s.en}</span><span class="l-zh">{s.zh}</span></dt>
+        </a>
+      ))}
+    </dl>
   </section>
 
-  <!-- Latest / featured paper -->
-  {featured && (
-    <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pb-4">
-      <div class="rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-6 sm:p-8">
-        <div class="flex items-center justify-between gap-4 flex-wrap mb-4">
-          <p class="text-sm font-bold text-brand-700">📰 Fresh off the press</p>
-          <a href={`${base}/publications`} class="text-sm font-semibold text-brand-700 hover:underline">All publications →</a>
-        </div>
-        <div class="flex flex-col sm:flex-row gap-6 items-start">
-          <a href={`https://doi.org/${featured.doi}`} target="_blank" rel="noopener" class="shrink-0 self-center sm:self-start">
-            <img
-              src={`${base}/images/papers/trd-ap.jpg`}
-              alt="First page of the British Journal of Psychiatry article"
-              width="144" height="204"
-              class="w-32 sm:w-36 rounded-lg shadow-md ring-1 ring-slate-200 hover:shadow-lg transition"
-            />
+  <!-- ── 01 Tools ─────────────────────────────────────────────────────── -->
+  <section id="tools" class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 scroll-mt-20">
+    <p class="text-sm font-extrabold text-accent-500 tabular-nums">01</p>
+    <h2 class="mt-1 text-3xl font-bold text-slate-900"><span class="l-en">Tools you can use today</span><span class="l-zh">今天就能用的工具</span></h2>
+    <p class="mt-2 text-slate-600 max-w-2xl leading-relaxed">
+      <span class="l-en">Everything here is open and runs in your browser. No install, no account, and nothing you type leaves your device.</span>
+      <span class="l-zh">這裡的工具全部開放，打開瀏覽器就能用：不用安裝、不用註冊，你輸入的內容也不會離開你的電腦。</span>
+    </p>
+
+    <div class="mt-6 grid gap-5 lg:grid-cols-3">
+      <!-- Protocol Generator: the lead tool, with the phenotype library inside it -->
+      <div class="lg:col-span-2 flex flex-col rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-6 sm:p-7 shadow-sm">
+        <span class="self-start text-[11px] uppercase tracking-wide font-semibold text-brand-700 bg-white rounded-full px-2.5 py-1 border border-brand-100"><span class="l-en">Design</span><span class="l-zh">研究設計</span></span>
+        <h3 class="mt-4 text-2xl font-bold text-slate-900">Protocol Generator</h3>
+        <p class="mt-2 text-slate-700 leading-relaxed max-w-2xl">
+          <span class="l-en">Answer six questions to narrow nine pharmacoepidemiology designs to the one that fits, then fill a guided form. It draws the study-design diagram, checks feasibility across Asian databases, and exports a multi-country protocol to Word or Markdown.</span>
+          <span class="l-zh">先回答六個問題，從九種藥物流行病學設計裡找出適合的，再照著表單填。它會畫出 study design diagram、檢查亞洲各資料庫是否做得到，最後匯出可跨國執行的研究計畫書（Word 或 Markdown）。</span>
+        </p>
+        <div class="mt-5 flex flex-wrap gap-3">
+          <a href={`${base}/tools/protocol-generator`} class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2.5 rounded-xl transition shadow-sm">
+            <span class="l-en">Start a protocol</span><span class="l-zh">開始寫計畫書</span> →
           </a>
-          <div class="flex-1 min-w-0">
-            <p class="text-slate-700 leading-relaxed">
-              Latest study in the <strong class="text-slate-900">British Journal of Psychiatry</strong>
-            </p>
-            <p class="mt-1 mb-3 text-sm text-slate-600 leading-relaxed">
-              A target trial emulation across Taiwan's National Health Insurance data examining how antipsychotic augmentation relates to suicide risk in treatment-resistant depression.
-            </p>
-            <a href={`https://doi.org/${featured.doi}`} target="_blank" rel="noopener" class="inline-block text-sm font-semibold text-brand-700 hover:underline">Read the paper →</a>
+          <a href={`${base}/tools/clone-censor-weight?library=outcomes`} class="bg-white border border-slate-300 text-slate-700 hover:border-brand-600 hover:text-brand-700 font-semibold px-5 py-2.5 rounded-xl transition">
+            <span class="l-en">Open the phenotype library</span><span class="l-zh">打開 phenotype library</span>
+          </a>
+        </div>
+        <p class="mt-4 text-xs text-slate-500 leading-relaxed">
+          <span class="l-en">Phenotype library: {nPhenotypes} code sets for indications, drugs and outcomes. {nValidated} carry a validation study; the other {nPhenotypes - nValidated} say plainly that they do not.</span>
+          <span class="l-zh">Phenotype library 收錄 {nPhenotypes} 組適應症、藥品與 outcome 的代碼定義，其中 {nValidated} 組附有 validation study，其餘 {nPhenotypes - nValidated} 組則明白標示沒有。</span>
+        </p>
+      </div>
+
+      <div class="flex flex-col gap-5">
+        <a href={`${base}/tools/phdc-rwe-tool`} class="group flex flex-col flex-1 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md hover:border-brand-400 transition">
+          <span class="self-start text-[11px] uppercase tracking-wide font-semibold text-brand-600 bg-brand-50 rounded-full px-2.5 py-1"><span class="l-en">Methods</span><span class="l-zh">方法</span></span>
+          <h3 class="mt-3 text-lg font-bold text-slate-900 group-hover:text-brand-700">PHDc RWE Toolbox</h3>
+          <p class="mt-1.5 text-sm text-slate-600 leading-relaxed flex-1">
+            <span class="l-en">More than thirty causal-inference and quasi-experimental methods in one place: what each one assumes, when to use it, and the references behind it.</span>
+            <span class="l-zh">三十多種因果推論與準實驗方法放在一起：每一種的假設、什麼時候該用，以及背後的參考文獻。</span>
+          </p>
+          <span class="mt-4 text-sm font-semibold text-brand-700"><span class="l-en">Launch the toolbox</span><span class="l-zh">打開工具箱</span> →</span>
+        </a>
+        <div class="flex flex-col flex-1 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <span class="self-start text-[11px] uppercase tracking-wide font-semibold text-brand-600 bg-brand-50 rounded-full px-2.5 py-1"><span class="l-en">Data</span><span class="l-zh">資料</span></span>
+          <h3 class="mt-3 text-lg font-bold text-slate-900">NHIRD Data Dictionary</h3>
+          <p class="mt-1.5 text-sm text-slate-600 leading-relaxed flex-1">
+            <span class="l-en">A searchable codebook for Taiwan's NHIRD and Health and Welfare Data Center files, plus a lookup from NHI drug code to ingredient and ATC.</span>
+            <span class="l-zh">可搜尋的 NHIRD 與衛生福利資料科學中心檔案 codebook，另有健保藥品代碼對成分與 ATC 的查詢。</span>
+          </p>
+          <div class="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-sm font-semibold">
+            <a href="https://danielhttsai.github.io/nhird-data-dictionary/" class="text-brand-700 hover:underline"><span class="l-en">Open the dictionary</span><span class="l-zh">打開資料字典</span> →</a>
+            <a href="https://danielhttsai.github.io/nhird-data-dictionary/drugs/" class="text-brand-700 hover:underline"><span class="l-en">Look up a drug code</span><span class="l-zh">查藥品代碼</span> →</a>
           </div>
         </div>
       </div>
-    </section>
-  )}
+    </div>
 
-  <!-- Quick stats -->
-  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
-    <div class="grid grid-cols-3 gap-4">
-      {[
-        { n: String(pubs.length), l: "Publications" },
-        { n: String(metrics.citations), l: "Citations" },
-        { n: String(metrics.hIndex), l: "h-index" },
-      ].map((s) => (
-        <div class="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
-          <div class="text-3xl font-extrabold text-brand-700">{s.n}</div>
-          <div class="text-xs uppercase tracking-wide text-slate-500 mt-1">{s.l}</div>
-        </div>
+    <div class="mt-5 grid gap-5 sm:grid-cols-3">
+      {secondaryTools.map((t) => (
+        <a href={t.href} class="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:border-brand-400 transition">
+          <h3 class="font-bold text-slate-900 group-hover:text-brand-700">{t.name} <span class="text-brand-700">→</span></h3>
+          <p class="mt-1.5 text-sm text-slate-600 leading-relaxed"><span class="l-en">{t.en}</span><span class="l-zh">{t.zh}</span></p>
+        </a>
       ))}
     </div>
+    <p class="mt-4 text-sm"><a href={`${base}/tools`} class="font-semibold text-brand-700 hover:underline"><span class="l-en">All tools</span><span class="l-zh">所有工具</span> →</a></p>
   </section>
 
-  <!-- Skills -->
-  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
-    <h2 class="text-2xl font-bold text-slate-900">Technical expertise</h2>
-    <div class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-      {skills.map((s) => (
+  <!-- ── 02 Methods ───────────────────────────────────────────────────── -->
+  <section id="methods" class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 scroll-mt-20">
+    <p class="text-sm font-extrabold text-accent-500 tabular-nums">02</p>
+    <h2 class="mt-1 text-3xl font-bold text-slate-900"><span class="l-en">Methods that hold up</span><span class="l-zh">站得住腳的方法</span></h2>
+    <p class="mt-2 text-slate-600 max-w-2xl leading-relaxed">
+      <span class="l-en">Target trial emulation, clone-censor-weight and self-controlled designs: used in my own papers, taught at ISPE and ACPE, and written up so you can follow each step.</span>
+      <span class="l-zh">Target trial emulation、clone-censor-weight 與 self-controlled designs：我在自己的論文裡用，在 ISPE 與 ACPE 教，也寫成一步一步看得懂的筆記。</span>
+    </p>
+
+    <div class="mt-6 grid gap-5 lg:grid-cols-5">
+      {featured && (
+        <div class="lg:col-span-3 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-6 sm:p-7">
+          <p class="text-sm font-bold text-brand-700"><span class="l-en">A worked example</span><span class="l-zh">一個完整的例子</span></p>
+          <div class="mt-4 flex flex-col sm:flex-row gap-6 items-start">
+            <a href={`https://doi.org/${featured.doi}`} target="_blank" rel="noopener" class="shrink-0 self-center sm:self-start">
+              <img
+                src={`${base}/images/papers/trd-ap.jpg`}
+                alt="First page of the British Journal of Psychiatry article"
+                width="144" height="204"
+                class="w-28 sm:w-32 rounded-lg shadow-md ring-1 ring-slate-200 hover:shadow-lg transition"
+              />
+            </a>
+            <div class="flex-1 min-w-0">
+              <p class="text-slate-800 leading-relaxed font-semibold">
+                <span class="l-en">Antipsychotic augmentation and suicide risk in treatment-resistant depression, <span class="font-normal">British Journal of Psychiatry</span></span>
+                <span class="l-zh">治療抗性憂鬱症加上抗精神病藥物與自殺風險，<span class="font-normal">British Journal of Psychiatry</span></span>
+              </p>
+              <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+                <span class="l-en">A conventional analysis of Taiwan's NHIRD made augmentation look protective against suicide attempt. Emulating the target trial with clone-censor-weight removed the time-lag bias, and the benefit went away.</span>
+                <span class="l-zh">用傳統分析看台灣 NHIRD，加上抗精神病藥物看起來能降低自殺企圖。改用 clone-censor-weight 來 emulate target trial、排除 time-lag bias 之後，這個好處就不見了。</span>
+              </p>
+              <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm font-semibold">
+                <a href={`https://doi.org/${featured.doi}`} target="_blank" rel="noopener" class="text-brand-700 hover:underline"><span class="l-en">Read the paper</span><span class="l-zh">讀論文</span> ↗</a>
+                <a href={`${base}/writing/clone-censor-weight`} class="text-brand-700 hover:underline"><span class="l-en">How the method works</span><span class="l-zh">這個方法怎麼運作</span> →</a>
+                <a href={`${base}/tools/clone-censor-weight`} class="text-brand-700 hover:underline"><span class="l-en">Draft your own</span><span class="l-zh">自己寫一份</span> →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div class="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 class="font-bold text-slate-900"><span class="l-en">Papers by design</span><span class="l-zh">依研究設計看論文</span></h3>
+        <ul class="mt-3 divide-y divide-slate-100">
+          {designLinks.map((d) => (
+            <li>
+              <a href={`${base}/publications?design=${d}`} class="group flex items-baseline justify-between gap-3 py-2 text-sm">
+                <span class="text-slate-700 group-hover:text-brand-700 group-hover:underline"><span class="l-en">{DESIGNS[d].en}</span><span class="l-zh">{DESIGNS[d].zh}</span></span>
+                <span class="tabular-nums font-bold text-brand-700">{nDesign[d]}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p class="mt-3 text-xs text-slate-500"><span class="l-en">Where this site has a tool for the same design, the paper links to it.</span><span class="l-zh">本站有對應工具的論文都附了連結，讓你照同一個設計做一次。</span></p>
+      </div>
+    </div>
+
+    <!-- Design diagrams -->
+    <div class="mt-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h3 class="font-bold text-slate-900"><span class="l-en">Draw the design before you run it</span><span class="l-zh">先把設計畫出來，再開始跑</span></h3>
+      <p class="mt-1.5 text-sm text-slate-600 leading-relaxed max-w-3xl">
+        <span class="l-en">Each builder draws the study-design diagram as you fill it in: index date, look-back, grace period, risk and control windows.</span>
+        <span class="l-zh">每個 builder 都會隨著你填的內容畫出 study design diagram：index date、look-back、grace period，以及 risk window 與 control window。</span>
+      </p>
+      <div class="mt-3 flex flex-wrap gap-2">
+        {builders.map((b) => (
+          <a href={b.href} class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:border-brand-500 hover:text-brand-700 transition">{b.name}</a>
+        ))}
+      </div>
+    </div>
+
+    <!-- Latest writing -->
+    {latestPosts.length > 0 && (
+      <div class="mt-8">
+        <div class="flex items-baseline justify-between gap-4 flex-wrap">
+          <h3 class="text-xl font-bold text-slate-900"><span class="l-en">Method notes</span><span class="l-zh">方法筆記</span></h3>
+          <div class="flex gap-5 text-sm font-semibold">
+            <a href={`${base}/writing`} class="text-brand-700 hover:underline"><span class="l-en">All notes</span><span class="l-zh">所有筆記</span> →</a>
+            <a href={`${base}/talks`} class="text-brand-700 hover:underline"><span class="l-en">Talks and teaching</span><span class="l-zh">演講與教學</span> →</a>
+          </div>
+        </div>
+        <div class="mt-4 grid gap-5 sm:grid-cols-2">
+          {latestPosts.map((p) => (
+            <a href={`${base}/writing/${p.id}`} class="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md hover:border-brand-400 transition">
+              <div class="flex flex-wrap gap-2 text-[11px] mb-2">
+                {p.data.tags.slice(0, 2).map((t) => (
+                  <span class="rounded-full bg-brand-50 text-brand-700 font-semibold px-2 py-0.5">{t}</span>
+                ))}
+              </div>
+              <h4 class="font-bold text-slate-900 group-hover:text-brand-700 leading-snug">{p.data.title}</h4>
+              <p class="mt-2 text-sm text-slate-600 leading-relaxed flex-1 line-clamp-3">{p.data.excerpt}</p>
+              <span class="mt-4 text-sm font-semibold text-brand-700 group-hover:underline"><span class="l-en">Read</span><span class="l-zh">閱讀（英文）</span> →</span>
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
+  </section>
+
+  <!-- ── 03 Networks ──────────────────────────────────────────────────── -->
+  <section id="networks" class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 scroll-mt-20">
+    <p class="text-sm font-extrabold text-accent-500 tabular-nums">03</p>
+    <h2 class="mt-1 text-3xl font-bold text-slate-900"><span class="l-en">Data networks across countries</span><span class="l-zh">跨國的資料網絡</span></h2>
+    <p class="mt-2 text-slate-600 max-w-2xl leading-relaxed">
+      <span class="l-en">One country's database answers a question for one health system. Running the same protocol in several shows whether the answer travels.</span>
+      <span class="l-zh">一個國家的資料庫，只能回答那個醫療體系裡的問題。把同一份計畫書放到幾個國家去跑，才知道答案能不能通用。</span>
+    </p>
+
+    <div class="mt-6 grid gap-5 lg:grid-cols-5">
+      <a href={`${base}/networks#map`} class="group lg:col-span-3 flex flex-col rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm hover:shadow-md hover:border-brand-400 transition">
+        <ResearchMap compact />
+        <p class="mt-4 text-sm text-slate-700 leading-relaxed">
+          <span class="l-en"><strong class="text-slate-900">{MAP_STATS.papers} papers</strong> name their data source: <strong class="text-slate-900">{MAP_STATS.databases} sources</strong> in <strong class="text-slate-900">{MAP_STATS.countries} countries and regions</strong>, and {MAP_STATS.multi} of the papers go beyond one country.</span>
+          <span class="l-zh"><strong class="text-slate-900">{MAP_STATS.papers} 篇論文</strong>明載資料來源：分布在 <strong class="text-slate-900">{MAP_STATS.countries} 個國家與地區</strong>的 <strong class="text-slate-900">{MAP_STATS.databases} 個資料來源</strong>，其中 {MAP_STATS.multi} 篇不只用一個國家的資料。</span>
+        </p>
+        <span class="mt-3 text-sm font-semibold text-brand-700 group-hover:underline"><span class="l-en">Open the research map</span><span class="l-zh">打開研究地圖</span> →</span>
+      </a>
+
+      <div class="lg:col-span-2 flex flex-col gap-5">
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 class="font-bold text-slate-900">{s.group}</h3>
-          <ul class="mt-3 space-y-1.5">
-            {s.items.map((i) => (
-              <li class="text-sm text-slate-600 flex gap-2">
-                <span class="text-brand-500 mt-0.5">▸</span><span>{i}</span>
+          <ul class="space-y-4 text-sm text-slate-700 leading-relaxed">
+            <li>
+              <a href="https://www.aspensig.asia/" target="_blank" rel="noopener" class="font-bold text-slate-900 hover:text-brand-700 hover:underline">AsPEN ↗</a>
+              <span class="l-en"> · Chair of the Asian Pharmacoepidemiology Network, after two years as education co-lead (2024–2026).</span>
+              <span class="l-zh"> · Asian Pharmacoepidemiology Network 現任 Chair，先前擔任兩年 education co-lead（2024–2026）。</span>
+            </li>
+            <li>
+              <a href="https://neurogen.hku.hk/" target="_blank" rel="noopener" class="font-bold text-slate-900 hover:text-brand-700 hover:underline">NeuroGEN ↗</a>
+              <span class="l-en"> · Led the 2023 data repository that describes its 15 databases in nine countries and regions.</span>
+              <span class="l-zh"> · 2023 年主導建置 data repository，整理了 9 個國家與地區的 15 個資料庫。</span>
+            </li>
+            <li>
+              <a href="https://www.phdcenter.org.tw/" target="_blank" rel="noopener" class="font-bold text-slate-900 hover:text-brand-700 hover:underline">PHDc ↗</a>
+              <span class="l-en"> · Operations lead at the Population Health Data Center, NCKU.</span>
+              <span class="l-zh"> · 成大群體健康數據中心營運負責人。</span>
+            </li>
+          </ul>
+          <p class="mt-4 text-sm"><a href={`${base}/networks`} class="font-semibold text-brand-700 hover:underline"><span class="l-en">All networks</span><span class="l-zh">所有合作網絡</span> →</a></p>
+        </div>
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 class="font-bold text-slate-900"><span class="l-en">Multi-country papers</span><span class="l-zh">跨國論文</span></h3>
+          <ul class="mt-3 space-y-3">
+            {MULTI_COUNTRY.map((p) => (
+              <li class="text-sm leading-snug">
+                <a href={`https://doi.org/${p.doi}`} target="_blank" rel="noopener" class="text-slate-800 hover:text-brand-700 hover:underline">{paperTitle(p)}</a>
+                <span class="block text-xs text-slate-500 mt-0.5">{paperJournal(p)}, {p.year}</span>
               </li>
             ))}
           </ul>
         </div>
-      ))}
+      </div>
     </div>
   </section>
-
-  <!-- RWE Tools -->
-  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
-    <h2 class="text-2xl font-bold text-slate-900">RWE tools</h2>
-    <p class="mt-2 text-slate-600 max-w-2xl">Open-access utilities I build and maintain for real-world-evidence research — each runs right here on this site.</p>
-    <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {tools.map((t) => (
-        <a
-          href={t.href}
-          target={t.external ? "_blank" : undefined}
-          rel={t.external ? "noopener" : undefined}
-          class="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md hover:border-brand-400 transition"
-        >
-          <span class="self-start text-[11px] uppercase tracking-wide font-semibold text-brand-600 bg-brand-50 rounded-full px-2.5 py-1">{t.tag}</span>
-          <h3 class="mt-4 text-lg font-bold text-slate-900 group-hover:text-brand-700">{t.name}</h3>
-          <p class="mt-2 text-sm text-slate-600 leading-relaxed flex-1">{t.blurb}</p>
-          <span class="mt-5 text-sm font-semibold text-brand-700">{t.cta} {t.external ? "↗" : "→"}</span>
-        </a>
-      ))}
-    </div>
-  </section>
-
-  <!-- Latest writing -->
-  {latestPosts.length > 0 && (
-    <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
-      <div class="flex items-baseline justify-between gap-4 flex-wrap">
-        <h2 class="text-2xl font-bold text-slate-900">Latest writing</h2>
-        <a href={`${base}/writing`} class="text-sm font-semibold text-brand-700 hover:underline">All notes →</a>
-      </div>
-      <div class="mt-6 grid gap-5 sm:grid-cols-2">
-        {latestPosts.map((p) => (
-          <a href={`${base}/writing/${p.id}`} class="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md hover:border-brand-400 transition">
-            <div class="flex flex-wrap gap-2 text-[11px] mb-2">
-              {p.data.tags.slice(0, 2).map((t) => (
-                <span class="rounded-full bg-brand-50 text-brand-700 font-semibold px-2 py-0.5">{t}</span>
-              ))}
-            </div>
-            <h3 class="font-bold text-slate-900 group-hover:text-brand-700 leading-snug">{p.data.title}</h3>
-            <p class="mt-2 text-sm text-slate-600 leading-relaxed flex-1 line-clamp-3">{p.data.excerpt}</p>
-            <span class="mt-4 text-sm font-semibold text-brand-700 group-hover:underline">Read →</span>
-          </a>
-        ))}
-      </div>
-    </section>
-  )}
 
   <!-- Contact / collaborate -->
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
     <div class="rounded-2xl bg-brand-700 text-white p-8 sm:p-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
       <div>
-        <h2 class="text-2xl font-bold">Open to collaborations</h2>
+        <h2 class="text-2xl font-bold"><span class="l-en">Open to collaborations</span><span class="l-zh">歡迎合作</span></h2>
         <p class="mt-2 text-brand-100 max-w-2xl leading-relaxed">
-          Multi-country RWE studies, methods work (target trial emulation, clone-censor-weight), or building research infrastructure — let's talk.
+          <span class="l-en">Multi-country RWE studies, methods work (target trial emulation, clone-censor-weight), or building research infrastructure. Tell me the question and which data you have.</span>
+          <span class="l-zh">跨國 RWE 研究、方法學（target trial emulation、clone-censor-weight），或是一起建研究基礎建設。告訴我你想回答的問題，和你手上有什麼資料。</span>
         </p>
       </div>
       <div class="flex flex-wrap gap-3 shrink-0">
-        <a href="mailto:danielhttsai@gmail.com" class="bg-white text-brand-700 hover:bg-brand-50 font-semibold px-6 py-3 rounded-xl transition">Email me</a>
+        <a href="mailto:danielhttsai@gmail.com" class="bg-white text-brand-700 hover:bg-brand-50 font-semibold px-6 py-3 rounded-xl transition"><span class="l-en">Email me</span><span class="l-zh">寫信給我</span></a>
         <a href="https://www.linkedin.com/in/daniel-hsiang-te-tsai/" target="_blank" rel="noopener" class="border border-white/40 hover:bg-white/10 text-white font-semibold px-6 py-3 rounded-xl transition">LinkedIn ↗</a>
       </div>
     </div>

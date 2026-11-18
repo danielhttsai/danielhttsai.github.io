@@ -19,13 +19,28 @@ const SRC = "https://danielhttsai.github.io/phdc-rwe-tool/";
     </div>
   </div>
 
+  <!-- The address is written in by the script below, not in the markup:
+       /tools/phdc-rwe-tool?m=ccw opens the toolbox on that method (the toolbox
+       routes on #m=<id>), which lets the Publications page link a paper to the
+       card for its method. Setting src once, with the hash already on it, is
+       what makes that reliable: changing the hash of a frame that is still
+       loading left it blank. Only a short lower-case id is accepted, so nothing
+       else can reach the frame's URL. The toolbox needs JavaScript anyway. -->
   <iframe
-    src={SRC}
+    data-toolbox
     title="PHDc RWE Toolbox"
     class="w-full border-0 block"
     style="height: calc(100dvh - 7rem);"
-    loading="lazy"
     allow="clipboard-write; clipboard-read"
     referrerpolicy="no-referrer-when-downgrade"
   ></iframe>
+  <noscript><p class="p-6 text-sm text-slate-600">The toolbox needs JavaScript. <a class="text-brand-700 underline" href={SRC}>Open it directly</a>.</p></noscript>
+
+  <script is:inline define:vars={{ SRC }}>
+    (function () {
+      var m = new URLSearchParams(location.search).get("m");
+      var f = document.querySelector("[data-toolbox]");
+      if (f) f.src = SRC + (m && /^[a-z0-9]{1,12}$/.test(m) ? "#m=" + m : "");
+    })();
+  </script>
 </BaseLayout>

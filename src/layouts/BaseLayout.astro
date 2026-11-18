@@ -6,6 +6,9 @@ import Footer from "../components/Footer.astro";
 interface Props {
   title?: string;
   description?: string;
+  /** Traditional Chinese title / description, shown when the visitor picks 中文. */
+  titleZh?: string;
+  descriptionZh?: string;
   /** Add a subtle teal-green tint to the body (used by the home page). */
   tint?: boolean;
   /** OpenGraph object type — "article" for the Writing posts, else "website". */
@@ -17,6 +20,11 @@ interface Props {
 const {
   title = "Daniel Tsai — Pharmacoepidemiology & Real-World Evidence",
   description = "Daniel Tsai is a postdoctoral research fellow at the Population Health Data Center, NCKU, specializing in comparative effectiveness research, causal inference, and real-world evidence tooling.",
+  // A page that sets its own English title but no Chinese one keeps the
+  // English title in both languages (the tool pages and the posts, which are
+  // English inside); only the site-wide default has a Chinese counterpart.
+  titleZh = Astro.props.title ? undefined : "蔡相德 Daniel Tsai：藥物流行病學與真實世界證據",
+  descriptionZh,
   tint = false,
   ogType = "website",
   publishedTime,
@@ -58,13 +66,34 @@ const personSchema = {
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-title-en={title} data-title-zh={titleZh} data-desc-en={description} data-desc-zh={descriptionZh}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
     <title>{title}</title>
+    <!-- Language choice, applied before first paint so the page never flashes
+         the other language. Order: ?lang= in the URL, then the saved choice,
+         then the browser language on a first visit. The switch itself lives in
+         Header.astro. -->
+    <script is:inline>
+      (function () {
+        try {
+          var h = document.documentElement;
+          var q = new URLSearchParams(location.search).get("lang");
+          var saved = null;
+          try { saved = localStorage.getItem("lang"); } catch (e) {}
+          var l = q === "zh" || q === "en" ? q : saved;
+          if (l !== "zh" && l !== "en") l = /^zh/i.test(navigator.language || "") ? "zh" : "en";
+          if (q === "zh" || q === "en") { try { localStorage.setItem("lang", l); } catch (e) {} }
+          if (l === "zh") {
+            h.lang = "zh-Hant";
+            if (h.dataset.titleZh) document.title = h.dataset.titleZh;
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="canonical" href={canonical} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -96,7 +125,7 @@ const personSchema = {
     )}
   </head>
   <body class:list={["text-slate-800 antialiased", tint ? "home-tint" : "bg-white"]}>
-    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-brand-600 text-white px-3 py-2 rounded">Skip to content</a>
+    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-brand-600 text-white px-3 py-2 rounded"><span class="l-en">Skip to content</span><span class="l-zh">跳到主要內容</span></a>
     <Header />
     <main id="main" class="min-h-[60vh]">
       <slot />

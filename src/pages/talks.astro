@@ -38,31 +38,42 @@ const media = [
   { title: "Shared Data × Open Science × Crossnational Transportability – Vision or Fantasy in Real-World Evidence", source: "PHDc", href: "https://www.phdcenter.org.tw/share_data_x_open_science_x_crossnational/", year: "" },
 ];
 
+const KIND_ZH: Record<string, string> = {
+  "Invited methods talk": "受邀方法學演講",
+  "Educational session": "教育課程",
+  "Invited talk": "受邀演講",
+};
+
 const talksByYear = [...new Set(talks.map((t) => t.year))].sort((a, b) => b.localeCompare(a))
   .map((y) => ({ year: y, items: talks.filter((t) => t.year === y) }));
 ---
 
 <BaseLayout
   title="Talks & teaching — Daniel Tsai"
+  titleZh="演講與教學｜蔡相德 Daniel Tsai"
+  descriptionZh="蔡相德的受邀演講、教育課程與研討會報告，主題為 real-world evidence 與藥物流行病學方法。"
   description="Invited talks, educational sessions, and conference presentations by Daniel Tsai on real-world evidence and pharmacoepidemiology methods."
 >
   <PageHeader
     eyebrow="Speaking & teaching"
+    eyebrowZh="演講與教學"
     title="Talks"
+    titleZh="演講"
+    descriptionZh="受邀演講、教育課程與研討會報告，主題多半是 real-world data 的因果推論方法（clone-censor-weight、target trial emulation）。講題依演講當時使用的語言列出。"
     description="Invited talks, educational sessions, and conference presentations — with a recurring focus on causal-inference methods (clone-censor-weight, target trial emulation) for real-world data."
   />
 
   <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12 space-y-12">
     <!-- Invited & educational -->
     <section>
-      <h2 class="text-2xl font-bold text-slate-900">Invited &amp; educational talks</h2>
+      <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">Invited &amp; educational talks</span><span class="l-zh">受邀演講與教育課程</span></h2>
       <ol class="mt-5 space-y-4">
         {invited.map((t) => (
           <li class="border-l-2 border-accent-500 pl-4">
             <p class="text-sm font-semibold text-slate-900">{t.title}</p>
             <p class="text-sm text-slate-600">{t.venue}{t.place ? ` · ${t.place}` : ""}</p>
             <div class="mt-1 flex items-center gap-2 text-xs">
-              <span class="rounded-full bg-brand-50 text-brand-700 font-semibold px-2 py-0.5">{t.kind}</span>
+              <span class="rounded-full bg-brand-50 text-brand-700 font-semibold px-2 py-0.5"><span class="l-en">{t.kind}</span><span class="l-zh">{KIND_ZH[t.kind] ?? t.kind}</span></span>
               <span class="text-slate-500">{t.year}</span>
             </div>
           </li>
@@ -72,7 +83,7 @@ const talksByYear = [...new Set(talks.map((t) => t.year))].sort((a, b) => b.loca
 
     <!-- Conference presentations -->
     <section>
-      <h2 class="text-2xl font-bold text-slate-900">Conference presentations</h2>
+      <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">Conference presentations</span><span class="l-zh">研討會報告</span></h2>
       {talksByYear.map((grp) => (
         <div class="mt-5">
           <h3 class="text-sm font-extrabold text-brand-700 mb-3">{grp.year}</h3>
@@ -90,7 +101,7 @@ const talksByYear = [...new Set(talks.map((t) => t.year))].sort((a, b) => b.loca
 
     <!-- News -->
     <section>
-      <h2 class="text-2xl font-bold text-slate-900">News</h2>
+      <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">News</span><span class="l-zh">相關報導</span></h2>
       <ol class="mt-5 space-y-4">
         {media.map((m) => (
           <li class="border-l-2 border-slate-200 pl-4">
@@ -103,9 +114,13 @@ const talksByYear = [...new Set(talks.map((t) => t.year))].sort((a, b) => b.loca
 
     <!-- Follow-up CTA (seed for the future QR/notify idea) -->
     <section class="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-      <p class="text-sm text-slate-700">
+      <p class="text-sm text-slate-700 l-en">
         <strong class="text-slate-900">Saw one of these talks?</strong> If you'd like the follow-up paper or slides from a session,
         <a href="mailto:danielhttsai@gmail.com?subject=Talk%20follow-up" class="font-semibold text-brand-700 hover:underline">drop me a line</a> and I'll send it your way.
+      </p>
+      <p class="text-sm text-slate-700 l-zh">
+        <strong class="text-slate-900">聽過其中一場嗎？</strong>想要後續發表的論文或當場的投影片，歡迎
+        <a href="mailto:danielhttsai@gmail.com?subject=Talk%20follow-up" class="font-semibold text-brand-700 hover:underline">寫信給我</a>，我寄給你。
       </p>
     </section>
   </div>

@@ -1,0 +1,264 @@
+{
+  "_comment": "Hand-checked tags for each paper, keyed by DOI (lower case). The weekly sync rewrites publications.json and never touches this file, so tags survive it; a paper the sync adds simply shows without tags until an entry is added here. Every tag was read off the paper itself (abstract or Methods). A tag is left out when the paper does not say it: an empty list means 'not stated', never 'none'. design / data / links use the ids in src/data/research.ts. countries are ISO alpha-2 codes, plus two pseudo codes: GLOBAL (a federated network whose countries the paper does not itemise) and MIDAS65 (the 65 countries and regions of the IQVIA MIDAS sales data, listed in research.ts).",
+  "tags": {
+    "10.1016/j.lanwpc.2026.102014": {
+      "design": ["cohort"],
+      "data": ["nhis-nhid", "cdars", "nhird", "nzmidp"],
+      "countries": ["KR", "HK", "TW", "NZ"],
+      "links": ["map"],
+      "source": "Methods, Data sources: NHIS-NHID (South Korea), Hospital Authority (Hong Kong), NHIRD (Taiwan), NZMIDP (New Zealand); retrospective cohort, propensity-score matched."
+    },
+    "10.1002/cpt.70536": {
+      "design": ["tte", "acnu", "cohort"],
+      "data": ["trinetx"],
+      "countries": ["GLOBAL"],
+      "links": ["builder-acnu", "toolbox-acnu", "note-tte"],
+      "source": "Abstract: TriNetX Global Collaborative Network; multicenter active-comparator, new-user target trial emulations."
+    },
+    "10.1186/s42238-026-00520-x": {
+      "design": ["cohort"],
+      "data": ["trinetx"],
+      "countries": ["US"],
+      "links": [],
+      "source": "Abstract: retrospective cohort study in the TriNetX US Collaborative Network."
+    },
+    "10.1002/cpt.70514": {
+      "design": ["tte", "acnu", "cohort"],
+      "data": ["nhird"],
+      "countries": ["TW"],
+      "links": ["builder-acnu", "toolbox-acnu", "note-tte", "nhird-dict", "drug-lookup"],
+      "source": "Title and Data source: target trial emulation in Taiwan's NHIRD; new users of SGLT2 inhibitors vs DPP4 inhibitors."
+    },
+    "10.1186/s13011-026-00760-3": {
+      "design": [],
+      "data": [],
+      "countries": ["TW"],
+      "links": [],
+      "source": "Methods: inventory data from eight drug addiction treatment centres in Tainan, Taiwan. Not a pharmacoepidemiology design, so no design tag."
+    },
+    "10.1007/s00210-026-05793-w": {
+      "design": ["cohort"],
+      "data": ["trinetx"],
+      "countries": ["US"],
+      "links": ["km-guide"],
+      "source": "Abstract: retrospective cohort study using the TriNetX U.S. Collaborative Network; Kaplan-Meier estimated cumulative incidence."
+    },
+    "10.1192/bjp.2026.10700": {
+      "design": ["commentary"],
+      "data": [],
+      "countries": [],
+      "links": ["note-ccw"],
+      "source": "Authors' reply on the modelling in the 2026 BJP clone-censor-weight study."
+    },
+    "10.1038/s41433-026-04459-4": {
+      "design": ["tte", "cohort"],
+      "data": ["trinetx"],
+      "countries": ["GLOBAL"],
+      "links": ["note-tte"],
+      "source": "Methods: a target trial emulation using the TriNetX Global Collaborative Network."
+    },
+    "10.1038/s43856-026-01545-2": {
+      "design": ["tte", "cohort"],
+      "data": ["trinetx"],
+      "countries": ["US"],
+      "links": ["note-tte"],
+      "source": "Methods: retrospective cohort in the TriNetX U.S. Collaborative Network; the Discussion states a target trial emulation framework was adopted."
+    },
+    "10.2147/clep.s609824": {
+      "design": ["commentary"],
+      "data": [],
+      "countries": [],
+      "links": [],
+      "source": "Response to a letter on the 2025 anticholinergic burden and pneumonia study."
+    },
+    "10.1371/journal.pmed.1004968": {
+      "design": ["tte", "acnu", "cohort"],
+      "data": ["trinetx"],
+      "countries": ["GLOBAL"],
+      "links": ["builder-acnu", "toolbox-acnu", "note-tte"],
+      "source": "Abstract: target trial emulation using the TriNetX Global Collaborative Network; new initiators with DPP4 inhibitors as the active comparator."
+    },
+    "10.1186/s12954-026-01427-9": {
+      "design": ["cctc", "cco"],
+      "data": ["nhird", "tidid"],
+      "countries": ["TW"],
+      "links": ["builder-cco", "toolbox-cctc", "nhird-dict", "drug-lookup"],
+      "source": "Abstract: NHIRD linked to the Taiwan Illicit Drug Issue Database; case-case-time-control study."
+    },
+    "10.1007/s40123-026-01327-y": {
+      "design": ["descriptive", "cohort"],
+      "data": ["trinetx"],
+      "countries": ["GLOBAL"],
+      "links": ["builder-descriptive"],
+      "source": "Abstract: retrospective cohort using the TriNetX Global Collaborative Network, 2013-2024; trends in first-line treatment."
+    },
+    "10.1007/s00210-025-04931-0": {
+      "design": ["cohort"],
+      "data": ["trinetx"],
+      "countries": ["GLOBAL"],
+      "links": [],
+      "source": "Methods: TriNetX Global Collaborative Network; incidence of intraocular inflammation in four disease cohorts."
+    },
+    "10.1186/s12916-026-04629-x": {
+      "design": ["tte", "acnu", "cohort"],
+      "data": ["trinetx"],
+      "countries": ["GLOBAL"],
+      "links": ["builder-acnu", "toolbox-acnu", "note-tte"],
+      "source": "Methods: TriNetX Global Collaborative Network and a target trial emulation framework; initiators of SGLT-2 vs DPP-4 inhibitors (active comparator)."
+    },
+    "10.1002/bcp.70373": {
+      "design": ["cohort"],
+      "data": ["cmuh"],
+      "countries": ["TW"],
+      "links": [],
+      "source": "Methods: retrospective cohort using electronic medical records and genetic data from China Medical University Hospital, Taiwan."
+    },
+    "10.1016/j.mayocp.2025.07.007": {
+      "design": ["acnu", "cohort"],
+      "data": ["trinetx"],
+      "countries": ["GLOBAL"],
+      "links": ["builder-acnu", "toolbox-acnu"],
+      "source": "Methods: multi-institutional and multinational cohort with an active-comparator, new-user design, using electronic health records from TriNetX."
+    },
+    "10.2147/clep.s553894": {
+      "design": ["review", "resource"],
+      "data": ["nhird"],
+      "countries": ["TW"],
+      "links": ["nhird-dict", "drug-lookup"],
+      "source": "Abstract: narrative review of Taiwan's NHIRD."
+    },
+    "10.34067/kid.0000000981": {
+      "design": ["acnu", "cohort"],
+      "data": ["trinetx"],
+      "countries": ["GLOBAL"],
+      "links": ["builder-acnu", "toolbox-acnu"],
+      "source": "Methods: retrospective multinational cohort in the TriNetX research network; new-user design with DPP4 inhibitors and GLP-1 RAs as active comparators."
+    },
+    "10.2147/clep.s524645": {
+      "design": ["cco"],
+      "data": ["nhird"],
+      "countries": ["TW"],
+      "links": ["builder-cco", "toolbox-cctc", "acb-calc", "nhird-dict"],
+      "source": "Abstract: case-crossover study using Taiwan's NHIRD, with case-time-control and case-case-time-control sensitivity analyses."
+    },
+    "10.2147/rmhp.s519367": {
+      "design": ["descriptive", "cohort"],
+      "data": ["nhird", "cgrd"],
+      "countries": ["TW"],
+      "links": ["builder-descriptive", "phenotype-lgs", "nhird-dict"],
+      "source": "Methods: National Health Insurance Database complemented by the Chang Gung Research Database; epidemiology and burden of illness."
+    },
+    "10.1002/cpt.70027": {
+      "design": ["tte", "acnu", "cohort"],
+      "data": ["nhis-nhid", "nhird"],
+      "countries": ["KR", "TW"],
+      "links": ["builder-acnu", "toolbox-acnu", "note-tte", "map"],
+      "source": "Data sources: Korea's NHIS-NHID and Taiwan's NHIRD; active comparator, new-user design emulating six cardiovascular outcome trials."
+    },
+    "10.1186/s12906-025-04945-4": {
+      "design": ["descriptive", "cohort"],
+      "data": ["nhird"],
+      "countries": ["TW"],
+      "links": ["builder-descriptive", "nhird-dict"],
+      "source": "Methods: retrospective cohort using Taiwan's NHIRD; prescription patterns."
+    },
+    "10.1093/ofid/ofaf329": {
+      "design": ["review"],
+      "data": [],
+      "countries": [],
+      "links": ["toolbox-srma"],
+      "source": "Methods: systematic literature review and meta-analyses of studies from 27 low- and middle-income countries. Literature, not a database, so no country tag."
+    },
+    "10.1136/jech-2025-223903": {
+      "design": ["descriptive"],
+      "data": ["nhird", "tidid"],
+      "countries": ["TW"],
+      "links": ["nhird-dict"],
+      "source": "Data source: four linked national databases in Taiwan, including autopsy data, the Taiwan Illicit Drug Issue Database and the NHIRD."
+    },
+    "10.1093/rheumatology/keaf216": {
+      "design": ["tte", "cohort"],
+      "data": ["nhird"],
+      "countries": ["TW"],
+      "links": ["note-tte", "nhird-dict", "drug-lookup"],
+      "source": "Methods: cohort study using a target trial emulation framework in Taiwan's NHIRD."
+    },
+    "10.1192/bjp.2024.283": {
+      "design": ["tte", "ccw", "cohort"],
+      "data": ["nhird"],
+      "countries": ["TW"],
+      "links": ["builder-ccw", "toolbox-ccw", "note-ccw", "nhird-dict"],
+      "source": "Title and Method: target trial emulation framework with the clone-censor-weight approach in Taiwan's NHIRD."
+    },
+    "10.1503/cmaj.240922": {
+      "design": ["tte", "acnu", "cohort"],
+      "data": ["cgrd"],
+      "countries": ["TW"],
+      "links": ["builder-acnu", "toolbox-acnu", "note-tte"],
+      "source": "Methods: new users with an active comparator under a target trial emulation framework; Chang Gung Research Database."
+    },
+    "10.1016/j.hroo.2024.11.012": {
+      "design": ["tte", "cohort"],
+      "data": ["trinetx"],
+      "countries": ["GLOBAL"],
+      "links": ["note-tte"],
+      "source": "Title and Methods: TriNetX-based retrospective cohort with target trial emulation; TriNetX Global Collaborative Network."
+    },
+    "10.3390/pharmacy12040129": {
+      "design": ["review"],
+      "data": [],
+      "countries": [],
+      "links": [],
+      "source": "Scoping review of randomised controlled trials (PRISMA-ScR)."
+    },
+    "10.1001/jamanetworkopen.2024.0946": {
+      "design": ["tte", "acnu", "cohort"],
+      "data": ["cgrd"],
+      "countries": ["TW"],
+      "links": ["builder-acnu", "toolbox-acnu", "note-tte"],
+      "source": "Design: retrospective cohort using target trial emulation with a new-user, active-comparator design; Chang Gung Medical Foundation (CGRD)."
+    },
+    "10.2147/clep.s426485": {
+      "design": ["resource"],
+      "data": ["pbs", "vlhd", "nhis-nhid", "nhird", "medicaid", "medicare", "finreg", "cdars", "phs", "cgrd", "pharmo", "cprd", "thin", "twb", "ukb"],
+      "countries": ["AU", "KR", "TW", "US", "FI", "HK", "GB", "NL"],
+      "links": ["map"],
+      "source": "Results: 15 databases, listed by name and country in the text and Table 1."
+    },
+    "10.1136/bmj-2023-076045": {
+      "design": ["cctc", "cco"],
+      "data": ["nhird"],
+      "countries": ["TW"],
+      "links": ["builder-cco", "toolbox-cctc", "acb-calc", "nhird-dict"],
+      "source": "Abstract: case-case-time-control study in Taiwan's NHIRD."
+    },
+    "10.1038/s41467-023-40637-8": {
+      "design": ["descriptive"],
+      "data": ["iqvia-midas"],
+      "countries": ["MIDAS65"],
+      "links": ["builder-descriptive", "map"],
+      "source": "Abstract and Methods: pharmaceutical sales data (IQVIA MIDAS) from 65 countries and regions; the list is the paper's own source data file."
+    },
+    "10.1186/s12879-023-08409-3": {
+      "design": ["review"],
+      "data": [],
+      "countries": [],
+      "links": [],
+      "source": "Scoping review (PubMed, Embase, Scopus)."
+    },
+    "10.1016/j.ajp.2023.103533": {
+      "design": ["ncc"],
+      "data": ["nhird"],
+      "countries": ["TW"],
+      "links": ["builder-cc", "toolbox-cc", "nhird-dict", "drug-lookup"],
+      "source": "Methods: nested case-control study using Taiwan's National Health Insurance Database linked to the Cause of Death Registry."
+    },
+    "10.1186/s12887-019-1895-7": {
+      "design": ["prediction"],
+      "data": ["cmuh"],
+      "countries": ["TW"],
+      "links": [],
+      "source": "Methods: retrospective chart review in the NICU of China Medical University Children's Hospital; regression vs artificial neural network models."
+    }
+  }
+}

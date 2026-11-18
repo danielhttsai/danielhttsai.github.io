@@ -14,6 +14,7 @@ export interface Pub {
   journal?: string; // overrides the name parsed from the RIS record
 }
 import JCR_ABBREV from "../data/jcr-journals.json";
+import { tagsOf, designChips, filterCountries, DESIGNS, DATABASES, LINKS } from "../data/research";
 interface Props { pub: Pub; hideCover?: boolean }
 const { pub, hideCover } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -55,6 +56,22 @@ const titleOf = (p: Pub): string => {
   return m ? unesc(m[1].trim()).replace(/[\s.]+$/, "") : p.citation;
 };
 
+// Hand-checked tags (design, database, country) and the "do it yourself" links
+// for this paper. A paper without an entry just renders without them.
+const tags = tagsOf(pub.doi);
+const chips = designChips(tags);
+const links = tags.links.map((id) => LINKS[id]).filter(Boolean);
+const href = (h: string) => (h.startsWith("http") ? h : `${base}${h}`);
+// Category labels come from publications.json in English.
+const TAG_ZH: Record<string, string> = {
+  "Drug Repurposing": "老藥新用",
+  "Data Infrastructure": "資料基礎建設",
+  "Methodology": "研究方法",
+  "Polypharmacy": "多重用藥",
+  "Multinational Studies": "跨國研究",
+  "Global Disease Burden": "全球疾病負擔",
+};
+
 const journal = journalOf(pub);
 // No abbreviation on file → no link, rather than one that lands on an empty profile.
 const jcrAbbrev = journal ? (JCR_ABBREV as Record<string, string>)[journal] : undefined;
@@ -71,7 +88,15 @@ const pt = pub.pmcid
   : null;
 ---
 
-<li class="border-l-2 pl-4" class:list={[pub.tag ? "border-brand-600" : pub.pmcid ? "border-accent-500" : "border-slate-200"]}>
+<li
+  class="border-l-2 pl-4"
+  class:list={[pub.tag ? "border-brand-600" : pub.pmcid ? "border-accent-500" : "border-slate-200"]}
+  data-pub
+  data-design={tags.design.join(" ")}
+  data-db={tags.data.join(" ")}
+  data-country={filterCountries(tags).join(" ")}
+  data-year={pub.year}
+>
   <div class="flex gap-4">
     {pub.cover && !hideCover && (
       <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" aria-label={`${titleOf(pub)} — full article at the publisher`} class="shrink-0">
@@ -80,22 +105,45 @@ const pt = pub.pmcid
     )}
     <div class="min-w-0 flex-1">
       {pub.tag && (
-        <span class="inline-flex items-center mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 rounded-full px-2.5 py-0.5">{pub.tag}</span>
+        <span class="inline-flex items-center mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 rounded-full px-2.5 py-0.5"><span class="l-en">{pub.tag}</span><span class="l-zh">{TAG_ZH[pub.tag] ?? pub.tag}</span></span>
       )}
       <p class="text-sm text-slate-700 leading-relaxed" set:html={highlight(pub.citation)} />
       <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         {pt && (
-          <a href={pt.href} target="_blank" rel="noopener" title={pt.title} class="font-semibold text-brand-700 hover:underline">{pt.label} ↗</a>
+          <a href={pt.href} target="_blank" rel="noopener" title={pt.title} class="font-semibold text-brand-700 hover:underline">{pt.label === "Full text" ? <><span class="l-en">Full text</span><span class="l-zh">全文</span></> : pt.label} ↗</a>
         )}
         <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" class="text-slate-500 hover:text-brand-700 hover:underline">DOI ↗</a>
         {pub.ris && (
-          <button type="button" data-ris={pub.ris} data-filename={risName(pub)} title="Download RIS for EndNote / Zotero / Mendeley" class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ Cite</button>
+          <button type="button" data-ris={pub.ris} data-filename={risName(pub)} title="Download RIS for EndNote / Zotero / Mendeley" class="font-semibold text-brand-700 hover:underline cursor-pointer">⧉ <span class="l-en">Cite</span><span class="l-zh">引用</span></button>
         )}
         {jcrAbbrev && (
           <a href={jcrUrl(jcrAbbrev)} target="_blank" rel="noopener" title={`${journal} — impact factor on Journal Citation Reports (needs Web of Science access)`} class="text-slate-500 hover:text-brand-700 hover:underline">JCR ↗</a>
         )}
-        {pub.pmcid && <span class="text-accent-500 font-medium">Open access</span>}
+        {pub.pmcid && <span class="text-accent-500 font-medium"><span class="l-en">Open access</span><span class="l-zh">開放取用</span></span>}
       </div>
+      {(chips.length > 0 || tags.data.length > 0) && (
+        <div class="mt-2 flex flex-wrap gap-1.5 text-[11px] leading-5">
+          {chips.map((d) => (
+            <span class="rounded-full bg-brand-50 text-brand-700 font-semibold px-2"><span class="l-en">{DESIGNS[d].en}</span><span class="l-zh">{DESIGNS[d].zh}</span></span>
+          ))}
+          {tags.data.slice(0, 4).map((d) => (
+            <span class="rounded-full bg-slate-100 text-slate-600 font-medium px-2" title={DATABASES[d].name.en}>{DATABASES[d].short}</span>
+          ))}
+          {tags.data.length > 4 && (
+            <span class="rounded-full bg-slate-100 text-slate-600 font-medium px-2">+{tags.data.length - 4} <span class="l-en">more</span><span class="l-zh">個資料庫</span></span>
+          )}
+        </div>
+      )}
+      {links.length > 0 && (
+        <p class="mt-1.5 text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-1">
+          <span class="font-semibold text-slate-600"><span class="l-en">Do it yourself</span><span class="l-zh">自己做一次</span></span>
+          {links.map((l) => (
+            <a href={href(l.href)} target={l.external ? "_blank" : undefined} rel={l.external ? "noopener" : undefined} class="text-brand-700 hover:underline">
+              <span class="l-en">{l.label.en}</span><span class="l-zh">{l.label.zh}</span> {l.external ? "↗" : "→"}
+            </a>
+          ))}
+        </p>
+      )}
     </div>
   </div>
 </li>

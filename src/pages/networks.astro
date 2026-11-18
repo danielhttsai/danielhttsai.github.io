@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import PageHeader from "../components/PageHeader.astro";
+import ResearchMap from "../components/ResearchMap.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -16,6 +17,8 @@ const networks = [
     heightClass: "max-h-20",
     tagline:
       "PHDc at National Cheng Kung University — Daniel's home centre and the data infrastructure behind much of his Taiwan-based real-world-evidence work.",
+    taglineZh:
+      "成大群體健康數據中心（PHDc）是我所在的研究中心，我在台灣做的 real-world evidence 研究，多數建立在這裡的資料基礎建設上。",
   },
   {
     name: "Asian Pharmacoepidemiology Network",
@@ -24,6 +27,8 @@ const networks = [
     heightClass: "max-h-32",
     tagline:
       "AsPEN — a Special Interest Group of ISPE advancing multi-national database research across the Asia/Pacific region, where Daniel serves as Chair, after two years as education co-lead (2024–2026).",
+    taglineZh:
+      "AsPEN 是 ISPE 的 Special Interest Group，推動亞太地區的跨國資料庫研究。我在 2024–2026 年擔任 education co-lead，現任 Chair。",
   },
   {
     name: "NeuroGEN",
@@ -32,6 +37,8 @@ const networks = [
     heightClass: "max-h-20",
     tagline:
       "The Neurological and mental health Global Epidemiology Network — a multi-database platform spanning Asia, Oceania, Europe, and North America, where Daniel is an active member and led the development of its data repository in 2023.",
+    taglineZh:
+      "NeuroGEN（Neurological and mental health Global Epidemiology Network）是橫跨亞洲、大洋洲、歐洲與北美的多資料庫平台。我是成員之一，並在 2023 年主導建置它的 data repository。",
   },
   {
     name: "DARWIN EU",
@@ -40,21 +47,28 @@ const networks = [
     heightClass: "max-h-32",
     tagline:
       "Data Analysis and Real World Interrogation Network — the European Medicines Agency's federated real-world-evidence network.",
+    taglineZh:
+      "DARWIN EU（Data Analysis and Real World Interrogation Network）是歐洲藥品管理局（EMA）的聯邦式 real-world evidence 網絡。",
   },
 ];
 ---
 
 <BaseLayout
   title="Networks & collaborations — Daniel Tsai"
-  description="The networks, centres, and collaborations Daniel Tsai works within: PHDc, AsPEN, NeuroGEN, and DARWIN EU."
+  titleZh="合作網絡｜蔡相德 Daniel Tsai"
+  description="The networks, centres, and collaborations Daniel Tsai works within (PHDc, AsPEN, NeuroGEN, DARWIN EU), and a map of the countries and databases behind his published papers."
+  descriptionZh="蔡相德參與的研究中心與合作網絡（PHDc、AsPEN、NeuroGEN、DARWIN EU），以及已發表論文所用國家與資料庫的研究地圖。"
 >
   <PageHeader
     eyebrow="Collaborations"
+    eyebrowZh="合作"
     title="Networks"
-    description="The networks, centres, and collaborations I work within."
+    titleZh="合作網絡"
+    description="The networks, centres, and collaborations I work within, and where the data behind my papers comes from."
+    descriptionZh="我參與的研究中心與合作網絡，以及我的論文資料從哪些國家來。"
   />
 
-  <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-16">
+  <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pt-14">
     <div class="grid gap-6 sm:grid-cols-2">
       {networks.map((n) => (
         <a href={n.href} target="_blank" rel="noopener noreferrer"
@@ -62,12 +76,24 @@ const networks = [
           <div class="h-36 flex items-center">
             <img src={`${base}/images/${n.image}`} alt={n.name} class:list={[n.heightClass, "w-auto max-w-full object-contain"]} />
           </div>
-          <p class="mt-6 text-sm text-slate-700 leading-relaxed flex-1">{n.tagline}</p>
+          <p class="mt-6 text-sm text-slate-700 leading-relaxed flex-1"><span class="l-en">{n.tagline}</span><span class="l-zh">{n.taglineZh}</span></p>
           <p class="mt-4 text-xs text-brand-700 font-semibold group-hover:underline">
             {n.href.replace(/^https?:\/\//, "").replace(/\/$/, "")} ↗
           </p>
         </a>
       ))}
+    </div>
+  </section>
+
+  <!-- scroll-mt keeps the heading clear of the sticky header on #map links -->
+  <section id="map" class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-16 scroll-mt-20">
+    <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">Research map</span><span class="l-zh">研究地圖</span></h2>
+    <p class="mt-2 text-slate-600 max-w-3xl leading-relaxed">
+      <span class="l-en">Which countries, and which databases, I have published with. Pick a country on the map or from the buttons to see its databases and the papers that used them.</span>
+      <span class="l-zh">我用過哪些國家、哪些資料庫發表論文。點地圖上的國家或下方的按鈕，就能看到那裡的資料庫和用過它的論文。</span>
+    </p>
+    <div class="mt-6">
+      <ResearchMap />
     </div>
   </section>
 </BaseLayout>

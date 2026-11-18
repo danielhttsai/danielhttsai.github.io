@@ -10,30 +10,38 @@ import metrics from "../data/metrics.json";
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const education = [
-  { degree: "PhD, Pharmacoepidemiology", org: "National Cheng Kung University", when: "Aug 2023 – Jul 2026" },
-  { degree: "MClinPharm, Clinical Pharmacy", org: "National Cheng Kung University", when: "Aug 2019 – Jul 2021" },
-  { degree: "BS, Pharmacy", org: "China Medical University", when: "Sep 2014 – Jun 2019" },
+  { degree: "PhD, Pharmacoepidemiology", degreeZh: "博士（藥物流行病學）", org: "National Cheng Kung University", orgZh: "國立成功大學", when: "Aug 2023 – Jul 2026" },
+  { degree: "MClinPharm, Clinical Pharmacy", degreeZh: "碩士（臨床藥學）", org: "National Cheng Kung University", orgZh: "國立成功大學", when: "Aug 2019 – Jul 2021" },
+  { degree: "BS, Pharmacy", degreeZh: "學士（藥學）", org: "China Medical University", orgZh: "中國醫藥大學", when: "Sep 2014 – Jun 2019" },
 ];
 
 const experience = [
   {
     role: "Research Fellow & Operations Lead",
+    roleZh: "研究員暨營運負責人",
     org: "Population Health Data Center, NCKU, Taiwan",
+    orgZh: "成大群體健康數據中心（PHDc）",
     when: "Feb 2026 – present",
   },
   {
     role: "Technology Lead",
+    roleZh: "技術負責人",
     org: "Population Health Data Center, NCKU, Taiwan",
+    orgZh: "成大群體健康數據中心（PHDc）",
     when: "May 2024 – Jan 2026",
   },
   {
     role: "Research Data Analyst",
+    roleZh: "研究資料分析師",
     org: "Centre for Neonatal and Paediatric Infection, St George's, University of London, UK",
+    orgZh: "英國倫敦大學聖喬治學院 Centre for Neonatal and Paediatric Infection",
     when: "Aug 2021 – Jul 2024",
   },
   {
     role: "Clinical Pharmacist",
+    roleZh: "臨床藥師",
     org: "National Cheng Kung University Hospital, Taiwan",
+    orgZh: "國立成功大學醫學院附設醫院",
     when: "Sep 2019 – Jul 2021",
   },
 ];
@@ -58,18 +66,33 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
   );
 ---
 
-<BaseLayout title="About — Daniel Tsai">
+<BaseLayout
+  title="About — Daniel Tsai"
+  titleZh="關於我｜蔡相德 Daniel Tsai"
+  descriptionZh="蔡相德（Daniel Tsai）是成大群體健康數據中心 的藥物流行病學博士後研究員：簡介、學經歷、技能、獎項與精選論文。"
+>
   <PageHeader
     eyebrow="About"
+    eyebrowZh="關於我"
     title="Daniel Tsai"
+    titleZh="蔡相德 Daniel Tsai"
     description="Postdoctoral research fellow in pharmacoepidemiology at the Population Health Data Center, NCKU."
+    descriptionZh="成大群體健康數據中心（PHDc）的藥物流行病學博士後研究員。"
   />
 
   <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-14 space-y-14">
     <!-- Bio -->
     <section>
-      <h2 class="text-2xl font-bold text-slate-900">BIO</h2>
-      <p class="mt-4 text-slate-600 leading-relaxed">
+      <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">BIO</span><span class="l-zh">簡介</span></h2>
+      <p class="mt-4 text-slate-600 leading-relaxed l-zh">
+        蔡相德是成大群體健康數據中心（PHDc）的博士後研究員暨營運負責人，專長為 comparative
+        effectiveness research 與政策研究。他擅長交叉運用健保申報資料、電子病歷與生物資料庫來做因果推論，並把產生
+        real-world evidence 所需的基礎建設實際建置起來，也參與人工智慧與高齡醫學交會領域的研究。他在 2024 至 2026
+        年擔任 Asian Pharmacoepidemiology Network（AsPEN）的 education co-lead，現任 AsPEN Chair；2023
+        年主導建置 Neurological and Mental Health Global Epidemiology Network（NeuroGEN）的 data
+        repository。透過這些角色，他持續投入國際研究合作，並推動藥物流行病學的發展。
+      </p>
+      <p class="mt-4 text-slate-600 leading-relaxed l-en">
         Daniel Tsai is a postdoctoral research fellow and operations lead at the Population Health Data Center, NCKU.
         He specialises in comparative effectiveness research and policy research. His expertise includes triangulating
         claims databases, electronic health records, and biomedical databases to inform causal inference, and
@@ -82,7 +105,7 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
       </p>
       <div class="mt-6 flex flex-wrap gap-3">
         <a href={`${base}/Daniel-Tsai-CV.pdf`} target="_blank" rel="noopener" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2.5 rounded-lg transition text-sm">
-          ⬇ Download CV (PDF)
+          ⬇ <span class="l-en">Download CV (PDF)</span><span class="l-zh">下載履歷（PDF，英文）</span>
         </a>
         <a href="https://orcid.org/0000-0003-2841-0338" target="_blank" rel="noopener" class="border border-slate-300 hover:border-brand-600 text-slate-700 hover:text-brand-700 font-semibold px-5 py-2.5 rounded-lg transition text-sm">
           ORCID ↗
@@ -92,13 +115,13 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
 
     <!-- Education -->
     <section>
-      <h2 class="text-2xl font-bold text-slate-900">Education</h2>
+      <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">Education</span><span class="l-zh">學歷</span></h2>
       <ul class="mt-5 space-y-4">
         {education.map((e) => (
           <li class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 border-b border-slate-100 pb-4">
             <div>
-              <p class="font-semibold text-slate-900">{e.degree}</p>
-              <p class="text-sm text-slate-600">{e.org}</p>
+              <p class="font-semibold text-slate-900"><span class="l-en">{e.degree}</span><span class="l-zh">{e.degreeZh}</span></p>
+              <p class="text-sm text-slate-600"><span class="l-en">{e.org}</span><span class="l-zh">{e.orgZh}</span></p>
             </div>
             <span class="text-sm text-slate-500 shrink-0">{e.when}</span>
           </li>
@@ -108,15 +131,15 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
 
     <!-- Experience -->
     <section>
-      <h2 class="text-2xl font-bold text-slate-900">Experience</h2>
+      <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">Experience</span><span class="l-zh">經歷</span></h2>
       <ul class="mt-5 space-y-4">
         {experience.map((e) => (
           <li class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 border-b border-slate-100 pb-4">
             <div>
-              <p class="font-semibold text-slate-900">{e.role}</p>
-              <p class="text-sm text-slate-600">{e.org}</p>
+              <p class="font-semibold text-slate-900"><span class="l-en">{e.role}</span><span class="l-zh">{e.roleZh}</span></p>
+              <p class="text-sm text-slate-600"><span class="l-en">{e.org}</span><span class="l-zh">{e.orgZh}</span></p>
             </div>
-            <span class="text-sm text-slate-500 shrink-0">{e.when}</span>
+            <span class="text-sm text-slate-500 shrink-0"><span class="l-en">{e.when}</span><span class="l-zh">{e.when.replace("present", "迄今")}</span></span>
           </li>
         ))}
       </ul>
@@ -124,8 +147,19 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
 
     <!-- Skills -->
     <section>
-      <h2 class="text-2xl font-bold text-slate-900">Training &amp; skills</h2>
-      <div class="mt-4 space-y-4 text-slate-600 leading-relaxed">
+      <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">Training &amp; skills</span><span class="l-zh">訓練與技能</span></h2>
+      <div class="mt-4 space-y-4 text-slate-600 leading-relaxed l-zh">
+        <p>
+          <strong class="text-slate-800">資料分析：</strong>熟悉 SAS、Stata、SPSS 與 R，資料處理的整個流程，從擷取、清理、分析到視覺化都有完整經驗。我用台灣全民健保資料庫（超過
+          2,000 萬人）執行大型藥物流行病學研究，並用多種研究設計交叉驗證結果。這些工作支撐了發表在 BMJ、Nature
+          Communications、CMAJ、JAMA Network Open、PLOS Medicine 與 BMC Medicine 等期刊的複雜設計與進階統計分析。
+        </p>
+        <p>
+          <strong class="text-slate-800">臨床藥師</strong>（領有台灣藥師證書，MoHW No. 045275）：腎臟科病房臨床服務，包括
+          antibiotic stewardship、medication reconciliation、腎臟病藥物治療最佳化、藥物血中濃度監測、藥物不良反應預防，以及在跨專業團隊中的病人衛教。
+        </p>
+      </div>
+      <div class="mt-4 space-y-4 text-slate-600 leading-relaxed l-en">
         <p>
           <strong class="text-slate-800">Computing:</strong> Proficient in SAS, Stata, SPSS, and R, with extensive
           experience across the entire data pipeline — extraction, cleaning, analysis, and visualization. I conduct
@@ -145,15 +179,20 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
 
     <!-- Grants & awards -->
     <section>
-      <h2 class="text-2xl font-bold text-slate-900">Grants &amp; awards</h2>
+      <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">Grants &amp; awards</span><span class="l-zh">研究計畫與獎項</span></h2>
       <div class="mt-4 space-y-3 text-slate-600 leading-relaxed">
-        <p>
+        <p class="l-zh">
+          參與產業（Amgen、Clarivate、Prospection）與政府（國家科學及技術委員會、National Institutes of
+          Health、教育部）資助的研究計畫，主題涵蓋 real-world evidence、藥物流行病學與因果推論。曾多次獲得 ISPE
+          的旅費與註冊費獎助：ICPE（2021–2023）、ISPE（2024–2026）與 ACPE（2021–2026）。
+        </p>
+        <p class="l-en">
           Contributor to projects funded by industry (Amgen, Clarivate, Prospection) and government (Taiwan's National
           Science and Technology Council, National Institutes of Health, Ministry of Education), focused on real-world
           evidence, pharmacoepidemiology, and causal inference. Recognised by multiple ISPE travel/registration
           scholarships for ICPE (2021–2023), ISPE (2024–2026), and ACPE (2021–2026).
         </p>
-        <p><strong class="text-slate-800">Awards</strong></p>
+        <p><strong class="text-slate-800"><span class="l-en">Awards</span><span class="l-zh">獎項</span></strong></p>
         <ul class="list-disc pl-5 space-y-1">
           <li>2026 ISPE Annual Meeting — Stanley A. Edlavitch Award</li>
           <li>2025 ISPE Annual Meeting — Spotlight Poster Award</li>
@@ -166,10 +205,11 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
     <!-- Selected publications -->
     <section>
       <div class="flex items-baseline justify-between gap-4 flex-wrap">
-        <h2 class="text-2xl font-bold text-slate-900">Selected publications</h2>
-        <a href={`${base}/publications`} class="text-sm font-semibold text-brand-700 hover:underline">View all publications →</a>
+        <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">Selected publications</span><span class="l-zh">精選論文</span></h2>
+        <a href={`${base}/publications`} class="text-sm font-semibold text-brand-700 hover:underline"><span class="l-en">View all publications</span><span class="l-zh">所有論文</span> →</a>
       </div>
-      <p class="mt-1 text-sm text-slate-500">{pubs.length} publications · {metrics.citations} citations · h-index {metrics.hIndex} <span class="text-slate-500">(Google Scholar, {metrics.updated})</span></p>
+      <p class="mt-1 text-sm text-slate-500 l-en">{pubs.length} publications · {metrics.citations} citations · h-index {metrics.hIndex} <span class="text-slate-500">(Google Scholar, {metrics.updated})</span></p>
+      <p class="mt-1 text-sm text-slate-500 l-zh">{pubs.length} 篇論文 · 被引用 {metrics.citations} 次 · h-index {metrics.hIndex}（Google Scholar，{metrics.updated}）</p>
       <ol class="mt-5 space-y-5">
         {selected.map((p) => <PublicationItem pub={p} />)}
       </ol>

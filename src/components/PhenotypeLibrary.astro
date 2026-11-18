@@ -113,5 +113,20 @@ import { PHENOTYPES } from "../data/phenotypes";
         modal.classList.remove("hidden"); searchEl.focus();
       });
     });
+
+    // ?library=indications&q=Lennox opens the library on load, exactly as a
+    // click on the page's own Library button would, with the search filled in.
+    // It lets other pages point at one entry (the Publications page links a
+    // paper to the definition it validated).
+    const want = new URLSearchParams(location.search);
+    const cat = want.get("library");
+    if (cat && Object.prototype.hasOwnProperty.call(PHENOTYPES, cat)) {
+      const btn = document.querySelector('[data-open-library][data-category="' + cat + '"]');
+      if (btn) {
+        btn.click();
+        const q = (want.get("q") || "").slice(0, 60);
+        if (q) { searchEl.value = q; renderList(); }
+      }
+    }
   })();
 </script>
