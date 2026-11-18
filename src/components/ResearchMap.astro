@@ -1,26 +1,31 @@
 ---
 // Research map: the countries and databases behind the published papers.
 //
-// Everything here is derived at build time from publication-tags.json, so the
-// map can only show a country or a database that a paper on the Publications
-// page actually names. The world outline is drawn to static inline SVG (no map
-// library ships to the browser); the small script at the bottom only switches
-// which country's panel is visible.
+// Everything is derived at build time from publication-tags.json, so the map
+// can only show a country or a database that a paper actually names. Nothing
+// here is a map library in the browser: the drawing is static inline SVG and
+// the script at the bottom only moves highlights and swaps panels.
 //
-//   <ResearchMap />          full, interactive (Networks page)
-//   <ResearchMap compact />  picture only (home page), links to the full one
+// What the picture says:
+//   bubble   one per country or region with person-level data; area = papers
+//   arc      two countries that appear in the same paper; heavier = more papers
+//   shading  light = covered only by the 65-country sales-data study
+//   dashed   TriNetX's global network, which the papers do not split by country
+// Selecting a bubble opens a panel: databases as bars (length = papers, colour
+// = kind of data) and papers as marks (shape and colour = study design). The
+// same content is available as plain text under "Show as list".
+//
+// Two drawings are rendered and CSS shows one: a Pacific-centred world map for
+// wide screens, and for phones a schematic of the same bubbles and arcs, since
+// nine countries on a 340 px world map are specks.
 import { geoEqualEarth, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import world from "world-atlas/countries-110m.json";
 import {
-  ALL_PUBS, tagsOf, DATABASES, COUNTRIES, CORE, MIDAS65,
-  paperTitle, paperJournal, paperLead, MAP_STATS,
+  ALL_PUBS, tagsOf, DATABASES, DB_KINDS, COUNTRIES, CORE, MIDAS65, DESIGNS, FAMILIES, familyOf, designChips,
+  paperTitle, paperTitleHtml, paperJournal, paperLead,
 } from "../data/research";
-import type { PubRow } from "../data/research";
-
-interface Props { compact?: boolean }
-const { compact = false } = Astro.props;
-const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+import type { PubRow, DbKind } from "../data/research";
 
 // ── Data ─────────────────────────────────────────────────────────────────
 const withDb = (db: string, extra: (p: PubRow) => boolean = () => true) =>
@@ -29,46 +34,76 @@ const midasPapers = withDb("iqvia-midas");
 const trinetxUS = withDb("trinetx", (p) => tagsOf(p.doi).countries.includes("US"));
 const trinetxGlobal = withDb("trinetx", (p) => tagsOf(p.doi).countries.includes("GLOBAL"));
 
-interface Entry { key: string; short: string; en: string; zh: string; typeEn: string; typeZh: string; papers: PubRow[] }
+interface Entry { key: string; short: string; en: string; zh: string; kind: DbKind; papers: PubRow[] }
 const entry = (id: string, papers: PubRow[], over: Partial<Entry> = {}): Entry => ({
-  key: id, short: DATABASES[id].short, en: DATABASES[id].name.en, zh: DATABASES[id].name.zh,
-  typeEn: DATABASES[id].type.en, typeZh: DATABASES[id].type.zh, papers, ...over,
+  key: id, short: DATABASES[id].short, en: DATABASES[id].name.en, zh: DATABASES[id].name.zh, kind: DATABASES[id].kind, papers, ...over,
 });
+interface Block { code: string; en: string; zh: string; entries: Entry[]; papers: { p: PubRow; dbs: string[] }[]; nDb: number; note?: { en: string; zh: string } }
+const makeBlock = (code: string, en: string, zh: string, entries: Entry[], note?: Block["note"]): Block => {
+  // Each paper once, newest first, with the databases it used here.
+  const papers = ALL_PUBS
+    .map((p) => ({ p, dbs: entries.filter((e) => e.papers.includes(p)).map((e) => e.short) }))
+    .filter((x) => x.dbs.length);
+  return { code, en, zh, entries, papers, nDb: entries.filter((e) => e.kind !== "sales").length, note };
+};
 
-const blocks = CORE.map((c) => {
+const salesOnly = MIDAS65.filter((c) => !CORE.includes(c)).sort((a, b) => COUNTRIES[a].name.en.localeCompare(COUNTRIES[b].name.en));
+const countryBlocks = CORE.map((c) => {
   const entries: Entry[] = Object.keys(DATABASES)
     .filter((id) => DATABASES[id].country === c)
     .map((id) => entry(id, withDb(id)))
     .filter((e) => e.papers.length)
     .sort((a, b) => b.papers.length - a.papers.length);
   if (c === "US" && trinetxUS.length) {
-    entries.push(entry("trinetx", trinetxUS, {
-      key: "trinetx-us", short: "TriNetX US", en: "TriNetX US Collaborative Network", zh: "TriNetX 美國協作網絡",
-    }));
+    entries.push(entry("trinetx", trinetxUS, { key: "trinetx-us", short: "TriNetX US", en: "TriNetX US Collaborative Network", zh: "TriNetX 美國協作網絡" }));
   }
   if (MIDAS65.includes(c) && midasPapers.length) entries.push(entry("iqvia-midas", midasPapers));
-  // Each paper once, newest first, with the databases it used in this country:
-  // a paper that used four UK databases is one line, not four.
-  const papers = ALL_PUBS
-    .map((p) => ({ p, dbs: entries.filter((e) => e.papers.includes(p)).map((e) => e.short) }))
-    .filter((x) => x.dbs.length);
-  // Person-level databases only: the sales data is the same file in every country.
-  const nDb = entries.filter((e) => e.key !== "iqvia-midas").length;
-  return { code: c, name: COUNTRIES[c].name, entries, papers, nPapers: papers.length, nDb };
+  return makeBlock(c, COUNTRIES[c].name.en, COUNTRIES[c].name.zh, entries);
 });
-const salesOnly = MIDAS65.filter((c) => !CORE.includes(c)).sort((a, b) => COUNTRIES[a].name.en.localeCompare(COUNTRIES[b].name.en));
+const blocks: Block[] = [
+  ...countryBlocks,
+  makeBlock("GLOBAL", "TriNetX global network", "TriNetX 全球網絡",
+    [entry("trinetx", trinetxGlobal, { short: "TriNetX Global", en: "TriNetX Global Collaborative Network", zh: "TriNetX 全球協作網絡" })],
+    {
+      en: "A federated network of electronic health records from healthcare organisations in many countries. These papers analyse it as one source and do not report by country, so it has no place on the map. Papers on the US Collaborative Network are under the United States.",
+      zh: "由多國醫療機構電子病歷組成的聯邦式網絡。這些論文把它當成單一資料來源分析，沒有依國家分開報告，所以在地圖上沒有位置。使用美國協作網絡的論文列在美國底下。",
+    }),
+  makeBlock("MIDAS", "Sales data, 65 countries", "銷售資料：65 個國家與地區",
+    [entry("iqvia-midas", midasPapers)],
+    {
+      en: `Country-level sales volumes, with no patient records. Besides the ${MIDAS65.length - salesOnly.length} countries that also have a person-level database here, the study covers: ${salesOnly.map((c) => COUNTRIES[c].name.en).join(", ")}.`,
+      zh: `這是國家層級的銷售量，沒有病人層級的紀錄。除了這裡同時有個人層級資料庫的 ${MIDAS65.length - salesOnly.length} 個國家，這項研究還涵蓋：${salesOnly.map((c) => COUNTRIES[c].name.zh).join("、")}。`,
+    }),
+];
+const byCode = Object.fromEntries(blocks.map((b) => [b.code, b]));
+const maxBar = Math.max(...blocks.flatMap((b) => b.entries.map((e) => e.papers.length)));
 
-const stats = MAP_STATS;
+// Arcs: two countries named in the same paper (person-level data only; the
+// sales study would tie 65 countries to each other and say nothing).
+const pairCount: Record<string, number> = {};
+for (const p of ALL_PUBS) {
+  const cs = tagsOf(p.doi).countries.filter((c) => CORE.includes(c));
+  for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+    const k = [cs[i], cs[j]].sort().join("-");
+    pairCount[k] = (pairCount[k] || 0) + 1;
+  }
+}
+const pairs = Object.entries(pairCount).map(([k, n]) => ({ a: k.split("-")[0], b: k.split("-")[1], n }));
 
 // ── Geometry ─────────────────────────────────────────────────────────────
-// Equal Earth, centred on the western Pacific so Asia-Pacific sits in the
-// middle with Europe to the left and the Americas to the right.
+interface Node { code: string; x: number; y: number; r: number; n: number; label: "right" | "left" | "below"; en: string; zh: string; dashed?: boolean }
+const nPapers = (c: string) => byCode[c].papers.length;
+const label2 = (c: string) => ({ en: byCode[c].en, zh: byCode[c].zh });
+
+// Wide: Equal Earth centred on the western Pacific, so Asia-Pacific sits in
+// the middle with Europe on the left and North America on the right. Bubbles
+// sit on their country except where neighbours would cover each other; those
+// are nudged apart (Hong Kong off Taiwan, the UK off the Netherlands).
 const W = 960;
 const projection = geoEqualEarth().rotate([-150, 0]).fitWidth(W, { type: "Sphere" } as any);
 const path = geoPath(projection).digits(1);
-const H = Math.ceil((path.bounds({ type: "Sphere" } as any)[1][1]) * 0.86); // crop Antarctica
+const TOP = 4, BOTTOM = 408; // crop the Arctic and Antarctica
 const countries = (feature(world as any, (world as any).objects.countries) as any).features as any[];
-
 const byId: Record<string, string> = {};
 for (const [code, c] of Object.entries(COUNTRIES)) if (c.id) byId[c.id] = code;
 const shapes = countries
@@ -76,246 +111,457 @@ const shapes = countries
   .map((f) => {
     const code = byId[f.id as string];
     const kind = code && CORE.includes(code) ? "core" : code && MIDAS65.includes(code) ? "sales" : "land";
-    return { d: path(f) || "", code, kind };
+    return { d: path(f) || "", kind };
   })
   .filter((s) => s.d);
-// Plain land is one path: it is never interactive, and one element is lighter
-// than 110.
-const land = shapes.filter((s) => s.kind === "land").map((s) => s.d).join("");
-const sales = shapes.filter((s) => s.kind === "sales");
-const core = shapes.filter((s) => s.kind === "core");
+const landD = shapes.filter((s) => s.kind === "land").map((s) => s.d).join("");
+const salesD = shapes.filter((s) => s.kind === "sales").map((s) => s.d).join("");
+const coreD = shapes.filter((s) => s.kind === "core").map((s) => s.d).join("");
 
-// Markers and labels for the person-level countries. dx/dy/anchor keep the
-// labels of close neighbours (Taiwan–Hong Kong, UK–Netherlands) apart.
-const LABEL: Record<string, { dx: number; dy: number; anchor: "start" | "end" | "middle" }> = {
-  TW: { dx: 10, dy: 4, anchor: "start" },
-  KR: { dx: 10, dy: -4, anchor: "start" },
-  HK: { dx: -10, dy: 8, anchor: "end" },
-  NZ: { dx: 10, dy: 4, anchor: "start" },
-  AU: { dx: 0, dy: 22, anchor: "middle" },
-  US: { dx: 0, dy: 22, anchor: "middle" },
-  GB: { dx: -9, dy: 14, anchor: "end" },
-  FI: { dx: 10, dy: -2, anchor: "start" },
-  NL: { dx: 10, dy: 12, anchor: "start" },
+const NUDGE: Record<string, [number, number]> = { KR: [9, -19], HK: [-42, 9], GB: [-13, -7], NL: [11.5, 8.5] };
+const WIDE_LABEL: Record<string, Node["label"]> = { TW: "right", KR: "right", HK: "left", NZ: "right", AU: "right", US: "right", GB: "left", FI: "right", NL: "right" };
+// Area proportional to papers. The drawing is 960 units wide and shows at about
+// 700 px beside the panel, so sizes here are roughly 1.4 times what is seen.
+const rWide = (n: number) => +(10 * Math.sqrt(n)).toFixed(1);
+const wideNodes: Node[] = [
+  ...CORE.map((c) => {
+    const [x, y] = projection(COUNTRIES[c].at!) as [number, number];
+    const [dx, dy] = NUDGE[c] || [0, 0];
+    return { code: c, x: +(x + dx).toFixed(1), y: +(y + dy).toFixed(1), r: rWide(nPapers(c)), n: nPapers(c), label: WIDE_LABEL[c], ...label2(c) };
+  }),
+  { code: "GLOBAL", x: 660, y: 262, r: rWide(trinetxGlobal.length), n: trinetxGlobal.length, label: "below", ...label2("GLOBAL"), dashed: true },
+];
+
+// Narrow: the same bubbles and arcs as a schematic, laid out by hand roughly
+// where the regions are (Europe top left, North America top right, Asia in the
+// middle, Oceania below). A square-ish canvas lets the bubbles be big enough
+// to read and to tap.
+const NW = 360, NH = 425;
+const rNarrow = (n: number) => +(9.5 * Math.sqrt(n)).toFixed(1);
+const NARROW_AT: Record<string, [number, number, Node["label"]]> = {
+  GB: [52, 72, "below"], FI: [150, 46, "right"], NL: [136, 132, "right"], US: [300, 74, "below"],
+  KR: [268, 178, "below"], TW: [186, 246, "below"], HK: [72, 240, "below"],
+  AU: [120, 356, "below"], NZ: [226, 380, "below"], GLOBAL: [278, 300, "below"],
 };
-const markers = CORE.map((c) => {
-  const [x, y] = projection(COUNTRIES[c].at!) as [number, number];
-  const b = blocks.find((k) => k.code === c)!;
-  return { code: c, x: +x.toFixed(1), y: +y.toFixed(1), name: COUNTRIES[c].name, nPapers: b.nPapers, nDb: b.nDb, ...LABEL[c] };
+const narrowNodes: Node[] = [...CORE, "GLOBAL"].map((c) => {
+  const [x, y, label] = NARROW_AT[c];
+  return { code: c, x, y, r: rNarrow(nPapers(c)), n: nPapers(c), label, ...label2(c), dashed: c === "GLOBAL" };
 });
+
+// A gentle arc between two bubbles, bowed away from the straight line so that
+// arcs sharing an endpoint fan out instead of stacking.
+const arcs = (nodes: Node[]) => {
+  const at = Object.fromEntries(nodes.map((n) => [n.code, n]));
+  return pairs.map(({ a, b, n }) => {
+    const A = at[a], B = at[b];
+    const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+    const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy) || 1;
+    let nx = -dy / len, ny = dx / len;
+    if (ny > 0) { nx = -nx; ny = -ny; } // always bow upward
+    const k = 0.2 * len;
+    return { a, b, n, d: `M${A.x},${A.y}Q${(mx + nx * k).toFixed(1)},${(my + ny * k).toFixed(1)} ${B.x},${B.y}` };
+  });
+};
+const layouts = [
+  { id: "wide", viewBox: `0 ${TOP} ${W} ${BOTTOM - TOP}`, nodes: wideNodes, arcs: arcs(wideNodes), map: true, font: 17, hit: 26, big: 18, stroke: 1.4 },
+  { id: "narrow", viewBox: `0 0 ${NW} ${NH}`, nodes: narrowNodes, arcs: arcs(narrowNodes), map: false, font: 12, hit: 24, big: 13, stroke: 1 },
+];
+const REGIONS = [
+  { x: 14, y: 22, en: "EUROPE", zh: "歐洲" }, { x: 346, y: 22, en: "NORTH AMERICA", zh: "北美", end: true },
+  { x: 14, y: 176, en: "ASIA", zh: "亞洲" }, { x: 14, y: 318, en: "OCEANIA", zh: "大洋洲" },
+];
+
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const doi = (p: PubRow) => `https://doi.org/${p.doi}`;
+const designOf = (p: PubRow) => designChips(tagsOf(p.doi))[0];
+const kindsIn = (b: Block) => (Object.keys(DB_KINDS) as DbKind[]).filter((k) => b.entries.some((e) => e.kind === k));
+const famsIn = (b: Block) => Object.keys(FAMILIES).filter((f) => b.papers.some(({ p }) => familyOf(tagsOf(p.doi)) === f));
+// Papers grouped by year, newest first, for the strip.
+const byYear = (b: Block) => {
+  const years = [...new Set(b.papers.map(({ p }) => p.year))];
+  return years.map((y) => ({ y, items: b.papers.filter(({ p }) => p.year === y) }));
+};
 ---
 
-<div class:list={["research-map", compact && "is-compact"]} data-research-map={compact ? undefined : ""}>
-  <svg
-    viewBox={`0 0 ${W} ${H}`}
-    role={compact ? "img" : "group"}
-    aria-label="World map of the countries and databases behind Daniel Tsai's publications"
-    data-i18n-attr="aria-label"
-    data-en-aria-label="World map of the countries and databases behind Daniel Tsai's publications"
-    data-zh-aria-label="世界地圖：蔡相德已發表論文所使用的國家與資料庫"
-    class="block w-full h-auto"
-  >
-    <path class="m-land" d={land} />
-    {sales.map((s) => (
-      compact
-        ? <path class="m-sales" d={s.d} />
-        : <path class="m-sales" d={s.d} data-c="MIDAS"><title>{COUNTRIES[s.code!].name.en}: IQVIA MIDAS sales data</title></path>
-    ))}
-    {core.map((s) => (
-      compact
-        ? <path class="m-core" d={s.d} />
-        : <path class="m-core" d={s.d} data-c={s.code} />
-    ))}
-    {markers.map((m) => (
-      compact ? (
-        <circle class="m-dot" cx={m.x} cy={m.y} r="4.5" />
-      ) : (
-        <g
-          class="m-marker"
-          data-c={m.code}
-          role="button"
-          tabindex="0"
-          aria-label={`${m.name.en}: ${plural(m.nDb, "database")}, ${plural(m.nPapers, "paper")}`}
+<div class="research-map" data-research-map>
+  <div class="rm-grid">
+    <div class="rm-stage">
+      {layouts.map((L) => (
+        <svg
+          viewBox={L.viewBox}
+          class:list={["rm-svg", `rm-${L.id}`]}
+          role="group"
+          aria-label="Map of the countries and databases behind Daniel Tsai's publications"
           data-i18n-attr="aria-label"
-          data-en-aria-label={`${m.name.en}: ${plural(m.nDb, "database")}, ${plural(m.nPapers, "paper")}`}
-          data-zh-aria-label={`${m.name.zh}：${m.nDb} 個資料庫、${m.nPapers} 篇論文`}
+          data-en-aria-label="Map of the countries and databases behind Daniel Tsai's publications"
+          data-zh-aria-label="蔡相德已發表論文所使用的國家與資料庫地圖"
         >
-          <circle class="m-hit" cx={m.x} cy={m.y} r="16" />
-          <circle class="m-dot" cx={m.x} cy={m.y} r="5.5" />
-          <text class="m-label l-en" x={m.x + m.dx} y={m.y + m.dy} text-anchor={m.anchor}>{m.name.en}</text>
-          <text class="m-label l-zh" x={m.x + m.dx} y={m.y + m.dy} text-anchor={m.anchor}>{m.name.zh}</text>
-        </g>
-      )
-    ))}
-  </svg>
+          {L.map && <path class="m-land" d={landD} />}
+          {L.map && <path class="m-sales" d={salesD} data-c="MIDAS" />}
+          {L.map && <path class="m-core" d={coreD} />}
+          {!L.map && REGIONS.map((r) => (
+            <>
+              <text class="m-region l-en" x={r.x} y={r.y} text-anchor={r.end ? "end" : "start"}>{r.en}</text>
+              <text class="m-region l-zh" x={r.x} y={r.y} text-anchor={r.end ? "end" : "start"}>{r.zh}</text>
+            </>
+          ))}
+          <g class="m-arcs" aria-hidden="true">
+            {L.arcs.map((a) => (
+              <path class="m-arc" d={a.d} data-a={a.a} data-b={a.b} stroke-width={(a.n === 1 ? 1.2 : a.n === 2 ? 2.6 : 4) * L.stroke} />
+            ))}
+          </g>
+          {L.nodes.map((n) => {
+            const gap = L.font * 0.5;
+            const lx = n.label === "right" ? n.r + gap : n.label === "left" ? -n.r - gap : 0;
+            const cs = n.r >= L.big ? L.font : L.font - 2.5;
+            const ly = n.label === "below" ? n.r + L.font + 8 : L.font * 0.35;
+            const anchor = n.label === "right" ? "start" : n.label === "left" ? "end" : "middle";
+            const en = `${n.en}: ${n.dashed ? "" : plural(byCode[n.code].nDb, "database") + ", "}${plural(n.n, "paper")}`;
+            const zh = `${n.zh}：${n.dashed ? "" : byCode[n.code].nDb + " 個資料庫、"}${n.n} 篇論文`;
+            return (
+              <g
+                class:list={["m-node", n.dashed && "is-network"]}
+                data-c={n.code}
+                transform={`translate(${n.x},${n.y})`}
+                role="button"
+                tabindex="0"
+                aria-label={en}
+                data-i18n-attr="aria-label"
+                data-en-aria-label={en}
+                data-zh-aria-label={zh}
+              >
+                <circle class="m-hit" r={Math.max(n.r + 4, L.hit)} />
+                <circle class="m-halo" r={n.r + 4} />
+                <circle class="m-bubble" r={n.r} />
+                <text class="m-count" y={cs * 0.35} font-size={cs} text-anchor="middle">{n.n}</text>
+                <text class="m-label l-en" x={lx} y={ly} text-anchor={anchor} font-size={L.font}>{n.en}</text>
+                <text class="m-label l-zh" x={lx} y={ly} text-anchor={anchor} font-size={L.font}>{n.zh}</text>
+              </g>
+            );
+          })}
+        </svg>
+      ))}
 
-  <ul class="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-600">
-    <li class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:var(--color-brand-500)"></span><span class="l-en">Person-level database used in a published paper</span><span class="l-zh">已發表論文使用過的個人層級資料庫</span></li>
-    <li class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:var(--color-brand-100)"></span><span class="l-en">Pharmaceutical sales data only (IQVIA MIDAS)</span><span class="l-zh">僅藥品銷售資料（IQVIA MIDAS）</span></li>
-  </ul>
-
-  {!compact && (
-    <div class="mt-8">
-      <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-        {[
-          { n: stats.countries, en: "countries and regions with person-level data", zh: "個國家與地區的個人層級資料" },
-          { n: stats.databases, en: "named data sources", zh: "個具名資料來源" },
-          { n: stats.papers, en: "papers that name their data source", zh: "篇論文明載資料來源" },
-          { n: stats.multi, en: "of them use more than one country or a multinational network", zh: "篇跨國或使用跨國網絡" },
-        ].map((s) => (
-          <div class="rounded-xl border border-slate-200 bg-white p-4">
-            <dd class="text-2xl font-extrabold text-brand-700">{s.n}</dd>
-            <dt class="mt-1 text-xs text-slate-500 leading-snug"><span class="l-en">{s.en}</span><span class="l-zh">{s.zh}</span></dt>
-          </div>
-        ))}
-      </dl>
-
-      <!-- The same choices as the map, as buttons: easier than a small country
-           on a phone, and reachable without a pointer. -->
-      <div class="mt-6 flex flex-wrap gap-2" role="group" aria-label="Choose a country or network" data-i18n-attr="aria-label" data-en-aria-label="Choose a country or network" data-zh-aria-label="選擇國家或網絡">
-        {blocks.map((b) => (
-          <button type="button" data-pick={b.code} aria-pressed="false" class="m-pick">
-            <span class="l-en">{b.name.en}</span><span class="l-zh">{b.name.zh}</span> <span class="m-pick-n">{b.nPapers}</span>
+      <!-- Legend. The two entries that are not places are buttons: they open
+           the same panel a bubble does. -->
+      <ul class="rm-legend">
+        <li><span class="k-bubble" aria-hidden="true"></span><span class="l-en">Country or region with person-level data; size and number = papers</span><span class="l-zh">有個人層級資料的國家或地區；大小與數字＝論文數</span></li>
+        <li><span class="k-arc" aria-hidden="true"></span><span class="l-en">Two countries in the same paper; thicker = more papers</span><span class="l-zh">同一篇論文用到的兩個國家；越粗＝篇數越多</span></li>
+        <li>
+          <button type="button" class="rm-key" data-pick="GLOBAL" aria-pressed="false">
+            <span class="k-network" aria-hidden="true"></span><span class="l-en">TriNetX global network, not split by country ({trinetxGlobal.length} papers)</span><span class="l-zh">TriNetX 全球網絡，不分國家（{trinetxGlobal.length} 篇）</span>
           </button>
-        ))}
-        <button type="button" data-pick="GLOBAL" aria-pressed="false" class="m-pick">
-          <span class="l-en">TriNetX global network</span><span class="l-zh">TriNetX 全球網絡</span> <span class="m-pick-n">{trinetxGlobal.length}</span>
-        </button>
-        <button type="button" data-pick="MIDAS" aria-pressed="false" class="m-pick">
-          <span class="l-en">Sales data, 65 countries</span><span class="l-zh">銷售資料，65 國</span> <span class="m-pick-n">{midasPapers.length}</span>
-        </button>
-        <button type="button" data-pick="ALL" aria-pressed="false" class="m-pick m-pick-all">
-          <span class="l-en">Show the full list</span><span class="l-zh">顯示完整清單</span>
-        </button>
-      </div>
-
-      <!-- Without the script every block below is visible: this is also the
-           plain-text version of the map. -->
-      <div class="mt-5 space-y-5" data-blocks>
-        {blocks.map((b) => (
-          <section data-block={b.code} class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-            <h3 class="text-lg font-bold text-slate-900"><span class="l-en">{b.name.en}</span><span class="l-zh">{b.name.zh}</span></h3>
-            <ul class="mt-3 space-y-1.5">
-              {b.entries.map((e) => (
-                <li class="text-sm">
-                  <span class="font-bold text-slate-900">{e.short}</span>
-                  <span class="text-slate-600"> · <span class="l-en">{e.en}</span><span class="l-zh">{e.zh}</span></span>
-                  <span class="ml-1 rounded-full bg-slate-100 text-slate-600 text-[11px] font-medium px-2 py-0.5 whitespace-nowrap"><span class="l-en">{e.typeEn}</span><span class="l-zh">{e.typeZh}</span></span>
-                  <span class="text-xs text-slate-500 whitespace-nowrap"> · {e.papers.length} <span class="l-en">{e.papers.length === 1 ? "paper" : "papers"}</span><span class="l-zh">篇</span></span>
-                </li>
-              ))}
-            </ul>
-            <h4 class="mt-5 text-xs font-bold uppercase tracking-wide text-slate-500"><span class="l-en">Papers</span><span class="l-zh">論文</span></h4>
-            <ul class="mt-2 space-y-2 border-l-2 border-brand-100 pl-3">
-              {b.papers.map(({ p, dbs }) => (
-                <li class="text-sm text-slate-700 leading-snug">
-                  <a href={doi(p)} target="_blank" rel="noopener" class="hover:text-brand-700 hover:underline">{paperTitle(p)}</a>
-                  <span class="text-slate-500"> — {paperLead(p)} {paperJournal(p)}, {p.year}</span>
-                  <span class="text-xs text-brand-700 font-semibold whitespace-nowrap"> · {dbs.join(", ")}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
-
-        <section data-block="GLOBAL" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-          <h3 class="text-lg font-bold text-slate-900"><span class="l-en">TriNetX Global Collaborative Network</span><span class="l-zh">TriNetX 全球協作網絡</span></h3>
-          <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-            <span class="l-en">A federated network of electronic health records from healthcare organisations in many countries. These papers analyse the network as a whole and do not report results by country, so it is not drawn on the map. Papers on the US Collaborative Network are listed under the United States.</span>
-            <span class="l-zh">由多國醫療機構電子病歷組成的聯邦式網絡。這些論文把整個網絡當成一個資料來源來分析，沒有依國家分開報告，所以不畫在地圖上。使用美國協作網絡的論文列在美國底下。</span>
-          </p>
-          <ul class="mt-3 space-y-1.5 border-l-2 border-brand-100 pl-3">
-            {trinetxGlobal.map((p) => (
-              <li class="text-sm text-slate-700 leading-snug">
-                <a href={doi(p)} target="_blank" rel="noopener" class="hover:text-brand-700 hover:underline">{paperTitle(p)}</a>
-                <span class="text-slate-500"> — {paperLead(p)} {paperJournal(p)}, {p.year}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section data-block="MIDAS" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-          <h3 class="text-lg font-bold text-slate-900"><span class="l-en">Pharmaceutical sales data, 65 countries and regions</span><span class="l-zh">藥品銷售資料：65 個國家與地區</span></h3>
-          <ul class="mt-3 space-y-1.5 border-l-2 border-brand-100 pl-3">
-            {midasPapers.map((p) => (
-              <li class="text-sm text-slate-700 leading-snug">
-                <a href={doi(p)} target="_blank" rel="noopener" class="hover:text-brand-700 hover:underline">{paperTitle(p)}</a>
-                <span class="text-slate-500"> — {paperLead(p)} {paperJournal(p)}, {p.year}</span>
-              </li>
-            ))}
-          </ul>
-          <p class="mt-3 text-sm text-slate-600 leading-relaxed">
-            <span class="l-en">Country-level sales volumes, with no patient records. Besides the {MIDAS65.length - salesOnly.length} countries above that also have a person-level database, the study covers: {salesOnly.map((c) => COUNTRIES[c].name.en).join(", ")}.</span>
-            <span class="l-zh">這是國家層級的銷售量，沒有病人層級的紀錄。除了上面 {MIDAS65.length - salesOnly.length} 個同時有個人層級資料庫的國家，這項研究還涵蓋：{salesOnly.map((c) => COUNTRIES[c].name.zh).join("、")}。</span>
-          </p>
-        </section>
-      </div>
-
-      <p class="mt-5 text-xs text-slate-500 leading-relaxed">
-        <span class="l-en">Every country and database here is named in the paper it is listed under. Systematic reviews, and papers that do not name a database, are not on the map.</span>
-        <span class="l-zh">這裡的每個國家與資料庫，都是所列論文自己寫明的。系統性回顧，以及沒有寫明資料庫的論文，不在地圖上。</span>
-      </p>
+        </li>
+        <li>
+          <button type="button" class="rm-key" data-pick="MIDAS" aria-pressed="false">
+            <span class="k-sales" aria-hidden="true"></span><span class="l-en">Sales data only, 65 countries ({plural(midasPapers.length, "paper")})</span><span class="l-zh">僅有銷售資料，共 65 國（{midasPapers.length} 篇）</span>
+          </button>
+        </li>
+      </ul>
     </div>
-  )}
+
+    <!-- Panel: one block per bubble; the script shows the selected one. Without
+         the script every block is visible, one after another. -->
+    <div class="rm-panel" data-blocks>
+      {blocks.map((b) => (
+        <section data-block={b.code} class="rm-block">
+          <div class="rm-a">
+          <h3 class="rm-title"><span class="l-en">{b.en}</span><span class="l-zh">{b.zh}</span></h3>
+          <p class="rm-sub">
+            <span class="l-en">{plural(b.papers.length, "paper")}{b.nDb > 0 && b.code !== "GLOBAL" ? ` · ${plural(b.nDb, "database")}` : ""}</span>
+            <span class="l-zh">{b.papers.length} 篇論文{b.nDb > 0 && b.code !== "GLOBAL" ? ` · ${b.nDb} 個資料庫` : ""}</span>
+          </p>
+
+          <h4 class="rm-h"><span class="l-en">Data sources, by papers</span><span class="l-zh">資料來源（依論文數）</span></h4>
+          <div class="rm-bars">
+            {b.entries.map((e) => (
+              <div class="rm-bar-row" title={e.en}>
+                <span class="rm-bar-name">{e.short}</span>
+                <span class="rm-bar-track"><span class:list={["rm-bar", `kind-${e.kind}`]} style={`width:${((e.papers.length / maxBar) * 100).toFixed(1)}%`}></span></span>
+                <span class="rm-bar-n">{e.papers.length}</span>
+              </div>
+            ))}
+          </div>
+          <ul class="rm-key-list">
+            {kindsIn(b).map((k) => (
+              <li><span class:list={["rm-swatch", `kind-${k}`]} aria-hidden="true"></span><span class="l-en">{DB_KINDS[k].en}</span><span class="l-zh">{DB_KINDS[k].zh}</span></li>
+            ))}
+          </ul>
+
+          </div>
+          <div class="rm-b">
+          <h4 class="rm-h"><span class="l-en">Papers, by study design</span><span class="l-zh">論文（依研究設計）</span></h4>
+          <div class="rm-strip">
+            {byYear(b).map((g) => (
+              <div class="rm-year">
+                <div class="rm-marks">
+                  {g.items.map(({ p }) => (
+                    <button
+                      type="button"
+                      class:list={["pm", `fam-${familyOf(tagsOf(p.doi))}`]}
+                      data-pm={p.doi}
+                      aria-pressed="false"
+                      aria-label={`${paperTitle(p)} (${p.year})`}
+                    ><span aria-hidden="true"></span></button>
+                  ))}
+                </div>
+                <span class="rm-year-label">{g.y}</span>
+              </div>
+            ))}
+          </div>
+          <ul class="rm-key-list">
+            {famsIn(b).map((f) => (
+              <li><span class:list={["pm-key", `fam-${f}`]} aria-hidden="true"><span></span></span><span class="l-en">{FAMILIES[f].en}</span><span class="l-zh">{FAMILIES[f].zh}</span></li>
+            ))}
+          </ul>
+
+          <!-- One card per paper; the mark that is hovered, focused or tapped shows its card. -->
+          <div class="rm-detail" aria-live="polite">
+            {b.papers.map(({ p, dbs }, i) => (
+              <div class="pd" data-pd={p.doi} hidden={i !== 0}>
+                <a href={doi(p)} target="_blank" rel="noopener" class="pd-title" set:html={paperTitleHtml(p) + " ↗"} />
+                <p class="pd-meta">{paperLead(p)} {paperJournal(p)}, {p.year}</p>
+                <p class="pd-tags">
+                  {designOf(p) && <span class="pd-tag"><span class="l-en">{DESIGNS[designOf(p)].en}</span><span class="l-zh">{DESIGNS[designOf(p)].zh}</span></span>}
+                  {dbs.map((d) => <span class="pd-tag pd-db">{d}</span>)}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p class="rm-hint"><span class="l-en">Hover, focus or tap a mark to see its paper.</span><span class="l-zh">滑過、聚焦或點一下圖示，就會顯示那篇論文。</span></p>
+
+          </div>
+          <div class="rm-c">
+          {b.note && <p class="rm-note"><span class="l-en">{b.note.en}</span><span class="l-zh">{b.note.zh}</span></p>}
+
+          <details class="rm-list">
+            <summary><span class="l-en">Show as list</span><span class="l-zh">以清單顯示</span></summary>
+            <ul class="rm-list-db">
+              {b.entries.map((e) => (
+                <li>
+                  <strong>{e.short}</strong> · <span class="l-en">{e.en}</span><span class="l-zh">{e.zh}</span>
+                  <span class="rm-list-kind"> · <span class="l-en">{DB_KINDS[e.kind].en}</span><span class="l-zh">{DB_KINDS[e.kind].zh}</span> · {e.papers.length} <span class="l-en">{e.papers.length === 1 ? "paper" : "papers"}</span><span class="l-zh">篇</span></span>
+                </li>
+              ))}
+            </ul>
+            <ol class="rm-list-papers">
+              {b.papers.map(({ p, dbs }) => (
+                <li>
+                  <a href={doi(p)} target="_blank" rel="noopener" set:html={paperTitleHtml(p)} />
+                  <span class="rm-list-meta"> — {paperLead(p)} {paperJournal(p)}, {p.year} · {dbs.join(", ")}</span>
+                </li>
+              ))}
+            </ol>
+          </details>
+          </div>
+        </section>
+      ))}
+    </div>
+  </div>
+
+  <p class="rm-foot">
+    <span class="l-en">Every country and database here is named in the paper it is listed under. Systematic reviews, and papers that do not name a database, are not shown.</span>
+    <span class="l-zh">這裡的每個國家與資料庫，都是所列論文自己寫明的。系統性回顧，以及沒有寫明資料庫的論文，不在圖上。</span>
+  </p>
 </div>
 
-<style>
-  .m-land { fill: #e2e8f0; }
-  .m-sales { fill: var(--color-brand-100); stroke: #fff; stroke-width: 0.5; }
-  .m-core { fill: var(--color-brand-500); stroke: #fff; stroke-width: 0.6; }
-  .m-dot { fill: var(--color-brand-700); stroke: #fff; stroke-width: 1.5; }
-  .m-hit { fill: transparent; }
-  .m-label { font-size: 13px; font-weight: 700; fill: #0f172a; paint-order: stroke; stroke: #fff; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
-  .research-map:not(.is-compact) [data-c] { cursor: pointer; }
-  .research-map:not(.is-compact) .m-sales:hover { fill: #a9cfc4; }
-  .research-map:not(.is-compact) .m-core:hover { fill: var(--color-brand-600); }
-  .m-sales.is-on { fill: #8fbfb2; }
-  .m-core.is-on { fill: var(--color-brand-700); }
-  .m-marker:focus { outline: none; }
-  .m-marker:focus-visible .m-dot, .m-marker.is-on .m-dot { fill: var(--color-accent-500); stroke-width: 2.5; r: 7.5px; }
-  .m-marker:focus-visible .m-hit { stroke: var(--color-brand-700); stroke-width: 2; }
-  .m-pick { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 9999px; padding: 0.35rem 0.8rem; font-size: 0.8125rem; font-weight: 600; transition: background 0.15s, border-color 0.15s; }
-  .m-pick:hover { border-color: var(--color-brand-500); }
-  .m-pick[aria-pressed="true"] { background: var(--color-brand-600); border-color: var(--color-brand-600); color: #fff; }
-  .m-pick-n { font-weight: 500; opacity: 0.7; margin-left: 0.15rem; }
-  .m-pick-all { border-style: dashed; }
-  /* Country names crowd the map on a phone; the buttons below carry them. */
-  @media (max-width: 639px) {
-    .m-label { display: none !important; }
-    /* The drawing is about a third of its desktop size here, so the dots and
-       their touch targets are drawn larger to stay visible and tappable. */
-    .m-dot { r: 11px; stroke-width: 3; }
-    .m-hit { r: 36px; }
-    .m-marker:focus-visible .m-dot, .m-marker.is-on .m-dot { r: 14px; stroke-width: 4; }
+<style is:global>
+  .research-map {
+    /* Kind of data source: slots 1-5 of the validated categorical palette, in
+       order. Study design family: slots 7, 6, 8 plus a neutral, and each family
+       also has its own shape, so neither legend leans on colour alone and the
+       two legends never share a hue. */
+    --k-claims: #2a78d6; --k-ehr: #eb6834; --k-registry: #1baf7a; --k-biobank: #eda100; --k-sales: #e87ba4;
+    --f-tte: #6250d6; --f-cohort: #008300; --f-self: #e34948; --f-other: #64748b;
+    --ink: #0f172a; --ink-2: #475569; --ink-3: #64748b; --rule: #e2e8f0;
   }
+  .rm-grid { display: grid; gap: 1.5rem; }
+  /* Wide screens: the map with the selected place's data sources beside it,
+     its papers underneath the map, and the notes across the bottom. The panel
+     and its blocks dissolve into the grid so their three parts can be placed. */
+  @media (min-width: 1024px) {
+    .rm-grid { grid-template-columns: minmax(0, 1fr) 19rem; column-gap: 2.25rem; row-gap: 0.5rem; align-items: start; }
+    .rm-stage { grid-column: 1; grid-row: 1; }
+    /* Only once the script is running and one block is shown at a time: with
+       every block visible they would all land in the same cells. */
+    .is-live .rm-panel, .is-live .rm-block { display: contents; }
+    .is-live .rm-a { grid-column: 2; grid-row: 1; }
+    .is-live .rm-b { grid-column: 1; grid-row: 2; }
+    .is-live .rm-c { grid-column: 2; grid-row: 2; }
+    .is-live .rm-b > .rm-h:first-child { margin-top: 0.5rem; }
+  }
+
+  .rm-svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .rm-narrow { display: none; max-width: 26rem; margin: 0 auto; }
+  @media (max-width: 639px) { .rm-wide { display: none; } .rm-narrow { display: block; } }
+
+  .m-land { fill: #e8edf2; }
+  .m-sales { fill: var(--color-brand-100); cursor: pointer; }
+  .m-core { fill: #9cc4b9; }
+  .sel-MIDAS .m-sales { fill: #f3bdd2; }
+  .m-region { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; fill: #94a3b8; }
+
+  .m-arc { fill: none; stroke: var(--color-brand-500); stroke-linecap: round; opacity: 0.3; transition: opacity 0.15s; }
+  .m-arc.is-on { opacity: 0.95; stroke: var(--color-brand-700); }
+  .m-arc.is-dim { opacity: 0.07; }
+
+  .m-node { cursor: pointer; }
+  .m-node:focus { outline: none; }
+  .m-hit { fill: transparent; }
+  .m-halo { fill: none; stroke: transparent; stroke-width: 2.5; }
+  .m-bubble { fill: var(--color-brand-600); stroke: #fff; stroke-width: 2.5; transition: fill 0.15s; }
+  .m-count { fill: #fff; font-weight: 800; pointer-events: none; }
+  .m-label { font-weight: 700; fill: var(--ink); paint-order: stroke; stroke: #fff; stroke-width: 0.3em; stroke-linejoin: round; pointer-events: none; }
+  .m-node.is-network .m-bubble { fill: #fff; stroke: var(--color-brand-600); stroke-width: 2; stroke-dasharray: 4 3; }
+  .m-node.is-network .m-count { fill: var(--color-brand-700); }
+  .m-node:hover .m-bubble, .m-node.is-partner .m-bubble { fill: var(--color-brand-700); }
+  .m-node.is-on .m-bubble { fill: var(--color-brand-900); }
+  .m-node.is-network.is-on .m-bubble, .m-node.is-network:hover .m-bubble { fill: var(--color-brand-50); }
+  .m-node.is-on .m-halo { stroke: var(--color-brand-900); }
+  .m-node:focus-visible .m-halo { stroke: var(--color-accent-500); stroke-width: 3; }
+  .m-node.is-dim { opacity: 0.45; }
+
+  .rm-legend { margin-top: 0.75rem; display: grid; gap: 0.35rem 1.25rem; font-size: 0.75rem; color: var(--ink-2); list-style: none; padding: 0; }
+  @media (min-width: 640px) { .rm-legend { grid-template-columns: 1fr 1fr; } }
+  .rm-legend li { display: flex; align-items: center; gap: 0.5rem; min-height: 1.5rem; }
+  .rm-key { display: flex; align-items: center; gap: 0.5rem; text-align: left; color: inherit; padding: 0.25rem 0.5rem; margin: -0.25rem -0.5rem; border-radius: 0.5rem; min-height: 2.25rem; }
+  .rm-key:hover, .rm-key[aria-pressed="true"] { background: var(--color-brand-50); color: var(--color-brand-700); }
+  .rm-key > span:not([aria-hidden]) { text-decoration: underline; text-decoration-color: #cbd5e1; text-underline-offset: 3px; }
+  .k-bubble, .k-network, .k-sales, .k-arc { flex: none; display: inline-block; }
+  .k-bubble { width: 14px; height: 14px; border-radius: 50%; background: var(--color-brand-600); }
+  .k-network { width: 14px; height: 14px; border-radius: 50%; border: 2px dashed var(--color-brand-600); }
+  .k-sales { width: 14px; height: 14px; border-radius: 3px; background: var(--color-brand-100); border: 1px solid #b5d3ca; }
+  .k-arc { width: 18px; height: 9px; border-top: 2px solid var(--color-brand-500); border-radius: 50% 50% 0 0 / 100% 100% 0 0; margin-top: 5px; }
+
+  .rm-block { min-width: 0; }
+  .rm-block + .rm-block { margin-top: 2rem; }
+  .rm-title { font-size: 1.25rem; font-weight: 800; color: var(--ink); line-height: 1.25; }
+  .rm-sub { margin-top: 0.15rem; font-size: 0.8125rem; color: var(--ink-3); }
+  .rm-h { margin-top: 1.1rem; margin-bottom: 0.5rem; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+
+  .rm-bars { display: grid; gap: 6px; }
+  .rm-bar-row { display: grid; grid-template-columns: 6.25rem minmax(0, 1fr) 1.5rem; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
+  .rm-bar-name { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rm-bar-track { display: block; height: 14px; border-left: 1px solid #cbd5e1; }
+  .rm-bar { display: block; height: 100%; min-width: 4px; border-radius: 0 4px 4px 0; }
+  .rm-bar-n { color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+  .kind-claims { background: var(--k-claims); } .kind-ehr { background: var(--k-ehr); } .kind-registry { background: var(--k-registry); }
+  .kind-biobank { background: var(--k-biobank); } .kind-sales { background: var(--k-sales); }
+
+  .rm-key-list { margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem; font-size: 0.6875rem; color: var(--ink-2); list-style: none; padding: 0; }
+  .rm-key-list li { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .rm-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .rm-strip { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.9rem; }
+  .rm-year { display: flex; flex-direction: column; gap: 0.2rem; }
+  .rm-marks { display: flex; flex-wrap: wrap; gap: 2px; max-width: 100%; }
+  .rm-year-label { font-size: 0.6875rem; color: var(--ink-3); font-variant-numeric: tabular-nums; border-top: 1px solid var(--rule); padding-top: 0.15rem; }
+  /* A paper mark: a 28 px target around a 14 px shape (36 px on touch screens). */
+  .pm { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; cursor: pointer; }
+  .pm > span, .pm-key > span { display: block; width: 14px; height: 14px; }
+  .pm-key { width: 14px; height: 14px; display: inline-grid; place-items: center; }
+  .pm-key > span { width: 10px; height: 10px; }
+  .fam-tte > span { background: var(--f-tte); border-radius: 50%; }
+  .fam-cohort > span { background: var(--f-cohort); border-radius: 2px; }
+  .fam-self > span { background: var(--f-self); border-radius: 1px; transform: rotate(45deg) scale(0.82); }
+  .fam-other > span { background: transparent; border: 3px solid var(--f-other); border-radius: 50%; }
+  .pm:hover, .pm:focus-visible { background: #f1f5f9; outline: none; }
+  .pm:focus-visible { box-shadow: 0 0 0 2px var(--color-brand-600); }
+  .pm[aria-pressed="true"] { background: var(--color-brand-50); box-shadow: inset 0 0 0 1.5px var(--color-brand-600); }
+  @media (pointer: coarse) { .pm { width: 36px; height: 36px; } .pm > span { width: 16px; height: 16px; } }
+
+  .rm-detail { margin-top: 0.75rem; border-left: 3px solid var(--color-brand-100); padding-left: 0.75rem; min-height: 5.5rem; }
+  .pd-title { display: block; font-size: 0.875rem; font-weight: 600; line-height: 1.4; color: var(--ink); }
+  .pd-title:hover { color: var(--color-brand-700); text-decoration: underline; }
+  .pd-meta { margin-top: 0.2rem; font-size: 0.75rem; color: var(--ink-3); }
+  .pd-tags { margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .pd-tag { font-size: 0.6875rem; font-weight: 600; line-height: 1.25rem; padding: 0 0.5rem; border-radius: 9999px; background: var(--color-brand-50); color: var(--color-brand-700); }
+  .pd-db { background: #f1f5f9; color: var(--ink-2); font-weight: 500; }
+  .rm-hint { margin-top: 0.4rem; font-size: 0.6875rem; color: var(--ink-3); }
+  .rm-note { margin-top: 0.9rem; font-size: 0.8125rem; line-height: 1.6; color: var(--ink-2); }
+
+  .rm-list { margin-top: 1rem; border-top: 1px solid var(--rule); padding-top: 0.6rem; font-size: 0.8125rem; }
+  .rm-list summary { cursor: pointer; font-weight: 600; color: var(--color-brand-700); padding: 0.25rem 0; }
+  .rm-list-db, .rm-list-papers { margin-top: 0.6rem; display: grid; gap: 0.45rem; color: var(--ink-2); line-height: 1.45; list-style: none; padding: 0; }
+  .rm-list-papers a { color: var(--ink); }
+  .rm-list-papers a:hover { color: var(--color-brand-700); text-decoration: underline; }
+  .rm-list-kind, .rm-list-meta { color: var(--ink-3); }
+  .rm-foot { margin-top: 1.25rem; font-size: 0.75rem; line-height: 1.6; color: var(--ink-3); }
 </style>
 
-{!compact && (
-  <script is:inline>
-    (function () {
-      var root = document.querySelector("[data-research-map]");
-      if (!root) return;
-      var blocks = [].slice.call(root.querySelectorAll("[data-block]"));
-      var picks = [].slice.call(root.querySelectorAll("[data-pick]"));
-      var marks = [].slice.call(root.querySelectorAll("[data-c]"));
-      function select(code) {
-        blocks.forEach(function (b) { b.hidden = code !== "ALL" && b.getAttribute("data-block") !== code; });
-        picks.forEach(function (p) { p.setAttribute("aria-pressed", String(p.getAttribute("data-pick") === code)); });
-        marks.forEach(function (m) { m.classList.toggle("is-on", m.getAttribute("data-c") === code); });
-      }
-      picks.forEach(function (p) { p.addEventListener("click", function () { select(p.getAttribute("data-pick")); }); });
-      marks.forEach(function (m) {
-        m.addEventListener("click", function () { select(m.getAttribute("data-c")); });
-        m.addEventListener("keydown", function (e) {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(m.getAttribute("data-c")); }
-        });
+<script is:inline>
+  (function () {
+    var root = document.querySelector("[data-research-map]");
+    if (!root) return;
+    var blocks = [].slice.call(root.querySelectorAll("[data-block]"));
+    var nodes = [].slice.call(root.querySelectorAll(".m-node"));
+    var arcs = [].slice.call(root.querySelectorAll(".m-arc"));
+    var keys = [].slice.call(root.querySelectorAll("[data-pick]"));
+    var selected = null;
+    root.classList.add("is-live");
+
+    // Highlight only: which bubble is emphasised, with its arcs and partners.
+    function paint(code) {
+      var partners = {};
+      arcs.forEach(function (a) {
+        var on = a.getAttribute("data-a") === code || a.getAttribute("data-b") === code;
+        a.classList.toggle("is-on", on);
+        a.classList.toggle("is-dim", !on);
+        if (on) partners[a.getAttribute("data-a") === code ? a.getAttribute("data-b") : a.getAttribute("data-a")] = true;
       });
-      // /networks?c=KR#map opens on that country (used by links elsewhere on the site).
-      var want = new URLSearchParams(location.search).get("c");
-      var ok = want && blocks.some(function (b) { return b.getAttribute("data-block") === want; });
-      select(ok ? want : "TW");
-    })();
-  </script>
-)}
+      var geographic = nodes.some(function (n) { return n.getAttribute("data-c") === code && !n.classList.contains("is-network"); });
+      nodes.forEach(function (n) {
+        var c = n.getAttribute("data-c");
+        n.classList.toggle("is-on", c === code);
+        n.classList.toggle("is-partner", !!partners[c]);
+        n.classList.toggle("is-dim", geographic && c !== code && !partners[c] && !n.classList.contains("is-network"));
+      });
+      root.classList.toggle("sel-MIDAS", code === "MIDAS");
+    }
+    // Selection: the highlight plus the panel.
+    function select(code) {
+      selected = code;
+      blocks.forEach(function (b) { b.hidden = b.getAttribute("data-block") !== code; });
+      keys.forEach(function (k) { k.setAttribute("aria-pressed", String(k.getAttribute("data-pick") === code)); });
+      paint(code);
+    }
+    nodes.forEach(function (n) {
+      var c = n.getAttribute("data-c");
+      n.addEventListener("click", function () { select(c); });
+      n.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(c); } });
+      n.addEventListener("mouseenter", function () { paint(c); });
+      n.addEventListener("mouseleave", function () { paint(selected); });
+      n.addEventListener("focus", function () { paint(c); });
+      n.addEventListener("blur", function () { paint(selected); });
+    });
+    keys.forEach(function (k) { k.addEventListener("click", function () { select(k.getAttribute("data-pick")); }); });
+    root.querySelectorAll("path[data-c]").forEach(function (p) { p.addEventListener("click", function () { select(p.getAttribute("data-c")); }); });
+
+    // Paper marks: hover or focus previews a paper's card, a click or tap keeps it.
+    blocks.forEach(function (b) {
+      var marks = [].slice.call(b.querySelectorAll(".pm"));
+      var cards = [].slice.call(b.querySelectorAll(".pd"));
+      var pinned = marks[0] ? marks[0].getAttribute("data-pm") : null;
+      function show(id) { cards.forEach(function (c) { c.hidden = c.getAttribute("data-pd") !== id; }); }
+      function pin(id) {
+        pinned = id;
+        marks.forEach(function (m) { m.setAttribute("aria-pressed", String(m.getAttribute("data-pm") === id)); });
+        show(id);
+      }
+      marks.forEach(function (m) {
+        var id = m.getAttribute("data-pm");
+        m.addEventListener("click", function () { pin(id); });
+        m.addEventListener("mouseenter", function () { show(id); });
+        m.addEventListener("mouseleave", function () { show(pinned); });
+        m.addEventListener("focus", function () { show(id); });
+        m.addEventListener("blur", function () { show(pinned); });
+      });
+      if (pinned) pin(pinned);
+    });
+
+    // /?c=KR#map opens on that country.
+    var want = new URLSearchParams(location.search).get("c");
+    var ok = want && blocks.some(function (b) { return b.getAttribute("data-block") === want; });
+    select(ok ? want : "TW");
+  })();
+</script>

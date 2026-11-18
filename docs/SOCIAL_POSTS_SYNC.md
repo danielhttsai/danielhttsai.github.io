@@ -14,7 +14,10 @@ signed-in Chrome once a week. It needs this PC to be on with Chrome open.
 - Read only. On LinkedIn and Facebook: no likes, comments, reposts, messages,
   follows, settings changes, and never sign out. Do not click post menus.
 - Open one new tab with the Claude in Chrome tools, use only that tab, close
-  it at the end. Leave Daniel's other tabs alone.
+  it at the end. Leave Daniel's other tabs alone. If that tab is the only one
+  in its window, navigate it to `about:blank` and leave it rather than closing
+  it: closing Chrome's last window disconnected the extension on 2026-11-18
+  and nothing more could be read that day.
 - Two pages only: his LinkedIn activity page and his own Facebook profile.
   One visit each per run. Do not browse anywhere else on either site.
 - If Chrome is not connected, or either site shows a sign-in page, a
@@ -34,6 +37,11 @@ signed-in Chrome once a week. It needs this PC to be on with Chrome open.
 2. LinkedIn. Open
    `https://www.linkedin.com/in/daniel-hsiang-te-tsai/recent-activity/all/`
    and scroll down a few screens so about the last three months have loaded.
+   (First fill, or whenever the file holds fewer LinkedIn posts than the
+   activity page shows for the last three years: keep scrolling until no older
+   posts load or the cards are more than three years old, and collect them
+   all. There is no cap on how many LinkedIn posts the file holds; the page
+   shows twelve and loads the rest twelve at a time behind "Show more".)
    A post is his own when its card shows "Daniel Tsai • You" as the author and
    has a "View analytics" link; the link's address contains the post's
    `urn:li:activity:<id>`. Cards headed "Daniel Tsai reposted this" are not
@@ -49,11 +57,30 @@ signed-in Chrome once a week. It needs this PC to be on with Chrome open.
    `facebook.com/dudu1399`) and scroll down a few screens. A post is his own
    and public when its audience control reads "Edit audience. Currently
    sharing with Public." Posts by other people on his timeline have no such
-   control: skip them. Skip anything not shared with Public. The post's
+   control: skip them. Skip anything not shared with Public. Then apply the
+   text rule below. The post's
    permalink (`https://www.facebook.com/dudu1399/posts/pfbid…`) is the link on
    its timestamp; it only appears in the page after the pointer has been over
    the timestamp. For each such post not yet in the file, record `url` (the
-   permalink without its query string) and a `text` excerpt of his own words.
+   permalink without its query string), `length` (see the rule) and a `text`
+   excerpt of his own words.
+
+   **Facebook text rule (Daniel, 2026-11-18: "只是轉發或寫很少字的不要留").**
+   Keep a Facebook post only when he wrote a real piece of text in it.
+   - Measure his own text only: the words he typed in this post, not the post,
+     link or video he shared, and not the "with …" tag line. Leave out
+     hashtags and URLs. `length` = number of Chinese characters + number of
+     Latin-alphabet words × 100 / 60, rounded. (So about 100 Chinese
+     characters and about 60 English words count the same.)
+   - Keep the post when `length` is 90 or more; drop it when it is under 90.
+     The target is "about 100"; the cut is set at 90 so a post a few
+     characters short of 100 is not lost.
+   - A share or repost of someone else's post, link or video, a memory
+     re-share, a check-in and a photo-only post are judged by the same number:
+     out unless his own added text reaches 90.
+   - Read the full text to count it (open "See more" by reading the embed in
+     step 4, which contains the whole text). Never decide from the excerpt or
+     the permalink.
 
 4. Check every new post as a signed-out visitor, in the built-in browser pane
    (not in Chrome, which is signed in):
@@ -91,8 +118,9 @@ signed-in Chrome once a week. It needs this PC to be on with Chrome open.
 - LinkedIn's terms do not in principle allow automated reading of its pages.
   Daniel accepted that for one visit a week to his own activity page. Keep it
   to that: one page, once, no retries in a loop.
-- The Posts page shows the 12 newest per network; older entries may stay in
-  the file.
+- The Posts page shows 12 posts per network at first and loads 12 more with
+  each "Show more"; the file may hold any number. The home page shows only the
+  two newest.
 - To take a post off the site by hand, delete its entry from the JSON file
   and push. To stop the weekly run, disable the scheduled task
   `website-social-posts-sync` in the Claude desktop app.

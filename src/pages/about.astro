@@ -211,7 +211,7 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
       <p class="mt-1 text-sm text-slate-500 l-en">{pubs.length} publications · {metrics.citations} citations · h-index {metrics.hIndex} <span class="text-slate-500">(Google Scholar, {metrics.updated})</span></p>
       <p class="mt-1 text-sm text-slate-500 l-zh">{pubs.length} 篇論文 · 被引用 {metrics.citations} 次 · h-index {metrics.hIndex}（Google Scholar，{metrics.updated}）</p>
       <ol class="mt-5 space-y-5">
-        {selected.map((p) => <PublicationItem pub={p} />)}
+        {selected.map((p) => <PublicationItem pub={p} plain />)}
       </ol>
     </section>
   </div>

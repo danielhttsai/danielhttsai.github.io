@@ -14,9 +14,15 @@ export interface Pub {
   journal?: string; // overrides the name parsed from the RIS record
 }
 import JCR_ABBREV from "../data/jcr-journals.json";
-import { tagsOf, designChips, DESIGNS, DATABASES, LINKS } from "../data/research";
-interface Props { pub: Pub; hideCover?: boolean }
-const { pub, hideCover } = Astro.props;
+import { tagsOf, designChips, paperTitle, DESIGNS, DATABASES, LINKS } from "../data/research";
+interface Props {
+  pub: Pub;
+  hideCover?: boolean;
+  /** Citation and its own links only: no tag chips, no tool links. For short
+      curated lists (Selected publications), where the extras read as clutter. */
+  plain?: boolean;
+}
+const { pub, hideCover, plain = false } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -50,17 +56,26 @@ const jcrUrl = (abbrev: string) =>
 
 // The article title, for the cover thumbnail's link label. The thumbnail image
 // itself is decorative (alt=""), so without this the link has no accessible
-// name and a screen reader announces a bare "link".
-const titleOf = (p: Pub): string => {
-  const m = (p.ris || "").match(/^TI  - (.+?)\r?$/m);
-  return m ? unesc(m[1].trim()).replace(/[\s.]+$/, "") : p.citation;
-};
+// name and a screen reader announces a bare "link". Plain text: publisher
+// markup in a title would be read out as "less than i greater than".
+const titleOf = (p: Pub): string => paperTitle(p as any);
 
-// Hand-checked tags (design, database, country) and the "do it yourself" links
-// for this paper. A paper without an entry just renders without them.
+// Hand-checked tags (design, database, country) and the tool links for this
+// paper. A paper without an entry just renders without them.
 const tags = tagsOf(pub.doi);
 const chips = designChips(tags);
-const links = tags.links.map((id) => LINKS[id]).filter(Boolean);
+// At most two links per paper, the two most specific to it: the builder (or,
+// failing that, the toolbox card) for its design, then one more, preferring a
+// tool made for this very paper (ACB calculator, its phenotype, the KM guide)
+// over a general data link. Method notes are not linked from here.
+const pickLinks = (ids: string[]) => {
+  const design = ids.find((i) => i.startsWith("builder-")) ?? ids.find((i) => i.startsWith("toolbox-"));
+  const rest = ids.filter((i) => !i.startsWith("builder-") && !i.startsWith("toolbox-") && !i.startsWith("note-"));
+  const own = ["acb-calc", "phenotype-lgs", "km-guide"];
+  const ordered = [...rest.filter((i) => own.includes(i)), ...rest.filter((i) => !own.includes(i))];
+  return [design, ...ordered].filter(Boolean).slice(0, 2) as string[];
+};
+const links = plain ? [] : pickLinks(tags.links).map((id) => LINKS[id]).filter(Boolean);
 const href = (h: string) => (h.startsWith("http") ? h : `${base}${h}`);
 // Category labels come from publications.json in English.
 const TAG_ZH: Record<string, string> = {
@@ -113,7 +128,7 @@ const pt = pub.pmcid
         )}
         {pub.pmcid && <span class="text-accent-500 font-medium"><span class="l-en">Open access</span><span class="l-zh">開放取用</span></span>}
       </div>
-      {(chips.length > 0 || tags.data.length > 0) && (
+      {!plain && (chips.length > 0 || tags.data.length > 0) && (
         <div class="mt-2 flex flex-wrap gap-1.5 text-[11px] leading-5">
           {chips.map((d) => (
             <span class="rounded-full bg-brand-50 text-brand-700 font-semibold px-2"><span class="l-en">{DESIGNS[d].en}</span><span class="l-zh">{DESIGNS[d].zh}</span></span>
@@ -127,12 +142,13 @@ const pt = pub.pmcid
         </div>
       )}
       {links.length > 0 && (
-        <p class="mt-1.5 text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-1">
-          <span class="font-semibold text-slate-600"><span class="l-en">Do it yourself</span><span class="l-zh">自己做一次</span></span>
-          {links.map((l) => (
-            <a href={href(l.href)} target={l.external ? "_blank" : undefined} rel={l.external ? "noopener" : undefined} class="text-brand-700 hover:underline">
-              <span class="l-en">{l.label.en}</span><span class="l-zh">{l.label.zh}</span> {l.external ? "↗" : "→"}
-            </a>
+        <p class="mt-1.5 text-[11px] leading-5 text-slate-500">
+          <span class="l-en">Try it:</span><span class="l-zh">動手做：</span>
+          {links.map((l, i) => (
+            <>
+              {i > 0 && <span class="mx-1.5 text-slate-300">·</span>}
+              <a href={href(l.href)} target={l.external ? "_blank" : undefined} rel={l.external ? "noopener" : undefined} class="text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-brand-700 hover:decoration-brand-500"><span class="l-en">{l.label.en}</span><span class="l-zh">{l.label.zh}</span></a>
+            </>
           ))}
         </p>
       )}

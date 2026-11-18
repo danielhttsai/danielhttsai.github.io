@@ -36,32 +36,56 @@ export const designChips = (t: PaperTags) => {
   return specific.length ? specific : t.design;
 };
 
+// Four families for the map's paper marks: twelve designs are too many to tell
+// apart by colour, and the family is what a reader scanning the strip wants.
+export const FAMILIES: Record<string, L> = {
+  tte: { en: "Target trial emulation", zh: "Target trial emulation" },
+  cohort: { en: "Other cohort study", zh: "其他世代研究" },
+  self: { en: "Self-controlled or case-control", zh: "自身對照或病例對照" },
+  other: { en: "Descriptive, data resource or other", zh: "描述性、資料庫介紹或其他" },
+};
+export const familyOf = (t: PaperTags) =>
+  t.design.includes("tte") ? "tte"
+    : t.design.some((d) => d === "cctc" || d === "cco" || d === "ncc") ? "self"
+    : t.design.includes("descriptive") || t.design.includes("resource") || t.design.includes("review") ? "other"
+    : t.design.includes("cohort") || t.design.includes("acnu") ? "cohort"
+    : "other";
+
 // ── Databases ────────────────────────────────────────────────────────────
-export interface Db { short: string; name: L; country: string; type: L }
+// `kind` is the colour key on the map panel's bars; `type` is the wording.
+export type DbKind = "claims" | "ehr" | "registry" | "biobank" | "sales";
+export interface Db { short: string; name: L; country: string; type: L; kind: DbKind }
 const CLAIMS = { en: "Claims", zh: "健保／保險申報資料" };
 const EHR = { en: "Electronic health records", zh: "電子病歷" };
 const BIO = { en: "Biobank", zh: "生物資料庫" };
+export const DB_KINDS: Record<DbKind, L> = {
+  claims: { en: "Claims", zh: "申報資料" },
+  ehr: { en: "Electronic health records", zh: "電子病歷" },
+  registry: { en: "Registry or linked national data", zh: "登錄或全國串聯資料" },
+  biobank: { en: "Biobank", zh: "生物資料庫" },
+  sales: { en: "Sales data", zh: "銷售資料" },
+};
 export const DATABASES: Record<string, Db> = {
-  nhird: { short: "NHIRD", name: { en: "National Health Insurance Research Database", zh: "全民健康保險研究資料庫" }, country: "TW", type: CLAIMS },
-  cgrd: { short: "CGRD", name: { en: "Chang Gung Research Database", zh: "長庚研究資料庫" }, country: "TW", type: EHR },
-  cmuh: { short: "CMUH", name: { en: "China Medical University Hospital records", zh: "中國醫藥大學附設醫院病歷資料" }, country: "TW", type: EHR },
-  tidid: { short: "TIDID", name: { en: "Taiwan Illicit Drug Issue Database", zh: "Taiwan Illicit Drug Issue Database" }, country: "TW", type: { en: "Registry", zh: "登錄資料" } },
-  twb: { short: "TWB", name: { en: "Taiwan Biobank", zh: "臺灣人體生物資料庫" }, country: "TW", type: BIO },
-  "nhis-nhid": { short: "NHIS-NHID", name: { en: "National Health Insurance Service – National Health Insurance Database", zh: "韓國國民健康保險公團資料庫" }, country: "KR", type: CLAIMS },
-  cdars: { short: "HA CDARS", name: { en: "Hospital Authority electronic health records (CDARS)", zh: "香港醫院管理局電子病歷（CDARS）" }, country: "HK", type: EHR },
-  nzmidp: { short: "NZMIDP", name: { en: "Medicines Intelligence Data Platform", zh: "紐西蘭 Medicines Intelligence 資料平台" }, country: "NZ", type: { en: "Linked national data", zh: "全國串聯資料" } },
-  pbs: { short: "PBS 10%", name: { en: "Pharmaceutical Benefits Scheme 10% sample", zh: "澳洲藥品給付計畫 10% 抽樣檔" }, country: "AU", type: CLAIMS },
-  vlhd: { short: "VLHD", name: { en: "Victorian Linked Health Data", zh: "維多利亞州串聯健康資料" }, country: "AU", type: CLAIMS },
-  medicaid: { short: "Medicaid", name: { en: "Medicaid", zh: "美國 Medicaid" }, country: "US", type: CLAIMS },
-  medicare: { short: "Medicare 20%", name: { en: "Medicare 20% sample", zh: "美國 Medicare 20% 抽樣檔" }, country: "US", type: CLAIMS },
-  finreg: { short: "FinReg", name: { en: "Finnish healthcare registers", zh: "芬蘭全國健康登錄資料" }, country: "FI", type: CLAIMS },
-  phs: { short: "PHS", name: { en: "Public Health Scotland", zh: "蘇格蘭公共衛生署資料" }, country: "GB", type: EHR },
-  pharmo: { short: "PHARMO", name: { en: "PHARMO Database Network", zh: "荷蘭 PHARMO 資料庫網絡" }, country: "NL", type: EHR },
-  cprd: { short: "CPRD", name: { en: "Clinical Practice Research Datalink", zh: "英國 CPRD 基層醫療資料庫" }, country: "GB", type: EHR },
-  thin: { short: "THIN", name: { en: "The Health Improvement Network", zh: "英國 THIN 基層醫療資料庫" }, country: "GB", type: EHR },
-  ukb: { short: "UK Biobank", name: { en: "UK Biobank", zh: "英國人體生物資料庫" }, country: "GB", type: BIO },
-  trinetx: { short: "TriNetX", name: { en: "TriNetX federated network", zh: "TriNetX 跨機構電子病歷網絡" }, country: "GLOBAL", type: EHR },
-  "iqvia-midas": { short: "IQVIA MIDAS", name: { en: "IQVIA MIDAS pharmaceutical sales data", zh: "IQVIA MIDAS 藥品銷售資料" }, country: "MIDAS65", type: { en: "Sales data", zh: "銷售資料" } },
+  nhird: { short: "NHIRD", name: { en: "National Health Insurance Research Database", zh: "全民健康保險研究資料庫" }, country: "TW", type: CLAIMS, kind: "claims" },
+  cgrd: { short: "CGRD", name: { en: "Chang Gung Research Database", zh: "長庚研究資料庫" }, country: "TW", type: EHR, kind: "ehr" },
+  cmuh: { short: "CMUH", name: { en: "China Medical University Hospital records", zh: "中國醫藥大學附設醫院病歷資料" }, country: "TW", type: EHR, kind: "ehr" },
+  tidid: { short: "TIDID", name: { en: "Taiwan Illicit Drug Issue Database", zh: "Taiwan Illicit Drug Issue Database" }, country: "TW", type: { en: "Registry", zh: "登錄資料" }, kind: "registry" },
+  twb: { short: "TWB", name: { en: "Taiwan Biobank", zh: "臺灣人體生物資料庫" }, country: "TW", type: BIO, kind: "biobank" },
+  "nhis-nhid": { short: "NHIS-NHID", name: { en: "National Health Insurance Service – National Health Insurance Database", zh: "韓國國民健康保險公團資料庫" }, country: "KR", type: CLAIMS, kind: "claims" },
+  cdars: { short: "HA CDARS", name: { en: "Hospital Authority electronic health records (CDARS)", zh: "香港醫院管理局電子病歷（CDARS）" }, country: "HK", type: EHR, kind: "ehr" },
+  nzmidp: { short: "NZMIDP", name: { en: "Medicines Intelligence Data Platform", zh: "紐西蘭 Medicines Intelligence 資料平台" }, country: "NZ", type: { en: "Linked national data", zh: "全國串聯資料" }, kind: "registry" },
+  pbs: { short: "PBS 10%", name: { en: "Pharmaceutical Benefits Scheme 10% sample", zh: "澳洲藥品給付計畫 10% 抽樣檔" }, country: "AU", type: CLAIMS, kind: "claims" },
+  vlhd: { short: "VLHD", name: { en: "Victorian Linked Health Data", zh: "維多利亞州串聯健康資料" }, country: "AU", type: CLAIMS, kind: "claims" },
+  medicaid: { short: "Medicaid", name: { en: "Medicaid", zh: "美國 Medicaid" }, country: "US", type: CLAIMS, kind: "claims" },
+  medicare: { short: "Medicare 20%", name: { en: "Medicare 20% sample", zh: "美國 Medicare 20% 抽樣檔" }, country: "US", type: CLAIMS, kind: "claims" },
+  finreg: { short: "FinReg", name: { en: "Finnish healthcare registers", zh: "芬蘭全國健康登錄資料" }, country: "FI", type: CLAIMS, kind: "claims" },
+  phs: { short: "PHS", name: { en: "Public Health Scotland", zh: "蘇格蘭公共衛生署資料" }, country: "GB", type: EHR, kind: "ehr" },
+  pharmo: { short: "PHARMO", name: { en: "PHARMO Database Network", zh: "荷蘭 PHARMO 資料庫網絡" }, country: "NL", type: EHR, kind: "ehr" },
+  cprd: { short: "CPRD", name: { en: "Clinical Practice Research Datalink", zh: "英國 CPRD 基層醫療資料庫" }, country: "GB", type: EHR, kind: "ehr" },
+  thin: { short: "THIN", name: { en: "The Health Improvement Network", zh: "英國 THIN 基層醫療資料庫" }, country: "GB", type: EHR, kind: "ehr" },
+  ukb: { short: "UK Biobank", name: { en: "UK Biobank", zh: "英國人體生物資料庫" }, country: "GB", type: BIO, kind: "biobank" },
+  trinetx: { short: "TriNetX", name: { en: "TriNetX federated network", zh: "TriNetX 跨機構電子病歷網絡" }, country: "GLOBAL", type: EHR, kind: "ehr" },
+  "iqvia-midas": { short: "IQVIA MIDAS", name: { en: "IQVIA MIDAS pharmaceutical sales data", zh: "IQVIA MIDAS 藥品銷售資料" }, country: "MIDAS65", type: { en: "Sales data", zh: "銷售資料" }, kind: "sales" },
 };
 
 // ── Countries and regions ────────────────────────────────────────────────
@@ -151,24 +175,24 @@ export const CORE = ["TW", "KR", "HK", "NZ", "AU", "US", "GB", "FI", "NL"];
 export interface ToolLink { href: string; label: L; external?: boolean }
 const TOOLBOX = "/tools/phdc-rwe-tool?m=";
 export const LINKS: Record<string, ToolLink> = {
-  "builder-acnu": { href: "/tools/active-comparator-new-user", label: { en: "Draft this design: ACNU protocol", zh: "照這個設計寫計畫書：ACNU" } },
-  "builder-ccw": { href: "/tools/clone-censor-weight", label: { en: "Draft this design: clone-censor-weight protocol", zh: "照這個設計寫計畫書：clone-censor-weight" } },
-  "builder-cco": { href: "/tools/case-crossover", label: { en: "Draft this design: case-crossover / CCTC protocol", zh: "照這個設計寫計畫書：case-crossover／CCTC" } },
-  "builder-cc": { href: "/tools/case-control", label: { en: "Draft this design: case-control protocol", zh: "照這個設計寫計畫書：病例對照" } },
-  "builder-descriptive": { href: "/tools/descriptive-analysis", label: { en: "Draft this design: descriptive protocol", zh: "照這個設計寫計畫書：描述性分析" } },
-  "toolbox-acnu": { href: TOOLBOX + "acnu", label: { en: "Try the method: ACNU in the RWE Toolbox", zh: "動手試：RWE 工具箱的 ACNU" } },
-  "toolbox-ccw": { href: TOOLBOX + "ccw", label: { en: "Try the method: CCW in the RWE Toolbox", zh: "動手試：RWE 工具箱的 CCW" } },
-  "toolbox-cctc": { href: TOOLBOX + "cctc", label: { en: "Try the method: CCTC in the RWE Toolbox", zh: "動手試：RWE 工具箱的 CCTC" } },
-  "toolbox-cc": { href: TOOLBOX + "cc", label: { en: "Try the method: case-control in the RWE Toolbox", zh: "動手試：RWE 工具箱的病例對照" } },
-  "toolbox-srma": { href: TOOLBOX + "srma", label: { en: "Try the method: SR/MA in the RWE Toolbox", zh: "動手試：RWE 工具箱的系統性回顧與統合分析" } },
+  "builder-acnu": { href: "/tools/active-comparator-new-user", label: { en: "ACNU protocol builder", zh: "ACNU 計畫書 builder" } },
+  "builder-ccw": { href: "/tools/clone-censor-weight", label: { en: "clone-censor-weight protocol builder", zh: "clone-censor-weight 計畫書 builder" } },
+  "builder-cco": { href: "/tools/case-crossover", label: { en: "case-crossover / CCTC protocol builder", zh: "case-crossover／CCTC 計畫書 builder" } },
+  "builder-cc": { href: "/tools/case-control", label: { en: "case-control protocol builder", zh: "病例對照計畫書 builder" } },
+  "builder-descriptive": { href: "/tools/descriptive-analysis", label: { en: "descriptive analysis protocol builder", zh: "描述性分析計畫書 builder" } },
+  "toolbox-acnu": { href: TOOLBOX + "acnu", label: { en: "ACNU in the RWE Toolbox", zh: "RWE 工具箱：ACNU" } },
+  "toolbox-ccw": { href: TOOLBOX + "ccw", label: { en: "CCW in the RWE Toolbox", zh: "RWE 工具箱：CCW" } },
+  "toolbox-cctc": { href: TOOLBOX + "cctc", label: { en: "CCTC in the RWE Toolbox", zh: "RWE 工具箱：CCTC" } },
+  "toolbox-cc": { href: TOOLBOX + "cc", label: { en: "case-control in the RWE Toolbox", zh: "RWE 工具箱：病例對照" } },
+  "toolbox-srma": { href: TOOLBOX + "srma", label: { en: "systematic review and meta-analysis in the RWE Toolbox", zh: "RWE 工具箱：系統性回顧與統合分析" } },
   "note-tte": { href: "/writing/target-trial-emulation", label: { en: "Method note: target trial emulation", zh: "方法筆記：target trial emulation" } },
   "note-ccw": { href: "/writing/clone-censor-weight", label: { en: "Method note: clone-censor-weight", zh: "方法筆記：clone-censor-weight" } },
-  "nhird-dict": { href: "https://danielhttsai.github.io/nhird-data-dictionary/", label: { en: "Look up the variables: NHIRD data dictionary", zh: "查變項：NHIRD 資料字典" }, external: true },
-  "drug-lookup": { href: "https://danielhttsai.github.io/nhird-data-dictionary/drugs/", label: { en: "Find the drug codes: NHI drug lookup", zh: "查藥品代碼：健保藥品查詢" }, external: true },
-  "acb-calc": { href: "/tools/acb-calculator", label: { en: "Score a patient: ACB calculator", zh: "算病人的負荷：ACB 計算機" } },
-  "km-guide": { href: "/tools/km-cif-riskset", label: { en: "Read the estimate: TriNetX survival vs cumulative incidence", zh: "讀懂估計值：TriNetX 存活機率與累積發生率" } },
-  "phenotype-lgs": { href: "/tools/clone-censor-weight?library=indications&q=Lennox", label: { en: "Reuse the definition: LGS in the phenotype library", zh: "沿用這個定義：phenotype library 的 LGS" } },
-  map: { href: "/networks#map", label: { en: "See the databases on the map", zh: "在地圖上看這些資料庫" } },
+  "nhird-dict": { href: "https://danielhttsai.github.io/nhird-data-dictionary/", label: { en: "NHIRD data dictionary", zh: "NHIRD 資料字典" }, external: true },
+  "drug-lookup": { href: "https://danielhttsai.github.io/nhird-data-dictionary/drugs/", label: { en: "NHI drug code lookup", zh: "健保藥品代碼查詢" }, external: true },
+  "acb-calc": { href: "/tools/acb-calculator", label: { en: "ACB calculator", zh: "ACB 計算機" } },
+  "km-guide": { href: "/tools/km-cif-riskset", label: { en: "TriNetX survival vs cumulative incidence guide", zh: "TriNetX 存活機率與累積發生率說明" } },
+  "phenotype-lgs": { href: "/tools/clone-censor-weight?library=indications&q=Lennox", label: { en: "LGS definition in the phenotype library", zh: "phenotype library 的 LGS 定義" } },
+  map: { href: "/#map", label: { en: "research map", zh: "研究地圖" } },
 };
 
 // ── Paper helpers ────────────────────────────────────────────────────────
@@ -179,7 +203,39 @@ const risField = (p: PubRow, f: string) => {
   const m = (p.ris || "").match(new RegExp(`^${f}  - (.+?)\\r?$`, "m"));
   return m ? unesc(m[1].trim()) : "";
 };
-export const paperTitle = (p: PubRow) => risField(p, "TI").replace(/[\s.]+$/, "") || p.citation;
+// Titles arrive from the publisher with inline markup ("P2Y <sub>12</sub>",
+// "<i>CYP2C19</i>") and the odd stray space ("<i>vs</i> ."). Two forms:
+//   paperTitleHtml  for the page: i / em / sub / sup kept as real markup, any
+//                   other tag dropped, everything else escaped. Use with set:html.
+//   paperTitle      plain text, every tag stripped: for attributes, labels,
+//                   metadata, anywhere markup would print as text.
+const KEEP = /^(i|em|sub|sup)$/i;
+const escText = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const tidyTitle = (s: string) =>
+  s.replace(/\s+/g, " ")
+    .replace(/\s+(<su[bp]>)/gi, "$1")              // "P2Y <sub>12</sub>" -> "P2Y<sub>12</sub>"
+    .replace(/(<\/(?:i|em|sub|sup)>)\s+([.,;:])/gi, "$1$2") // "<i>vs</i> ." -> "<i>vs</i>."
+    .replace(/\s+([.,;:])/g, "$1")
+    .trim()
+    .replace(/[\s.]+$/, "");
+export const paperTitleHtml = (p: PubRow) => {
+  const raw = risField(p, "TI");
+  if (!raw) return escText(p.citation);
+  const parts = raw.split(/(<\/?[a-zA-Z][^>]*>)/);
+  const html = parts
+    .map((part) => {
+      const m = part.match(/^<(\/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*>$/);
+      if (!m) return escText(part);
+      return KEEP.test(m[2]) ? `<${m[1]}${m[2].toLowerCase()}>` : "";
+    })
+    .join("");
+  return tidyTitle(html);
+};
+export const paperTitle = (p: PubRow) => {
+  const raw = risField(p, "TI");
+  if (!raw) return p.citation;
+  return tidyTitle(raw.replace(/\s*<su[bp]>/gi, "").replace(/<\/?[a-zA-Z][^>]*>/g, ""));
+};
 export const paperJournal = (p: PubRow) => (risField(p, "JO") || risField(p, "T2")).replace(/^[\s.]+|[\s.]+$/g, "");
 // "Tsai DHT et al." from the formatted citation.
 export const paperLead = (p: PubRow) => {

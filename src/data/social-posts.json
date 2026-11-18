@@ -1,5 +1,5 @@
 {
-  "_comment": "Daniel's own public posts, newest first, embedded on /posts (English page: LinkedIn; Chinese page: Facebook). Kept up to date by the weekly task described in docs/SOCIAL_POSTS_SYNC.md; edit by hand only to remove a post. urn / url identify the post for the official embed; date is the day it was posted; text is a short excerpt of his own words, shown on the home page and as the fallback when an embed does not load.",
+  "_comment": "Daniel's own public posts, newest first, embedded on /posts (English page: LinkedIn; Chinese page: Facebook). Kept up to date by the weekly task described in docs/SOCIAL_POSTS_SYNC.md; edit by hand only to remove a post. urn / url identify the post for the official embed; date is the day it was posted; length (Facebook only) is the size of his own text, counted as docs/SOCIAL_POSTS_SYNC.md describes; text is a short excerpt of his own words, shown on the home page and as the fallback when an embed does not load.",
   "updated": "2026-11-18",
   "profiles": {
     "linkedin": "https://www.linkedin.com/in/daniel-hsiang-te-tsai/recent-activity/all/",
@@ -64,88 +64,69 @@
   ],
   "facebook": [
     {
-      "url": "https://www.facebook.com/dudu1399/posts/pfbid0bbWv89Cu17t3h7f2gRKiwnFACxcTgXgKLe2oxR2i2bXwJBNavpNfZG4ebPh3T7iVl",
-      "date": "2026-10-28",
-      "text": "我們研究中心這三年以來應用模擬臨床試驗持續探索 SGLT2 inhibitors 與電解質 （鉀磷鈣鎂鈉）的關係，昨天也剛好拼上最後一塊拼圖。 歡迎大家來挑戰自己對SGLT2 inhibitors 與電解質的文獻理解～～～"
-    },
-    {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid02VMp4EvGGeerK9x3XnGsyY9GA1Y37CyPXtMuRYjzdQAQm6WJ7Nr1ihUUSJmp5nTY9l",
       "date": "2026-09-13",
+      "length": 100,
       "text": "來到因果推論工作坊第二天 ☀️ 今天我們邀請 BMJ 和 JAMA 作者親自跑 code 從 SCCS、CCO 到 ITS，今天不只討論研究設計，更直接進入實際 programming。大家一起在陽光下寫 code、在 error 裡找曙光，努力讓分析結果不只跑得出來，也能更了解每個方法到底在做什麼。"
-    },
-    {
-      "url": "https://www.facebook.com/dudu1399/posts/pfbid0T8Q5ekAQ8DSpQxRn79CX1fLpBUoSN7qcv1KqbDAs7pgV9BHq2TqckdVeEszBgQKhl",
-      "date": "2026-09-12",
-      "text": "我們又回到成大最陽光的未來館開課囉! 這次我們一起討論 SCCS、CCO 與 ITS，從個體層級的自我對照，到群體層級的時間趨勢比較；從因果推論的方法思維，一路延伸到政策評估與決策。 歡迎大家有興趣來探班😎"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid025HT8GNangBUcJ296tKpMpkp2m6Vdbi4sje82EVkSgCRMYqDev6wryLAijksj8GMnl",
       "date": "2026-09-04",
+      "length": 355,
       "text": "🌏 Asian Pharmacoepidemiology Network（AsPEN）新版網站正式上線！ https://www.aspensig.asia 從 2012 年開始，AsPEN 持續串聯亞太不同國家的研究者、資料庫與醫療體系，一起回答重要的用藥安全與療效問題。"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid02DBv3HAxfySVvf72m1go2bMtsK2yasJ8oYugWt4ff1ZRnCthexSh4AviSPS4CkPpml",
       "date": "2026-08-28",
+      "length": 325,
       "text": "如何更準確地管理美沙冬？ 我們近期發表的研究，蒐集台南 8 家藥癮治療機構 2017–2022 年的資料，評估導入「重量法」管理美沙冬庫存前後的變化。"
-    },
-    {
-      "url": "https://www.facebook.com/dudu1399/posts/pfbid0N2YmdiawAwEQHtMfSVJLARrPocgokeiMgc8m7zj2AB8suwKYiRsaiqhpnuJyXsLKl",
-      "date": "2026-08-02",
-      "text": "最近剛好口試完比較有空，又被同事推坑去看《奧德賽》。看到奧德修斯繞了二十年才終於回到家，突然覺得藥物流行病學博士念個三、四年，好像真的只是人生中很短的一段時間~~~"
-    },
-    {
-      "url": "https://www.facebook.com/dudu1399/posts/pfbid0AQPqaecALzVu4jrqhjz382NiVdYsAFp7VHUdjfBa22w5Y7MRPeC9NSCBe6AKokohl",
-      "date": "2026-07-15",
-      "text": "- 世界上可能有一千四百萬六百零五種反事實，謝謝讓我走到了最幸運的這一個。"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid02AFf3VDL2ePV3gZDHjLFvPmBGmimzmBpWxWhxAU1KNHBzmAAfXnxEuNzDw9gdVXYil",
       "date": "2026-07-14",
+      "length": 94,
       "text": "中午 12:10–13:00，我們將在成功大學醫學院鳳杯講堂，和來自英國、韓國與臺灣的講者，一起討論： 共享資料 × 開放科學 × 跨國轉移 究竟是真實世界數據研究的未來願景，還是仍待克服的幻想？"
-    },
-    {
-      "url": "https://www.facebook.com/dudu1399/posts/pfbid0Qo62Me3dsaKwain4F7rJgnP5ksG8asPomDQ7JA97UrRzVWLuMRGAuv2fMqw6GCMYl",
-      "date": "2026-06-19",
-      "text": "Team NCKU! #PHDc"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid02BijNh6GTqsjuu92zZnALF3nfESZSpaFsV31ZVpyRKD5pc6M6Kv8uJzNGetLscwqcl",
       "date": "2026-06-13",
+      "length": 462,
       "text": "真實世界數據因果推論工作坊😎😎😎 第一梯次額滿之後，我們收到不少研究夥伴的訊息：「台南有點遠。」「那週剛好卡到。」「我只是晚了一點點，名額就沒了。」 所以，第二梯次來了。"
-    },
-    {
-      "url": "https://www.facebook.com/dudu1399/posts/pfbid02cvWTXoPr4zH4Ya97wj5bKSe6FCNdx8H64NqLzkBFapZTJ6qkHCQFMY6EcemE4L3zl",
-      "date": "2026-06-08",
-      "text": "My client is not in a hurry. #PHDc"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid02qHUPeKEGpJ6wBi8R8yBQfZHMwjcDjdUL8UoNSX4RU58iYC5PkXbRoBDF8CSxYqyXl",
       "date": "2026-05-30",
+      "length": 155,
       "text": "當我們無意間走進了永續，走進了藥物流行病學，開始出席一場國內研討會；遇見了伯樂，也認識了一群願意同行的夥伴。在學習與實踐的過程中，我們又遇見了更多人，累積了更多對話，也留下了更多共同努力的回憶。"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid0YQBoWDRMZUv3hxC94fU6oZCvNtDiRNMxm1WGPj4T3yugLaryK8suudWsB6p1j2DHl",
       "date": "2026-05-24",
+      "length": 97,
       "text": "資料有時候很像意若思鏡 (Mirror of Erised)，它映照出我們最想看見的答案，但不一定等於我們最需要做出的決策。真正成熟的研究，不是盯著鏡中最完美的影像，而是知道什麼時候該離開鏡子，回到現實世界裡用不完美但適當的證據做決策。"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid02ZKNVTh5SF6mEa1bwQbiUy55qSd3K9EFm9Coi7NUSuRKhRyJ68fjKdBsKSEfBkzngl",
       "date": "2026-05-05",
+      "length": 322,
       "text": "這幾年來，我們團隊在老人醫院的用藥安全領域投入了許多心力。 長輩們往往需要同時服用多種藥物，而其中許多藥物帶有抗膽鹼作用。"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid02TjZdSnHfdSQFhNsZZ5t9eRQFNaNw9ZM3pZvk7UpRA8HA43jNnGauLE5GUjtctSHjl",
       "date": "2026-04-26",
+      "length": 601,
       "text": "這一兩年一直被大家問到同一個問題： TriNetX 的研究值得相信嗎？設計不夠嚴謹、方法交代不足，或解讀過度的 TriNetX 研究結果？"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid0Fw2z4SsNCZqC4oSpygE6x7Anjj82jRnW8T9etkwYSCqnnftWWAxcqhutc5C4xq8al",
       "date": "2026-04-23",
+      "length": 391,
       "text": "我們探討糖尿病黃斑部水腫治療藥物安全性的研究，終於正式在英國皇家眼科醫師學會Eye刊登了～～～～～～～～"
     },
     {
       "url": "https://www.facebook.com/dudu1399/posts/pfbid02otDkqXhx7HcQy8ne6RXQsKHVAwfAqEVUCCPkg7K9YJZoSCiVJmPVPtrJj5qqRYLfl",
       "date": "2025-04-09",
+      "length": 952,
       "text": "我們最新的複製人研究，探討抗精神藥物與強化治療在難治型憂鬱症中的療效，正式發表英國精神醫學期刊《British Journal of Psychiatry》(Impact Factor 8.8, 10/279) !"
     }
   ]

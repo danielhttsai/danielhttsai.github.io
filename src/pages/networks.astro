@@ -1,7 +1,6 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import PageHeader from "../components/PageHeader.astro";
-import ResearchMap from "../components/ResearchMap.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -56,19 +55,19 @@ const networks = [
 <BaseLayout
   title="Networks & collaborations — Daniel Tsai"
   titleZh="合作網絡｜蔡相德 Daniel Tsai"
-  description="The networks, centres, and collaborations Daniel Tsai works within (PHDc, AsPEN, NeuroGEN, DARWIN EU), and a map of the countries and databases behind his published papers."
-  descriptionZh="蔡相德參與的研究中心與合作網絡（PHDc、AsPEN、NeuroGEN、DARWIN EU），以及已發表論文所用國家與資料庫的研究地圖。"
+  description="The networks, centres, and collaborations Daniel Tsai works within: PHDc, AsPEN, NeuroGEN, and DARWIN EU."
+  descriptionZh="蔡相德參與的研究中心與合作網絡：PHDc、AsPEN、NeuroGEN 與 DARWIN EU。"
 >
   <PageHeader
     eyebrow="Collaborations"
     eyebrowZh="合作"
     title="Networks"
     titleZh="合作網絡"
-    description="The networks, centres, and collaborations I work within, and where the data behind my papers comes from."
-    descriptionZh="我參與的研究中心與合作網絡，以及我的論文資料從哪些國家來。"
+    description="The networks, centres, and collaborations I work within."
+    descriptionZh="我參與的研究中心與合作網絡。"
   />
 
-  <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pt-14">
+  <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-16">
     <div class="grid gap-6 sm:grid-cols-2">
       {networks.map((n) => (
         <a href={n.href} target="_blank" rel="noopener noreferrer"
@@ -85,15 +84,10 @@ const networks = [
     </div>
   </section>
 
-  <!-- scroll-mt keeps the heading clear of the sticky header on #map links -->
-  <section id="map" class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-16 scroll-mt-20">
-    <h2 class="text-2xl font-bold text-slate-900"><span class="l-en">Research map</span><span class="l-zh">研究地圖</span></h2>
-    <p class="mt-2 text-slate-600 max-w-3xl leading-relaxed">
-      <span class="l-en">Which countries, and which databases, I have published with. Pick a country on the map or from the buttons to see its databases and the papers that used them.</span>
-      <span class="l-zh">我用過哪些國家、哪些資料庫發表論文。點地圖上的國家或下方的按鈕，就能看到那裡的資料庫和用過它的論文。</span>
+  <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pb-16 -mt-6">
+    <p class="text-sm text-slate-600">
+      <span class="l-en">Which countries and databases my papers draw on is shown on the</span><span class="l-zh">我的論文用過哪些國家與資料庫，請看首頁的</span>
+      <a href={`${base}/#map`} class="font-semibold text-brand-700 hover:underline"><span class="l-en">research map on the home page</span><span class="l-zh">研究地圖</span> →</a>
     </p>
-    <div class="mt-6">
-      <ResearchMap />
-    </div>
   </section>
 </BaseLayout>
