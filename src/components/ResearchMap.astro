@@ -176,11 +176,14 @@ const doi = (p: PubRow) => `https://doi.org/${p.doi}`;
 const designOf = (p: PubRow) => designChips(tagsOf(p.doi))[0];
 const kindsIn = (b: Block) => (Object.keys(DB_KINDS) as DbKind[]).filter((k) => b.entries.some((e) => e.kind === k));
 const famsIn = (b: Block) => Object.keys(FAMILIES).filter((f) => b.papers.some(({ p }) => familyOf(tagsOf(p.doi)) === f));
-// Papers grouped by year, newest first, for the strip.
-const byYear = (b: Block) => {
-  const years = [...new Set(b.papers.map(({ p }) => p.year))];
-  return years.map((y) => ({ y, items: b.papers.filter(({ p }) => p.year === y) }));
-};
+// The papers grid: one row per design family, one column per year. Every panel
+// uses the same years, earliest to latest across all papers on the map, so a
+// column means the same thing whichever country is selected.
+const allYears = ALL_PUBS.filter((p) => tagsOf(p.doi).data.length).map((p) => +p.year);
+const YEARS = Array.from({ length: Math.max(...allYears) - Math.min(...allYears) + 1 }, (_, i) => String(Math.min(...allYears) + i));
+const cell = (b: Block, fam: string, year: string) =>
+  b.papers.filter(({ p }) => p.year === year && familyOf(tagsOf(p.doi)) === fam).map(({ p }) => p);
+const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(tagsOf(p.doi)) === fam).length;
 ---
 
 <div class="research-map" data-research-map>
@@ -291,29 +294,33 @@ const byYear = (b: Block) => {
           </div>
           <div class="rm-b">
           <h4 class="rm-h"><span class="l-en">Papers, by study design</span><span class="l-zh">論文（依研究設計）</span></h4>
-          <div class="rm-strip">
-            {byYear(b).map((g) => (
-              <div class="rm-year">
-                <div class="rm-marks">
-                  {g.items.map(({ p }) => (
-                    <button
-                      type="button"
-                      class:list={["pm", `fam-${familyOf(tagsOf(p.doi))}`]}
-                      data-pm={p.doi}
-                      aria-pressed="false"
-                      aria-label={`${paperTitle(p)} (${p.year})`}
-                    ><span aria-hidden="true"></span></button>
-                  ))}
-                </div>
-                <span class="rm-year-label">{g.y}</span>
+          <p class="rm-hint"><span class="l-en">Each dot is one paper. Click or tap a dot to see it below.</span><span class="l-zh">每個圓點是一篇論文，點一下就會顯示在下方。</span></p>
+          <div class="rg" style={`--cols:${YEARS.length}`}>
+            {famsIn(b).map((f) => (
+              <div class="rg-row">
+                <div class="rg-name"><span class:list={["rg-dot", `fam-${f}`]} aria-hidden="true"></span><span class="l-en">{FAMILIES[f].en}</span><span class="l-zh">{FAMILIES[f].zh}</span></div>
+                {YEARS.map((y) => (
+                  <div class="rg-cell">
+                    {cell(b, f, y).map((p) => (
+                      <button
+                        type="button"
+                        class:list={["pm", `fam-${f}`]}
+                        data-pm={p.doi}
+                        aria-pressed="false"
+                        aria-label={`${paperTitle(p)} (${p.year})`}
+                      ></button>
+                    ))}
+                  </div>
+                ))}
+                <div class="rg-n" title="papers">{famCount(b, f)}</div>
               </div>
             ))}
+            <div class="rg-row rg-axis" aria-hidden="true">
+              <div class="rg-name"></div>
+              {YEARS.map((y) => <div class="rg-year"><span class="y-full">{y}</span><span class="y-short">’{y.slice(2)}</span></div>)}
+              <div class="rg-n"></div>
+            </div>
           </div>
-          <ul class="rm-key-list">
-            {famsIn(b).map((f) => (
-              <li><span class:list={["pm-key", `fam-${f}`]} aria-hidden="true"><span></span></span><span class="l-en">{FAMILIES[f].en}</span><span class="l-zh">{FAMILIES[f].zh}</span></li>
-            ))}
-          </ul>
 
           <!-- One card per paper; the mark that is hovered, focused or tapped shows its card. -->
           <div class="rm-detail" aria-live="polite">
@@ -328,7 +335,6 @@ const byYear = (b: Block) => {
               </div>
             ))}
           </div>
-          <p class="rm-hint"><span class="l-en">Hover, focus or tap a mark to see its paper.</span><span class="l-zh">滑過、聚焦或點一下圖示，就會顯示那篇論文。</span></p>
 
           </div>
           <div class="rm-c">
@@ -452,32 +458,44 @@ const byYear = (b: Block) => {
   .rm-key-list li { display: inline-flex; align-items: center; gap: 0.35rem; }
   .rm-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 
-  .rm-strip { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.9rem; }
-  .rm-year { display: flex; flex-direction: column; gap: 0.2rem; }
-  .rm-marks { display: flex; flex-wrap: wrap; gap: 2px; max-width: 100%; }
-  .rm-year-label { font-size: 0.6875rem; color: var(--ink-3); font-variant-numeric: tabular-nums; border-top: 1px solid var(--rule); padding-top: 0.15rem; }
-  /* A paper mark: a 28 px target around a 14 px shape (36 px on touch screens). */
-  .pm { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; cursor: pointer; }
-  .pm > span, .pm-key > span { display: block; width: 14px; height: 14px; }
-  .pm-key { width: 14px; height: 14px; display: inline-grid; place-items: center; }
-  .pm-key > span { width: 10px; height: 10px; }
-  .fam-tte > span { background: var(--f-tte); border-radius: 50%; }
-  .fam-cohort > span { background: var(--f-cohort); border-radius: 2px; }
-  .fam-self > span { background: var(--f-self); border-radius: 1px; transform: rotate(45deg) scale(0.82); }
-  .fam-other > span { background: transparent; border: 3px solid var(--f-other); border-radius: 50%; }
-  .pm:hover, .pm:focus-visible { background: #f1f5f9; outline: none; }
-  .pm:focus-visible { box-shadow: 0 0 0 2px var(--color-brand-600); }
-  .pm[aria-pressed="true"] { background: var(--color-brand-50); box-shadow: inset 0 0 0 1.5px var(--color-brand-600); }
-  @media (pointer: coarse) { .pm { width: 36px; height: 36px; } .pm > span { width: 16px; height: 16px; } }
+  /* Papers grid. Row = design family (named at the left, counted at the right),
+     column = year. A dot is 16 px with a 28 px target; dots that share a cell
+     sit side by side and wrap, so none covers another. */
+  .rg { margin-top: 0.5rem; border-top: 1px solid var(--rule); }
+  .rg-row { display: grid; grid-template-columns: 12.5rem repeat(var(--cols), minmax(0, 1fr)) 1.75rem; align-items: stretch; border-bottom: 1px solid var(--rule); }
+  .rg-name { display: flex; align-items: center; gap: 0.45rem; padding: 0.4rem 0.5rem 0.4rem 0; font-size: 0.8125rem; font-weight: 600; color: var(--ink); line-height: 1.25; }
+  .rg-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+  .rg-cell { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 6px; padding: 7px 3px; border-left: 1px solid #eef2f6; min-height: 30px; }
+  .rg-n { display: flex; align-items: center; justify-content: flex-end; font-size: 0.8125rem; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; border-left: 1px solid #eef2f6; }
+  .rg-axis { border-bottom: 0; }
+  .rg-year { padding-top: 0.3rem; text-align: center; font-size: 0.6875rem; color: var(--ink-3); font-variant-numeric: tabular-nums; border-left: 1px solid #eef2f6; }
+  .rg-axis .rg-n { border-left: 1px solid #eef2f6; }
+  .y-short { display: none; }
+  .fam-tte { background: var(--f-tte); } .fam-cohort { background: var(--f-cohort); }
+  .fam-self { background: var(--f-self); } .fam-other { background: var(--f-other); }
+  .pm { position: relative; width: 16px; height: 16px; border-radius: 50%; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; }
+  .pm::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; } /* 28 px target */
+  .pm:hover { transform: scale(1.2); box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #94a3b8; }
+  .pm:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--color-brand-600); }
+  .pm[aria-pressed="true"] { transform: scale(1.2); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ink); }
+  /* Phones: the family name gets its own line above its row, and years lose
+     their century, so eight columns fit without the page scrolling sideways. */
+  @media (max-width: 639px) {
+    .rg-row { grid-template-columns: repeat(var(--cols), minmax(0, 1fr)) 1.75rem; }
+    .rg-name { grid-column: 1 / -1; padding: 0.45rem 0 0.1rem; }
+    .rg-axis .rg-name { display: none; }
+    .rg-cell { gap: 5px; padding: 7px 1px 9px; min-height: 34px; }
+    .y-full { display: none; } .y-short { display: inline; }
+  }
 
-  .rm-detail { margin-top: 0.75rem; border-left: 3px solid var(--color-brand-100); padding-left: 0.75rem; min-height: 5.5rem; }
+  .rm-detail { margin-top: 0.9rem; border-left: 3px solid var(--color-brand-100); padding-left: 0.75rem; min-height: 5.5rem; }
   .pd-title { display: block; font-size: 0.875rem; font-weight: 600; line-height: 1.4; color: var(--ink); }
   .pd-title:hover { color: var(--color-brand-700); text-decoration: underline; }
   .pd-meta { margin-top: 0.2rem; font-size: 0.75rem; color: var(--ink-3); }
   .pd-tags { margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.3rem; }
   .pd-tag { font-size: 0.6875rem; font-weight: 600; line-height: 1.25rem; padding: 0 0.5rem; border-radius: 9999px; background: var(--color-brand-50); color: var(--color-brand-700); }
   .pd-db { background: #f1f5f9; color: var(--ink-2); font-weight: 500; }
-  .rm-hint { margin-top: 0.4rem; font-size: 0.6875rem; color: var(--ink-3); }
+  .rm-hint { margin: -0.15rem 0 0; font-size: 0.75rem; color: var(--ink-3); }
   .rm-note { margin-top: 0.9rem; font-size: 0.8125rem; line-height: 1.6; color: var(--ink-2); }
 
   .rm-list { margin-top: 1rem; border-top: 1px solid var(--rule); padding-top: 0.6rem; font-size: 0.8125rem; }
@@ -541,7 +559,7 @@ const byYear = (b: Block) => {
     blocks.forEach(function (b) {
       var marks = [].slice.call(b.querySelectorAll(".pm"));
       var cards = [].slice.call(b.querySelectorAll(".pd"));
-      var pinned = marks[0] ? marks[0].getAttribute("data-pm") : null;
+      var pinned = cards[0] ? cards[0].getAttribute("data-pd") : null; // the newest paper
       function show(id) { cards.forEach(function (c) { c.hidden = c.getAttribute("data-pd") !== id; }); }
       function pin(id) {
         pinned = id;
