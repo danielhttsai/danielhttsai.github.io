@@ -11,9 +11,11 @@
 //   arc      two countries that appear in the same paper; heavier = more papers
 //   shading  light = covered only by the 65-country sales-data study
 //   dashed   TriNetX's global network, which the papers do not split by country
-// Selecting a bubble opens a panel: databases as bars (length = papers, colour
-// = kind of data) and papers as marks (shape and colour = study design). The
-// same content is available as plain text under "Show as list".
+// Selecting a bubble opens a panel: databases as bars (length = papers, with
+// the kind of data written as a tag) and papers as dots in a grid of study
+// design by year. The same content is available as plain text under "Show as
+// list". The whole block is drawn in the site's green plus neutrals; nothing
+// is told apart by hue, so the words carry what colour used to.
 //
 // Two drawings are rendered and CSS shows one: a Pacific-centred world map for
 // wide screens, and for phones a schematic of the same bubbles and arcs, since
@@ -22,7 +24,7 @@ import { geoEqualEarth, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import world from "world-atlas/countries-110m.json";
 import {
-  ALL_PUBS, tagsOf, DATABASES, DB_KINDS, COUNTRIES, CORE, MIDAS65, DESIGNS, FAMILIES, familyOf, designChips,
+  ALL_PUBS, tagsOf, DATABASES, DB_KINDS, DB_KIND_TAGS, COUNTRIES, CORE, MIDAS65, DESIGNS, FAMILIES, familyOf, designChips,
   paperTitle, paperTitleHtml, paperJournal, paperLead,
 } from "../data/research";
 import type { PubRow, DbKind } from "../data/research";
@@ -174,7 +176,6 @@ const REGIONS = [
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const doi = (p: PubRow) => `https://doi.org/${p.doi}`;
 const designOf = (p: PubRow) => designChips(tagsOf(p.doi))[0];
-const kindsIn = (b: Block) => (Object.keys(DB_KINDS) as DbKind[]).filter((k) => b.entries.some((e) => e.kind === k));
 const famsIn = (b: Block) => Object.keys(FAMILIES).filter((f) => b.papers.some(({ p }) => familyOf(tagsOf(p.doi)) === f));
 // The papers grid: one row per design family, one column per year. Every panel
 // uses the same years, earliest to latest across all papers on the map, so a
@@ -183,6 +184,15 @@ const allYears = ALL_PUBS.filter((p) => tagsOf(p.doi).data.length).map((p) => +p
 const YEARS = Array.from({ length: Math.max(...allYears) - Math.min(...allYears) + 1 }, (_, i) => String(Math.min(...allYears) + i));
 const cell = (b: Block, fam: string, year: string) =>
   b.papers.filter(({ p }) => p.year === year && familyOf(tagsOf(p.doi)) === fam).map(({ p }) => p);
+// Years without papers are not blank: they say what Daniel was doing, in his
+// own words (2026-11-18). The bands are about him, so they are the same on
+// every panel. Wording is his; do not elaborate it.
+const CONTEXT = [
+  { from: "2020", to: "2021", en: "Clinical internship", zh: "臨床實習", enShort: "Internship", zhShort: "實習" },
+  { from: "2022", to: "2022", en: "PhD, year 1", zh: "博士班第一年", enShort: "PhD Y1", zhShort: "博一" },
+]
+  .filter((c) => YEARS.includes(c.from) && YEARS.includes(c.to))
+  .map((c) => ({ ...c, at: YEARS.indexOf(c.from) + 1, span: YEARS.indexOf(c.to) - YEARS.indexOf(c.from) + 1 }));
 const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(tagsOf(p.doi)) === fam).length;
 ---
 
@@ -278,33 +288,35 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
           <h4 class="rm-h"><span class="l-en">Data sources, by papers</span><span class="l-zh">資料來源（依論文數）</span></h4>
           <div class="rm-bars">
             {b.entries.map((e) => (
-              <div class="rm-bar-row" title={e.en}>
-                <span class="rm-bar-name">{e.short}</span>
-                <span class="rm-bar-track"><span class:list={["rm-bar", `kind-${e.kind}`]} style={`width:${((e.papers.length / maxBar) * 100).toFixed(1)}%`}></span></span>
+              <div class="rm-bar-row" title={`${e.en} (${DB_KINDS[e.kind].en})`}>
+                <span class="rm-bar-name">{e.short} <span class="rm-bar-kind"><span class="l-en">{DB_KIND_TAGS[e.kind].en}</span><span class="l-zh">{DB_KIND_TAGS[e.kind].zh}</span></span></span>
+                <span class="rm-bar-track"><span class="rm-bar" style={`width:${((e.papers.length / maxBar) * 100).toFixed(1)}%`}></span></span>
                 <span class="rm-bar-n">{e.papers.length}</span>
               </div>
             ))}
           </div>
-          <ul class="rm-key-list">
-            {kindsIn(b).map((k) => (
-              <li><span class:list={["rm-swatch", `kind-${k}`]} aria-hidden="true"></span><span class="l-en">{DB_KINDS[k].en}</span><span class="l-zh">{DB_KINDS[k].zh}</span></li>
-            ))}
-          </ul>
-
           </div>
           <div class="rm-b">
           <h4 class="rm-h"><span class="l-en">Papers, by study design</span><span class="l-zh">論文（依研究設計）</span></h4>
           <p class="rm-hint"><span class="l-en">Each dot is one paper. Click or tap a dot to see it below.</span><span class="l-zh">每個圓點是一篇論文，點一下就會顯示在下方。</span></p>
           <div class="rg" style={`--cols:${YEARS.length}`}>
+            <div class="rg-bands" aria-hidden="true">
+              {CONTEXT.map((c) => (
+                <div class="rg-band" style={`--wide:${c.at + 1} / span ${c.span};--narrow:${c.at} / span ${c.span}`}>
+                  <span class="rg-band-full"><span class="l-en">{c.en}</span><span class="l-zh">{c.zh}</span></span>
+                  <span class="rg-band-short"><span class="l-en">{c.enShort}</span><span class="l-zh">{c.zhShort}</span></span>
+                </div>
+              ))}
+            </div>
             {famsIn(b).map((f) => (
               <div class="rg-row">
-                <div class="rg-name"><span class:list={["rg-dot", `fam-${f}`]} aria-hidden="true"></span><span class="l-en">{FAMILIES[f].en}</span><span class="l-zh">{FAMILIES[f].zh}</span></div>
+                <div class="rg-name"><span class="l-en">{FAMILIES[f].en}</span><span class="l-zh">{FAMILIES[f].zh}</span></div>
                 {YEARS.map((y) => (
                   <div class="rg-cell">
                     {cell(b, f, y).map((p) => (
                       <button
                         type="button"
-                        class:list={["pm", `fam-${f}`]}
+                        class="pm"
                         data-pm={p.doi}
                         aria-pressed="false"
                         aria-label={`${paperTitle(p)} (${p.year})`}
@@ -321,6 +333,11 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
               <div class="rg-n"></div>
             </div>
           </div>
+          <p class="sr-only">
+            {CONTEXT.map((c) => (
+              <><span class="l-en">{c.from === c.to ? c.from : `${c.from}–${c.to}`}: {c.en}. </span><span class="l-zh">{c.from === c.to ? c.from : `${c.from}–${c.to}`}：{c.zh}。</span></>
+            ))}
+          </p>
 
           <!-- One card per paper; the mark that is hovered, focused or tapped shows its card. -->
           <div class="rm-detail" aria-live="polite">
@@ -373,12 +390,11 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
 
 <style is:global>
   .research-map {
-    /* Kind of data source: slots 1-5 of the validated categorical palette, in
-       order. Study design family: slots 7, 6, 8 plus a neutral, and each family
-       also has its own shape, so neither legend leans on colour alone and the
-       two legends never share a hue. */
-    --k-claims: #2a78d6; --k-ehr: #eb6834; --k-registry: #1baf7a; --k-biobank: #eda100; --k-sales: #e87ba4;
-    --f-tte: #6250d6; --f-cohort: #008300; --f-self: #e34948; --f-other: #64748b;
+    /* One family: the site's green in a few steps, plus neutral ink and rules.
+       Marks (bubbles, bars, dots) are at least 3:1 on white; text is 4.5:1. */
+    --g-900: var(--color-brand-900); --g-700: var(--color-brand-700); --g-600: var(--color-brand-600);
+    --g-500: var(--color-brand-500); --g-300: #9cc4b9; --g-100: var(--color-brand-100); --g-50: var(--color-brand-50);
+    --band: #eff4f1; --land: #e9eeec;
     --ink: #0f172a; --ink-2: #475569; --ink-3: #64748b; --rule: #e2e8f0;
   }
   .rm-grid { display: grid; gap: 1.5rem; }
@@ -401,11 +417,11 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .rm-narrow { display: none; max-width: 26rem; margin: 0 auto; }
   @media (max-width: 639px) { .rm-wide { display: none; } .rm-narrow { display: block; } }
 
-  .m-land { fill: #e8edf2; }
+  .m-land { fill: var(--land); }
   .m-sales { fill: var(--color-brand-100); cursor: pointer; }
-  .m-core { fill: #9cc4b9; }
-  .sel-MIDAS .m-sales { fill: #f3bdd2; }
-  .m-region { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; fill: #94a3b8; }
+  .m-core { fill: var(--g-300); }
+  .sel-MIDAS .m-sales { fill: #b3d4cb; stroke: var(--g-500); stroke-width: 0.7; }
+  .m-region { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; fill: var(--ink-3); }
 
   .m-arc { fill: none; stroke: var(--color-brand-500); stroke-linecap: round; opacity: 0.3; transition: opacity 0.15s; }
   .m-arc.is-on { opacity: 0.95; stroke: var(--color-brand-700); }
@@ -436,7 +452,7 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .k-bubble, .k-network, .k-sales, .k-arc { flex: none; display: inline-block; }
   .k-bubble { width: 14px; height: 14px; border-radius: 50%; background: var(--color-brand-600); }
   .k-network { width: 14px; height: 14px; border-radius: 50%; border: 2px dashed var(--color-brand-600); }
-  .k-sales { width: 14px; height: 14px; border-radius: 3px; background: var(--color-brand-100); border: 1px solid #b5d3ca; }
+  .k-sales { width: 14px; height: 14px; border-radius: 3px; background: var(--color-brand-100); border: 1px solid var(--g-300); }
   .k-arc { width: 18px; height: 9px; border-top: 2px solid var(--color-brand-500); border-radius: 50% 50% 0 0 / 100% 100% 0 0; margin-top: 5px; }
 
   .rm-block { min-width: 0; }
@@ -446,41 +462,44 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .rm-h { margin-top: 1.1rem; margin-bottom: 0.5rem; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
 
   .rm-bars { display: grid; gap: 6px; }
-  .rm-bar-row { display: grid; grid-template-columns: 6.25rem minmax(0, 1fr) 1.5rem; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
-  .rm-bar-name { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rm-bar-row { display: grid; grid-template-columns: 9.25rem minmax(0, 1fr) 1.5rem; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
+  .rm-bar-name { color: var(--ink); font-weight: 600; line-height: 1.25; }
+  .rm-bar-kind { font-weight: 500; font-size: 0.6875rem; color: var(--ink-3); white-space: nowrap; }
   .rm-bar-track { display: block; height: 14px; border-left: 1px solid #cbd5e1; }
-  .rm-bar { display: block; height: 100%; min-width: 4px; border-radius: 0 4px 4px 0; }
+  .rm-bar { display: block; height: 100%; min-width: 4px; border-radius: 0 4px 4px 0; background: var(--g-500); }
   .rm-bar-n { color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
-  .kind-claims { background: var(--k-claims); } .kind-ehr { background: var(--k-ehr); } .kind-registry { background: var(--k-registry); }
-  .kind-biobank { background: var(--k-biobank); } .kind-sales { background: var(--k-sales); }
-
-  .rm-key-list { margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem; font-size: 0.6875rem; color: var(--ink-2); list-style: none; padding: 0; }
-  .rm-key-list li { display: inline-flex; align-items: center; gap: 0.35rem; }
-  .rm-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-
   /* Papers grid. Row = design family (named at the left, counted at the right),
      column = year. A dot is 16 px with a 28 px target; dots that share a cell
      sit side by side and wrap, so none covers another. */
-  .rg { margin-top: 0.5rem; border-top: 1px solid var(--rule); }
-  .rg-row { display: grid; grid-template-columns: 12.5rem repeat(var(--cols), minmax(0, 1fr)) 1.75rem; align-items: stretch; border-bottom: 1px solid var(--rule); }
+  .rg { position: relative; margin-top: 0.5rem; border-top: 1px solid var(--rule); }
+  /* Context bands: a layer behind the rows on the same columns. Quiet tint,
+     small muted text, no pointer events: background, not data. */
+  .rg-bands { position: absolute; inset: 0; z-index: 0; pointer-events: none; display: grid; grid-template-columns: 12.5rem repeat(var(--cols), minmax(0, 1fr)) 1.75rem; }
+  .rg-band { grid-column: var(--wide); grid-row: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 3px 1.4rem; background: var(--band); color: var(--ink-2); font-size: 0.6875rem; line-height: 1.25; }
+  .rg-band + .rg-band { border-left: 2px solid #fff; } /* a gap, so two periods do not read as one */
+  .rg-band-short { display: none; }
+  .rg-row { position: relative; z-index: 1; display: grid; grid-template-columns: 12.5rem repeat(var(--cols), minmax(0, 1fr)) 1.75rem; align-items: stretch; border-bottom: 1px solid var(--rule); }
   .rg-name { display: flex; align-items: center; gap: 0.45rem; padding: 0.4rem 0.5rem 0.4rem 0; font-size: 0.8125rem; font-weight: 600; color: var(--ink); line-height: 1.25; }
-  .rg-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
   .rg-cell { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 6px; padding: 7px 3px; border-left: 1px solid #eef2f6; min-height: 30px; }
   .rg-n { display: flex; align-items: center; justify-content: flex-end; font-size: 0.8125rem; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; border-left: 1px solid #eef2f6; }
   .rg-axis { border-bottom: 0; }
-  .rg-year { padding-top: 0.3rem; text-align: center; font-size: 0.6875rem; color: var(--ink-3); font-variant-numeric: tabular-nums; border-left: 1px solid #eef2f6; }
+  .rg-year { padding-top: 0.3rem; text-align: center; font-size: 0.6875rem; color: var(--ink-2); font-variant-numeric: tabular-nums; border-left: 1px solid #eef2f6; }
   .rg-axis .rg-n { border-left: 1px solid #eef2f6; }
   .y-short { display: none; }
-  .fam-tte { background: var(--f-tte); } .fam-cohort { background: var(--f-cohort); }
-  .fam-self { background: var(--f-self); } .fam-other { background: var(--f-other); }
-  .pm { position: relative; width: 16px; height: 16px; border-radius: 50%; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; }
+  .pm { position: relative; width: 16px; height: 16px; border-radius: 50%; background: var(--g-500); cursor: pointer; transition: transform 0.12s, box-shadow 0.12s, background-color 0.12s; }
   .pm::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; } /* 28 px target */
-  .pm:hover { transform: scale(1.2); box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #94a3b8; }
+  .pm:hover { transform: scale(1.2); background: var(--g-700); box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--g-300); }
   .pm:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--color-brand-600); }
-  .pm[aria-pressed="true"] { transform: scale(1.2); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ink); }
+  .pm[aria-pressed="true"] { transform: scale(1.2); background: var(--g-900); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--g-900); }
   /* Phones: the family name gets its own line above its row, and years lose
      their century, so eight columns fit without the page scrolling sideways. */
   @media (max-width: 639px) {
+    /* The label moves under the years, on a line of its own that the grid
+       leaves room for: inside the band it would run into the design names. */
+    .rg { padding-bottom: 1.25rem; }
+    .rg-bands { grid-template-columns: repeat(var(--cols), minmax(0, 1fr)) 1.75rem; }
+    .rg-band { grid-column: var(--narrow); align-items: flex-end; padding: 0 0 0.25rem; font-size: 0.625rem; white-space: nowrap; }
+    .rg-band-full { display: none; } .rg-band-short { display: inline; }
     .rg-row { grid-template-columns: repeat(var(--cols), minmax(0, 1fr)) 1.75rem; }
     .rg-name { grid-column: 1 / -1; padding: 0.45rem 0 0.1rem; }
     .rg-axis .rg-name { display: none; }

@@ -65,6 +65,14 @@ export const DB_KINDS: Record<DbKind, L> = {
   biobank: { en: "Biobank", zh: "生物資料庫" },
   sales: { en: "Sales data", zh: "銷售資料" },
 };
+// The same, short enough to sit beside a database name as a tag.
+export const DB_KIND_TAGS: Record<DbKind, L> = {
+  claims: { en: "claims", zh: "申報" },
+  ehr: { en: "EHR", zh: "電子病歷" },
+  registry: { en: "registry", zh: "登錄" },
+  biobank: { en: "biobank", zh: "生物資料庫" },
+  sales: { en: "sales", zh: "銷售" },
+};
 export const DATABASES: Record<string, Db> = {
   nhird: { short: "NHIRD", name: { en: "National Health Insurance Research Database", zh: "全民健康保險研究資料庫" }, country: "TW", type: CLAIMS, kind: "claims" },
   cgrd: { short: "CGRD", name: { en: "Chang Gung Research Database", zh: "長庚研究資料庫" }, country: "TW", type: EHR, kind: "ehr" },

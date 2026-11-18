@@ -11,7 +11,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import PageHeader from "../components/PageHeader.astro";
 import social from "../data/social-posts.json";
 
-const BATCH = 12; // cards shown at first, and added by each "Show more"
+const BATCH = 10; // cards shown at first, and added by each "Show more"
 
 const fmtEn = (d: string) => {
   const [y, m, day] = d.split("-").map(Number);
