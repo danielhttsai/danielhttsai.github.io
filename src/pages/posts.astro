@@ -1,0 +1,157 @@
+---
+// Posts: Daniel's own public posts, shown through each network's official
+// single-post embed. The English page shows LinkedIn, the Chinese page shows
+// Facebook; both lists are in the page and <html lang> picks one, like every
+// other translated block on the site.
+//
+// The list comes from src/data/social-posts.json, which a weekly task keeps
+// current (docs/SOCIAL_POSTS_SYNC.md). Nothing here talks to LinkedIn or
+// Facebook at build time, so a build never fails because of them.
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PageHeader from "../components/PageHeader.astro";
+import social from "../data/social-posts.json";
+
+const CAP = 12; // newest first; the rest are one click away on the profile
+
+const fmtEn = (d: string) => {
+  const [y, m, day] = d.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
+};
+const fmtZh = (d: string) => {
+  const [y, m, day] = d.split("-").map(Number);
+  return `${y} 年 ${m} 月 ${day} 日`;
+};
+
+const linkedin = social.linkedin.slice(0, CAP).map((p) => ({
+  ...p,
+  embed: `https://www.linkedin.com/embed/feed/update/${p.urn}`,
+  link: `https://www.linkedin.com/feed/update/${p.urn}/`,
+}));
+// The Facebook plugin takes its width from the URL, so the script below fills
+// it in from the card's real width; this is the address without it.
+const facebook = social.facebook.slice(0, CAP).map((p) => ({
+  ...p,
+  embed: `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(p.url)}&show_text=true`,
+  link: p.url,
+}));
+---
+
+<BaseLayout
+  title="Posts — Daniel Tsai"
+  titleZh="貼文｜蔡相德 Daniel Tsai"
+  description="Recent LinkedIn posts by Daniel Tsai on pharmacoepidemiology, causal inference and real-world evidence."
+  descriptionZh="蔡相德在 Facebook 的近期公開貼文：藥物流行病學、因果推論與 real-world evidence。"
+>
+  <PageHeader
+    eyebrow="From LinkedIn"
+    eyebrowZh="來自 Facebook"
+    title="Posts"
+    titleZh="貼文"
+    description="What I have been working on and thinking about lately, as posted on LinkedIn."
+    descriptionZh="最近在做什麼、在想什麼，都寫在 Facebook 上。"
+  />
+
+  <!-- English: LinkedIn -->
+  <div class="l-en mx-auto max-w-5xl px-3 sm:px-6 lg:px-8 py-12" data-feed="en">
+    {linkedin.length === 0 ? (
+      <p class="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
+        No posts to show here yet. You can read them on <a href={social.profiles.linkedin} target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">LinkedIn ↗</a>.
+      </p>
+    ) : (
+      <>
+        <ol class="grid gap-6 md:grid-cols-2 items-start">
+          {linkedin.map((p) => (
+            <li class="post-card rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div class="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-100 text-xs">
+                <span class="text-slate-500">{fmtEn(p.date)}</span>
+                <a href={p.link} target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">Open on LinkedIn ↗</a>
+              </div>
+              <div class="post-frame" data-embed={p.embed}>
+                <!-- Shown until the embed loads, and instead of it without JavaScript -->
+                <p class="post-fallback px-4 py-4 text-sm text-slate-700 leading-relaxed">{p.text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p class="mt-8 text-sm text-slate-600">
+          Showing the {linkedin.length} most recent{social.linkedin.length > CAP ? ` of ${social.linkedin.length}` : ""}.
+          <a href={social.profiles.linkedin} target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">All posts on LinkedIn ↗</a>
+        </p>
+      </>
+    )}
+  </div>
+
+  <!-- 中文：Facebook -->
+  <div class="l-zh mx-auto max-w-5xl px-3 sm:px-6 lg:px-8 py-12" data-feed="zh">
+    {facebook.length === 0 ? (
+      <p class="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-slate-600">
+        這裡還沒有貼文。可以直接到 <a href={social.profiles.facebook} target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">Facebook ↗</a> 看。
+      </p>
+    ) : (
+      <>
+        <ol class="grid gap-6 md:grid-cols-2 items-start">
+          {facebook.map((p) => (
+            <li class="post-card rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div class="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-100 text-xs">
+                <span class="text-slate-500">{fmtZh(p.date)}</span>
+                <a href={p.link} target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">在 Facebook 開啟 ↗</a>
+              </div>
+              <div class="post-frame" data-embed={p.embed} data-fb>
+                <p class="post-fallback px-4 py-4 text-sm text-slate-700 leading-relaxed">{p.text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p class="mt-8 text-sm text-slate-600">
+          顯示最新的 {facebook.length} 則{social.facebook.length > CAP ? `（共 ${social.facebook.length} 則）` : ""}。
+          <a href={social.profiles.facebook} target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">到 Facebook 看全部貼文 ↗</a>
+        </p>
+      </>
+    )}
+  </div>
+
+  <style is:global>
+    /* A fixed-height window onto each post: the embeds do not report their own
+       height, and a long post scrolls inside its card rather than stretching
+       the page. */
+    /* The space is reserved before the embed exists, so cards keep their place
+       and only the ones near the viewport are loaded. */
+    .post-frame { position: relative; min-height: 560px; }
+    .post-frame iframe { display: block; width: 100%; height: 560px; border: 0; background: #fff; }
+    .post-frame.is-loaded .post-fallback { display: none; }
+    @media (max-width: 639px) { .post-frame { min-height: 520px; } .post-frame iframe { height: 520px; } }
+  </style>
+
+  <script is:inline>
+    (function () {
+      // Each embed is a full third-party page, so one is created only when its
+      // card is about to scroll into view, and only for the language on screen.
+      function mount(frame) {
+        if (frame.dataset.mounted) return;
+        frame.dataset.mounted = "1";
+        var src = frame.getAttribute("data-embed");
+        if (frame.hasAttribute("data-fb")) {
+          // Facebook renders at the width it is told, between 350 and 750 px.
+          var w = Math.max(350, Math.min(750, Math.floor(frame.clientWidth)));
+          src += "&width=" + w;
+        }
+        var f = document.createElement("iframe");
+        f.src = src;
+        f.loading = "lazy";
+        f.title = frame.hasAttribute("data-fb") ? "Facebook 貼文" : "LinkedIn post";
+        f.setAttribute("allowfullscreen", "");
+        f.setAttribute("scrolling", "auto");
+        f.addEventListener("load", function () { frame.classList.add("is-loaded"); });
+        frame.appendChild(f);
+      }
+      var frames = [].slice.call(document.querySelectorAll(".post-frame"));
+      if (!("IntersectionObserver" in window)) { frames.forEach(function (fr) { if (fr.offsetParent) mount(fr); }); return; }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { mount(e.target); io.unobserve(e.target); } });
+      }, { rootMargin: "400px 0px" });
+      // A hidden language's cards have no box and never intersect; they are
+      // picked up when the visitor switches language.
+      frames.forEach(function (fr) { io.observe(fr); });
+    })();
+  </script>
+</BaseLayout>

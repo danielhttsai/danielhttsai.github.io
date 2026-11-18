@@ -5,7 +5,6 @@ import PublicationItem from "../components/PublicationItem.astro";
 import type { Pub } from "../components/PublicationItem.astro";
 import CiteScript from "../components/CiteScript.astro";
 import pubs from "../data/publications.json";
-import { tagsOf, countBy, filterCountries, countryLabel, DESIGNS, DATABASES, CORE } from "../data/research";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -16,96 +15,30 @@ const all = (pubs as (Pub & { date?: number; pmcid?: string })[]).slice().sort((
 const years = [...new Set(all.map((p) => p.year))].sort((a, b) => b.localeCompare(a));
 const byYear = years.map((y) => ({ year: y, items: all.filter((p) => p.year === y) }));
 
-// Filter options, built from the tags so an option never leads to an empty list.
-// Designs keep the order of DESIGNS; databases and countries go by paper count.
-const nDesign = countBy((t) => t.design);
-const nDb = countBy((t) => t.data);
-const nCountry = countBy((t) => filterCountries(t));
-const designOpts = Object.keys(DESIGNS).filter((d) => nDesign[d]);
-const dbOpts = Object.keys(DATABASES).filter((d) => nDb[d]).sort((a, b) => nDb[b] - nDb[a]);
-const countryOpts = [...CORE, "MULTI"].filter((c) => nCountry[c]);
-const tagged = all.filter((p) => { const t = tagsOf(p.doi); return t.design.length || t.data.length; }).length;
 ---
 
 <BaseLayout
   title="Publications — Daniel Tsai"
   titleZh="論文｜蔡相德 Daniel Tsai"
-  description="Complete list of peer-reviewed publications by Daniel Tsai, filterable by study design, database, country and year, with links to the tools that let you run the same design."
-  descriptionZh="蔡相德的同儕審查論文完整清單，可依研究設計、資料庫、國家與年份篩選，並連到能讓你照同一個設計動手做的工具。"
+  description="Complete list of peer-reviewed publications by Daniel Tsai, tagged with study design and data source where the paper states them, with links to the tools that let you run the same design."
+  descriptionZh="蔡相德的同儕審查論文完整清單，依論文所述標示研究設計與資料來源，並連到能讓你照同一個設計動手做的工具。"
 >
   <PageHeader
     eyebrow="Research"
     eyebrowZh="研究"
     title="Publications"
     titleZh="論文"
-    description={`${all.length} peer-reviewed publications. Filter by design, database, country or year. Where a tool on this site lets you run the same design, the paper links to it.`}
-    descriptionZh={`共 ${all.length} 篇同儕審查論文。可依研究設計、資料庫、國家或年份篩選。本站若有能讓你照同一個設計做一次的工具，論文底下會附上連結。`}
+    description={`${all.length} peer-reviewed publications, tagged with study design and data source where the paper states them. Where a tool on this site lets you run the same design, the paper links to it.`}
+    descriptionZh={`共 ${all.length} 篇同儕審查論文，依論文所述標示研究設計與資料來源。本站若有能讓你照同一個設計做一次的工具，論文底下會附上連結。`}
   />
 
   <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
-    <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600 pb-6">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600 border-b border-slate-200 pb-6 mb-8">
       <span><strong class="text-brand-700 text-base">{all.length}</strong> <span class="l-en">publications</span><span class="l-zh">篇論文</span></span>
       <a href="https://orcid.org/0000-0003-2841-0338" target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">ORCID 0000-0003-2841-0338 ↗</a>
       <a href={`${base}/about`} class="font-semibold text-brand-700 hover:underline"><span class="l-en">About &amp; CV</span><span class="l-zh">關於我與履歷</span> →</a>
       <a href={`${base}/networks#map`} class="font-semibold text-brand-700 hover:underline"><span class="l-en">Research map</span><span class="l-zh">研究地圖</span> →</a>
     </div>
-
-    <!-- Filters. Plain <select>s: they work with one thumb on a phone and need
-         no script to be readable. The script below does the filtering and keeps
-         the choice in the URL so a filtered view can be linked to. -->
-    <form data-filters class="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5 mb-6" aria-label="Filter publications">
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <label class="block text-xs font-semibold text-slate-600">
-          <span class="l-en">Study design</span><span class="l-zh">研究設計</span>
-          <select name="design" class="mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-normal text-slate-800">
-            <option value="" data-en="All designs" data-zh="所有設計">All designs</option>
-            {designOpts.map((d) => (
-              <option value={d} data-en={`${DESIGNS[d].en} (${nDesign[d]})`} data-zh={`${DESIGNS[d].zh}（${nDesign[d]}）`}>{DESIGNS[d].en} ({nDesign[d]})</option>
-            ))}
-          </select>
-        </label>
-        <label class="block text-xs font-semibold text-slate-600">
-          <span class="l-en">Database</span><span class="l-zh">資料庫</span>
-          <select name="db" class="mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-normal text-slate-800">
-            <option value="" data-en="All databases" data-zh="所有資料庫">All databases</option>
-            {dbOpts.map((d) => (
-              <option value={d} data-en={`${DATABASES[d].short} (${nDb[d]})`} data-zh={`${DATABASES[d].short}（${nDb[d]}）`}>{DATABASES[d].short} ({nDb[d]})</option>
-            ))}
-          </select>
-        </label>
-        <label class="block text-xs font-semibold text-slate-600">
-          <span class="l-en">Country or region</span><span class="l-zh">國家或地區</span>
-          <select name="country" class="mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-normal text-slate-800">
-            <option value="" data-en="All countries" data-zh="所有國家">All countries</option>
-            {countryOpts.map((c) => (
-              <option value={c} data-en={`${countryLabel(c).en} (${nCountry[c]})`} data-zh={`${countryLabel(c).zh}（${nCountry[c]}）`}>{countryLabel(c).en} ({nCountry[c]})</option>
-            ))}
-          </select>
-        </label>
-        <label class="block text-xs font-semibold text-slate-600">
-          <span class="l-en">Year</span><span class="l-zh">年份</span>
-          <select name="year" class="mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-normal text-slate-800">
-            <option value="" data-en="All years" data-zh="所有年份">All years</option>
-            {byYear.map((g) => (
-              <option value={g.year} data-en={`${g.year} (${g.items.length})`} data-zh={`${g.year}（${g.items.length}）`}>{g.year} ({g.items.length})</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div class="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p class="text-sm text-slate-700" aria-live="polite">
-          <span class="l-en">Showing <strong data-count class="text-brand-700">{all.length}</strong> of {all.length}</span>
-          <span class="l-zh">顯示 {all.length} 篇中的 <strong data-count class="text-brand-700">{all.length}</strong> 篇</span>
-        </p>
-        <button type="button" data-clear hidden class="text-sm font-semibold text-brand-700 hover:underline">
-          ✕ <span class="l-en">Clear filters</span><span class="l-zh">清除篩選</span>
-        </button>
-      </div>
-      <p class="mt-2 text-xs text-slate-500">
-        <span class="l-en">Tags are read off each paper's own abstract and methods ({tagged} of {all.length} tagged). A paper that does not state a design or a database carries no tag for it.</span>
-        <span class="l-zh">標籤皆取自各篇論文的摘要與方法（{all.length} 篇中有 {tagged} 篇已標）。論文沒有明寫的設計或資料庫，就不標。</span>
-      </p>
-    </form>
 
     <p class="text-xs text-slate-500 mb-8">
       <span class="inline-flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-accent-500"></span> <span class="l-en">Free full text on PubMed Central</span><span class="l-zh">PubMed Central 可免費閱讀全文</span></span>
@@ -115,13 +48,8 @@ const tagged = all.filter((p) => { const t = tagsOf(p.doi); return t.design.leng
       <span class="l-en">JCR opens the journal's impact factor (needs Web of Science access)</span><span class="l-zh">JCR 會開啟期刊影響係數（需 Web of Science 權限）</span>
     </p>
 
-    <p data-empty hidden class="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-      <span class="l-en">No paper matches all of these filters. Clear one of them to see more.</span>
-      <span class="l-zh">沒有同時符合這些條件的論文。清除其中一項就能看到更多。</span>
-    </p>
-
     {byYear.map((grp) => (
-      <section class="mb-10" data-year-group={grp.year}>
+      <section class="mb-10">
         <h2 class="text-xl font-extrabold text-brand-700 mb-4 sticky top-16 bg-white/90 backdrop-blur py-1">{grp.year}</h2>
         <ol class="space-y-5">
           {grp.items.map((p) => <PublicationItem pub={p} />)}
@@ -132,60 +60,4 @@ const tagged = all.filter((p) => { const t = tagsOf(p.doi); return t.design.leng
 
   <CiteScript />
 
-  <script is:inline>
-    (function () {
-      var form = document.querySelector("[data-filters]");
-      if (!form) return;
-      var keys = ["design", "db", "country", "year"];
-      var sel = {};
-      keys.forEach(function (k) { sel[k] = form.elements[k]; });
-      var items = [].slice.call(document.querySelectorAll("[data-pub]"));
-      var groups = [].slice.call(document.querySelectorAll("[data-year-group]"));
-      var counts = document.querySelectorAll("[data-count]");
-      var clear = form.querySelector("[data-clear]");
-      var empty = document.querySelector("[data-empty]");
-
-      function has(el, attr, v) { return !v || (" " + (el.getAttribute(attr) || "") + " ").indexOf(" " + v + " ") !== -1; }
-      function apply(push) {
-        var v = {};
-        keys.forEach(function (k) { v[k] = sel[k].value; });
-        var n = 0;
-        items.forEach(function (li) {
-          var ok = has(li, "data-design", v.design) && has(li, "data-db", v.db) && has(li, "data-country", v.country) && (!v.year || li.getAttribute("data-year") === v.year);
-          li.hidden = !ok;
-          if (ok) n++;
-        });
-        groups.forEach(function (g) { g.hidden = !g.querySelector("[data-pub]:not([hidden])"); });
-        counts.forEach(function (c) { c.textContent = String(n); });
-        var any = keys.some(function (k) { return v[k]; });
-        clear.hidden = !any;
-        empty.hidden = n !== 0;
-        if (push) {
-          var q = new URLSearchParams(location.search);
-          keys.forEach(function (k) { if (v[k]) q.set(k, v[k]); else q.delete(k); });
-          var s = q.toString();
-          try { history.replaceState(null, "", location.pathname + (s ? "?" + s : "") + location.hash); } catch (e) {}
-        }
-      }
-      // A filtered view can be linked to: /publications?design=tte&db=nhird
-      var q = new URLSearchParams(location.search);
-      keys.forEach(function (k) {
-        var want = q.get(k);
-        if (want && [].some.call(sel[k].options, function (o) { return o.value === want; })) sel[k].value = want;
-        sel[k].addEventListener("change", function () { apply(true); });
-      });
-      clear.addEventListener("click", function () {
-        keys.forEach(function (k) { sel[k].value = ""; });
-        apply(true);
-      });
-      // <option> cannot hold two spans, so its text is swapped with the language.
-      function relabel() {
-        var l = window.getLang ? window.getLang() : "en";
-        form.querySelectorAll("option").forEach(function (o) { o.textContent = o.getAttribute("data-" + l) || o.textContent; });
-      }
-      document.addEventListener("langchange", relabel);
-      relabel();
-      apply(false);
-    })();
-  </script>
 </BaseLayout>

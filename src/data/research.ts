@@ -145,12 +145,6 @@ export const MIDAS65 = [
 ];
 // Countries that have a person-level database on the map, in display order.
 export const CORE = ["TW", "KR", "HK", "NZ", "AU", "US", "GB", "FI", "NL"];
-export const NETWORK: L = { en: "Multinational network or sales data", zh: "跨國網絡或銷售資料" };
-// What a paper's country tags mean for the country filter: the pseudo codes
-// collapse into one "multinational" bucket.
-export const filterCountries = (t: PaperTags) => t.countries.map((c) => (c === "GLOBAL" || c === "MIDAS65" ? "MULTI" : c));
-export const countryLabel = (c: string): L => (c === "MULTI" ? NETWORK : COUNTRIES[c].name);
-
 // ── "Do it yourself" links ───────────────────────────────────────────────
 // Each id is something on this site that lets a reader do what the paper did.
 // A paper lists the ids that really fit it; nothing is derived automatically.
@@ -195,13 +189,6 @@ export const paperLead = (p: PubRow) => {
 };
 
 export const ALL_PUBS = (pubs as PubRow[]).slice().sort((a, b) => (b.date || 0) - (a.date || 0));
-// Papers per tag value, for filter counts and the home page.
-export const countBy = (pick: (t: PaperTags) => string[]) => {
-  const n: Record<string, number> = {};
-  for (const p of ALL_PUBS) for (const v of new Set(pick(tagsOf(p.doi)))) n[v] = (n[v] || 0) + 1;
-  return n;
-};
-
 // Headline numbers for the map, shared by the Networks page and the home page.
 export const MAP_STATS = (() => {
   const tagged = ALL_PUBS.map((p) => tagsOf(p.doi));

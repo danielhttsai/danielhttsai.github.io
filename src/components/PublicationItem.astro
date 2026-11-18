@@ -14,7 +14,7 @@ export interface Pub {
   journal?: string; // overrides the name parsed from the RIS record
 }
 import JCR_ABBREV from "../data/jcr-journals.json";
-import { tagsOf, designChips, filterCountries, DESIGNS, DATABASES, LINKS } from "../data/research";
+import { tagsOf, designChips, DESIGNS, DATABASES, LINKS } from "../data/research";
 interface Props { pub: Pub; hideCover?: boolean }
 const { pub, hideCover } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -88,15 +88,7 @@ const pt = pub.pmcid
   : null;
 ---
 
-<li
-  class="border-l-2 pl-4"
-  class:list={[pub.tag ? "border-brand-600" : pub.pmcid ? "border-accent-500" : "border-slate-200"]}
-  data-pub
-  data-design={tags.design.join(" ")}
-  data-db={tags.data.join(" ")}
-  data-country={filterCountries(tags).join(" ")}
-  data-year={pub.year}
->
+<li class="border-l-2 pl-4" class:list={[pub.tag ? "border-brand-600" : pub.pmcid ? "border-accent-500" : "border-slate-200"]}>
   <div class="flex gap-4">
     {pub.cover && !hideCover && (
       <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener" aria-label={`${titleOf(pub)} — full article at the publisher`} class="shrink-0">
