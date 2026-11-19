@@ -1,5 +1,5 @@
 {
-  "_comment": "Hand-checked tags for each paper, keyed by DOI (lower case). The weekly sync rewrites publications.json and never touches this file, so tags survive it; a paper the sync adds simply shows without tags until an entry is added here. Every tag was read off the paper itself (abstract or Methods). A tag is left out when the paper does not say it: an empty list means 'not stated', never 'none'. design / data / links use the ids in src/data/research.ts. countries are ISO alpha-2 codes, plus two pseudo codes: GLOBAL (a federated network whose countries the paper does not itemise) and MIDAS65 (the 65 countries and regions of the IQVIA MIDAS sales data, listed in research.ts). `links` lists every tool on the site that fits the paper; none is shown unless its id is also in the paper's optional `featured` list (at most two show). No paper has `featured` set as of 2026-11-19.",
+  "_comment": "Hand-checked tags for each paper, keyed by DOI (lower case). The weekly sync rewrites publications.json and never touches this file, so tags survive it; a paper the sync adds simply shows without tags until an entry is added here. Every tag was read off the paper itself (abstract or Methods). A tag is left out when the paper does not say it: an empty list means 'not stated', never 'none'. design / data / links use the ids in src/data/research.ts. countries are ISO alpha-2 codes, plus two pseudo codes: GLOBAL (a federated network whose countries the paper does not itemise) and MIDAS65 (the 65 countries and regions of the IQVIA MIDAS sales data, listed in research.ts). `links` lists every tool on the site that fits the paper; none is shown unless its id is also in the paper's optional `featured` list (at most two show). Featured as of 2026-11-19, chosen by Daniel: the BMJ case-case-time-control paper (ACB calculator, case-crossover builder), the BJP clone-censor-weight paper (CCW builder) and the Lennox-Gastaut paper (its phenotype library entry).",
   "tags": {
     "10.1016/j.lanwpc.2026.102014": {
       "design": ["cohort"],
@@ -146,6 +146,7 @@
       "data": ["nhird", "cgrd"],
       "countries": ["TW"],
       "links": ["builder-descriptive", "phenotype-lgs", "nhird-dict"],
+      "featured": ["phenotype-lgs"],
       "source": "Methods: National Health Insurance Database complemented by the Chang Gung Research Database; epidemiology and burden of illness."
     },
     "10.1002/cpt.70027": {
@@ -188,6 +189,7 @@
       "data": ["nhird"],
       "countries": ["TW"],
       "links": ["builder-ccw", "toolbox-ccw", "note-ccw", "nhird-dict"],
+      "featured": ["builder-ccw"],
       "source": "Title and Method: target trial emulation framework with the clone-censor-weight approach in Taiwan's NHIRD."
     },
     "10.1503/cmaj.240922": {
@@ -230,6 +232,7 @@
       "data": ["nhird"],
       "countries": ["TW"],
       "links": ["builder-cco", "toolbox-cctc", "acb-calc", "nhird-dict"],
+      "featured": ["acb-calc", "builder-cco"],
       "source": "Abstract: case-case-time-control study in Taiwan's NHIRD."
     },
     "10.1038/s41467-023-40637-8": {

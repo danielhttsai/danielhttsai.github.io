@@ -184,8 +184,8 @@ export interface ToolLink { href: string; label: L; external?: boolean }
 const TOOLBOX = "/tools/phdc-rwe-tool?m=";
 export const LINKS: Record<string, ToolLink> = {
   "builder-acnu": { href: "/tools/active-comparator-new-user", label: { en: "ACNU protocol builder", zh: "ACNU 計畫書 builder" } },
-  "builder-ccw": { href: "/tools/clone-censor-weight", label: { en: "clone-censor-weight protocol builder", zh: "clone-censor-weight 計畫書 builder" } },
-  "builder-cco": { href: "/tools/case-crossover", label: { en: "case-crossover / CCTC protocol builder", zh: "case-crossover／CCTC 計畫書 builder" } },
+  "builder-ccw": { href: "/tools/clone-censor-weight", label: { en: "Build this design: clone-censor-weight protocol", zh: "照這個設計寫計畫書：clone-censor-weight" } },
+  "builder-cco": { href: "/tools/case-crossover", label: { en: "Build this design: case-crossover protocol", zh: "照這個設計寫計畫書：case-crossover" } },
   "builder-cc": { href: "/tools/case-control", label: { en: "case-control protocol builder", zh: "病例對照計畫書 builder" } },
   "builder-descriptive": { href: "/tools/descriptive-analysis", label: { en: "descriptive analysis protocol builder", zh: "描述性分析計畫書 builder" } },
   "toolbox-acnu": { href: TOOLBOX + "acnu", label: { en: "ACNU in the RWE Toolbox", zh: "RWE 工具箱：ACNU" } },
@@ -197,9 +197,9 @@ export const LINKS: Record<string, ToolLink> = {
   "note-ccw": { href: "/writing/clone-censor-weight", label: { en: "Method note: clone-censor-weight", zh: "方法筆記：clone-censor-weight" } },
   "nhird-dict": { href: "https://danielhttsai.github.io/nhird-data-dictionary/", label: { en: "NHIRD data dictionary", zh: "NHIRD 資料字典" }, external: true },
   "drug-lookup": { href: "https://danielhttsai.github.io/nhird-data-dictionary/drugs/", label: { en: "NHI drug code lookup", zh: "健保藥品代碼查詢" }, external: true },
-  "acb-calc": { href: "/tools/acb-calculator", label: { en: "ACB calculator", zh: "ACB 計算機" } },
+  "acb-calc": { href: "/tools/acb-calculator", label: { en: "Score these drugs: ACB calculator", zh: "算這些藥的負荷：ACB 計算機" } },
   "km-guide": { href: "/tools/km-cif-riskset", label: { en: "TriNetX survival vs cumulative incidence guide", zh: "TriNetX 存活機率與累積發生率說明" } },
-  "phenotype-lgs": { href: "/tools/clone-censor-weight?library=indications&q=Lennox", label: { en: "LGS definition in the phenotype library", zh: "phenotype library 的 LGS 定義" } },
+  "phenotype-lgs": { href: "/tools/clone-censor-weight?library=indications&q=Lennox", label: { en: "Reuse the definition: LGS in the phenotype library", zh: "沿用這個定義：phenotype library 的 LGS" } },
   map: { href: "/#map", label: { en: "research map", zh: "研究地圖" } },
 };
 
