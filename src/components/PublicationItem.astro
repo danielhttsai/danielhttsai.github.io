@@ -64,18 +64,13 @@ const titleOf = (p: Pub): string => paperTitle(p as any);
 // paper. A paper without an entry just renders without them.
 const tags = tagsOf(pub.doi);
 const chips = designChips(tags);
-// At most two links per paper, the two most specific to it: the builder (or,
-// failing that, the toolbox card) for its design, then one more, preferring a
-// tool made for this very paper (ACB calculator, its phenotype, the KM guide)
-// over a general data link. Method notes are not linked from here.
-const pickLinks = (ids: string[]) => {
-  const design = ids.find((i) => i.startsWith("builder-")) ?? ids.find((i) => i.startsWith("toolbox-"));
-  const rest = ids.filter((i) => !i.startsWith("builder-") && !i.startsWith("toolbox-") && !i.startsWith("note-"));
-  const own = ["acb-calc", "phenotype-lgs", "km-guide"];
-  const ordered = [...rest.filter((i) => own.includes(i)), ...rest.filter((i) => !own.includes(i))];
-  return [design, ...ordered].filter(Boolean).slice(0, 2) as string[];
-};
-const links = plain ? [] : pickLinks(tags.links).map((id) => LINKS[id]).filter(Boolean);
+// Tool links under a paper are off by default (Daniel, 2026-11-19: keep only
+// a few of the most distinctive ones, as small touches). Every candidate stays
+// in publication-tags.json under `links`; a link shows only when its id is also
+// listed in that paper's `featured`, e.g.
+//   "10.1136/bmj-2023-076045": { ..., "links": [...], "featured": ["acb-calc"] }
+// Turning one on or off is that one-line data change. At most two show.
+const links = plain ? [] : (tags.featured ?? []).filter((id) => tags.links.includes(id)).slice(0, 2).map((id) => LINKS[id]).filter(Boolean);
 const href = (h: string) => (h.startsWith("http") ? h : `${base}${h}`);
 // Category labels come from publications.json in English.
 const TAG_ZH: Record<string, string> = {

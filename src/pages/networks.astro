@@ -4,7 +4,8 @@ import PageHeader from "../components/PageHeader.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-// Networks, centres, and collaborations Daniel works within. Modelled on the
+// Networks and centres, each described as itself: Daniel's roles in them are
+// on About and in the home hero, not here (his request, 2026-11-19). Modelled on the
 // AsPEN site's "open source / friendship links" page. `image` is a path under
 // public/images/. `heightClass` tunes
 // each logo so they read at a similar visual scale despite different aspects.
@@ -15,9 +16,9 @@ const networks = [
     image: "networks/phdc.png",
     heightClass: "max-h-20",
     tagline:
-      "PHDc at National Cheng Kung University — Daniel's home centre and the data infrastructure behind much of his Taiwan-based real-world-evidence work.",
+      "PHDc at National Cheng Kung University, a research centre for real-world evidence built on Taiwan's health data.",
     taglineZh:
-      "成大群體健康數據中心（PHDc）是我所在的研究中心，我在台灣做的 real-world evidence 研究，多數建立在這裡的資料基礎建設上。",
+      "成大群體健康數據中心（PHDc），以台灣健康資料進行 real-world evidence 研究的研究中心。",
   },
   {
     name: "Asian Pharmacoepidemiology Network",
@@ -25,9 +26,9 @@ const networks = [
     image: "networks/aspen.png",
     heightClass: "max-h-32",
     tagline:
-      "AsPEN — a Special Interest Group of ISPE advancing multi-national database research across the Asia/Pacific region, where Daniel serves as Chair, after two years as education co-lead (2024–2026).",
+      "AsPEN, a Special Interest Group of ISPE advancing multinational database research across the Asia-Pacific region.",
     taglineZh:
-      "AsPEN 是 ISPE 的 Special Interest Group，推動亞太地區的跨國資料庫研究。我在 2024–2026 年擔任 education co-lead，現任 Chair。",
+      "AsPEN 是 ISPE 的 Special Interest Group，推動亞太地區的跨國資料庫研究。",
   },
   {
     name: "NeuroGEN",
@@ -35,9 +36,9 @@ const networks = [
     image: "networks/neurogen.png",
     heightClass: "max-h-20",
     tagline:
-      "The Neurological and mental health Global Epidemiology Network — a multi-database platform spanning Asia, Oceania, Europe, and North America, where Daniel is an active member and led the development of its data repository in 2023.",
+      "The Neurological and mental health Global Epidemiology Network, a multi-database platform spanning Asia, Oceania, Europe and North America.",
     taglineZh:
-      "NeuroGEN（Neurological and mental health Global Epidemiology Network）是橫跨亞洲、大洋洲、歐洲與北美的多資料庫平台。我是成員之一，並在 2023 年主導建置它的 data repository。",
+      "NeuroGEN（Neurological and mental health Global Epidemiology Network），橫跨亞洲、大洋洲、歐洲與北美的多資料庫平台。",
   },
   {
     name: "DARWIN EU",
@@ -45,7 +46,7 @@ const networks = [
     image: "networks/darwin-eu.png",
     heightClass: "max-h-32",
     tagline:
-      "Data Analysis and Real World Interrogation Network — the European Medicines Agency's federated real-world-evidence network.",
+      "Data Analysis and Real World Interrogation Network, the European Medicines Agency's federated real-world-evidence network.",
     taglineZh:
       "DARWIN EU（Data Analysis and Real World Interrogation Network）是歐洲藥品管理局（EMA）的聯邦式 real-world evidence 網絡。",
   },
@@ -55,16 +56,16 @@ const networks = [
 <BaseLayout
   title="Networks & collaborations — Daniel Tsai"
   titleZh="合作網絡｜蔡相德 Daniel Tsai"
-  description="The networks, centres, and collaborations Daniel Tsai works within: PHDc, AsPEN, NeuroGEN, and DARWIN EU."
-  descriptionZh="蔡相德參與的研究中心與合作網絡：PHDc、AsPEN、NeuroGEN 與 DARWIN EU。"
+  description="Research networks and centres: PHDc, AsPEN, NeuroGEN and DARWIN EU."
+  descriptionZh="研究網絡與研究中心：PHDc、AsPEN、NeuroGEN 與 DARWIN EU。"
 >
   <PageHeader
     eyebrow="Collaborations"
     eyebrowZh="合作"
     title="Networks"
     titleZh="合作網絡"
-    description="The networks, centres, and collaborations I work within."
-    descriptionZh="我參與的研究中心與合作網絡。"
+    description="Research networks and centres."
+    descriptionZh="研究網絡與研究中心。"
   />
 
   <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-16">
@@ -84,10 +85,4 @@ const networks = [
     </div>
   </section>
 
-  <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pb-16 -mt-6">
-    <p class="text-sm text-slate-600">
-      <span class="l-en">Which countries and databases my papers draw on is shown on the</span><span class="l-zh">我的論文用過哪些國家與資料庫，請看首頁的</span>
-      <a href={`${base}/#map`} class="font-semibold text-brand-700 hover:underline"><span class="l-en">research map on the home page</span><span class="l-zh">研究地圖</span> →</a>
-    </p>
-  </section>
 </BaseLayout>

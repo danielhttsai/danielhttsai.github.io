@@ -11,7 +11,9 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import PageHeader from "../components/PageHeader.astro";
 import social from "../data/social-posts.json";
 
-const BATCH = 10; // cards shown at first, and added by each "Show more"
+// The newest ten per network; the data file keeps every post, and older
+// ones are a click away on the profile.
+const SHOW = 10;
 
 const fmtEn = (d: string) => {
   const [y, m, day] = d.split("-").map(Number);
@@ -22,14 +24,14 @@ const fmtZh = (d: string) => {
   return `${y} 年 ${m} 月 ${day} 日`;
 };
 
-const linkedin = social.linkedin.map((p) => ({
+const linkedin = social.linkedin.slice(0, SHOW).map((p) => ({
   ...p,
   embed: `https://www.linkedin.com/embed/feed/update/${p.urn}`,
   link: `https://www.linkedin.com/feed/update/${p.urn}/`,
 }));
 // The Facebook plugin takes its width from the URL, so the script below fills
 // it in from the card's real width; this is the address without it.
-const facebook = social.facebook.map((p) => ({
+const facebook = social.facebook.slice(0, SHOW).map((p) => ({
   ...p,
   embed: `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(p.url)}&show_text=true`,
   link: p.url,
@@ -73,11 +75,9 @@ const facebook = social.facebook.map((p) => ({
             </li>
           ))}
         </ol>
-        <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-slate-600">
-          <button type="button" data-more hidden class="rounded-xl border border-slate-300 bg-white px-5 py-2.5 font-semibold text-slate-700 hover:border-brand-600 hover:text-brand-700 transition">Show more</button>
-          <span>Showing <span data-shown>{linkedin.length}</span> of {linkedin.length}.</span>
-          <a href={social.profiles.linkedin} target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">All posts on LinkedIn ↗</a>
-        </div>
+        <p class="mt-8 text-sm">
+          <a href={social.profiles.linkedin} target="_blank" rel="noopener" class="text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-brand-700">More on LinkedIn ↗</a>
+        </p>
       </>
     )}
   </div>
@@ -103,11 +103,9 @@ const facebook = social.facebook.map((p) => ({
             </li>
           ))}
         </ol>
-        <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-slate-600">
-          <button type="button" data-more hidden class="rounded-xl border border-slate-300 bg-white px-5 py-2.5 font-semibold text-slate-700 hover:border-brand-600 hover:text-brand-700 transition">顯示更多</button>
-          <span>顯示 {facebook.length} 則中的 <span data-shown>{facebook.length}</span> 則。</span>
-          <a href={social.profiles.facebook} target="_blank" rel="noopener" class="font-semibold text-brand-700 hover:underline">到 Facebook 看全部貼文 ↗</a>
-        </div>
+        <p class="mt-8 text-sm">
+          <a href={social.profiles.facebook} target="_blank" rel="noopener" class="text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-brand-700">到 Facebook 看更多 ↗</a>
+        </p>
       </>
     )}
   </div>
@@ -124,7 +122,7 @@ const facebook = social.facebook.map((p) => ({
     @media (max-width: 639px) { .post-frame { min-height: 520px; } .post-frame iframe { height: 520px; } }
   </style>
 
-  <script is:inline define:vars={{ BATCH }}>
+  <script is:inline>
     (function () {
       // Each embed is a full third-party page, so one is created only when its
       // card is about to scroll into view, and only for the language on screen.
@@ -155,28 +153,6 @@ const facebook = social.facebook.map((p) => ({
       // picked up when the visitor switches language.
       frames.forEach(function (fr) { io.observe(fr); });
 
-      // The first BATCH cards of each feed show; "Show more" reveals the next
-      // BATCH. A hidden card never intersects, so its embed is not created
-      // until it is asked for. Without this script every card is simply shown.
-      document.querySelectorAll("[data-feed]").forEach(function (feed) {
-        var cards = [].slice.call(feed.querySelectorAll(".post-card"));
-        var more = feed.querySelector("[data-more]");
-        var shown = feed.querySelector("[data-shown]");
-        if (!more || cards.length <= BATCH) return;
-        var n = BATCH;
-        function apply() {
-          cards.forEach(function (c, i) { c.hidden = i >= n; });
-          if (shown) shown.textContent = String(Math.min(n, cards.length));
-          more.hidden = n >= cards.length;
-        }
-        more.addEventListener("click", function () {
-          var first = cards[n];
-          n += BATCH;
-          apply();
-          if (first) { var a = first.querySelector("a"); if (a) a.focus({ preventScroll: true }); }
-        });
-        apply();
-      });
     })();
   </script>
 </BaseLayout>

@@ -41,7 +41,7 @@ signed-in Chrome once a week. It needs this PC to be on with Chrome open.
    activity page shows for the last three years: keep scrolling until no older
    posts load or the cards are more than three years old, and collect them
    all. There is no cap on how many LinkedIn posts the file holds; the page
-   shows ten and loads the rest ten at a time behind "Show more".)
+   shows the newest ten.)
    A post is his own when its card shows "Daniel Tsai • You" as the author and
    has a "View analytics" link; the link's address contains the post's
    `urn:li:activity:<id>`. Cards headed "Daniel Tsai reposted this" are not
@@ -118,8 +118,8 @@ signed-in Chrome once a week. It needs this PC to be on with Chrome open.
 - LinkedIn's terms do not in principle allow automated reading of its pages.
   Daniel accepted that for one visit a week to his own activity page. Keep it
   to that: one page, once, no retries in a loop.
-- The Posts page shows 10 posts per network at first and loads 10 more with
-  each "Show more"; the file may hold any number. The home page shows only the
+- The Posts page shows the ten newest posts per network and a link to the
+  profile for older ones; the file may hold any number. The home page shows only the
   two newest.
 - To take a post off the site by hand, delete its entry from the JSON file
   and push. To stop the weekly run, disable the scheduled task

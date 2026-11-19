@@ -6,7 +6,7 @@ import tagFile from "./publication-tags.json";
 import pubs from "./publications.json";
 
 export interface L { en: string; zh: string }
-export interface PaperTags { design: string[]; data: string[]; countries: string[]; links: string[]; source?: string }
+export interface PaperTags { design: string[]; data: string[]; countries: string[]; links: string[]; featured?: string[]; source?: string }
 
 const TAGS = tagFile.tags as Record<string, PaperTags>;
 const EMPTY: PaperTags = { design: [], data: [], countries: [], links: [] };

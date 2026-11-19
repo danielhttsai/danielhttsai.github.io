@@ -177,22 +177,62 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const doi = (p: PubRow) => `https://doi.org/${p.doi}`;
 const designOf = (p: PubRow) => designChips(tagsOf(p.doi))[0];
 const famsIn = (b: Block) => Object.keys(FAMILIES).filter((f) => b.papers.some(({ p }) => familyOf(tagsOf(p.doi)) === f));
-// The papers grid: one row per design family, one column per year. Every panel
-// uses the same years, earliest to latest across all papers on the map, so a
-// column means the same thing whichever country is selected.
+// The papers grid: one row per design family, one column per year, earliest
+// to latest across all papers on the map. A run of two or more years with no
+// papers for the selected place collapses into one narrow "…" column (an axis
+// break); a single empty year keeps its column. The reason for a gap is only
+// in the "…" tooltip and its accessible name.
 const allYears = ALL_PUBS.filter((p) => tagsOf(p.doi).data.length).map((p) => +p.year);
 const YEARS = Array.from({ length: Math.max(...allYears) - Math.min(...allYears) + 1 }, (_, i) => String(Math.min(...allYears) + i));
 const cell = (b: Block, fam: string, year: string) =>
   b.papers.filter(({ p }) => p.year === year && familyOf(tagsOf(p.doi)) === fam).map(({ p }) => p);
-// Years without papers are not blank: they say what Daniel was doing, in his
-// own words (2026-11-18). The bands are about him, so they are the same on
-// every panel. Wording is his; do not elaborate it.
+// What Daniel was doing in years without papers, in his words (2026-11-18).
+// Do not elaborate it.
 const CONTEXT = [
-  { from: "2020", to: "2021", en: "Clinical internship", zh: "臨床實習", enShort: "Internship", zhShort: "實習" },
-  { from: "2022", to: "2022", en: "PhD, year 1", zh: "博士班第一年", enShort: "PhD Y1", zhShort: "博一" },
-]
-  .filter((c) => YEARS.includes(c.from) && YEARS.includes(c.to))
-  .map((c) => ({ ...c, at: YEARS.indexOf(c.from) + 1, span: YEARS.indexOf(c.to) - YEARS.indexOf(c.from) + 1 }));
+  { from: 2020, to: 2021, en: "clinical internship", zh: "臨床實習" },
+  { from: 2022, to: 2022, en: "PhD year 1", zh: "博士班第一年" },
+];
+const NO_PAPERS = { en: "no papers here", zh: "此處無論文" };
+const gapReason = (years: string[]) => {
+  const labelOf = (y: string) => CONTEXT.find((c) => +y >= c.from && +y <= c.to) ?? NO_PAPERS;
+  const runs: { from: string; to: string; l: { en: string; zh: string } }[] = [];
+  for (const y of years) {
+    const l = labelOf(y), last = runs[runs.length - 1];
+    if (last && last.l === l) last.to = y; else runs.push({ from: y, to: y, l });
+  }
+  const range = (r: { from: string; to: string }) => (r.from === r.to ? r.from : `${r.from}–${r.to}`);
+  return {
+    en: runs.map((r) => `${range(r)} ${r.l.en}`).join(", "),
+    zh: runs.map((r) => `${range(r)} ${r.l.zh}`).join("，"),
+  };
+};
+type Col = { gap: false; y: string } | { gap: true; from: string; to: string; en: string; zh: string };
+const colsOf = (b: Block): Col[] => {
+  const has = new Set(b.papers.map(({ p }) => p.year));
+  const cols: Col[] = [];
+  for (let i = 0; i < YEARS.length; ) {
+    if (has.has(YEARS[i])) { cols.push({ gap: false, y: YEARS[i] }); i++; continue; }
+    let j = i;
+    while (j + 1 < YEARS.length && !has.has(YEARS[j + 1])) j++;
+    if (j > i) cols.push({ gap: true, from: YEARS[i], to: YEARS[j], ...gapReason(YEARS.slice(i, j + 1)) });
+    else cols.push({ gap: false, y: YEARS[i] });
+    i = j + 1;
+  }
+  return cols;
+};
+// Year columns share the width equally; a gap is a third of one.
+const tplOf = (cols: Col[]) => cols.map((c) => (c.gap ? "minmax(0, 0.34fr)" : "minmax(0, 1fr)")).join(" ");
+// One overall grid for every paper on the map (any paper that names a data
+// source). Each dot knows which places it belongs to, so selecting a place on
+// the map can bring its dots forward.
+const overall = {
+  papers: ALL_PUBS.filter((p) => tagsOf(p.doi).data.length).map((p) => ({
+    p,
+    dbs: tagsOf(p.doi).data.map((d) => DATABASES[d].short),
+    where: blocks.filter((b) => b.papers.some((x) => x.p === p)).map((b) => b.code),
+  })),
+} as unknown as Block & { papers: { p: PubRow; dbs: string[]; where: string[] }[] };
+const whereOf = (p: PubRow) => overall.papers.find((x) => x.p === p)!.where.join(" ");
 const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(tagsOf(p.doi)) === fam).length;
 ---
 
@@ -278,7 +318,6 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     <div class="rm-panel" data-blocks>
       {blocks.map((b) => (
         <section data-block={b.code} class="rm-block">
-          <div class="rm-a">
           <h3 class="rm-title"><span class="l-en">{b.en}</span><span class="l-zh">{b.zh}</span></h3>
           <p class="rm-sub">
             <span class="l-en">{plural(b.papers.length, "paper")}{b.nDb > 0 && b.code !== "GLOBAL" ? ` · ${plural(b.nDb, "database")}` : ""}</span>
@@ -295,66 +334,6 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
               </div>
             ))}
           </div>
-          </div>
-          <div class="rm-b">
-          <h4 class="rm-h"><span class="l-en">Papers, by study design</span><span class="l-zh">論文（依研究設計）</span></h4>
-          <p class="rm-hint"><span class="l-en">Each dot is one paper. Click or tap a dot to see it below.</span><span class="l-zh">每個圓點是一篇論文，點一下就會顯示在下方。</span></p>
-          <div class="rg" style={`--cols:${YEARS.length}`}>
-            <div class="rg-bands" aria-hidden="true">
-              {CONTEXT.map((c) => (
-                <div class="rg-band" style={`--wide:${c.at + 1} / span ${c.span};--narrow:${c.at} / span ${c.span}`}>
-                  <span class="rg-band-full"><span class="l-en">{c.en}</span><span class="l-zh">{c.zh}</span></span>
-                  <span class="rg-band-short"><span class="l-en">{c.enShort}</span><span class="l-zh">{c.zhShort}</span></span>
-                </div>
-              ))}
-            </div>
-            {famsIn(b).map((f) => (
-              <div class="rg-row">
-                <div class="rg-name"><span class="l-en">{FAMILIES[f].en}</span><span class="l-zh">{FAMILIES[f].zh}</span></div>
-                {YEARS.map((y) => (
-                  <div class="rg-cell">
-                    {cell(b, f, y).map((p) => (
-                      <button
-                        type="button"
-                        class="pm"
-                        data-pm={p.doi}
-                        aria-pressed="false"
-                        aria-label={`${paperTitle(p)} (${p.year})`}
-                      ></button>
-                    ))}
-                  </div>
-                ))}
-                <div class="rg-n" title="papers">{famCount(b, f)}</div>
-              </div>
-            ))}
-            <div class="rg-row rg-axis" aria-hidden="true">
-              <div class="rg-name"></div>
-              {YEARS.map((y) => <div class="rg-year"><span class="y-full">{y}</span><span class="y-short">’{y.slice(2)}</span></div>)}
-              <div class="rg-n"></div>
-            </div>
-          </div>
-          <p class="sr-only">
-            {CONTEXT.map((c) => (
-              <><span class="l-en">{c.from === c.to ? c.from : `${c.from}–${c.to}`}: {c.en}. </span><span class="l-zh">{c.from === c.to ? c.from : `${c.from}–${c.to}`}：{c.zh}。</span></>
-            ))}
-          </p>
-
-          <!-- One card per paper; the mark that is hovered, focused or tapped shows its card. -->
-          <div class="rm-detail" aria-live="polite">
-            {b.papers.map(({ p, dbs }, i) => (
-              <div class="pd" data-pd={p.doi} hidden={i !== 0}>
-                <a href={doi(p)} target="_blank" rel="noopener" class="pd-title" set:html={paperTitleHtml(p) + " ↗"} />
-                <p class="pd-meta">{paperLead(p)} {paperJournal(p)}, {p.year}</p>
-                <p class="pd-tags">
-                  {designOf(p) && <span class="pd-tag"><span class="l-en">{DESIGNS[designOf(p)].en}</span><span class="l-zh">{DESIGNS[designOf(p)].zh}</span></span>}
-                  {dbs.map((d) => <span class="pd-tag pd-db">{d}</span>)}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          </div>
-          <div class="rm-c">
           {b.note && <p class="rm-note"><span class="l-en">{b.note.en}</span><span class="l-zh">{b.note.zh}</span></p>}
 
           <details class="rm-list">
@@ -376,9 +355,86 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
               ))}
             </ol>
           </details>
-          </div>
         </section>
       ))}
+    </div>
+
+    <!-- Papers: one overall grid under the map. -->
+    <div class="rm-papers" data-papers>
+  <h3 class="rm-papers-title"><span class="l-en">Papers by study design and year</span><span class="l-zh">論文：研究設計與年份</span></h3>
+  <p class="rm-hint"><span class="l-en">Each dot is one paper. Click or tap a dot to see it below.</span><span class="l-zh">每個圓點是一篇論文，點一下就會顯示在下方。</span></p>
+  <p class="rm-focus" data-focus hidden>
+    <span class="l-en">Highlighted: papers from <strong data-focus-en></strong>.</span><span class="l-zh">已標示：<strong data-focus-zh></strong>的論文。</span>
+    <button type="button" data-focus-clear><span class="l-en">Show all</span><span class="l-zh">顯示全部</span></button>
+  </p>
+      {(() => {
+        const cols = colsOf(overall);
+        return (
+          <div class="rg" style={`--tpl:${tplOf(cols)}`}>
+            {famsIn(overall).map((f) => (
+              <div class="rg-row">
+                <div class="rg-name"><span class="l-en">{FAMILIES[f].en}</span><span class="l-zh">{FAMILIES[f].zh}</span></div>
+                {cols.map((c) =>
+                  c.gap ? (
+                    <div class="rg-cell rg-gap" aria-hidden="true"></div>
+                  ) : (
+                    <div class="rg-cell">
+                      {cell(overall, f, c.y).map((p) => (
+                        <button
+                          type="button"
+                          class="pm"
+                          data-pm={p.doi}
+                          data-where={whereOf(p)}
+                          aria-pressed="false"
+                          aria-label={`${paperTitle(p)} (${p.year})`}
+                        ></button>
+                      ))}
+                    </div>
+                  )
+                )}
+                <div class="rg-n" title="papers">{famCount(overall, f)}</div>
+              </div>
+            ))}
+            <div class="rg-row rg-axis">
+              <div class="rg-name" aria-hidden="true"></div>
+              {cols.map((c) =>
+                c.gap ? (
+                  <div class="rg-year rg-gap">
+                    <span
+                      class="rg-ellipsis"
+                      role="img"
+                      title={c.en}
+                      aria-label={c.en}
+                      data-i18n-attr="title,aria-label"
+                      data-en-title={c.en}
+                      data-zh-title={c.zh}
+                      data-en-aria-label={c.en}
+                      data-zh-aria-label={c.zh}
+                    >…</span>
+                  </div>
+                ) : (
+                  <div class="rg-year"><span class="y-full">{c.y}</span><span class="y-short" aria-hidden="true">’{c.y.slice(2)}</span></div>
+                )
+              )}
+              <div class="rg-n" aria-hidden="true"></div>
+            </div>
+          </div>
+        );
+      })()}
+
+      <!-- One card per paper; the mark that is hovered, focused or tapped shows its card. -->
+      <div class="rm-detail" aria-live="polite">
+        {overall.papers.map(({ p, dbs }, i) => (
+          <div class="pd" data-pd={p.doi} hidden={i !== 0}>
+            <a href={doi(p)} target="_blank" rel="noopener" class="pd-title" set:html={paperTitleHtml(p) + " ↗"} />
+            <p class="pd-meta">{paperLead(p)} {paperJournal(p)}, {p.year}</p>
+            <p class="pd-tags">
+              {designOf(p) && <span class="pd-tag"><span class="l-en">{DESIGNS[designOf(p)].en}</span><span class="l-zh">{DESIGNS[designOf(p)].zh}</span></span>}
+              {dbs.map((d) => <span class="pd-tag pd-db">{d}</span>)}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   </div>
 
@@ -394,7 +450,7 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
        Marks (bubbles, bars, dots) are at least 3:1 on white; text is 4.5:1. */
     --g-900: var(--color-brand-900); --g-700: var(--color-brand-700); --g-600: var(--color-brand-600);
     --g-500: var(--color-brand-500); --g-300: #9cc4b9; --g-100: var(--color-brand-100); --g-50: var(--color-brand-50);
-    --band: #eff4f1; --land: #e9eeec;
+    --land: #e9eeec;
     --ink: #0f172a; --ink-2: #475569; --ink-3: #64748b; --rule: #e2e8f0;
   }
   .rm-grid { display: grid; gap: 1.5rem; }
@@ -406,11 +462,8 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     .rm-stage { grid-column: 1; grid-row: 1; }
     /* Only once the script is running and one block is shown at a time: with
        every block visible they would all land in the same cells. */
-    .is-live .rm-panel, .is-live .rm-block { display: contents; }
-    .is-live .rm-a { grid-column: 2; grid-row: 1; }
-    .is-live .rm-b { grid-column: 1; grid-row: 2; }
-    .is-live .rm-c { grid-column: 2; grid-row: 2; }
-    .is-live .rm-b > .rm-h:first-child { margin-top: 0.5rem; }
+    .rm-panel { grid-column: 2; grid-row: 1 / span 2; }
+    .rm-papers { grid-column: 1; grid-row: 2; }
   }
 
   .rm-svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -456,6 +509,11 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .k-arc { width: 18px; height: 9px; border-top: 2px solid var(--color-brand-500); border-radius: 50% 50% 0 0 / 100% 100% 0 0; margin-top: 5px; }
 
   .rm-block { min-width: 0; }
+  .rm-papers { min-width: 0; }
+  .rm-papers-title { font-size: 1rem; font-weight: 800; color: var(--ink); margin-bottom: 0.35rem; }
+  .rm-focus { margin-top: 0.4rem; font-size: 0.75rem; color: var(--ink-2); }
+  .rm-focus button { margin-left: 0.4rem; font-weight: 600; color: var(--color-brand-700); text-decoration: underline; text-underline-offset: 2px; }
+  .pm.is-dim { opacity: 0.22; }
   .rm-block + .rm-block { margin-top: 2rem; }
   .rm-title { font-size: 1.25rem; font-weight: 800; color: var(--ink); line-height: 1.25; }
   .rm-sub { margin-top: 0.15rem; font-size: 0.8125rem; color: var(--ink-3); }
@@ -471,20 +529,22 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   /* Papers grid. Row = design family (named at the left, counted at the right),
      column = year. A dot is 16 px with a 28 px target; dots that share a cell
      sit side by side and wrap, so none covers another. */
-  .rg { position: relative; margin-top: 0.5rem; border-top: 1px solid var(--rule); }
-  /* Context bands: a layer behind the rows on the same columns. Quiet tint,
-     small muted text, no pointer events: background, not data. */
-  .rg-bands { position: absolute; inset: 0; z-index: 0; pointer-events: none; display: grid; grid-template-columns: 12.5rem repeat(var(--cols), minmax(0, 1fr)) 1.75rem; }
-  .rg-band { grid-column: var(--wide); grid-row: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 3px 1.4rem; background: var(--band); color: var(--ink-2); font-size: 0.6875rem; line-height: 1.25; }
-  .rg-band + .rg-band { border-left: 2px solid #fff; } /* a gap, so two periods do not read as one */
-  .rg-band-short { display: none; }
-  .rg-row { position: relative; z-index: 1; display: grid; grid-template-columns: 12.5rem repeat(var(--cols), minmax(0, 1fr)) 1.75rem; align-items: stretch; border-bottom: 1px solid var(--rule); }
+  /* Row rules sit on the cells, not the row, so the "…" column can break them
+     and read as an axis break rather than as an empty year. */
+  .rg { margin-top: 0.5rem; }
+  .rg-row { display: grid; grid-template-columns: 12.5rem var(--tpl) 1.75rem; align-items: stretch; }
+  .rg-row > * { border-bottom: 1px solid var(--rule); }
+  .rg-row:first-child > * { border-top: 1px solid var(--rule); }
+  .rg-row > .rg-gap { border-color: transparent; }
+  .rg-axis > * { border-bottom: 0; }
   .rg-name { display: flex; align-items: center; gap: 0.45rem; padding: 0.4rem 0.5rem 0.4rem 0; font-size: 0.8125rem; font-weight: 600; color: var(--ink); line-height: 1.25; }
   .rg-cell { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 6px; padding: 7px 3px; border-left: 1px solid #eef2f6; min-height: 30px; }
   .rg-n { display: flex; align-items: center; justify-content: flex-end; font-size: 0.8125rem; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; border-left: 1px solid #eef2f6; }
-  .rg-axis { border-bottom: 0; }
   .rg-year { padding-top: 0.3rem; text-align: center; font-size: 0.6875rem; color: var(--ink-2); font-variant-numeric: tabular-nums; border-left: 1px solid #eef2f6; }
   .rg-axis .rg-n { border-left: 1px solid #eef2f6; }
+  .rg-gap { border-left: 0; padding: 0; min-height: 0; }
+  .rg-year.rg-gap { padding-top: 0.3rem; }
+  .rg-ellipsis { display: inline-block; padding: 0 2px; color: var(--ink-3); font-weight: 700; letter-spacing: 0.05em; cursor: help; }
   .y-short { display: none; }
   .pm { position: relative; width: 16px; height: 16px; border-radius: 50%; background: var(--g-500); cursor: pointer; transition: transform 0.12s, box-shadow 0.12s, background-color 0.12s; }
   .pm::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; } /* 28 px target */
@@ -494,16 +554,12 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   /* Phones: the family name gets its own line above its row, and years lose
      their century, so eight columns fit without the page scrolling sideways. */
   @media (max-width: 639px) {
-    /* The label moves under the years, on a line of its own that the grid
-       leaves room for: inside the band it would run into the design names. */
-    .rg { padding-bottom: 1.25rem; }
-    .rg-bands { grid-template-columns: repeat(var(--cols), minmax(0, 1fr)) 1.75rem; }
-    .rg-band { grid-column: var(--narrow); align-items: flex-end; padding: 0 0 0.25rem; font-size: 0.625rem; white-space: nowrap; }
-    .rg-band-full { display: none; } .rg-band-short { display: inline; }
-    .rg-row { grid-template-columns: repeat(var(--cols), minmax(0, 1fr)) 1.75rem; }
+    .rg-row { grid-template-columns: var(--tpl) 1.75rem; }
     .rg-name { grid-column: 1 / -1; padding: 0.45rem 0 0.1rem; }
+    .rg-row > .rg-name { border-bottom: 0; }
     .rg-axis .rg-name { display: none; }
     .rg-cell { gap: 5px; padding: 7px 1px 9px; min-height: 34px; }
+    .rg-gap { padding: 0; min-height: 0; }
     .y-full { display: none; } .y-short { display: inline; }
   }
 
@@ -575,30 +631,55 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     root.querySelectorAll("path[data-c]").forEach(function (p) { p.addEventListener("click", function () { select(p.getAttribute("data-c")); }); });
 
     // Paper marks: hover or focus previews a paper's card, a click or tap keeps it.
-    blocks.forEach(function (b) {
-      var marks = [].slice.call(b.querySelectorAll(".pm"));
-      var cards = [].slice.call(b.querySelectorAll(".pd"));
-      var pinned = cards[0] ? cards[0].getAttribute("data-pd") : null; // the newest paper
-      function show(id) { cards.forEach(function (c) { c.hidden = c.getAttribute("data-pd") !== id; }); }
-      function pin(id) {
-        pinned = id;
-        marks.forEach(function (m) { m.setAttribute("aria-pressed", String(m.getAttribute("data-pm") === id)); });
-        show(id);
-      }
-      marks.forEach(function (m) {
-        var id = m.getAttribute("data-pm");
-        m.addEventListener("click", function () { pin(id); });
-        m.addEventListener("mouseenter", function () { show(id); });
-        m.addEventListener("mouseleave", function () { show(pinned); });
-        m.addEventListener("focus", function () { show(id); });
-        m.addEventListener("blur", function () { show(pinned); });
-      });
-      if (pinned) pin(pinned);
+    var papers = root.querySelector("[data-papers]");
+    var marks = [].slice.call(papers.querySelectorAll(".pm"));
+    var cards = [].slice.call(papers.querySelectorAll(".pd"));
+    var pinned = cards[0] ? cards[0].getAttribute("data-pd") : null; // the newest paper
+    function show(id) { cards.forEach(function (c) { c.hidden = c.getAttribute("data-pd") !== id; }); }
+    function pin(id) {
+      pinned = id;
+      marks.forEach(function (m) { m.setAttribute("aria-pressed", String(m.getAttribute("data-pm") === id)); });
+      show(id);
+    }
+    marks.forEach(function (m) {
+      var id = m.getAttribute("data-pm");
+      m.addEventListener("click", function () { pin(id); });
+      m.addEventListener("mouseenter", function () { show(id); });
+      m.addEventListener("mouseleave", function () { show(pinned); });
+      m.addEventListener("focus", function () { show(id); });
+      m.addEventListener("blur", function () { show(pinned); });
     });
+    if (pinned) pin(pinned);
+
+    // A place chosen on the map brings its papers forward in the grid. Only a
+    // visitor's own choice does this; the panel opening on Taiwan by default
+    // leaves the grid showing everything.
+    var focus = papers.querySelector("[data-focus]");
+    function highlight(code) {
+      marks.forEach(function (m) {
+        var w = " " + (m.getAttribute("data-where") || "") + " ";
+        m.classList.toggle("is-dim", !!code && w.indexOf(" " + code + " ") < 0);
+      });
+      focus.hidden = !code;
+      if (code) {
+        var b = root.querySelector('[data-block="' + code + '"] .rm-title');
+        focus.querySelector("[data-focus-en]").textContent = b ? b.querySelector(".l-en").textContent : code;
+        focus.querySelector("[data-focus-zh]").textContent = b ? b.querySelector(".l-zh").textContent : code;
+      }
+    }
+    papers.querySelector("[data-focus-clear]").addEventListener("click", function () { highlight(null); });
+    var chosen = function (c) { select(c); highlight(c); };
+    nodes.forEach(function (n) {
+      var c = n.getAttribute("data-c");
+      n.addEventListener("click", function () { highlight(c); });
+      n.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") highlight(c); });
+    });
+    keys.forEach(function (k) { k.addEventListener("click", function () { highlight(k.getAttribute("data-pick")); }); });
+    root.querySelectorAll("path[data-c]").forEach(function (p) { p.addEventListener("click", function () { highlight(p.getAttribute("data-c")); }); });
 
     // /?c=KR#map opens on that country.
     var want = new URLSearchParams(location.search).get("c");
     var ok = want && blocks.some(function (b) { return b.getAttribute("data-block") === want; });
-    select(ok ? want : "TW");
+    if (ok) chosen(want); else select("TW");
   })();
 </script>
