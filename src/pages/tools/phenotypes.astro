@@ -1,0 +1,187 @@
+---
+// Phenotype library as a page of its own. It reads src/data/phenotypes.ts, the
+// same data the protocol builders' "Library" modal uses, so there is one
+// source. Every entry has a stable anchor (#slug of its name): a link such as
+// /tools/phenotypes#lennox-gastaut-syndrome-lgs scrolls to that entry and
+// briefly highlights it. ?q=… fills the search box.
+//
+// Entries are reference data and stay in English in both languages; the page
+// around them is translated.
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import PageHeader from "../../components/PageHeader.astro";
+import { PHENOTYPES } from "../../data/phenotypes";
+import type { Phenotype } from "../../data/phenotypes";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const slugOf = (name: string) =>
+  name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+const SECTIONS = [
+  { key: "indications", en: "Populations and indications", zh: "族群與適應症" },
+  { key: "exposures", en: "Drugs (exposure or comparator)", zh: "藥品（暴露或對照）" },
+  { key: "outcomes", en: "Outcomes", zh: "Outcome" },
+] as const;
+const groups = SECTIONS.map((s) => ({ ...s, items: (PHENOTYPES as Record<string, Phenotype[]>)[s.key] ?? [] }));
+const total = groups.reduce((n, g) => n + g.items.length, 0);
+const nValidated = groups.reduce((n, g) => n + g.items.filter((p) => p.validation).length, 0);
+
+// Citations in the data name their papers by PMID or DOI in running text; both
+// become links. Everything else is escaped.
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const linkify = (s: string) =>
+  esc(s)
+    .replace(/\b(10\.\d{4,9}\/[^\s;,)]+[^\s;,.)])/g, '<a href="https://doi.org/$1" target="_blank" rel="noopener">$1</a>')
+    .replace(/\bPMID:? ?(\d{6,9})\b/g, '<a href="https://pubmed.ncbi.nlm.nih.gov/$1/" target="_blank" rel="noopener">PMID $1</a>');
+const haystack = (p: Phenotype) => [p.name, p.codes, p.definition, p.notes, p.validation].filter(Boolean).join(" ").toLowerCase();
+---
+
+<BaseLayout
+  title="Phenotype library — Daniel Tsai"
+  titleZh="Phenotype library｜蔡相德 Daniel Tsai"
+  description="Code sets for populations, drugs and outcomes used by the protocol builders, each marked with whether a validation study exists."
+  descriptionZh="Protocol builder 使用的族群、藥品與 outcome 代碼定義，每一筆都標明是否有 validation study。"
+>
+  <PageHeader
+    eyebrow="RWE Tools"
+    eyebrowZh="RWE 工具"
+    title="Phenotype library"
+    titleZh="Phenotype library"
+    description={`${total} code sets for populations, drugs and outcomes: the same ones the protocol builders offer. ${nValidated} carry a validation study; the rest say plainly that they do not. Cite the source you use.`}
+    descriptionZh={`${total} 組族群、藥品與 outcome 的代碼定義，和 protocol builder 裡提供的是同一份。其中 ${nValidated} 組附有 validation study，其餘明白標示沒有。使用時請引用你採用的來源。`}
+  />
+
+  <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10">
+    <a class="text-sm text-brand-700 hover:underline font-semibold" href={`${base}/tools`}>← <span class="l-en">RWE Tools</span><span class="l-zh">RWE 工具</span></a>
+
+    <div class="mt-6 sticky top-16 z-10 bg-white/95 backdrop-blur py-3 border-b border-slate-200">
+      <label class="block">
+        <span class="sr-only"><span class="l-en">Search the library</span><span class="l-zh">搜尋 phenotype library</span></span>
+        <input
+          type="search"
+          data-ph-search
+          autocomplete="off"
+          placeholder="Search: MI, SGLT2, suicide, I21 …"
+          data-i18n-attr="placeholder"
+          data-en-placeholder="Search: MI, SGLT2, suicide, I21 …"
+          data-zh-placeholder="搜尋：MI、SGLT2、suicide、I21 …"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
+        />
+      </label>
+      <p class="mt-1.5 text-xs text-slate-500" aria-live="polite" data-ph-status></p>
+      <nav class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Sections" data-i18n-attr="aria-label" data-en-aria-label="Sections" data-zh-aria-label="分類">
+        {groups.map((g) => (
+          <a href={`#${g.key}`} class="font-semibold text-brand-700 hover:underline"><span class="l-en">{g.en}</span><span class="l-zh">{g.zh}</span> <span class="font-normal text-slate-500" data-ph-count={g.key}>{g.items.length}</span></a>
+        ))}
+      </nav>
+    </div>
+
+    {groups.map((g) => (
+      <section id={g.key} class="ph-section mt-10" data-ph-section={g.key}>
+        <h2 class="text-xl font-extrabold text-slate-900">
+          <span class="l-en">{g.en}</span><span class="l-zh">{g.zh}</span>
+          <span class="ml-1 text-base font-semibold text-slate-500" data-ph-count={g.key}>{g.items.length}</span>
+        </h2>
+        {g.key === "exposures" && (
+          <p class="mt-1 text-sm text-slate-500">
+            <span class="l-en">A dispensing identifies the drug directly, so drug code sets have no predictive value to quote. Check the codes against your site's formulary and ATC version.</span>
+            <span class="l-zh">藥品由調劑紀錄直接辨識，所以沒有預測值可以引用。請對照你所在機構的處方集與 ATC 版本確認代碼。</span>
+          </p>
+        )}
+        <ol class="mt-3 divide-y divide-slate-200 border-y border-slate-200">
+          {g.items.map((p) => (
+            <li id={slugOf(p.name)} class="ph-entry py-4" data-ph-entry data-hay={haystack(p)}>
+              <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h3 class="text-base font-bold text-slate-900">
+                  <a href={`#${slugOf(p.name)}`} class="hover:text-brand-700">{p.name}</a>
+                </h3>
+                {p.validation
+                  ? <span class="text-[11px] font-bold tracking-wide text-brand-700"><span class="l-en uppercase">Validation study</span><span class="l-zh">有 validation study</span></span>
+                  : <span class="text-[11px] font-bold tracking-wide text-slate-500"><span class="l-en uppercase">No validation study</span><span class="l-zh">無 validation study</span></span>}
+              </div>
+              {p.codes && <p class="mt-1.5 text-sm text-slate-700 leading-relaxed font-mono break-words">{p.codes}</p>}
+              {p.definition && <p class="mt-1.5 text-sm text-slate-700 leading-relaxed">{p.definition}</p>}
+              {p.notes && p.notes.trim() && <p class="mt-1.5 text-sm text-slate-500 leading-relaxed" set:html={linkify(p.notes)} />}
+              {p.validation && <p class="ph-cite mt-2 border-l-2 border-brand-100 pl-3 text-sm text-slate-600 leading-relaxed" set:html={linkify(p.validation)} />}
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
+
+    <p data-ph-none hidden class="mt-10 text-sm text-slate-600">
+      <span class="l-en">No entry matches. Try a shorter word or a code.</span><span class="l-zh">沒有符合的項目。試試較短的字或代碼。</span>
+    </p>
+  </div>
+
+  <style is:global>
+    .ph-entry { scroll-margin-top: 11rem; margin: 0 -0.75rem; padding-left: 0.75rem; padding-right: 0.75rem; transition: background-color 1.2s ease; }
+    .ph-entry.is-target { background: var(--color-brand-50); transition: none; }
+    .ph-section { scroll-margin-top: 12rem; }
+    .ph-entry a[target], .ph-cite a { color: var(--color-brand-700); text-decoration: underline; text-underline-offset: 2px; }
+  </style>
+
+  <script is:inline>
+    (function () {
+      var input = document.querySelector("[data-ph-search]");
+      var entries = [].slice.call(document.querySelectorAll("[data-ph-entry]"));
+      var sections = [].slice.call(document.querySelectorAll("[data-ph-section]"));
+      var status = document.querySelector("[data-ph-status]");
+      var none = document.querySelector("[data-ph-none]");
+      var total = entries.length;
+
+      // Every word typed must appear somewhere in the entry; no syntax.
+      function filter() {
+        var words = (input.value || "").toLowerCase().split(/\s+/).filter(Boolean);
+        var shown = 0;
+        entries.forEach(function (e) {
+          var hay = e.getAttribute("data-hay");
+          var ok = words.every(function (w) { return hay.indexOf(w) >= 0; });
+          e.hidden = !ok;
+          if (ok) shown++;
+        });
+        sections.forEach(function (s) {
+          var n = s.querySelectorAll("[data-ph-entry]:not([hidden])").length;
+          s.hidden = n === 0;
+          document.querySelectorAll('[data-ph-count="' + s.getAttribute("data-ph-section") + '"]').forEach(function (c) { c.textContent = String(n); });
+        });
+        none.hidden = shown !== 0;
+        var zh = document.documentElement.lang === "zh-Hant";
+        status.textContent = words.length ? (zh ? "符合 " + shown + " 筆，共 " + total + " 筆" : shown + " of " + total + " match") : "";
+      }
+      input.addEventListener("input", filter);
+      document.addEventListener("langchange", filter);
+
+      // ?q= fills the search; #slug scrolls to one entry and highlights it.
+      var q = new URLSearchParams(location.search).get("q");
+      if (q) { input.value = q.slice(0, 80); }
+      filter();
+      // Place the entry just below the sticky search bar, immediately (not
+      // with the page's smooth scrolling, which a late layout shift can throw off).
+      function scrollToEntry(el) {
+        var bar = document.querySelector("[data-ph-search]").closest(".sticky");
+        var below = bar ? bar.getBoundingClientRect().height + 64 + 12 : 200;
+        window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - below, behavior: "instant" });
+      }
+      function goTo() {
+        var id = decodeURIComponent((location.hash || "").slice(1));
+        var el = id && document.getElementById(id);
+        if (!el || !el.hasAttribute("data-ph-entry")) return;
+        if (el.hidden) { input.value = ""; filter(); }
+        scrollToEntry(el);
+        el.classList.add("is-target");
+        setTimeout(function () { el.classList.remove("is-target"); }, 2500);
+      }
+      window.addEventListener("hashchange", goTo);
+      // Run now (the list is already laid out) and once more after images and
+      // fonts have loaded, in case they moved the entry.
+      if (location.hash) {
+        goTo();
+        window.addEventListener("load", function () {
+          var el = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+          if (el && el.hasAttribute("data-ph-entry")) scrollToEntry(el);
+        });
+      }
+    })();
+  </script>
+</BaseLayout>

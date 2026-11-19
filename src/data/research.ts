@@ -199,7 +199,7 @@ export const LINKS: Record<string, ToolLink> = {
   "drug-lookup": { href: "https://danielhttsai.github.io/nhird-data-dictionary/drugs/", label: { en: "NHI drug code lookup", zh: "健保藥品代碼查詢" }, external: true },
   "acb-calc": { href: "/tools/acb-calculator", label: { en: "Score these drugs: ACB calculator", zh: "算這些藥的負荷：ACB 計算機" } },
   "km-guide": { href: "/tools/km-cif-riskset", label: { en: "TriNetX survival vs cumulative incidence guide", zh: "TriNetX 存活機率與累積發生率說明" } },
-  "phenotype-lgs": { href: "/tools/clone-censor-weight?library=indications&q=Lennox", label: { en: "Reuse the definition: LGS in the phenotype library", zh: "沿用這個定義：phenotype library 的 LGS" } },
+  "phenotype-lgs": { href: "/tools/phenotypes#lennox-gastaut-syndrome-lgs", label: { en: "Reuse the definition: LGS in the phenotype library", zh: "沿用這個定義：phenotype library 的 LGS" } },
   map: { href: "/#map", label: { en: "research map", zh: "研究地圖" } },
 };
 
