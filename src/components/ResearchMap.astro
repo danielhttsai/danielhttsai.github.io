@@ -19,7 +19,8 @@
 // What the picture says:
 //   bubble   one per country or region with person-level data; area = papers
 //   arc      two countries that appear in the same paper; heavier = more papers
-//   shading  light = covered only by the 65-country sales-data study
+//   extra    the 65-country sales-data study (IQVIA MIDAS) is not part of
+//            the map: one line under the legend, counted nowhere
 //   dashed   TriNetX's global network, which the papers do not split by country
 // Selecting a bubble opens a panel: databases as bars (length = papers, with
 // the kind of data written as a tag) and papers as dots in a grid of study
@@ -34,7 +35,7 @@ import { geoEqualEarth, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import world from "world-atlas/countries-110m.json";
 import {
-  ALL_PUBS, tagsOf, DATABASES, DB_KINDS, DB_KIND_TAGS, COUNTRIES, CORE, MIDAS65, DESIGNS, FAMILIES, familyOf, designChips,
+  ALL_PUBS, tagsOf, DATABASES, DB_KINDS, DB_KIND_TAGS, COUNTRIES, CORE, DESIGNS, FAMILIES, familyOf, designChips, onMap, SALES_PAPERS,
   paperTitle, paperTitleHtml, paperJournal, paperLead,
 } from "../data/research";
 import type { PubRow, DbKind } from "../data/research";
@@ -42,7 +43,6 @@ import type { PubRow, DbKind } from "../data/research";
 // ── Data ─────────────────────────────────────────────────────────────────
 const withDb = (db: string, extra: (p: PubRow) => boolean = () => true) =>
   ALL_PUBS.filter((p) => tagsOf(p.doi).data.includes(db) && extra(p));
-const midasPapers = withDb("iqvia-midas");
 const trinetxUS = withDb("trinetx", (p) => tagsOf(p.doi).countries.includes("US"));
 const trinetxGlobal = withDb("trinetx", (p) => tagsOf(p.doi).countries.includes("GLOBAL"));
 
@@ -59,7 +59,6 @@ const makeBlock = (code: string, en: string, zh: string, entries: Entry[], note?
   return { code, en, zh, entries, papers, nDb: entries.filter((e) => e.kind !== "sales").length, note };
 };
 
-const salesOnly = MIDAS65.filter((c) => !CORE.includes(c)).sort((a, b) => COUNTRIES[a].name.en.localeCompare(COUNTRIES[b].name.en));
 const countryBlocks = CORE.map((c) => {
   const entries: Entry[] = Object.keys(DATABASES)
     .filter((id) => DATABASES[id].country === c)
@@ -69,7 +68,6 @@ const countryBlocks = CORE.map((c) => {
   if (c === "US" && trinetxUS.length) {
     entries.push(entry("trinetx", trinetxUS, { key: "trinetx-us", short: "TriNetX US", en: "TriNetX US Collaborative Network", zh: "TriNetX 美國協作網絡" }));
   }
-  if (MIDAS65.includes(c) && midasPapers.length) entries.push(entry("iqvia-midas", midasPapers));
   return makeBlock(c, COUNTRIES[c].name.en, COUNTRIES[c].name.zh, entries);
 });
 const blocks: Block[] = [
@@ -79,12 +77,6 @@ const blocks: Block[] = [
     {
       en: "A federated network of electronic health records from healthcare organisations in many countries. These papers analyse it as one source and do not report by country, so it has no place on the map. Papers on the US Collaborative Network are under the United States.",
       zh: "由多國醫療機構電子病歷組成的聯邦式網絡。這些論文把它當成單一資料來源分析，沒有依國家分開報告，所以在地圖上沒有位置。使用美國協作網絡的論文列在美國底下。",
-    }),
-  makeBlock("MIDAS", "Sales data, 65 countries", "銷售資料：65 個國家與地區",
-    [entry("iqvia-midas", midasPapers)],
-    {
-      en: `Country-level sales volumes, with no patient records. Besides the ${MIDAS65.length - salesOnly.length} countries that also have a person-level database here, the study covers: ${salesOnly.map((c) => COUNTRIES[c].name.en).join(", ")}.`,
-      zh: `這是國家層級的銷售量，沒有病人層級的紀錄。除了這裡同時有個人層級資料庫的 ${MIDAS65.length - salesOnly.length} 個國家，這項研究還涵蓋：${salesOnly.map((c) => COUNTRIES[c].name.zh).join("、")}。`,
     }),
 ];
 const byCode = Object.fromEntries(blocks.map((b) => [b.code, b]));
@@ -122,12 +114,11 @@ const shapes = countries
   .filter((f) => f.id !== "010")
   .map((f) => {
     const code = byId[f.id as string];
-    const kind = code && CORE.includes(code) ? "core" : code && MIDAS65.includes(code) ? "sales" : "land";
+    const kind = code && CORE.includes(code) ? "core" : "land";
     return { d: path(f) || "", kind };
   })
   .filter((s) => s.d);
 const landD = shapes.filter((s) => s.kind === "land").map((s) => s.d).join("");
-const salesD = shapes.filter((s) => s.kind === "sales").map((s) => s.d).join("");
 const coreD = shapes.filter((s) => s.kind === "core").map((s) => s.d).join("");
 
 const NUDGE: Record<string, [number, number]> = { KR: [9, -19], HK: [-42, 9], GB: [-13, -7], NL: [11.5, 8.5] };
@@ -192,7 +183,7 @@ const famsIn = (b: Block) => Object.keys(FAMILIES).filter((f) => b.papers.some((
 // papers for the selected place collapses into one narrow "…" column (an axis
 // break); a single empty year keeps its column. The reason for a gap is only
 // in the "…" tooltip and its accessible name.
-const allYears = ALL_PUBS.filter((p) => tagsOf(p.doi).data.length).map((p) => +p.year);
+const allYears = ALL_PUBS.filter(onMap).map((p) => +p.year);
 const YEARS = Array.from({ length: Math.max(...allYears) - Math.min(...allYears) + 1 }, (_, i) => String(Math.min(...allYears) + i));
 const cell = (b: Block, fam: string, year: string) =>
   b.papers.filter(({ p }) => p.year === year && familyOf(tagsOf(p.doi)) === fam).map(({ p }) => p);
@@ -236,7 +227,7 @@ const tplOf = (cols: Col[]) => cols.map((c) => (c.gap ? "minmax(0, 0.34fr)" : "m
 // source). Each dot knows which places it belongs to, so selecting a place on
 // the map can bring its dots forward.
 const overall = {
-  papers: ALL_PUBS.filter((p) => tagsOf(p.doi).data.length).map((p) => ({
+  papers: ALL_PUBS.filter(onMap).map((p) => ({
     p,
     dbs: tagsOf(p.doi).data.map((d) => DATABASES[d].short),
     where: blocks.filter((b) => b.papers.some((x) => x.p === p)).map((b) => b.code),
@@ -260,7 +251,6 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
           data-zh-aria-label="蔡相德已發表論文所使用的國家與資料庫地圖"
         >
           {L.map && <path class="m-land" d={landD} />}
-          {L.map && <path class="m-sales" d={salesD} data-c="MIDAS" />}
           {L.map && <path class="m-core" d={coreD} />}
           {!L.map && REGIONS.map((r) => (
             <>
@@ -322,12 +312,14 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
             <span class="k-network" aria-hidden="true"></span><span class="l-en">TriNetX global network, not split by country ({trinetxGlobal.length} papers)</span><span class="l-zh">TriNetX 全球網絡，不分國家（{trinetxGlobal.length} 篇）</span>
           </button>
         </li>
-        <li>
-          <button type="button" class="rm-key" data-pick="MIDAS" aria-pressed="false">
-            <span class="k-sales" aria-hidden="true"></span><span class="l-en">Sales data only, 65 countries ({plural(midasPapers.length, "paper")})</span><span class="l-zh">僅有銷售資料，共 65 國（{midasPapers.length} 篇）</span>
-          </button>
-        </li>
       </ul>
+      {SALES_PAPERS.length > 0 && (
+        <p class="rm-extra">
+          <span class="l-en">Also: pharmaceutical sales data for 65 countries (IQVIA MIDAS), </span><span class="l-zh">另有：65 國藥品銷售資料（IQVIA MIDAS），</span>{SALES_PAPERS.map((p, i) => (
+            <>{i > 0 && ", "}<a href={doi(p)} target="_blank" rel="noopener" title={paperTitle(p)}><span class="l-en">{SALES_PAPERS.length === 1 ? "1 paper" : `paper ${i + 1}`}</span><span class="l-zh">{SALES_PAPERS.length === 1 ? "1 篇" : `第 ${i + 1} 篇`}</span> ↗</a></>
+          ))}
+        </p>
+      )}
 
       <!-- Tour control. Hidden until the script is running; it is the pause
            the moving selection needs. -->
@@ -381,6 +373,19 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
                 </li>
               ))}
             </ol>
+            {SALES_PAPERS.length > 0 && (
+              <div class="rm-list-extra">
+                <p class="rm-list-extra-h"><span class="l-en">Also, not on the map: IQVIA MIDAS pharmaceutical sales data, 65 countries</span><span class="l-zh">另有，不在地圖上：IQVIA MIDAS 藥品銷售資料，65 國</span></p>
+                <ol class="rm-list-papers">
+                  {SALES_PAPERS.map((p) => (
+                    <li>
+                      <a href={doi(p)} target="_blank" rel="noopener" set:html={paperTitleHtml(p)} />
+                      <span class="rm-list-meta"> — {paperLead(p)} {paperJournal(p)}, {p.year}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
           </details>
         </section>
       ))}
@@ -498,9 +503,7 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   @media (max-width: 639px) { .rm-wide { display: none; } .rm-narrow { display: block; } }
 
   .m-land { fill: var(--land); }
-  .m-sales { fill: var(--color-brand-100); cursor: pointer; }
   .m-core { fill: var(--g-300); }
-  .sel-MIDAS .m-sales { fill: #b3d4cb; stroke: var(--g-500); stroke-width: 0.7; }
   .m-region { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; fill: var(--ink-3); }
 
   .m-arc { fill: none; stroke: var(--color-brand-500); stroke-linecap: round; opacity: 0.3; transition: opacity 0.15s; }
@@ -529,10 +532,9 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .rm-key { display: flex; align-items: center; gap: 0.5rem; text-align: left; color: inherit; padding: 0.25rem 0.5rem; margin: -0.25rem -0.5rem; border-radius: 0.5rem; min-height: 2.25rem; }
   .rm-key:hover, .rm-key[aria-pressed="true"] { background: var(--color-brand-50); color: var(--color-brand-700); }
   .rm-key > span:not([aria-hidden]) { text-decoration: underline; text-decoration-color: #cbd5e1; text-underline-offset: 3px; }
-  .k-bubble, .k-network, .k-sales, .k-arc { flex: none; display: inline-block; }
+  .k-bubble, .k-network, .k-arc { flex: none; display: inline-block; }
   .k-bubble { width: 14px; height: 14px; border-radius: 50%; background: var(--color-brand-600); }
   .k-network { width: 14px; height: 14px; border-radius: 50%; border: 2px dashed var(--color-brand-600); }
-  .k-sales { width: 14px; height: 14px; border-radius: 3px; background: var(--color-brand-100); border: 1px solid var(--g-300); }
   .k-arc { width: 18px; height: 9px; border-top: 2px solid var(--color-brand-500); border-radius: 50% 50% 0 0 / 100% 100% 0 0; margin-top: 5px; }
 
   .rm-block { min-width: 0; }
@@ -606,6 +608,11 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .rm-list-papers a { color: var(--ink); }
   .rm-list-papers a:hover { color: var(--color-brand-700); text-decoration: underline; }
   .rm-list-kind, .rm-list-meta { color: var(--ink-3); }
+  .rm-extra { margin-top: 0.6rem; font-size: 0.75rem; line-height: 1.5; color: var(--ink-3); }
+  .rm-extra a { color: var(--ink-2); text-decoration: underline; text-decoration-color: #cbd5e1; text-underline-offset: 2px; }
+  .rm-extra a:hover { color: var(--color-brand-700); }
+  .rm-list-extra { margin-top: 1rem; padding-top: 0.6rem; border-top: 1px dashed var(--rule); }
+  .rm-list-extra-h { font-size: 0.75rem; font-weight: 600; color: var(--ink-3); }
   .rm-foot { margin-top: 1.25rem; font-size: 0.75rem; line-height: 1.6; color: var(--ink-3); }
 
   /* ── Motion ────────────────────────────────────────────────────────────
@@ -627,8 +634,8 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   @media (prefers-reduced-motion: no-preference) {
     /* Before the block is first seen. Only set by the script, so a page
        without the script shows the finished drawing. */
-    .rm-pre .m-land, .rm-pre .m-sales, .rm-pre .m-core, .rm-pre .m-node, .rm-pre .m-arc { opacity: 0; }
-    .rm-in .m-land, .rm-in .m-sales, .rm-in .m-core { animation: rm-fade 0.7s ease-out both; }
+    .rm-pre .m-land, .rm-pre .m-core, .rm-pre .m-node, .rm-pre .m-arc { opacity: 0; }
+    .rm-in .m-land, .rm-in .m-core { animation: rm-fade 0.7s ease-out both; }
     .rm-in .m-node { animation: rm-fade 0.35s ease-out both; animation-delay: calc(0.3s + var(--i, 0) * 0.09s); }
     .rm-in .m-bubble { transform-box: fill-box; transform-origin: center; animation: rm-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: calc(0.3s + var(--i, 0) * 0.09s); }
     .rm-in .m-arc { animation: rm-draw 0.9s ease-out both; animation-delay: calc(1.2s + var(--i, 0) * 0.05s); }
@@ -673,7 +680,6 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
         n.classList.toggle("is-partner", !!partners[c]);
         n.classList.toggle("is-dim", geographic && c !== code && !partners[c] && !n.classList.contains("is-network"));
       });
-      root.classList.toggle("sel-MIDAS", code === "MIDAS");
       // Dots run along the emphasised place's arcs, away from it.
       flows.forEach(function (f) {
         var a = f.getAttribute("data-a"), b = f.getAttribute("data-b");

@@ -253,18 +253,20 @@ export const paperLead = (p: PubRow) => {
 };
 
 export const ALL_PUBS = (pubs as PubRow[]).slice().sort((a, b) => (b.date || 0) - (a.date || 0));
-// Headline numbers for the map, shared by the Networks page and the home page.
+// What the map counts: person-level data only. The IQVIA MIDAS sales study is
+// an extra, shown on its own line and counted nowhere (Daniel, 2026-11-23).
+export const mapData = (t: PaperTags) => t.data.filter((d) => DATABASES[d].kind !== "sales");
+export const onMap = (p: PubRow) => mapData(tagsOf(p.doi)).length > 0;
+export const SALES_PAPERS = ALL_PUBS.filter((p) => tagsOf(p.doi).data.some((d) => DATABASES[d].kind === "sales") && !onMap(p));
+
+// Headline numbers for the map, shared by the home page.
 export const MAP_STATS = (() => {
-  const tagged = ALL_PUBS.map((p) => tagsOf(p.doi));
+  const tagged = ALL_PUBS.filter(onMap).map((p) => tagsOf(p.doi));
+  const places = (t: PaperTags) => t.countries.filter((c) => c !== "MIDAS65");
   return {
     countries: CORE.length,
-    databases: new Set(tagged.flatMap((t) => t.data)).size,
-    papers: tagged.filter((t) => t.data.length).length,
-    multi: tagged.filter((t) => t.countries.length > 1 || t.countries.includes("GLOBAL") || t.countries.includes("MIDAS65")).length,
+    databases: new Set(tagged.flatMap(mapData)).size,
+    papers: tagged.length,
+    multi: tagged.filter((t) => places(t).length > 1 || places(t).includes("GLOBAL")).length,
   };
 })();
-// Papers whose data comes from more than one named country.
-export const MULTI_COUNTRY = ALL_PUBS.filter((p) => {
-  const t = tagsOf(p.doi);
-  return t.countries.length > 1 || t.countries.includes("MIDAS65");
-});
