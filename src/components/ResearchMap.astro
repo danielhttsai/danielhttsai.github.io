@@ -3,8 +3,18 @@
 //
 // Everything is derived at build time from publication-tags.json, so the map
 // can only show a country or a database that a paper actually names. Nothing
-// here is a map library in the browser: the drawing is static inline SVG and
-// the script at the bottom only moves highlights and swaps panels.
+// here is a map library in the browser: the drawing is inline SVG built here,
+// and the script at the bottom moves highlights, swaps panels and runs the
+// motion described next.
+//
+// Motion (all of it off under prefers-reduced-motion):
+//   entrance  the land fades in, bubbles pop in one by one, arcs draw themselves
+//   pulse     a ring breathes around the selected place
+//   flow      dots run along the selected place's arcs, away from it
+//   tour      until the visitor touches the block, the selection steps through
+//             the countries; a button pauses and restarts it
+// The dots and the ring are emphasis only. They encode nothing the arcs and
+// bubbles do not already say, so the legend does not list them.
 //
 // What the picture says:
 //   bubble   one per country or region with person-level data; area = papers
@@ -165,8 +175,8 @@ const arcs = (nodes: Node[]) => {
   });
 };
 const layouts = [
-  { id: "wide", viewBox: `0 ${TOP} ${W} ${BOTTOM - TOP}`, nodes: wideNodes, arcs: arcs(wideNodes), map: true, font: 17, hit: 26, big: 18, stroke: 1.4 },
-  { id: "narrow", viewBox: `0 0 ${NW} ${NH}`, nodes: narrowNodes, arcs: arcs(narrowNodes), map: false, font: 12, hit: 24, big: 13, stroke: 1 },
+  { id: "wide", viewBox: `0 ${TOP} ${W} ${BOTTOM - TOP}`, nodes: wideNodes, arcs: arcs(wideNodes), map: true, font: 17, hit: 26, big: 18, stroke: 1.4, flow: 3.4, gap: 17 },
+  { id: "narrow", viewBox: `0 0 ${NW} ${NH}`, nodes: narrowNodes, arcs: arcs(narrowNodes), map: false, font: 12, hit: 24, big: 13, stroke: 1, flow: 2.6, gap: 12 },
 ];
 const REGIONS = [
   { x: 14, y: 22, en: "EUROPE", zh: "歐洲" }, { x: 346, y: 22, en: "NORTH AMERICA", zh: "北美", end: true },
@@ -259,11 +269,16 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
             </>
           ))}
           <g class="m-arcs" aria-hidden="true">
-            {L.arcs.map((a) => (
-              <path class="m-arc" d={a.d} data-a={a.a} data-b={a.b} stroke-width={(a.n === 1 ? 1.2 : a.n === 2 ? 2.6 : 4) * L.stroke} />
+            {L.arcs.map((a, i) => (
+              <path class="m-arc" d={a.d} data-a={a.a} data-b={a.b} pathLength="1" style={`--i:${i}`} stroke-width={(a.n === 1 ? 1.2 : a.n === 2 ? 2.6 : 4) * L.stroke} />
             ))}
           </g>
-          {L.nodes.map((n) => {
+          <g class="m-flows" aria-hidden="true">
+            {L.arcs.map((a) => (
+              <path class="m-flow" d={a.d} data-a={a.a} data-b={a.b} stroke-width={L.flow} style={`--gap:${L.gap}px`} />
+            ))}
+          </g>
+          {L.nodes.map((n, i) => {
             const gap = L.font * 0.5;
             const lx = n.label === "right" ? n.r + gap : n.label === "left" ? -n.r - gap : 0;
             const cs = n.r >= L.big ? L.font : L.font - 2.5;
@@ -276,6 +291,7 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
                 class:list={["m-node", n.dashed && "is-network"]}
                 data-c={n.code}
                 transform={`translate(${n.x},${n.y})`}
+                style={`--i:${i}`}
                 role="button"
                 tabindex="0"
                 aria-label={en}
@@ -284,6 +300,7 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
                 data-zh-aria-label={zh}
               >
                 <circle class="m-hit" r={Math.max(n.r + 4, L.hit)} />
+                <circle class="m-pulse" r={n.r + 3} />
                 <circle class="m-halo" r={n.r + 4} />
                 <circle class="m-bubble" r={n.r} />
                 <text class="m-count" y={cs * 0.35} font-size={cs} text-anchor="middle">{n.n}</text>
@@ -311,6 +328,16 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
           </button>
         </li>
       </ul>
+
+      <!-- Tour control. Hidden until the script is running; it is the pause
+           the moving selection needs. -->
+      <p class="rm-tourbar">
+        <button type="button" class="rm-tour" data-tour aria-pressed="false" hidden>
+          <span class="rm-tour-icon" aria-hidden="true"></span>
+          <span data-tour-on hidden><span class="l-en">Touring the countries · pause</span><span class="l-zh">自動導覽各國中 · 暫停</span></span>
+          <span data-tour-off><span class="l-en">Play the tour</span><span class="l-zh">播放自動導覽</span></span>
+        </button>
+      </p>
     </div>
 
     <!-- Panel: one block per bubble; the script shows the selected one. Without
@@ -580,6 +607,42 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .rm-list-papers a:hover { color: var(--color-brand-700); text-decoration: underline; }
   .rm-list-kind, .rm-list-meta { color: var(--ink-3); }
   .rm-foot { margin-top: 1.25rem; font-size: 0.75rem; line-height: 1.6; color: var(--ink-3); }
+
+  /* ── Motion ────────────────────────────────────────────────────────────
+     Arcs carry pathLength="1", so a dash of 1 is the whole arc and the
+     offset can draw it. Flow dots are zero-length dashes with round caps. */
+  .m-arc { stroke-dasharray: 1; stroke-dashoffset: 0; }
+  .m-flow { fill: none; stroke: var(--color-brand-900); stroke-linecap: round; stroke-dasharray: 0.01px var(--gap); opacity: 0; pointer-events: none; }
+  .m-pulse { fill: none; stroke: var(--color-brand-700); stroke-width: 2.5; opacity: 0; pointer-events: none; transform-box: fill-box; transform-origin: center; }
+
+  .rm-tourbar { margin-top: 0.6rem; display: flex; justify-content: flex-end; }
+  .rm-tour { display: inline-flex; align-items: center; gap: 0.45rem; min-height: 2rem; padding: 0.2rem 0.7rem; border-radius: 9999px; border: 1px solid var(--rule); background: #fff; font-size: 0.75rem; font-weight: 600; color: var(--ink-2); }
+  .rm-tour[hidden] { display: none; }
+  .rm-tour:hover { border-color: var(--g-500); color: var(--color-brand-700); }
+  .rm-tour:focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
+  /* Icon: a play triangle when stopped, two bars when touring. */
+  .rm-tour-icon { width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent currentColor; }
+  .rm-tour[aria-pressed="true"] .rm-tour-icon { width: 8px; height: 10px; border-width: 0 3px; border-color: currentColor; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* Before the block is first seen. Only set by the script, so a page
+       without the script shows the finished drawing. */
+    .rm-pre .m-land, .rm-pre .m-sales, .rm-pre .m-core, .rm-pre .m-node, .rm-pre .m-arc { opacity: 0; }
+    .rm-in .m-land, .rm-in .m-sales, .rm-in .m-core { animation: rm-fade 0.7s ease-out both; }
+    .rm-in .m-node { animation: rm-fade 0.35s ease-out both; animation-delay: calc(0.3s + var(--i, 0) * 0.09s); }
+    .rm-in .m-bubble { transform-box: fill-box; transform-origin: center; animation: rm-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: calc(0.3s + var(--i, 0) * 0.09s); }
+    .rm-in .m-arc { animation: rm-draw 0.9s ease-out both; animation-delay: calc(1.2s + var(--i, 0) * 0.05s); }
+    /* Dots wait for the entrance (rm-done): until then their arcs and the
+       bubbles they run to are not on screen yet. */
+    .rm-done .m-flow.is-on { opacity: 0.85; animation: rm-flow 0.9s linear infinite; }
+    .rm-done .m-flow.is-on.is-rev { animation-direction: reverse; }
+    .m-node.is-on .m-pulse { animation: rm-pulse 2.4s ease-out infinite; }
+  }
+  @keyframes rm-fade { from { opacity: 0; } }
+  @keyframes rm-pop { from { transform: scale(0.2); } }
+  @keyframes rm-draw { from { stroke-dashoffset: 1; opacity: 0; } }
+  @keyframes rm-flow { to { stroke-dashoffset: calc(var(--gap) * -1); } }
+  @keyframes rm-pulse { 0% { transform: scale(1); opacity: 0.6; } 75%, 100% { transform: scale(1.85); opacity: 0; } }
 </style>
 
 <script is:inline>
@@ -589,6 +652,7 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     var blocks = [].slice.call(root.querySelectorAll("[data-block]"));
     var nodes = [].slice.call(root.querySelectorAll(".m-node"));
     var arcs = [].slice.call(root.querySelectorAll(".m-arc"));
+    var flows = [].slice.call(root.querySelectorAll(".m-flow"));
     var keys = [].slice.call(root.querySelectorAll("[data-pick]"));
     var selected = null;
     root.classList.add("is-live");
@@ -610,6 +674,12 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
         n.classList.toggle("is-dim", geographic && c !== code && !partners[c] && !n.classList.contains("is-network"));
       });
       root.classList.toggle("sel-MIDAS", code === "MIDAS");
+      // Dots run along the emphasised place's arcs, away from it.
+      flows.forEach(function (f) {
+        var a = f.getAttribute("data-a"), b = f.getAttribute("data-b");
+        f.classList.toggle("is-on", a === code || b === code);
+        f.classList.toggle("is-rev", b === code);
+      });
     }
     // Selection: the highlight plus the panel.
     function select(code) {
@@ -681,5 +751,98 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     var want = new URLSearchParams(location.search).get("c");
     var ok = want && blocks.some(function (b) { return b.getAttribute("data-block") === want; });
     if (ok) chosen(want); else select("TW");
+
+    // ── Motion ──────────────────────────────────────────────────────────
+    // The drawing comes in the first time it is seen. After that, and until
+    // the visitor touches the block, the selection steps through the
+    // countries. A tour step is select(), never highlight(): the papers grid
+    // stays as the visitor left it.
+    var stage = root.querySelector(".rm-stage");
+    var panel = root.querySelector("[data-blocks]");
+    var tourBtn = root.querySelector("[data-tour]");
+    var motionOK = !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    var STEP_MS = 4200;
+    var order = [];
+    nodes.forEach(function (n) {
+      var c = n.getAttribute("data-c");
+      if (!n.classList.contains("is-network") && order.indexOf(c) < 0) order.push(c);
+    });
+    var touring = false, taken = false, seen = false, inView = !("IntersectionObserver" in window), over = false, timer = null;
+
+    // While the tour runs the panel keeps the height of its tallest block, so
+    // the page below it does not jump at every step.
+    function reserve(on) {
+      if (!panel) return;
+      if (!on) { panel.style.minHeight = ""; return; }
+      var max = 0;
+      blocks.forEach(function (b) {
+        var was = b.hidden;
+        b.hidden = false;
+        max = Math.max(max, b.offsetHeight);
+        b.hidden = was;
+      });
+      panel.style.minHeight = max + "px";
+    }
+    function tick() {
+      if (!touring || !inView || over || document.hidden) return;
+      select(order[(order.indexOf(selected) + 1) % order.length]);
+    }
+    function setTour(on) {
+      touring = on;
+      reserve(on);
+      if (tourBtn) {
+        tourBtn.setAttribute("aria-pressed", String(on));
+        tourBtn.querySelector("[data-tour-on]").hidden = !on;
+        tourBtn.querySelector("[data-tour-off]").hidden = on;
+      }
+      if (on && !timer) timer = setInterval(tick, STEP_MS);
+      if (!on && timer) { clearInterval(timer); timer = null; }
+    }
+    if (tourBtn && order.length > 1) {
+      tourBtn.hidden = false;
+      tourBtn.addEventListener("click", function () { taken = true; setTour(!touring); });
+    }
+    // Any press or key inside the block is the visitor taking over.
+    function takeOver(e) {
+      if (tourBtn && tourBtn.contains(e.target)) return;
+      taken = true;
+      if (touring) setTour(false);
+    }
+    root.addEventListener("pointerdown", takeOver, true);
+    root.addEventListener("keydown", function (e) { if (e.key !== "Tab" && e.key !== "Shift") takeOver(e); }, true);
+    // Reading is not interrupted: the tour waits while the mouse is on the
+    // drawing or the panel, or while focus is inside either.
+    [].slice.call(root.querySelectorAll(".rm-svg")).concat(panel ? [panel] : []).forEach(function (el) {
+      el.addEventListener("mouseenter", function () { over = true; });
+      el.addEventListener("mouseleave", function () { over = false; });
+      el.addEventListener("focusin", function () { over = true; });
+      el.addEventListener("focusout", function () { over = false; });
+    });
+    var resizeT = null;
+    window.addEventListener("resize", function () {
+      if (!touring) return;
+      clearTimeout(resizeT);
+      resizeT = setTimeout(function () { if (touring) reserve(true); }, 200);
+    });
+
+    if ("IntersectionObserver" in window && stage) {
+      if (motionOK) root.classList.add("rm-pre");
+      new IntersectionObserver(function (es) {
+        inView = es[es.length - 1].isIntersecting;
+        if (!inView || seen) return;
+        seen = true;
+        root.classList.remove("rm-pre");
+        root.classList.add("rm-in");
+        // Let the entrance finish, then let the dots run and start touring,
+        // unless the visitor arrived on a chosen country (?c=) or has
+        // already taken over.
+        setTimeout(function () {
+          root.classList.add("rm-done");
+          if (motionOK && !ok && !taken) setTour(true);
+        }, motionOK ? 2600 : 0);
+      }, { threshold: 0.3 }).observe(stage);
+    } else {
+      root.classList.add("rm-done");
+    }
   })();
 </script>
