@@ -240,6 +240,8 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
 <div class="research-map" data-research-map>
   <div class="rm-grid">
     <div class="rm-stage">
+      <!-- The view clips the drawing only while the tour's camera is zoomed in. -->
+      <div class="rm-view">
       {layouts.map((L) => (
         <svg
           viewBox={L.viewBox}
@@ -301,6 +303,7 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
           })}
         </svg>
       ))}
+      </div>
 
       <!-- Legend. The two entries that are not places are buttons: they open
            the same panel a bubble does. -->
@@ -324,10 +327,15 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
       <!-- Tour control. Hidden until the script is running; it is the pause
            the moving selection needs. -->
       <p class="rm-tourbar">
-        <button type="button" class="rm-tour" data-tour aria-pressed="false" hidden>
+        <button type="button" class="rm-tour" data-tour data-state="idle" hidden>
           <span class="rm-tour-icon" aria-hidden="true"></span>
-          <span data-tour-on hidden><span class="l-en">Touring the countries · pause</span><span class="l-zh">自動導覽各國中 · 暫停</span></span>
-          <span data-tour-off><span class="l-en">Play the tour</span><span class="l-zh">播放自動導覽</span></span>
+          <span data-when="idle"><span class="l-en">Play the tour</span><span class="l-zh">播放導覽</span></span>
+          <span data-when="playing" hidden><span class="l-en">Pause</span><span class="l-zh">暫停</span></span>
+          <span data-when="paused" hidden><span class="l-en">Resume</span><span class="l-zh">繼續</span></span>
+          <span data-when="ended" hidden><span class="l-en">Play again</span><span class="l-zh">再播一次</span></span>
+        </button>
+        <button type="button" class="rm-tour" data-tour-next hidden>
+          <span class="l-en">Next stop</span><span class="l-zh">下一站</span> <span aria-hidden="true">→</span>
         </button>
       </p>
     </div>
@@ -339,17 +347,17 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
         <section data-block={b.code} class="rm-block">
           <h3 class="rm-title"><span class="l-en">{b.en}</span><span class="l-zh">{b.zh}</span></h3>
           <p class="rm-sub">
-            <span class="l-en">{plural(b.papers.length, "paper")}{b.nDb > 0 && b.code !== "GLOBAL" ? ` · ${plural(b.nDb, "database")}` : ""}</span>
-            <span class="l-zh">{b.papers.length} 篇論文{b.nDb > 0 && b.code !== "GLOBAL" ? ` · ${b.nDb} 個資料庫` : ""}</span>
+            <span class="l-en"><span class="rm-num" data-n={b.papers.length}>{b.papers.length}</span> {b.papers.length === 1 ? "paper" : "papers"}{b.nDb > 0 && b.code !== "GLOBAL" && <> · <span class="rm-num" data-n={b.nDb}>{b.nDb}</span> {b.nDb === 1 ? "database" : "databases"}</>}</span>
+            <span class="l-zh"><span class="rm-num" data-n={b.papers.length}>{b.papers.length}</span> 篇論文{b.nDb > 0 && b.code !== "GLOBAL" && <> · <span class="rm-num" data-n={b.nDb}>{b.nDb}</span> 個資料庫</>}</span>
           </p>
 
           <h4 class="rm-h"><span class="l-en">Data sources, by papers</span><span class="l-zh">資料來源（依論文數）</span></h4>
           <div class="rm-bars">
-            {b.entries.map((e) => (
-              <div class="rm-bar-row" title={`${e.en} (${DB_KINDS[e.kind].en})`}>
+            {b.entries.map((e, j) => (
+              <div class="rm-bar-row" title={`${e.en} (${DB_KINDS[e.kind].en})`} style={`--j:${j}`}>
                 <span class="rm-bar-name">{e.short} <span class="rm-bar-kind"><span class="l-en">{DB_KIND_TAGS[e.kind].en}</span><span class="l-zh">{DB_KIND_TAGS[e.kind].zh}</span></span></span>
                 <span class="rm-bar-track"><span class="rm-bar" style={`width:${((e.papers.length / maxBar) * 100).toFixed(1)}%`}></span></span>
-                <span class="rm-bar-n">{e.papers.length}</span>
+                <span class="rm-bar-n"><span class="rm-num" data-n={e.papers.length}>{e.papers.length}</span></span>
               </div>
             ))}
           </div>
@@ -544,6 +552,8 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .rm-focus button { margin-left: 0.4rem; font-weight: 600; color: var(--color-brand-700); text-decoration: underline; text-underline-offset: 2px; }
   .pm.is-dim { opacity: 0.22; }
   .rm-block + .rm-block { margin-top: 2rem; }
+  /* With the script one block shows at a time; the gap is only for the no-script list. */
+  .is-live .rm-block + .rm-block { margin-top: 0; }
   .rm-title { font-size: 1.25rem; font-weight: 800; color: var(--ink); line-height: 1.25; }
   .rm-sub { margin-top: 0.15rem; font-size: 0.8125rem; color: var(--ink-3); }
   .rm-h { margin-top: 1.1rem; margin-bottom: 0.5rem; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
@@ -622,14 +632,19 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .m-flow { fill: none; stroke: var(--color-brand-900); stroke-linecap: round; stroke-dasharray: 0.01px var(--gap); opacity: 0; pointer-events: none; }
   .m-pulse { fill: none; stroke: var(--color-brand-700); stroke-width: 2.5; opacity: 0; pointer-events: none; transform-box: fill-box; transform-origin: center; }
 
-  .rm-tourbar { margin-top: 0.6rem; display: flex; justify-content: flex-end; }
+  .rm-tourbar { margin-top: 0.6rem; display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap; }
+  .rm-view { position: relative; }
+  .rm-view.is-zoomed { overflow: hidden; }
+  .rm-wide { transform-origin: 0 0; }
+  .rm-touring .rm-wide { will-change: transform; }
   .rm-tour { display: inline-flex; align-items: center; gap: 0.45rem; min-height: 2rem; padding: 0.2rem 0.7rem; border-radius: 9999px; border: 1px solid var(--rule); background: #fff; font-size: 0.75rem; font-weight: 600; color: var(--ink-2); }
   .rm-tour[hidden] { display: none; }
   .rm-tour:hover { border-color: var(--g-500); color: var(--color-brand-700); }
   .rm-tour:focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
   /* Icon: a play triangle when stopped, two bars when touring. */
   .rm-tour-icon { width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent currentColor; }
-  .rm-tour[aria-pressed="true"] .rm-tour-icon { width: 8px; height: 10px; border-width: 0 3px; border-color: currentColor; }
+  .rm-tour[data-state="playing"] .rm-tour-icon { width: 8px; height: 10px; border-width: 0 3px; border-color: currentColor; }
+  .rm-tour[data-tour-next] { color: var(--ink-3); }
 
   @media (prefers-reduced-motion: no-preference) {
     /* Before the block is first seen. Only set by the script, so a page
@@ -645,6 +660,23 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     .rm-done .m-flow.is-on.is-rev { animation-direction: reverse; }
     .m-node.is-on .m-pulse { animation: rm-pulse 2.4s ease-out infinite; }
   }
+  /* Tour: panel steps cross-fade in every case; the rest is motion only. */
+  .rm-block.is-enter { animation: rm-fade 0.35s ease-out both; }
+  @media (prefers-reduced-motion: no-preference) {
+    .m-node { transition: opacity 0.4s ease; }
+    .m-arc { transition: opacity 0.4s ease; }
+    .rm-block.is-enter { animation: rm-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+    .rm-block.is-enter .rm-bar { transform-origin: left center; animation: rm-grow 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(0.12s + var(--j, 0) * 0.07s); }
+    .m-node.is-arrive .m-bubble { transform-box: fill-box; transform-origin: center; animation: rm-arrive 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+    .m-node.is-arrive .m-halo { stroke: var(--g-500); }
+    .m-node.is-reached .m-bubble { transform-box: fill-box; transform-origin: center; animation: rm-ping 0.6s ease-out; }
+    /* While arcs draw, the running dots wait. */
+    .rm-drawing .m-flow { opacity: 0 !important; animation: none !important; }
+  }
+  @keyframes rm-rise { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes rm-grow { from { transform: scaleX(0); } }
+  @keyframes rm-arrive { 0% { transform: scale(0.55); } 60% { transform: scale(1.14); } 100% { transform: scale(1); } }
+  @keyframes rm-ping { 0% { transform: scale(1); } 40% { transform: scale(1.28); } 100% { transform: scale(1); } }
   @keyframes rm-fade { from { opacity: 0; } }
   @keyframes rm-pop { from { transform: scale(0.2); } }
   @keyframes rm-draw { from { stroke-dashoffset: 1; opacity: 0; } }
@@ -688,9 +720,30 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
       });
     }
     // Selection: the highlight plus the panel.
+    var motionOK = !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    var ready = false; // no panel animation for the selection made at load
+    function enter(block) {
+      if (!block || !ready) return;
+      block.classList.remove("is-enter");
+      void block.offsetWidth;
+      block.classList.add("is-enter");
+      if (!motionOK) return;
+      // Counts tick up from zero alongside the growing bars.
+      var nums = [].slice.call(block.querySelectorAll(".rm-num"));
+      var t0 = performance.now();
+      nums.forEach(function (n) { n.textContent = "0"; });
+      (function step(t) {
+        var p = Math.min(1, (t - t0) / 700), e = 1 - Math.pow(1 - p, 3);
+        nums.forEach(function (n) { n.textContent = String(Math.round(e * +n.getAttribute("data-n"))); });
+        if (p < 1) requestAnimationFrame(step);
+      })(t0);
+      setTimeout(function () { nums.forEach(function (n) { n.textContent = n.getAttribute("data-n"); }); }, 900);
+    }
     function select(code) {
+      var changed = code !== selected;
       selected = code;
       blocks.forEach(function (b) { b.hidden = b.getAttribute("data-block") !== code; });
+      if (changed) enter(root.querySelector('[data-block="' + code + '"]'));
       keys.forEach(function (k) { k.setAttribute("aria-pressed", String(k.getAttribute("data-pick") === code)); });
       paint(code);
     }
@@ -759,21 +812,33 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     if (ok) chosen(want); else select("TW");
 
     // ── Motion ──────────────────────────────────────────────────────────
-    // The drawing comes in the first time it is seen. After that, and until
-    // the visitor touches the block, the selection steps through the
-    // countries. A tour step is select(), never highlight(): the papers grid
-    // stays as the visitor left it.
+    // The drawing comes in the first time it is seen, then a tour runs once:
+    // from Taiwan, the hub, outward along the collaboration links (East Asia,
+    // Oceania, Europe, North America), ending on the TriNetX network with every
+    // arc drawn. At each stop the camera eases in on the place (wide map only),
+    // its bubble pulses, the panel's bars grow and counts tick up; the camera
+    // then eases back out while the place's arcs draw out to its partners, each
+    // partner lighting up as its arc arrives. Only transform, opacity and
+    // stroke-dashoffset move. Reduced motion: no camera, no drawing; the panel
+    // steps with a cross-fade, and the tour waits for the button.
     var stage = root.querySelector(".rm-stage");
     var panel = root.querySelector("[data-blocks]");
+    var view = root.querySelector(".rm-view");
+    var wide = root.querySelector(".rm-wide");
     var tourBtn = root.querySelector("[data-tour]");
-    var motionOK = !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    var STEP_MS = 4200;
-    var order = [];
-    nodes.forEach(function (n) {
-      var c = n.getAttribute("data-c");
-      if (!n.classList.contains("is-network") && order.indexOf(c) < 0) order.push(c);
+    var nextBtn = root.querySelector("[data-tour-next]");
+    var ORDER = ["TW", "KR", "HK", "AU", "NZ", "GB", "NL", "FI", "US", "GLOBAL"].filter(function (c) {
+      return nodes.some(function (n) { return n.getAttribute("data-c") === c; });
     });
-    var touring = false, taken = false, seen = false, inView = !("IntersectionObserver" in window), over = false, timer = null;
+    // How far the camera zooms on each place; Europe and East Asia need most.
+    var ZOOM = { TW: 2.1, KR: 2.4, HK: 2.4, AU: 1.9, NZ: 1.9, GB: 2.9, NL: 2.9, FI: 2.9, US: 1.9 };
+    var MOVE_MS = 1000, DRAW_MS = 1000, STAGGER = 70;
+    var state = "idle", stopIdx = -1, timers = [], seen = false;
+    var inView = !("IntersectionObserver" in window);
+
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+    function cameraOn() { return motionOK && wide && view && getComputedStyle(wide).display !== "none"; }
 
     // While the tour runs the panel keeps the height of its tallest block, so
     // the page below it does not jump at every step.
@@ -789,48 +854,156 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
       });
       panel.style.minHeight = max + "px";
     }
-    function tick() {
-      if (!touring || !inView || over || document.hidden) return;
-      select(order[(order.indexOf(selected) + 1) % order.length]);
+
+    // Camera: a CSS transform on the wide <svg>, which the browser composites.
+    function camTo(code) {
+      if (!cameraOn()) return;
+      var s = ZOOM[code], n = wide.querySelector('.m-node[data-c="' + code + '"]');
+      if (!s || !n) { camHome(); return; }
+      var m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(n.getAttribute("transform") || "");
+      if (!m) return;
+      var vb = wide.viewBox.baseVal, cw = view.clientWidth, ch = cw * vb.height / vb.width;
+      var px = (+m[1] - vb.x) * cw / vb.width, py = (+m[2] - vb.y) * ch / vb.height;
+      var tx = Math.min(0, Math.max(cw - s * cw, cw / 2 - s * px));
+      var ty = Math.min(0, Math.max(ch - s * ch, ch / 2 - s * py));
+      view.classList.add("is-zoomed");
+      wide.style.transition = "transform " + MOVE_MS + "ms cubic-bezier(0.65, 0, 0.35, 1)";
+      wide.style.transform = "translate(" + tx.toFixed(1) + "px, " + ty.toFixed(1) + "px) scale(" + s + ")";
     }
-    function setTour(on) {
-      touring = on;
-      reserve(on);
-      if (tourBtn) {
-        tourBtn.setAttribute("aria-pressed", String(on));
-        tourBtn.querySelector("[data-tour-on]").hidden = !on;
-        tourBtn.querySelector("[data-tour-off]").hidden = on;
+    function camHome() {
+      if (!wide || !wide.style.transform) return;
+      wide.style.transition = "transform " + MOVE_MS + "ms cubic-bezier(0.65, 0, 0.35, 1)";
+      wide.style.transform = "";
+      setTimeout(function () { if (!wide.style.transform) view.classList.remove("is-zoomed"); }, MOVE_MS + 50);
+    }
+
+    function resetArcs() {
+      arcs.forEach(function (a) { a.style.transition = ""; a.style.strokeDashoffset = ""; });
+      nodes.forEach(function (n) { n.classList.remove("is-arrive", "is-reached"); });
+    }
+    function arrive(code) {
+      nodes.forEach(function (n) {
+        if (n.getAttribute("data-c") !== code) return;
+        n.classList.remove("is-arrive");
+        void n.getBoundingClientRect();
+        n.classList.add("is-arrive");
+      });
+    }
+    function reach(svg, codes) {
+      codes.forEach(function (c) {
+        var n = svg.querySelector('.m-node[data-c="' + c + '"]');
+        if (!n) return;
+        n.classList.add("is-partner", "is-reached");
+        later(function () { n.classList.remove("is-reached"); }, 700);
+      });
+    }
+    // Arcs draw out from `code` (or every arc when code is null). pathLength is
+    // 1, so an offset of ±1 hides an arc and 0 shows it; the sign picks the end
+    // it grows from.
+    function drawOut(code, delay) {
+      var list = arcs.filter(function (a) { return !code || a.getAttribute("data-a") === code || a.getAttribute("data-b") === code; });
+      list.forEach(function (a) {
+        a.style.transition = "none";
+        a.style.strokeDashoffset = code && a.getAttribute("data-b") === code ? "-1" : "1";
+      });
+      void root.getBoundingClientRect();
+      var count = {};
+      list.forEach(function (a) {
+        var svg = a.ownerSVGElement, key = svg.getAttribute("class");
+        var i = (count[key] = (count[key] || 0) + 1) - 1;
+        var d = delay + i * STAGGER;
+        a.style.transition = "stroke-dashoffset " + DRAW_MS + "ms cubic-bezier(0.3, 0.1, 0.25, 1) " + d + "ms, opacity 0.4s ease";
+        a.style.strokeDashoffset = "0";
+        var to = !code ? [a.getAttribute("data-a"), a.getAttribute("data-b")]
+          : [a.getAttribute("data-a") === code ? a.getAttribute("data-b") : a.getAttribute("data-a")];
+        later(function () { reach(svg, to); }, d + DRAW_MS * 0.9);
+      });
+      return delay + (list.length / 2) * STAGGER + DRAW_MS;
+    }
+
+    function runStop(i) {
+      clearTimers();
+      stopIdx = i;
+      var code = ORDER[i];
+      if (!code) { endTour(); return; }
+      select(code);
+      if (!motionOK) { later(next, 3200); return; }
+      resetArcs();
+      root.classList.add("rm-drawing");
+      if (code === "GLOBAL") {
+        // Finale: back to the whole world and every arc drawn at once.
+        camHome();
+        arcs.forEach(function (a) { a.classList.add("is-on"); a.classList.remove("is-dim"); });
+        nodes.forEach(function (n) { n.classList.remove("is-dim", "is-partner"); });
+        arrive(code);
+        var done = drawOut(null, MOVE_MS * 0.5);
+        later(function () { root.classList.remove("rm-drawing"); }, done + 200);
+        later(next, done + 1600);
+        return;
       }
-      if (on && !timer) timer = setInterval(tick, STEP_MS);
-      if (!on && timer) { clearInterval(timer); timer = null; }
+      nodes.forEach(function (n) { n.classList.remove("is-partner"); }); // they light up as reached
+      var cam = cameraOn();
+      if (cam) camTo(code);
+      later(function () { arrive(code); }, cam ? MOVE_MS * 0.55 : 0);
+      var drawAt = cam ? MOVE_MS + 250 : 350;
+      if (cam) later(camHome, drawAt);
+      var finished = drawOut(code, drawAt);
+      later(function () { root.classList.remove("rm-drawing"); }, finished + 200);
+      later(next, Math.max(cam ? 3800 : 3200, finished + 700));
     }
-    if (tourBtn && order.length > 1) {
+    function next() {
+      // Off screen or in a background tab, the tour waits where it is.
+      if (!inView || document.hidden) { later(next, 600); return; }
+      runStop(stopIdx + 1);
+    }
+    function setState(st) {
+      state = st;
+      root.classList.toggle("rm-touring", st === "playing");
+      if (tourBtn) {
+        tourBtn.setAttribute("data-state", st);
+        [].slice.call(tourBtn.querySelectorAll("[data-when]")).forEach(function (el) { el.hidden = el.getAttribute("data-when") !== st; });
+      }
+      if (nextBtn) nextBtn.hidden = !(st === "playing" || st === "paused");
+    }
+    function settle() {
+      clearTimers();
+      camHome();
+      resetArcs();
+      root.classList.remove("rm-drawing");
+      paint(selected);
+    }
+    function startTour(from) { reserve(true); setState("playing"); runStop(from); }
+    function pauseTour() { settle(); setState("paused"); }
+    function endTour() { settle(); reserve(false); select("TW"); paint("TW"); setState("ended"); }
+    function stopTour() { settle(); reserve(false); setState("idle"); }
+
+    if (tourBtn && ORDER.length > 1) {
       tourBtn.hidden = false;
-      tourBtn.addEventListener("click", function () { taken = true; setTour(!touring); });
+      tourBtn.addEventListener("click", function () {
+        if (state === "playing") pauseTour();
+        else if (state === "paused") startTour(stopIdx);
+        else startTour(0);
+      });
     }
-    // Any press or key inside the block is the visitor taking over.
-    function takeOver(e) {
-      if (tourBtn && tourBtn.contains(e.target)) return;
-      taken = true;
-      if (touring) setTour(false);
-    }
-    root.addEventListener("pointerdown", takeOver, true);
-    root.addEventListener("keydown", function (e) { if (e.key !== "Tab" && e.key !== "Shift") takeOver(e); }, true);
-    // Reading is not interrupted: the tour waits while the mouse is on the
-    // drawing or the panel, or while focus is inside either.
-    [].slice.call(root.querySelectorAll(".rm-svg")).concat(panel ? [panel] : []).forEach(function (el) {
-      el.addEventListener("mouseenter", function () { over = true; });
-      el.addEventListener("mouseleave", function () { over = false; });
-      el.addEventListener("focusin", function () { over = true; });
-      el.addEventListener("focusout", function () { over = false; });
-    });
+    if (nextBtn) nextBtn.addEventListener("click", function () { setState("playing"); runStop(stopIdx + 1); });
+    // A press anywhere else in the block stops the tour; the press then does
+    // what it would have done, so a clicked country stays selected.
+    root.addEventListener("pointerdown", function (e) {
+      if (e.target.closest && e.target.closest(".rm-tourbar")) return;
+      if (state === "playing" || state === "paused") stopTour();
+    }, true);
+    root.addEventListener("keydown", function (e) {
+      if (e.key === "Tab" || e.key === "Shift" || (e.target.closest && e.target.closest(".rm-tourbar"))) return;
+      if (state === "playing" || state === "paused") stopTour();
+    }, true);
     var resizeT = null;
     window.addEventListener("resize", function () {
-      if (!touring) return;
+      if (state !== "playing") return;
       clearTimeout(resizeT);
-      resizeT = setTimeout(function () { if (touring) reserve(true); }, 200);
+      resizeT = setTimeout(function () { reserve(true); if (ORDER[stopIdx] && ORDER[stopIdx] !== "GLOBAL") camTo(ORDER[stopIdx]); }, 200);
     });
 
+    ready = true;
     if ("IntersectionObserver" in window && stage) {
       if (motionOK) root.classList.add("rm-pre");
       new IntersectionObserver(function (es) {
@@ -839,12 +1012,12 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
         seen = true;
         root.classList.remove("rm-pre");
         root.classList.add("rm-in");
-        // Let the entrance finish, then let the dots run and start touring,
-        // unless the visitor arrived on a chosen country (?c=) or has
-        // already taken over.
+        // Let the entrance finish, then hand over to the tour, unless the
+        // visitor arrived on a chosen country (?c=) or has already taken over.
         setTimeout(function () {
+          root.classList.remove("rm-in");
           root.classList.add("rm-done");
-          if (motionOK && !ok && !taken) setTour(true);
+          if (motionOK && !ok && state === "idle") startTour(0);
         }, motionOK ? 2600 : 0);
       }, { threshold: 0.3 }).observe(stage);
     } else {
