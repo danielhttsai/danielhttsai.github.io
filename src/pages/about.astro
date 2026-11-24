@@ -120,7 +120,7 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
         {education.map((e) => (
           <li class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 border-b border-slate-100 pb-4">
             <div>
-              <p class="font-semibold text-slate-900"><span class="l-en">{e.degree}</span><span class="l-zh">{e.degreeZh}</span></p>
+              <p class="font-bold text-slate-900"><span class="l-en">{e.degree}</span><span class="l-zh">{e.degreeZh}</span></p>
               <p class="text-sm text-slate-600"><span class="l-en">{e.org}</span><span class="l-zh">{e.orgZh}</span></p>
             </div>
             <span class="text-sm text-slate-500 shrink-0">{e.when}</span>
@@ -136,7 +136,7 @@ const selected = (SELECTED_DOIS.map((d) => byDoi.get(d)).filter(Boolean) as Pub[
         {experience.map((e) => (
           <li class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 border-b border-slate-100 pb-4">
             <div>
-              <p class="font-semibold text-slate-900"><span class="l-en">{e.role}</span><span class="l-zh">{e.roleZh}</span></p>
+              <p class="font-bold text-slate-900"><span class="l-en">{e.role}</span><span class="l-zh">{e.roleZh}</span></p>
               <p class="text-sm text-slate-600"><span class="l-en">{e.org}</span><span class="l-zh">{e.orgZh}</span></p>
             </div>
             <span class="text-sm text-slate-500 shrink-0"><span class="l-en">{e.when}</span><span class="l-zh">{e.when.replace("present", "迄今")}</span></span>
