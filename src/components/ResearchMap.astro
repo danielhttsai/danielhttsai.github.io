@@ -165,6 +165,22 @@ const arcs = (nodes: Node[]) => {
     return { a, b, n, d: `M${A.x},${A.y}Q${(mx + nx * k).toFixed(1)},${(my + ny * k).toFixed(1)} ${B.x},${B.y}` };
   });
 };
+// Routes the tour travels from Taiwan to places that share no paper with it.
+// Drawn dashed and faint during the tour only, so they claim no collaboration.
+const ghosts = (nodes: Node[]) => {
+  const linked = new Set(pairs.flatMap(({ a, b }) => (a === "TW" ? [b] : b === "TW" ? [a] : [])));
+  const fake = CORE.filter((c) => c !== "TW" && !linked.has(c)).map((c) => ({ a: "TW", b: c, n: 0 }));
+  const at = Object.fromEntries(nodes.map((n) => [n.code, n]));
+  return fake.map(({ a, b }) => {
+    const A = at[a], B = at[b];
+    const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+    const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy) || 1;
+    let nx = -dy / len, ny = dx / len;
+    if (ny > 0) { nx = -nx; ny = -ny; }
+    const k = 0.2 * len;
+    return { a, b, d: `M${A.x},${A.y}Q${(mx + nx * k).toFixed(1)},${(my + ny * k).toFixed(1)} ${B.x},${B.y}` };
+  });
+};
 const layouts = [
   { id: "wide", viewBox: `0 ${TOP} ${W} ${BOTTOM - TOP}`, nodes: wideNodes, arcs: arcs(wideNodes), map: true, font: 17, hit: 26, big: 18, stroke: 1.4, flow: 3.4, gap: 17 },
   { id: "narrow", viewBox: `0 0 ${NW} ${NH}`, nodes: narrowNodes, arcs: arcs(narrowNodes), map: false, font: 12, hit: 24, big: 13, stroke: 1, flow: 2.6, gap: 12 },
@@ -265,6 +281,11 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
               <path class="m-arc" d={a.d} data-a={a.a} data-b={a.b} pathLength="1" style={`--i:${i}`} stroke-width={(a.n === 1 ? 1.2 : a.n === 2 ? 2.6 : 4) * L.stroke} />
             ))}
           </g>
+          <g class="m-ghosts" aria-hidden="true">
+            {ghosts(L.nodes).map((g) => (
+              <path class="m-ghost" d={g.d} data-a={g.a} data-b={g.b} stroke-width={1.2 * L.stroke} />
+            ))}
+          </g>
           <g class="m-flows" aria-hidden="true">
             {L.arcs.map((a) => (
               <path class="m-flow" d={a.d} data-a={a.a} data-b={a.b} stroke-width={L.flow} style={`--gap:${L.gap}px`} />
@@ -305,17 +326,11 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
       ))}
       </div>
 
-      <!-- Legend. The two entries that are not places are buttons: they open
-           the same panel a bubble does. -->
-      <ul class="rm-legend">
-        <li><span class="k-bubble" aria-hidden="true"></span><span class="l-en">Country or region with person-level data; size and number = papers</span><span class="l-zh">有個人層級資料的國家或地區；大小與數字＝論文數</span></li>
-        <li><span class="k-arc" aria-hidden="true"></span><span class="l-en">Two countries in the same paper; thicker = more papers</span><span class="l-zh">同一篇論文用到的兩個國家；越粗＝篇數越多</span></li>
-        <li>
-          <button type="button" class="rm-key" data-pick="GLOBAL" aria-pressed="false">
-            <span class="k-network" aria-hidden="true"></span><span class="l-en">TriNetX global network, not split by country ({trinetxGlobal.length} papers)</span><span class="l-zh">TriNetX 全球網絡，不分國家（{trinetxGlobal.length} 篇）</span>
-          </button>
-        </li>
-      </ul>
+      <!-- Legend: only what the drawing cannot say for itself. -->
+      <p class="rm-legend">
+        <span class="rm-legend-item"><span class="k-bubble" aria-hidden="true"></span><span class="l-en">Bubble size and number = papers</span><span class="l-zh">圓的大小與數字＝論文數</span></span>
+        <span class="rm-legend-item"><span class="k-arc" aria-hidden="true"></span><span class="l-en">Line = a paper shared by two places</span><span class="l-zh">連線＝兩地共同的論文</span></span>
+      </p>
       {SALES_PAPERS.length > 0 && (
         <p class="rm-extra">
           <span class="l-en">Also: pharmaceutical sales data for 65 countries (IQVIA MIDAS), </span><span class="l-zh">另有：65 國藥品銷售資料（IQVIA MIDAS），</span>{SALES_PAPERS.map((p, i) => (
@@ -534,15 +549,10 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .m-node:focus-visible .m-halo { stroke: var(--color-accent-500); stroke-width: 3; }
   .m-node.is-dim { opacity: 0.45; }
 
-  .rm-legend { margin-top: 0.75rem; display: grid; gap: 0.35rem 1.25rem; font-size: 0.75rem; color: var(--ink-2); list-style: none; padding: 0; }
-  @media (min-width: 640px) { .rm-legend { grid-template-columns: 1fr 1fr; } }
-  .rm-legend li { display: flex; align-items: center; gap: 0.5rem; min-height: 1.5rem; }
-  .rm-key { display: flex; align-items: center; gap: 0.5rem; text-align: left; color: inherit; padding: 0.25rem 0.5rem; margin: -0.25rem -0.5rem; border-radius: 0.5rem; min-height: 2.25rem; }
-  .rm-key:hover, .rm-key[aria-pressed="true"] { background: var(--color-brand-50); color: var(--color-brand-700); }
-  .rm-key > span:not([aria-hidden]) { text-decoration: underline; text-decoration-color: #cbd5e1; text-underline-offset: 3px; }
-  .k-bubble, .k-network, .k-arc { flex: none; display: inline-block; }
+  .rm-legend { margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.35rem 1.25rem; font-size: 0.75rem; color: var(--ink-2); }
+  .rm-legend-item { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 1.5rem; }
+  .k-bubble, .k-arc { flex: none; display: inline-block; }
   .k-bubble { width: 14px; height: 14px; border-radius: 50%; background: var(--color-brand-600); }
-  .k-network { width: 14px; height: 14px; border-radius: 50%; border: 2px dashed var(--color-brand-600); }
   .k-arc { width: 18px; height: 9px; border-top: 2px solid var(--color-brand-500); border-radius: 50% 50% 0 0 / 100% 100% 0 0; margin-top: 5px; }
 
   .rm-block { min-width: 0; }
@@ -673,6 +683,16 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     /* While arcs draw, the running dots wait. */
     .rm-drawing .m-flow { opacity: 0 !important; animation: none !important; }
   }
+  /* Tour from Taiwan: only Taiwan's arcs at full strength; arcs between two
+     other places stay faint until the tour ends; places not yet reached are
+     dimmed and come up as the tour arrives. */
+  .m-ghost { display: none; fill: none; stroke: var(--g-500); stroke-dasharray: 5 5; stroke-linecap: round; }
+  .research-map.rm-tour-net .m-ghost { display: inline; opacity: 0; }
+  .research-map.rm-tour-net .m-arc { opacity: 0.06; }
+  .research-map.rm-tour-net .m-arc.is-tw { opacity: 0.95; stroke: var(--color-brand-700); }
+  .research-map.rm-tour-net .m-flow { opacity: 0 !important; animation: none !important; }
+  .research-map.rm-tour-net .m-node { opacity: 0.35; }
+  .research-map.rm-tour-net .m-node.is-visited { opacity: 1; }
   @keyframes rm-rise { from { opacity: 0; transform: translateY(6px); } }
   @keyframes rm-grow { from { transform: scaleX(0); } }
   @keyframes rm-arrive { 0% { transform: scale(0.55); } 60% { transform: scale(1.14); } 100% { transform: scale(1); } }
@@ -812,32 +832,51 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     if (ok) chosen(want); else select("TW");
 
     // ── Motion ──────────────────────────────────────────────────────────
-    // The drawing comes in the first time it is seen, then a tour runs once:
-    // from Taiwan, the hub, outward along the collaboration links (East Asia,
-    // Oceania, Europe, North America), ending on the TriNetX network with every
-    // arc drawn. At each stop the camera eases in on the place (wide map only),
-    // its bubble pulses, the panel's bars grow and counts tick up; the camera
-    // then eases back out while the place's arcs draw out to its partners, each
-    // partner lighting up as its arc arrives. Only transform, opacity and
-    // stroke-dashoffset move. Reduced motion: no camera, no drawing; the panel
-    // steps with a cross-fade, and the tour waits for the button.
+    // The drawing comes in the first time it is seen, then a tour runs once,
+    // always setting out from Taiwan (Daniel, 2026-11-24). It opens on Taiwan;
+    // at each stop one arc draws out from Taiwan to the next place while the
+    // camera (wide map only) travels along it, the place lights up as the arc
+    // arrives and the panel switches to it. Drawn arcs stay, so Taiwan's
+    // network builds up; arcs between two other places stay faint until the
+    // end. Finale: the camera pulls out to the world, then the TriNetX ring
+    // pulses. A place with no paper shared with Taiwan would get a dashed,
+    // faint route instead of an arc. Only transform, opacity and
+    // stroke-dashoffset change. Reduced motion: no camera and no drawing; the
+    // panel steps with a cross-fade, and the tour waits for the button.
     var stage = root.querySelector(".rm-stage");
     var panel = root.querySelector("[data-blocks]");
     var view = root.querySelector(".rm-view");
     var wide = root.querySelector(".rm-wide");
     var tourBtn = root.querySelector("[data-tour]");
     var nextBtn = root.querySelector("[data-tour-next]");
-    var ORDER = ["TW", "KR", "HK", "AU", "NZ", "GB", "NL", "FI", "US", "GLOBAL"].filter(function (c) {
-      return nodes.some(function (n) { return n.getAttribute("data-c") === c; });
-    });
-    // How far the camera zooms on each place; Europe and East Asia need most.
-    var ZOOM = { TW: 2.1, KR: 2.4, HK: 2.4, AU: 1.9, NZ: 1.9, GB: 2.9, NL: 2.9, FI: 2.9, US: 1.9 };
-    var MOVE_MS = 1000, DRAW_MS = 1000, STAGGER = 70;
-    var state = "idle", stopIdx = -1, timers = [], seen = false;
+    var ghosts = [].slice.call(root.querySelectorAll(".m-ghost"));
+    var has = function (c) { return nodes.some(function (n) { return n.getAttribute("data-c") === c; }); };
+    // Outward from Taiwan: nearest first, then Oceania, Europe (by distance), North America.
+    var ORDER = ["TW", "HK", "KR", "AU", "NZ", "FI", "NL", "GB", "US"].filter(has);
+    var Z_HOME = 2.2;
+    var ZOOM = { HK: 2.6, KR: 2.4, AU: 1.8, NZ: 1.8, FI: 2.3, NL: 2.6, GB: 2.6, US: 1.6 };
+    var BACK_MS = 750, FLY_MS = 1700, HOLD_MS = 1300;
+    var state = "idle", stopIdx = -1, timers = [], frames = [], seen = false;
     var inView = !("IntersectionObserver" in window);
+    var cam = null; // { x, y, z } in the wide map's own units
+
+    arcs.forEach(function (a) {
+      if (a.getAttribute("data-a") === "TW" || a.getAttribute("data-b") === "TW") a.classList.add("is-tw");
+    });
 
     function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
-    function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+    function clearTimers() { timers.forEach(clearTimeout); timers = []; frames.forEach(cancelAnimationFrame); frames = []; }
+    function animate(ms, onFrame, onDone) {
+      var t0 = null;
+      function step(t) {
+        if (t0 === null) t0 = t;
+        var p = Math.min(1, (t - t0) / ms);
+        onFrame(p);
+        if (p < 1) frames.push(requestAnimationFrame(step)); else if (onDone) onDone();
+      }
+      frames.push(requestAnimationFrame(step));
+    }
+    var ease = function (p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; };
     function cameraOn() { return motionOK && wide && view && getComputedStyle(wide).display !== "none"; }
 
     // While the tour runs the panel keeps the height of its tallest block, so
@@ -855,101 +894,120 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
       panel.style.minHeight = max + "px";
     }
 
-    // Camera: a CSS transform on the wide <svg>, which the browser composites.
-    function camTo(code) {
-      if (!cameraOn()) return;
-      var s = ZOOM[code], n = wide.querySelector('.m-node[data-c="' + code + '"]');
-      if (!s || !n) { camHome(); return; }
-      var m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(n.getAttribute("transform") || "");
-      if (!m) return;
-      var vb = wide.viewBox.baseVal, cw = view.clientWidth, ch = cw * vb.height / vb.width;
-      var px = (+m[1] - vb.x) * cw / vb.width, py = (+m[2] - vb.y) * ch / vb.height;
-      var tx = Math.min(0, Math.max(cw - s * cw, cw / 2 - s * px));
-      var ty = Math.min(0, Math.max(ch - s * ch, ch / 2 - s * py));
-      view.classList.add("is-zoomed");
-      wide.style.transition = "transform " + MOVE_MS + "ms cubic-bezier(0.65, 0, 0.35, 1)";
-      wide.style.transform = "translate(" + tx.toFixed(1) + "px, " + ty.toFixed(1) + "px) scale(" + s + ")";
+    // Camera: a CSS transform on the wide <svg>, set frame by frame.
+    function vb() { return wide.viewBox.baseVal; }
+    function world() { var v = vb(); return { x: v.x + v.width / 2, y: v.y + v.height / 2, z: 1 }; }
+    function posOf(code) {
+      var n = wide.querySelector('.m-node[data-c="' + code + '"]');
+      var m = n && /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(n.getAttribute("transform") || "");
+      return m ? { x: +m[1], y: +m[2] } : world();
     }
-    function camHome() {
-      if (!wide || !wide.style.transform) return;
-      wide.style.transition = "transform " + MOVE_MS + "ms cubic-bezier(0.65, 0, 0.35, 1)";
-      wide.style.transform = "";
-      setTimeout(function () { if (!wide.style.transform) view.classList.remove("is-zoomed"); }, MOVE_MS + 50);
+    function setCam(c) {
+      cam = c;
+      var v = vb(), cw = view.clientWidth, ch = cw * v.height / v.width, z = Math.max(1, c.z);
+      var px = (c.x - v.x) * cw / v.width, py = (c.y - v.y) * ch / v.height;
+      var tx = Math.min(0, Math.max(cw - z * cw, cw / 2 - z * px));
+      var ty = Math.min(0, Math.max(ch - z * ch, ch / 2 - z * py));
+      wide.style.transition = "none";
+      if (z <= 1.001) { wide.style.transform = ""; view.classList.remove("is-zoomed"); return; }
+      view.classList.add("is-zoomed");
+      wide.style.transform = "translate(" + tx.toFixed(1) + "px, " + ty.toFixed(1) + "px) scale(" + z.toFixed(3) + ")";
+    }
+    function camTo(target, ms, done) {
+      if (!cameraOn()) { if (done) done(); return; }
+      var from = cam || world();
+      animate(ms, function (p) {
+        var e = ease(p);
+        setCam({ x: from.x + (target.x - from.x) * e, y: from.y + (target.y - from.y) * e, z: from.z + (target.z - from.z) * e });
+      }, done);
     }
 
-    function resetArcs() {
-      arcs.forEach(function (a) { a.style.transition = ""; a.style.strokeDashoffset = ""; });
-      nodes.forEach(function (n) { n.classList.remove("is-arrive", "is-reached"); });
+    // Arcs. pathLength is 1, so an offset of ±1 hides an arc and 0 shows it;
+    // the sign makes it grow from Taiwan's end.
+    function fromTW(a) { return a.getAttribute("data-a") === "TW" ? 1 : -1; }
+    function partnerOf(a) { return a.getAttribute("data-a") === "TW" ? a.getAttribute("data-b") : a.getAttribute("data-a"); }
+    function routesTo(code) {
+      return arcs.concat(ghosts).filter(function (a) { return a.classList.contains("is-tw") || a.classList.contains("m-ghost") ? partnerOf(a) === code : false; });
+    }
+    // Lay out the network as it stands before stop i: Taiwan's arcs to places
+    // already visited are drawn, the rest hidden.
+    function layout(i) {
+      var done = ORDER.slice(1, i);
+      arcs.forEach(function (a) {
+        a.style.transition = "";
+        if (!a.classList.contains("is-tw")) { a.style.strokeDashoffset = ""; return; }
+        a.style.strokeDashoffset = done.indexOf(partnerOf(a)) >= 0 ? "0" : String(fromTW(a));
+      });
+      ghosts.forEach(function (g) { g.style.opacity = done.indexOf(partnerOf(g)) >= 0 ? "0.5" : "0"; });
+      nodes.forEach(function (n) {
+        var c = n.getAttribute("data-c");
+        n.classList.toggle("is-visited", c === "TW" || done.indexOf(c) >= 0);
+        n.classList.remove("is-arrive", "is-reached");
+      });
     }
     function arrive(code) {
       nodes.forEach(function (n) {
         if (n.getAttribute("data-c") !== code) return;
+        n.classList.add("is-visited");
         n.classList.remove("is-arrive");
         void n.getBoundingClientRect();
         n.classList.add("is-arrive");
       });
     }
-    function reach(svg, codes) {
-      codes.forEach(function (c) {
-        var n = svg.querySelector('.m-node[data-c="' + c + '"]');
-        if (!n) return;
-        n.classList.add("is-partner", "is-reached");
-        later(function () { n.classList.remove("is-reached"); }, 700);
-      });
-    }
-    // Arcs draw out from `code` (or every arc when code is null). pathLength is
-    // 1, so an offset of ±1 hides an arc and 0 shows it; the sign picks the end
-    // it grows from.
-    function drawOut(code, delay) {
-      var list = arcs.filter(function (a) { return !code || a.getAttribute("data-a") === code || a.getAttribute("data-b") === code; });
-      list.forEach(function (a) {
-        a.style.transition = "none";
-        a.style.strokeDashoffset = code && a.getAttribute("data-b") === code ? "-1" : "1";
-      });
-      void root.getBoundingClientRect();
-      var count = {};
-      list.forEach(function (a) {
-        var svg = a.ownerSVGElement, key = svg.getAttribute("class");
-        var i = (count[key] = (count[key] || 0) + 1) - 1;
-        var d = delay + i * STAGGER;
-        a.style.transition = "stroke-dashoffset " + DRAW_MS + "ms cubic-bezier(0.3, 0.1, 0.25, 1) " + d + "ms, opacity 0.4s ease";
-        a.style.strokeDashoffset = "0";
-        var to = !code ? [a.getAttribute("data-a"), a.getAttribute("data-b")]
-          : [a.getAttribute("data-a") === code ? a.getAttribute("data-b") : a.getAttribute("data-a")];
-        later(function () { reach(svg, to); }, d + DRAW_MS * 0.9);
-      });
-      return delay + (list.length / 2) * STAGGER + DRAW_MS;
+
+    // One leg: Taiwan → code. The arc grows and the camera rides its tip.
+    function fly(code) {
+      var list = routesTo(code);
+      var guide = wide && list.filter(function (a) { return a.ownerSVGElement === wide; })[0];
+      var len = guide ? guide.getTotalLength() : 0;
+      var home = posOf("TW"), dest = posOf(code);
+      var v = wide ? vb() : null;
+      var dist = v ? Math.hypot(dest.x - home.x, dest.y - home.y) / v.width : 0;
+      var dip = Math.min(1.3, dist * 2.4); // long legs pull out mid-flight
+      var zEnd = ZOOM[code] || 2, switched = false;
+      animate(FLY_MS, function (p) {
+        var e = ease(p);
+        list.forEach(function (a) {
+          if (a.classList.contains("m-ghost")) a.style.opacity = String(0.5 * e);
+          else a.style.strokeDashoffset = String(fromTW(a) * (1 - e));
+        });
+        if (cameraOn() && guide) {
+          var u = fromTW(guide) > 0 ? e : 1 - e;
+          var pt = guide.getPointAtLength(u * len);
+          setCam({ x: pt.x, y: pt.y, z: Z_HOME + (zEnd - Z_HOME) * e - dip * Math.sin(Math.PI * e) });
+        }
+        if (!switched && p >= 0.6) { switched = true; select(code); }
+      }, function () { arrive(code); });
     }
 
     function runStop(i) {
       clearTimers();
       stopIdx = i;
+      if (i >= ORDER.length) { finale(); return; }
       var code = ORDER[i];
-      if (!code) { endTour(); return; }
-      select(code);
-      if (!motionOK) { later(next, 3200); return; }
-      resetArcs();
-      root.classList.add("rm-drawing");
-      if (code === "GLOBAL") {
-        // Finale: back to the whole world and every arc drawn at once.
-        camHome();
-        arcs.forEach(function (a) { a.classList.add("is-on"); a.classList.remove("is-dim"); });
-        nodes.forEach(function (n) { n.classList.remove("is-dim", "is-partner"); });
-        arrive(code);
-        var done = drawOut(null, MOVE_MS * 0.5);
-        later(function () { root.classList.remove("rm-drawing"); }, done + 200);
-        later(next, done + 1600);
+      if (!motionOK) { select(code); later(next, 3200); return; }
+      root.classList.add("rm-tour-net");
+      layout(i);
+      if (i === 0) {
+        select("TW");
+        camTo({ x: posOf("TW").x, y: posOf("TW").y, z: Z_HOME }, 1000);
+        later(function () { arrive("TW"); }, 500);
+        later(next, 2600);
         return;
       }
-      nodes.forEach(function (n) { n.classList.remove("is-partner"); }); // they light up as reached
-      var cam = cameraOn();
-      if (cam) camTo(code);
-      later(function () { arrive(code); }, cam ? MOVE_MS * 0.55 : 0);
-      var drawAt = cam ? MOVE_MS + 250 : 350;
-      if (cam) later(camHome, drawAt);
-      var finished = drawOut(code, drawAt);
-      later(function () { root.classList.remove("rm-drawing"); }, finished + 200);
-      later(next, Math.max(cam ? 3800 : 3200, finished + 700));
+      // Back to Taiwan first, then out along the new arc.
+      var back = cameraOn() && cam ? BACK_MS : 0;
+      if (back) camTo({ x: posOf("TW").x, y: posOf("TW").y, z: Z_HOME }, back);
+      later(function () { fly(code); }, back);
+      later(next, back + FLY_MS + HOLD_MS);
+    }
+    function finale() {
+      // Everything Taiwan reached, from far out; then the TriNetX ring.
+      if (!motionOK) { if (has("GLOBAL")) select("GLOBAL"); later(endTour, 3200); return; }
+      layout(ORDER.length);
+      camTo(world(), 1200);
+      if (has("GLOBAL")) later(function () { select("GLOBAL"); arrive("GLOBAL"); }, 1500);
+      later(endTour, 3900);
     }
     function next() {
       // Off screen or in a background tab, the tour waits where it is.
@@ -965,11 +1023,15 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
       }
       if (nextBtn) nextBtn.hidden = !(st === "playing" || st === "paused");
     }
+    // Back to the normal map: every arc at full strength, camera home.
     function settle() {
       clearTimers();
-      camHome();
-      resetArcs();
-      root.classList.remove("rm-drawing");
+      root.classList.remove("rm-tour-net");
+      arcs.forEach(function (a) { a.style.transition = ""; a.style.strokeDashoffset = ""; });
+      ghosts.forEach(function (g) { g.style.opacity = ""; });
+      nodes.forEach(function (n) { n.classList.remove("is-visited", "is-arrive", "is-reached"); });
+      if (cam && cameraOn()) camTo(world(), 900, function () { setCam(world()); cam = null; });
+      else if (wide) { cam = null; wide.style.transform = ""; if (view) view.classList.remove("is-zoomed"); }
       paint(selected);
     }
     function startTour(from) { reserve(true); setState("playing"); runStop(from); }
@@ -1000,7 +1062,7 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     window.addEventListener("resize", function () {
       if (state !== "playing") return;
       clearTimeout(resizeT);
-      resizeT = setTimeout(function () { reserve(true); if (ORDER[stopIdx] && ORDER[stopIdx] !== "GLOBAL") camTo(ORDER[stopIdx]); }, 200);
+      resizeT = setTimeout(function () { reserve(true); if (cam && cameraOn()) setCam(cam); }, 200);
     });
 
     ready = true;
