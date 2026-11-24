@@ -96,8 +96,11 @@ export const PHENOTYPES: Record<"indications" | "exposures" | "outcomes", Phenot
     { name: "Pregnancy", area: "preg", codes: "ICD-10 O*, Z3*; supplemented by pregnancy-specific dispensings", notes: "Consider trimester-specific look-back." },
     {
       name: "Lennox-Gastaut Syndrome (LGS)", area: "neuro",
-      codes: "Confirmed LGS: ICD-10 G40.812 OR ≥1 rufinamide dispensing. Probable LGS: age ≤10 y at index with ≥3 antiseizure medications co-prescribed, plus ICD-9/10 developmental-delay codes.",
-      notes: "NHIRD-CGRD two-stage validation: NHIRD identification adjusted by CGRD EMR-confirmed PPV. 2018 PPV-adjusted prevalence ~2.4 / 100,000 overall (0.6 adult, 10.2 paediatric).",
+      // Codes as the validation paper states them (Yang, Tsai et al 2025,
+      // PMID 41000540, Methods). This used to say G40.812, one code of the
+      // G40.81x family the paper actually validated.
+      codes: "Base cohort: ≥2 epilepsy diagnosis records (ICD-10 G40/G41; ICD-9-CM 345). Confirmed LGS: \"ICD-10 LGS codes (all G40.81 codes) or at least one rufinamide prescription\", i.e. any G40.81x. Probable LGS: \"aged 10 years or younger when simultaneously prescribed 3 or more antiseizure medications (ASMs), with any ICD-9/10 code for developmental delay\" and no codes for other etiologies (code lists in the paper's Supplementary Tables 1-2).",
+      notes: "NHIRD-CGRD two-stage validation: NHIRD identification adjusted by CGRD EMR-confirmed PPV (68% confirmed, 42% probable). 2018 PPV-adjusted prevalence ~2.4 / 100,000 overall (0.6 adult, 10.2 paediatric).",
     },
     // Added 2026-11-24 with their validation studies; no general code set of their own yet:
     // the algorithms are in the studies.
