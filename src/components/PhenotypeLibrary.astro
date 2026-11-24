@@ -4,8 +4,29 @@
 //   data-open-library data-category="exposures|outcomes|indications"
 //   data-target-name="fieldName" [data-target-codes="…"] [data-target-def="…"] [data-also-fill="…"]
 // Clicking a library row fills the named form fields on the page.
-import { PHENOTYPES } from "../data/phenotypes";
+import { PHENOTYPES, tierOf, bestPpv } from "../data/phenotypes";
+import type { Phenotype } from "../data/phenotypes";
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// The full studies live on /tools/phenotypes; the modal carries a short form
+// of them (tier, how many studies, the best PPV and where it was measured) and
+// links each row to its full entry there.
+const slugOf = (name: string) =>
+  name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const short = (p: Phenotype) => {
+  const b = bestPpv(p);
+  const hi = p.highImpact?.[0];
+  return {
+    name: p.name, codes: p.codes, definition: p.definition, notes: p.notes,
+    slug: slugOf(p.name), tier: tierOf(p), n: p.validations?.length ?? 0,
+    best: b ? { ppv: Math.round(b.ppv * 10) / 10, db: b.study.db, country: b.study.country } : null,
+    hi: hi ? { journal: hi.journal, jif: hi.jif } : null,
+    // what the search box looks through, beyond what the row shows
+    hay: [...(p.validations ?? []), ...(p.highImpact ?? [])].map((v) => [v.db, v.country, v.icd10, v.icd9, v.short].join(" ")).join(" "),
+  };
+};
+const LIB = Object.fromEntries(Object.entries(PHENOTYPES).map(([k, items]) => [k, items.map(short)]));
+const FULL = `${base}/tools/phenotypes`;
 ---
 
 <div data-library-modal class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-start justify-center p-4 sm:p-8 overflow-y-auto">
@@ -24,15 +45,15 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
            them per row cost this list half its visible height — measured at 2-3
            entries visible instead of 5-6 — for no per-row information. -->
       <p class="text-[11px] text-slate-500 leading-relaxed mb-3">
-        Each entry says whether a study has measured how well it identifies what it names. Nothing here is added to
-        your protocol's reference list — this builder has no mechanism for that, so cite what you use yourself.
+        Each entry says whether a study has measured how well it identifies what it names, with the best PPV found and
+        where; "Full entry" opens every study. Nothing here is added to your protocol's reference list, so cite what you use yourself.
       </p>
       <div data-library-list class="space-y-2 max-h-[55vh] overflow-y-auto"></div>
     </div>
   </div>
 </div>
 
-<script is:inline define:vars={{ PHENOTYPES }}>
+<script is:inline define:vars={{ PHENOTYPES: LIB, FULL }}>
   (function () {
     const modal = document.querySelector("[data-library-modal]");
     if (!modal) return;
@@ -61,44 +82,46 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       close();
     }
 
-    // Whether a definition has ever been measured against a chart review is the
-    // single most important thing about it, so it goes on the row, at the moment
-    // of picking, in BOTH directions — the ACNU builder's library already works
-    // this way and this one served five builders without it. Thirty of the
-    // forty-nine entries carry no validation study (every drug class and twelve
-    // of the thirteen indications), so a silent row is a claim of validation the
-    // data does not support.
+    // Whether a definition has ever been measured against a reference standard
+    // is the single most important thing about it, so every row says which of
+    // three tiers it is in, at the moment of picking: validated (with how many
+    // studies and the best PPV found, and where), used in a high-impact study
+    // (not validated), or no published source. The studies themselves are on
+    // the library page; each row links to its full entry there. The link sits
+    // beside the row's button, not inside it, so a click on it never fills the
+    // form.
     //
-    // The wording deliberately does NOT promise the citation reaches the
-    // protocol: unlike the ACNU library, nothing here has a pickedCitations
-    // mechanism, so a picked entry's validation study is shown and then the user
-    // is on their own. Saying so is the honest version.
+    // The wording deliberately does NOT promise a citation reaches the
+    // protocol: nothing here has a pickedCitations mechanism, so cite what you
+    // use yourself.
+    function tierLine(it) {
+      if (it.tier === "validated") {
+        const n = it.n + (it.n === 1 ? " study" : " studies");
+        const best = it.best ? " · best PPV " + it.best.ppv + "% (" + esc(it.best.db) + ", " + esc(it.best.country) + ")" : "";
+        return '<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validated</span> · ' + n + best + "</p>";
+      }
+      if (it.tier === "highImpact") {
+        return '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Used in a high-impact study (not validated)</span>' + (it.hi ? " · " + esc(it.hi.journal) + ", JIF " + esc(it.hi.jif) : "") + "</p>";
+      }
+      return '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No published source</span> · Nothing here measures how accurately this definition finds what it names. Check or validate it before use.</p>';
+    }
     function renderList() {
       const items = PHENOTYPES[current.category] || [];
-      const isDrug = current.category === "exposures";
       const q = (searchEl.value || "").toLowerCase().trim();
-      // Search what is on screen. `notes` and `validation` were not searched
-      // before because they were not rendered either; now that they are, a user
-      // who can read "Cheng" or "T1DM" on a row and gets no match when they type
-      // it would be reading a search box that lies about its own list.
-      const shown = items.filter((it) => !q || (it.name + " " + (it.codes || "") + " " + (it.definition || "") + " " + (it.notes || "") + " " + (it.validation || "")).toLowerCase().includes(q));
+      // Search what is on screen, plus the databases, codes and first authors
+      // of the studies behind each row.
+      const shown = items.filter((it) => !q || (it.name + " " + (it.codes || "") + " " + (it.definition || "") + " " + (it.notes || "") + " " + it.hay).toLowerCase().includes(q));
       listEl.innerHTML = shown.map((it) =>
-        '<button type="button" data-idx="' + items.indexOf(it) + '" class="block w-full text-left rounded-lg border border-slate-200 p-3 hover:border-brand-400 hover:bg-brand-50/40 transition">' +
+        '<div class="relative">' +
+        '<button type="button" data-idx="' + items.indexOf(it) + '" class="block w-full text-left rounded-lg border border-slate-200 p-3 pr-24 hover:border-brand-400 hover:bg-brand-50/40 transition">' +
         '<p class="text-sm font-semibold text-slate-900">' + esc(it.name) + "</p>" +
         (it.codes ? '<p class="text-xs text-slate-500 mt-0.5">' + esc(it.codes) + "</p>" : "") +
         (it.definition ? '<p class="text-xs text-slate-600 mt-1">' + esc(it.definition) + "</p>" : "") +
         (it.notes && it.notes.trim() ? '<p class="text-[11px] text-slate-500 mt-1 leading-relaxed">' + esc(it.notes) + "</p>" : "") +
-        // The drug wording used to say "a drug class" and warn about "a
-        // wildcard's membership". Four of the eighteen exposures are a single
-        // fully-specified ATC code with no wildcard at all — Metformin is
-        // A10BA02 — so that sentence described a property the row in front of
-        // the reader did not have. It is now keyed on the codes themselves.
-        (it.validation
-          ? '<p class="mt-1.5 text-[11px] text-emerald-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">Validation study</span> · ' + esc(it.validation) + '</p>'
-          : (isDrug
-            ? '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · A dispensing identifies the drug directly, so there is no predictive value to quote — but check these codes against your site’s formulary' + ((it.codes || "").includes("*") ? ' and ATC version: what the wildcard covers changes as the index is revised.' : '.') + '</p>'
-            : '<p class="mt-1.5 text-[11px] text-amber-800 leading-relaxed"><span class="font-bold uppercase tracking-widest text-[9px]">No validation study</span> · Nothing here measures how accurately this definition finds the condition in routine data. Cite your own source for its predictive value.</p>')) +
-        "</button>"
+        tierLine(it) +
+        "</button>" +
+        '<a href="' + FULL + "#" + it.slug + '" target="_blank" rel="noopener" class="absolute top-3 right-3 text-[11px] font-semibold text-brand-700 hover:underline">Full entry ↗</a>' +
+        "</div>"
       ).join("") || '<p class="text-sm text-slate-400 p-3">No matches.</p>';
       listEl.querySelectorAll("[data-idx]").forEach((b) => b.addEventListener("click", () => fillFrom(items[+b.dataset.idx])));
     }
