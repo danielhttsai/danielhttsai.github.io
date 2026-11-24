@@ -8,6 +8,7 @@ import social from "../data/social-posts.json";
 import { MAP_STATS } from "../data/research";
 import { toolsList } from "../data/tools";
 import StatsBar from "../components/StatsBar.astro";
+import { tagsOf } from "../data/research";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -113,6 +114,23 @@ const tools = [
     tagZh: "臨床工具",
   },
 ];
+
+// Sublabels for the numbers band, from the same data as the numbers.
+// Publications: the span of years; "peer-reviewed" only if nothing in the list
+// is a letter or reply. Citations and h-index: where the numbers come from and
+// when the weekly sync last changed them (metrics.json).
+const pubYears = (pubs as Pub[]).map((p) => +p.year).filter(Boolean);
+const span = `${Math.min(...pubYears)}–${Math.max(...pubYears)}`;
+const allReviewed = (pubs as Pub[]).every((p) => !tagsOf(p.doi).design.includes("commentary"));
+const pubsSub = allReviewed
+  ? { en: `peer-reviewed, ${span}`, zh: `同儕審查，${span}` }
+  : { en: `in journals, ${span}`, zh: `期刊發表，${span}` };
+const [mY, mM] = String((metrics as any).updated || "").split("-").map(Number);
+const mWhen = mY && mM
+  ? { en: new Date(Date.UTC(mY, mM - 1, 1)).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }), zh: `${mY}/${mM}` }
+  : null;
+const mSource = (metrics as any).source || "Google Scholar";
+const metricsSub = mWhen ? { en: `${mSource}, ${mWhen.en}`, zh: `${mSource}，${mWhen.zh}` } : { en: mSource, zh: mSource };
 ---
 
 <BaseLayout
@@ -204,11 +222,11 @@ const tools = [
 
   <!-- Numbers: all computed from the site's own data at build time -->
   <StatsBar stats={[
-    { value: pubs.length, label: { en: "Publications", zh: "論文" } },
-    { value: Number(metrics.citations), label: { en: "Citations", zh: "被引用次數" } },
-    { value: Number(metrics.hIndex), label: { en: "h-index", zh: "h-index" } },
-    { value: MAP_STATS.countries, label: { en: "Countries and regions", zh: "國家與地區" }, sublabel: { en: "with person-level data", zh: "個人層級資料" } },
-    { value: toolsList(base).length, label: { en: "Open tools", zh: "開放工具" }, sublabel: { en: "free, in the browser", zh: "免費、在瀏覽器執行" } },
+    { value: pubs.length, label: { en: "Publications", zh: "論文" }, sublabel: pubsSub },
+    { value: Number(metrics.citations), label: { en: "Citations", zh: "被引用次數" }, sublabel: metricsSub },
+    { value: Number(metrics.hIndex), label: { en: "h-index", zh: "h-index" }, sublabel: metricsSub },
+    { value: MAP_STATS.countries, label: { en: "Countries and regions", zh: "國家與地區" }, sublabel: { en: "in multi-country studies", zh: "跨國研究涵蓋" } },
+    { value: toolsList(base).length, label: { en: "Open tools", zh: "開放工具" }, sublabel: { en: "for real-world evidence studies", zh: "real-world evidence 研究用" } },
   ]} />
 
   <!-- Skills -->
