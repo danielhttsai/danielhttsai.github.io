@@ -6,6 +6,8 @@ import pubs from "../data/publications.json";
 import metrics from "../data/metrics.json";
 import social from "../data/social-posts.json";
 import { MAP_STATS } from "../data/research";
+import { toolsList } from "../data/tools";
+import StatsBar from "../components/StatsBar.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -200,21 +202,14 @@ const tools = [
     </section>
   )}
 
-  <!-- Quick stats -->
-  <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
-    <div class="grid grid-cols-3 gap-4">
-      {[
-        { n: String(pubs.length), l: "Publications", zh: "論文" },
-        { n: String(metrics.citations), l: "Citations", zh: "被引用次數" },
-        { n: String(metrics.hIndex), l: "h-index", zh: "h-index" },
-      ].map((s) => (
-        <div class="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
-          <div class="text-3xl font-extrabold text-brand-700">{s.n}</div>
-          <div class="text-xs uppercase tracking-wide text-slate-500 mt-1"><span class="l-en">{s.l}</span><span class="l-zh">{s.zh}</span></div>
-        </div>
-      ))}
-    </div>
-  </section>
+  <!-- Numbers: all computed from the site's own data at build time -->
+  <StatsBar stats={[
+    { value: pubs.length, label: { en: "Publications", zh: "論文" } },
+    { value: Number(metrics.citations), label: { en: "Citations", zh: "被引用次數" } },
+    { value: Number(metrics.hIndex), label: { en: "h-index", zh: "h-index" } },
+    { value: MAP_STATS.countries, label: { en: "Countries and regions", zh: "國家與地區" }, sublabel: { en: "with person-level data", zh: "個人層級資料" } },
+    { value: toolsList(base).length, label: { en: "Open tools", zh: "開放工具" }, sublabel: { en: "free, in the browser", zh: "免費、在瀏覽器執行" } },
+  ]} />
 
   <!-- Skills -->
   <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">

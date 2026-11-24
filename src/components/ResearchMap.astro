@@ -165,22 +165,6 @@ const arcs = (nodes: Node[]) => {
     return { a, b, n, d: `M${A.x},${A.y}Q${(mx + nx * k).toFixed(1)},${(my + ny * k).toFixed(1)} ${B.x},${B.y}` };
   });
 };
-// Routes the tour travels from Taiwan to places that share no paper with it.
-// Drawn dashed and faint during the tour only, so they claim no collaboration.
-const ghosts = (nodes: Node[]) => {
-  const linked = new Set(pairs.flatMap(({ a, b }) => (a === "TW" ? [b] : b === "TW" ? [a] : [])));
-  const fake = CORE.filter((c) => c !== "TW" && !linked.has(c)).map((c) => ({ a: "TW", b: c, n: 0 }));
-  const at = Object.fromEntries(nodes.map((n) => [n.code, n]));
-  return fake.map(({ a, b }) => {
-    const A = at[a], B = at[b];
-    const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
-    const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy) || 1;
-    let nx = -dy / len, ny = dx / len;
-    if (ny > 0) { nx = -nx; ny = -ny; }
-    const k = 0.2 * len;
-    return { a, b, d: `M${A.x},${A.y}Q${(mx + nx * k).toFixed(1)},${(my + ny * k).toFixed(1)} ${B.x},${B.y}` };
-  });
-};
 const layouts = [
   { id: "wide", viewBox: `0 ${TOP} ${W} ${BOTTOM - TOP}`, nodes: wideNodes, arcs: arcs(wideNodes), map: true, font: 17, hit: 26, big: 18, stroke: 1.4, flow: 3.4, gap: 17 },
   { id: "narrow", viewBox: `0 0 ${NW} ${NH}`, nodes: narrowNodes, arcs: arcs(narrowNodes), map: false, font: 12, hit: 24, big: 13, stroke: 1, flow: 2.6, gap: 12 },
@@ -256,8 +240,6 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
 <div class="research-map" data-research-map>
   <div class="rm-grid">
     <div class="rm-stage">
-      <!-- The view clips the drawing only while the tour's camera is zoomed in. -->
-      <div class="rm-view">
       {layouts.map((L) => (
         <svg
           viewBox={L.viewBox}
@@ -279,11 +261,6 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
           <g class="m-arcs" aria-hidden="true">
             {L.arcs.map((a, i) => (
               <path class="m-arc" d={a.d} data-a={a.a} data-b={a.b} pathLength="1" style={`--i:${i}`} stroke-width={(a.n === 1 ? 1.2 : a.n === 2 ? 2.6 : 4) * L.stroke} />
-            ))}
-          </g>
-          <g class="m-ghosts" aria-hidden="true">
-            {ghosts(L.nodes).map((g) => (
-              <path class="m-ghost" d={g.d} data-a={g.a} data-b={g.b} stroke-width={1.2 * L.stroke} />
             ))}
           </g>
           <g class="m-flows" aria-hidden="true">
@@ -324,7 +301,6 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
           })}
         </svg>
       ))}
-      </div>
 
       <!-- Legend: only what the drawing cannot say for itself. -->
       <p class="rm-legend">
@@ -339,19 +315,8 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
         </p>
       )}
 
-      <!-- Tour control. Hidden until the script is running; it is the pause
-           the moving selection needs. -->
-      <p class="rm-tourbar">
-        <button type="button" class="rm-tour" data-tour data-state="idle" hidden>
-          <span class="rm-tour-icon" aria-hidden="true"></span>
-          <span data-when="idle"><span class="l-en">Play the tour</span><span class="l-zh">播放導覽</span></span>
-          <span data-when="playing" hidden><span class="l-en">Pause</span><span class="l-zh">暫停</span></span>
-          <span data-when="paused" hidden><span class="l-en">Resume</span><span class="l-zh">繼續</span></span>
-          <span data-when="ended" hidden><span class="l-en">Play again</span><span class="l-zh">再播一次</span></span>
-        </button>
-        <button type="button" class="rm-tour" data-tour-next hidden>
-          <span class="l-en">Next stop</span><span class="l-zh">下一站</span> <span aria-hidden="true">→</span>
-        </button>
+      <p class="rm-replaybar">
+        <button type="button" class="rm-replay" data-replay hidden><span class="l-en">Replay</span><span class="l-zh">重播</span></button>
       </p>
     </div>
 
@@ -642,64 +607,38 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
   .m-flow { fill: none; stroke: var(--color-brand-900); stroke-linecap: round; stroke-dasharray: 0.01px var(--gap); opacity: 0; pointer-events: none; }
   .m-pulse { fill: none; stroke: var(--color-brand-700); stroke-width: 2.5; opacity: 0; pointer-events: none; transform-box: fill-box; transform-origin: center; }
 
-  .rm-tourbar { margin-top: 0.6rem; display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap; }
-  .rm-view { position: relative; }
-  .rm-view.is-zoomed { overflow: hidden; }
-  .rm-wide { transform-origin: 0 0; }
-  .rm-touring .rm-wide { will-change: transform; }
-  .rm-tour { display: inline-flex; align-items: center; gap: 0.45rem; min-height: 2rem; padding: 0.2rem 0.7rem; border-radius: 9999px; border: 1px solid var(--rule); background: #fff; font-size: 0.75rem; font-weight: 600; color: var(--ink-2); }
-  .rm-tour[hidden] { display: none; }
-  .rm-tour:hover { border-color: var(--g-500); color: var(--color-brand-700); }
-  .rm-tour:focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
-  /* Icon: a play triangle when stopped, two bars when touring. */
-  .rm-tour-icon { width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent currentColor; }
-  .rm-tour[data-state="playing"] .rm-tour-icon { width: 8px; height: 10px; border-width: 0 3px; border-color: currentColor; }
-  .rm-tour[data-tour-next] { color: var(--ink-3); }
+  .rm-replaybar { margin-top: 0.4rem; display: flex; justify-content: flex-end; min-height: 1.5rem; }
+  .rm-replay { font-size: 0.75rem; font-weight: 600; color: var(--ink-3); text-decoration: underline; text-decoration-color: #cbd5e1; text-underline-offset: 2px; padding: 0.15rem 0.25rem; }
+  .rm-replay:hover { color: var(--color-brand-700); }
+  .rm-replay[hidden] { display: none; }
 
-  @media (prefers-reduced-motion: no-preference) {
-    /* Before the block is first seen. Only set by the script, so a page
-       without the script shows the finished drawing. */
-    .rm-pre .m-land, .rm-pre .m-core, .rm-pre .m-node, .rm-pre .m-arc { opacity: 0; }
-    .rm-in .m-land, .rm-in .m-core { animation: rm-fade 0.7s ease-out both; }
-    .rm-in .m-node { animation: rm-fade 0.35s ease-out both; animation-delay: calc(0.3s + var(--i, 0) * 0.09s); }
-    .rm-in .m-bubble { transform-box: fill-box; transform-origin: center; animation: rm-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: calc(0.3s + var(--i, 0) * 0.09s); }
-    .rm-in .m-arc { animation: rm-draw 0.9s ease-out both; animation-delay: calc(1.2s + var(--i, 0) * 0.05s); }
-    /* Dots wait for the entrance (rm-done): until then their arcs and the
-       bubbles they run to are not on screen yet. */
-    .rm-done .m-flow.is-on { opacity: 0.85; animation: rm-flow 0.9s linear infinite; }
-    .rm-done .m-flow.is-on.is-rev { animation-direction: reverse; }
-    .m-node.is-on .m-pulse { animation: rm-pulse 2.4s ease-out infinite; }
-  }
-  /* Tour: panel steps cross-fade in every case; the rest is motion only. */
+  /* Panel: a new place cross-fades in, in every case; bars grow with motion. */
   .rm-block.is-enter { animation: rm-fade 0.35s ease-out both; }
   @media (prefers-reduced-motion: no-preference) {
-    .m-node { transition: opacity 0.4s ease; }
-    .m-arc { transition: opacity 0.4s ease; }
     .rm-block.is-enter { animation: rm-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
     .rm-block.is-enter .rm-bar { transform-origin: left center; animation: rm-grow 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(0.12s + var(--j, 0) * 0.07s); }
-    .m-node.is-arrive .m-bubble { transform-box: fill-box; transform-origin: center; animation: rm-arrive 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-    .m-node.is-arrive .m-halo { stroke: var(--g-500); }
-    .m-node.is-reached .m-bubble { transform-box: fill-box; transform-origin: center; animation: rm-ping 0.6s ease-out; }
-    /* While arcs draw, the running dots wait. */
-    .rm-drawing .m-flow { opacity: 0 !important; animation: none !important; }
+    /* After the opening sequence: dots run along the selected place's arcs
+       and a ring breathes around it. */
+    .rm-done .m-flow.is-on { opacity: 0.85; animation: rm-flow 0.9s linear infinite; }
+    .rm-done .m-flow.is-on.is-rev { animation-direction: reverse; }
+    .rm-done .m-node.is-on .m-pulse { animation: rm-pulse 2.4s ease-out infinite; }
+
+    /* Opening sequence (set only by the script, so no script = finished map):
+       Taiwan appears, its arcs draw out to its partners one after another,
+       each partner fading in as its arc lands, then the TriNetX ring, then
+       the remaining arcs. */
+    .research-map.rm-seq .m-node { opacity: 0; transition: opacity 0.35s ease-out; }
+    .research-map.rm-seq .m-node.is-shown { opacity: 1; }
+    .research-map.rm-seq .m-arc { opacity: 0; transition: opacity 0.5s ease-out; }
+    .research-map.rm-seq .m-arc.is-tw { opacity: 0.9; }
+    .research-map.rm-seq .m-flow { opacity: 0 !important; animation: none !important; }
+    .m-node.is-first .m-bubble { transform-box: fill-box; transform-origin: center; animation: rm-soft 0.7s ease-out both; }
+    .m-arc { transition: opacity 0.5s ease-out; }
   }
-  /* Tour from Taiwan: only Taiwan's arcs at full strength; arcs between two
-     other places stay faint until the tour ends; places not yet reached are
-     dimmed and come up as the tour arrives. */
-  .m-ghost { display: none; fill: none; stroke: var(--g-500); stroke-dasharray: 5 5; stroke-linecap: round; }
-  .research-map.rm-tour-net .m-ghost { display: inline; opacity: 0; }
-  .research-map.rm-tour-net .m-arc { opacity: 0.06; }
-  .research-map.rm-tour-net .m-arc.is-tw { opacity: 0.95; stroke: var(--color-brand-700); }
-  .research-map.rm-tour-net .m-flow { opacity: 0 !important; animation: none !important; }
-  .research-map.rm-tour-net .m-node { opacity: 0.35; }
-  .research-map.rm-tour-net .m-node.is-visited { opacity: 1; }
   @keyframes rm-rise { from { opacity: 0; transform: translateY(6px); } }
   @keyframes rm-grow { from { transform: scaleX(0); } }
-  @keyframes rm-arrive { 0% { transform: scale(0.55); } 60% { transform: scale(1.14); } 100% { transform: scale(1); } }
-  @keyframes rm-ping { 0% { transform: scale(1); } 40% { transform: scale(1.28); } 100% { transform: scale(1); } }
+  @keyframes rm-soft { 0% { transform: scale(0.85); } 60% { transform: scale(1.06); } 100% { transform: scale(1); } }
   @keyframes rm-fade { from { opacity: 0; } }
-  @keyframes rm-pop { from { transform: scale(0.2); } }
-  @keyframes rm-draw { from { stroke-dashoffset: 1; opacity: 0; } }
   @keyframes rm-flow { to { stroke-dashoffset: calc(var(--gap) * -1); } }
   @keyframes rm-pulse { 0% { transform: scale(1); opacity: 0.6; } 75%, 100% { transform: scale(1.85); opacity: 0; } }
 </style>
@@ -832,256 +771,88 @@ const famCount = (b: Block, fam: string) => b.papers.filter(({ p }) => familyOf(
     if (ok) chosen(want); else select("TW");
 
     // ── Motion ──────────────────────────────────────────────────────────
-    // The drawing comes in the first time it is seen, then a tour runs once,
-    // always setting out from Taiwan (Daniel, 2026-11-24). It opens on Taiwan;
-    // at each stop one arc draws out from Taiwan to the next place while the
-    // camera (wide map only) travels along it, the place lights up as the arc
-    // arrives and the panel switches to it. Drawn arcs stay, so Taiwan's
-    // network builds up; arcs between two other places stay faint until the
-    // end. Finale: the camera pulls out to the world, then the TriNetX ring
-    // pulses. A place with no paper shared with Taiwan would get a dashed,
-    // faint route instead of an arc. Only transform, opacity and
-    // stroke-dashoffset change. Reduced motion: no camera and no drawing; the
-    // panel steps with a cross-fade, and the tour waits for the button.
+    // One short opening sequence the first time the map scrolls into view
+    // (Daniel, 2026-11-24: no camera, no tour). Taiwan appears with one subtle
+    // pulse; its arcs draw out to its partners, overlapping, nearest first,
+    // each partner fading in as its arc lands; then the TriNetX ring; then the
+    // arcs between other places. About 4.5 s. The panel stays on Taiwan. A
+    // click anywhere in the block finishes it at once. Afterwards a small
+    // "Replay" link plays it again. Reduced motion: no sequence.
     var stage = root.querySelector(".rm-stage");
-    var panel = root.querySelector("[data-blocks]");
-    var view = root.querySelector(".rm-view");
-    var wide = root.querySelector(".rm-wide");
-    var tourBtn = root.querySelector("[data-tour]");
-    var nextBtn = root.querySelector("[data-tour-next]");
-    var ghosts = [].slice.call(root.querySelectorAll(".m-ghost"));
-    var has = function (c) { return nodes.some(function (n) { return n.getAttribute("data-c") === c; }); };
-    // Outward from Taiwan: nearest first, then Oceania, Europe (by distance), North America.
-    var ORDER = ["TW", "HK", "KR", "AU", "NZ", "FI", "NL", "GB", "US"].filter(has);
-    var Z_HOME = 2.2;
-    var ZOOM = { HK: 2.6, KR: 2.4, AU: 1.8, NZ: 1.8, FI: 2.3, NL: 2.6, GB: 2.6, US: 1.6 };
-    var BACK_MS = 750, FLY_MS = 1700, HOLD_MS = 1300;
-    var state = "idle", stopIdx = -1, timers = [], frames = [], seen = false;
-    var inView = !("IntersectionObserver" in window);
-    var cam = null; // { x, y, z } in the wide map's own units
-
-    arcs.forEach(function (a) {
-      if (a.getAttribute("data-a") === "TW" || a.getAttribute("data-b") === "TW") a.classList.add("is-tw");
-    });
-
+    var replayBtn = root.querySelector("[data-replay]");
+    var ORDER = ["HK", "KR", "AU", "NZ", "FI", "NL", "GB", "US"];
+    var START = 450, DRAW = 650, STEP = 280;
+    var timers = [], running = false, seen = false;
     function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
-    function clearTimers() { timers.forEach(clearTimeout); timers = []; frames.forEach(cancelAnimationFrame); frames = []; }
-    function animate(ms, onFrame, onDone) {
-      var t0 = null;
-      function step(t) {
-        if (t0 === null) t0 = t;
-        var p = Math.min(1, (t - t0) / ms);
-        onFrame(p);
-        if (p < 1) frames.push(requestAnimationFrame(step)); else if (onDone) onDone();
-      }
-      frames.push(requestAnimationFrame(step));
-    }
-    var ease = function (p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; };
-    function cameraOn() { return motionOK && wide && view && getComputedStyle(wide).display !== "none"; }
 
-    // While the tour runs the panel keeps the height of its tallest block, so
-    // the page below it does not jump at every step.
-    function reserve(on) {
-      if (!panel) return;
-      if (!on) { panel.style.minHeight = ""; return; }
-      var max = 0;
-      blocks.forEach(function (b) {
-        var was = b.hidden;
-        b.hidden = false;
-        max = Math.max(max, b.offsetHeight);
-        b.hidden = was;
+    var twArcs = arcs.filter(function (a) { return a.getAttribute("data-a") === "TW" || a.getAttribute("data-b") === "TW"; });
+    twArcs.forEach(function (a) { a.classList.add("is-tw"); });
+    var partner = function (a) { return a.getAttribute("data-a") === "TW" ? a.getAttribute("data-b") : a.getAttribute("data-a"); };
+    // pathLength is 1: an offset of ±1 hides an arc; the sign makes it grow from Taiwan.
+    var hideOffset = function (a) { return a.getAttribute("data-a") === "TW" ? "1" : "-1"; };
+    function nodesOf(code) { return nodes.filter(function (n) { return n.getAttribute("data-c") === code; }); }
+
+    function prime() {
+      // The state before the sequence: nothing drawn, no bubble shown.
+      root.classList.add("rm-seq");
+      root.classList.remove("rm-done");
+      nodes.forEach(function (n) { n.classList.remove("is-shown", "is-first"); });
+      twArcs.forEach(function (a) { a.style.transition = "none"; a.style.strokeDashoffset = hideOffset(a); });
+    }
+    function finish() {
+      timers.forEach(clearTimeout); timers = [];
+      root.classList.remove("rm-seq");
+      root.classList.add("rm-done");
+      twArcs.forEach(function (a) { a.style.transition = ""; a.style.strokeDashoffset = ""; });
+      nodes.forEach(function (n) { n.classList.remove("is-shown"); });
+      running = false;
+      if (replayBtn) replayBtn.hidden = !motionOK;
+    }
+    function play() {
+      prime();
+      void root.getBoundingClientRect();
+      running = true;
+      if (replayBtn) replayBtn.hidden = true;
+      select("TW");
+      nodesOf("TW").forEach(function (n) { n.classList.add("is-shown", "is-first"); });
+      // Taiwan's arcs, nearest partner first, in both drawings.
+      var order = ORDER.filter(function (c) { return twArcs.some(function (a) { return partner(a) === c; }); });
+      order.forEach(function (c, k) {
+        var at = START + k * STEP;
+        later(function () {
+          twArcs.forEach(function (a) {
+            if (partner(a) !== c) return;
+            a.style.transition = "stroke-dashoffset " + DRAW + "ms cubic-bezier(0.3, 0.1, 0.25, 1)";
+            a.style.strokeDashoffset = "0";
+          });
+        }, at);
+        later(function () { nodesOf(c).forEach(function (n) { n.classList.add("is-shown"); }); }, at + DRAW - 80);
       });
-      panel.style.minHeight = max + "px";
+      var lastLand = START + (order.length - 1) * STEP + DRAW;
+      later(function () { nodesOf("GLOBAL").forEach(function (n) { n.classList.add("is-shown"); }); }, lastLand + 150);
+      // Then the arcs between other places fade in and the sequence ends.
+      later(finish, lastLand + 150 + 900);
     }
 
-    // Camera: a CSS transform on the wide <svg>, set frame by frame.
-    function vb() { return wide.viewBox.baseVal; }
-    function world() { var v = vb(); return { x: v.x + v.width / 2, y: v.y + v.height / 2, z: 1 }; }
-    function posOf(code) {
-      var n = wide.querySelector('.m-node[data-c="' + code + '"]');
-      var m = n && /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(n.getAttribute("transform") || "");
-      return m ? { x: +m[1], y: +m[2] } : world();
-    }
-    function setCam(c) {
-      cam = c;
-      var v = vb(), cw = view.clientWidth, ch = cw * v.height / v.width, z = Math.max(1, c.z);
-      var px = (c.x - v.x) * cw / v.width, py = (c.y - v.y) * ch / v.height;
-      var tx = Math.min(0, Math.max(cw - z * cw, cw / 2 - z * px));
-      var ty = Math.min(0, Math.max(ch - z * ch, ch / 2 - z * py));
-      wide.style.transition = "none";
-      if (z <= 1.001) { wide.style.transform = ""; view.classList.remove("is-zoomed"); return; }
-      view.classList.add("is-zoomed");
-      wide.style.transform = "translate(" + tx.toFixed(1) + "px, " + ty.toFixed(1) + "px) scale(" + z.toFixed(3) + ")";
-    }
-    function camTo(target, ms, done) {
-      if (!cameraOn()) { if (done) done(); return; }
-      var from = cam || world();
-      animate(ms, function (p) {
-        var e = ease(p);
-        setCam({ x: from.x + (target.x - from.x) * e, y: from.y + (target.y - from.y) * e, z: from.z + (target.z - from.z) * e });
-      }, done);
-    }
-
-    // Arcs. pathLength is 1, so an offset of ±1 hides an arc and 0 shows it;
-    // the sign makes it grow from Taiwan's end.
-    function fromTW(a) { return a.getAttribute("data-a") === "TW" ? 1 : -1; }
-    function partnerOf(a) { return a.getAttribute("data-a") === "TW" ? a.getAttribute("data-b") : a.getAttribute("data-a"); }
-    function routesTo(code) {
-      return arcs.concat(ghosts).filter(function (a) { return a.classList.contains("is-tw") || a.classList.contains("m-ghost") ? partnerOf(a) === code : false; });
-    }
-    // Lay out the network as it stands before stop i: Taiwan's arcs to places
-    // already visited are drawn, the rest hidden.
-    function layout(i) {
-      var done = ORDER.slice(1, i);
-      arcs.forEach(function (a) {
-        a.style.transition = "";
-        if (!a.classList.contains("is-tw")) { a.style.strokeDashoffset = ""; return; }
-        a.style.strokeDashoffset = done.indexOf(partnerOf(a)) >= 0 ? "0" : String(fromTW(a));
-      });
-      ghosts.forEach(function (g) { g.style.opacity = done.indexOf(partnerOf(g)) >= 0 ? "0.5" : "0"; });
-      nodes.forEach(function (n) {
-        var c = n.getAttribute("data-c");
-        n.classList.toggle("is-visited", c === "TW" || done.indexOf(c) >= 0);
-        n.classList.remove("is-arrive", "is-reached");
-      });
-    }
-    function arrive(code) {
-      nodes.forEach(function (n) {
-        if (n.getAttribute("data-c") !== code) return;
-        n.classList.add("is-visited");
-        n.classList.remove("is-arrive");
-        void n.getBoundingClientRect();
-        n.classList.add("is-arrive");
-      });
-    }
-
-    // One leg: Taiwan → code. The arc grows and the camera rides its tip.
-    function fly(code) {
-      var list = routesTo(code);
-      var guide = wide && list.filter(function (a) { return a.ownerSVGElement === wide; })[0];
-      var len = guide ? guide.getTotalLength() : 0;
-      var home = posOf("TW"), dest = posOf(code);
-      var v = wide ? vb() : null;
-      var dist = v ? Math.hypot(dest.x - home.x, dest.y - home.y) / v.width : 0;
-      var dip = Math.min(1.3, dist * 2.4); // long legs pull out mid-flight
-      var zEnd = ZOOM[code] || 2, switched = false;
-      animate(FLY_MS, function (p) {
-        var e = ease(p);
-        list.forEach(function (a) {
-          if (a.classList.contains("m-ghost")) a.style.opacity = String(0.5 * e);
-          else a.style.strokeDashoffset = String(fromTW(a) * (1 - e));
-        });
-        if (cameraOn() && guide) {
-          var u = fromTW(guide) > 0 ? e : 1 - e;
-          var pt = guide.getPointAtLength(u * len);
-          setCam({ x: pt.x, y: pt.y, z: Z_HOME + (zEnd - Z_HOME) * e - dip * Math.sin(Math.PI * e) });
-        }
-        if (!switched && p >= 0.6) { switched = true; select(code); }
-      }, function () { arrive(code); });
-    }
-
-    function runStop(i) {
-      clearTimers();
-      stopIdx = i;
-      if (i >= ORDER.length) { finale(); return; }
-      var code = ORDER[i];
-      if (!motionOK) { select(code); later(next, 3200); return; }
-      root.classList.add("rm-tour-net");
-      layout(i);
-      if (i === 0) {
-        select("TW");
-        camTo({ x: posOf("TW").x, y: posOf("TW").y, z: Z_HOME }, 1000);
-        later(function () { arrive("TW"); }, 500);
-        later(next, 2600);
-        return;
-      }
-      // Back to Taiwan first, then out along the new arc.
-      var back = cameraOn() && cam ? BACK_MS : 0;
-      if (back) camTo({ x: posOf("TW").x, y: posOf("TW").y, z: Z_HOME }, back);
-      later(function () { fly(code); }, back);
-      later(next, back + FLY_MS + HOLD_MS);
-    }
-    function finale() {
-      // Everything Taiwan reached, from far out; then the TriNetX ring.
-      if (!motionOK) { if (has("GLOBAL")) select("GLOBAL"); later(endTour, 3200); return; }
-      layout(ORDER.length);
-      camTo(world(), 1200);
-      if (has("GLOBAL")) later(function () { select("GLOBAL"); arrive("GLOBAL"); }, 1500);
-      later(endTour, 3900);
-    }
-    function next() {
-      // Off screen or in a background tab, the tour waits where it is.
-      if (!inView || document.hidden) { later(next, 600); return; }
-      runStop(stopIdx + 1);
-    }
-    function setState(st) {
-      state = st;
-      root.classList.toggle("rm-touring", st === "playing");
-      if (tourBtn) {
-        tourBtn.setAttribute("data-state", st);
-        [].slice.call(tourBtn.querySelectorAll("[data-when]")).forEach(function (el) { el.hidden = el.getAttribute("data-when") !== st; });
-      }
-      if (nextBtn) nextBtn.hidden = !(st === "playing" || st === "paused");
-    }
-    // Back to the normal map: every arc at full strength, camera home.
-    function settle() {
-      clearTimers();
-      root.classList.remove("rm-tour-net");
-      arcs.forEach(function (a) { a.style.transition = ""; a.style.strokeDashoffset = ""; });
-      ghosts.forEach(function (g) { g.style.opacity = ""; });
-      nodes.forEach(function (n) { n.classList.remove("is-visited", "is-arrive", "is-reached"); });
-      if (cam && cameraOn()) camTo(world(), 900, function () { setCam(world()); cam = null; });
-      else if (wide) { cam = null; wide.style.transform = ""; if (view) view.classList.remove("is-zoomed"); }
-      paint(selected);
-    }
-    function startTour(from) { reserve(true); setState("playing"); runStop(from); }
-    function pauseTour() { settle(); setState("paused"); }
-    function endTour() { settle(); reserve(false); select("TW"); paint("TW"); setState("ended"); }
-    function stopTour() { settle(); reserve(false); setState("idle"); }
-
-    if (tourBtn && ORDER.length > 1) {
-      tourBtn.hidden = false;
-      tourBtn.addEventListener("click", function () {
-        if (state === "playing") pauseTour();
-        else if (state === "paused") startTour(stopIdx);
-        else startTour(0);
-      });
-    }
-    if (nextBtn) nextBtn.addEventListener("click", function () { setState("playing"); runStop(stopIdx + 1); });
-    // A press anywhere else in the block stops the tour; the press then does
-    // what it would have done, so a clicked country stays selected.
+    if (replayBtn) replayBtn.addEventListener("click", function () { play(); });
+    // Clicking anywhere else in the block ends the sequence with everything drawn.
     root.addEventListener("pointerdown", function (e) {
-      if (e.target.closest && e.target.closest(".rm-tourbar")) return;
-      if (state === "playing" || state === "paused") stopTour();
+      if (!running || (e.target.closest && e.target.closest(".rm-replaybar"))) return;
+      finish();
     }, true);
     root.addEventListener("keydown", function (e) {
-      if (e.key === "Tab" || e.key === "Shift" || (e.target.closest && e.target.closest(".rm-tourbar"))) return;
-      if (state === "playing" || state === "paused") stopTour();
+      if (running && e.key !== "Tab" && e.key !== "Shift") finish();
     }, true);
-    var resizeT = null;
-    window.addEventListener("resize", function () {
-      if (state !== "playing") return;
-      clearTimeout(resizeT);
-      resizeT = setTimeout(function () { reserve(true); if (cam && cameraOn()) setCam(cam); }, 200);
-    });
 
     ready = true;
-    if ("IntersectionObserver" in window && stage) {
-      if (motionOK) root.classList.add("rm-pre");
-      new IntersectionObserver(function (es) {
-        inView = es[es.length - 1].isIntersecting;
-        if (!inView || seen) return;
+    if (motionOK && !ok && "IntersectionObserver" in window && stage) {
+      prime();
+      new IntersectionObserver(function (es, io) {
+        if (!es[es.length - 1].isIntersecting || seen) return;
         seen = true;
-        root.classList.remove("rm-pre");
-        root.classList.add("rm-in");
-        // Let the entrance finish, then hand over to the tour, unless the
-        // visitor arrived on a chosen country (?c=) or has already taken over.
-        setTimeout(function () {
-          root.classList.remove("rm-in");
-          root.classList.add("rm-done");
-          if (motionOK && !ok && state === "idle") startTour(0);
-        }, motionOK ? 2600 : 0);
-      }, { threshold: 0.3 }).observe(stage);
+        io.disconnect();
+        play();
+      }, { threshold: 0.35 }).observe(stage);
     } else {
       root.classList.add("rm-done");
     }

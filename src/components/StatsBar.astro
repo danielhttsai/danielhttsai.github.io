@@ -1,0 +1,61 @@
+---
+// At-a-glance numbers, in the manner of the AsPEN site's stats bar: a white
+// band with hairline rules, large tabular numbers that count up once when the
+// band first scrolls into view. Values are computed by the parent from the
+// site's own data at build time; nothing here is typed in by hand.
+interface Stat {
+  value: number;
+  label: { en: string; zh: string };
+  sublabel?: { en: string; zh: string };
+}
+interface Props { stats: Stat[] }
+const { stats } = Astro.props;
+---
+
+<section class="bg-white border-y border-slate-200">
+  <div
+    class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-8 gap-x-4 text-center"
+    data-stats-bar
+  >
+    {stats.map((s) => (
+      <div>
+        <p class="text-4xl sm:text-5xl font-bold text-brand-700 leading-none tabular-nums">
+          <span data-stat-value={s.value}>{s.value}</span>
+        </p>
+        <p class:list={["mt-3 text-sm font-semibold text-slate-800 tracking-wide", s.label.en !== "h-index" && "uppercase"]}><span class="l-en">{s.label.en}</span><span class="l-zh">{s.label.zh}</span></p>
+        {s.sublabel && <p class="mt-1 text-xs text-slate-500"><span class="l-en">{s.sublabel.en}</span><span class="l-zh">{s.sublabel.zh}</span></p>}
+      </div>
+    ))}
+  </div>
+</section>
+
+<script is:inline>
+  (function () {
+    var bar = document.querySelector("[data-stats-bar]");
+    if (!bar || !("IntersectionObserver" in window)) return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var numbers = [].slice.call(bar.querySelectorAll("[data-stat-value]"));
+    // The final values are in the markup; the count-up only starts from zero
+    // once the band is about to be seen.
+    var played = false;
+    function animate() {
+      var start = performance.now(), duration = 1500;
+      var easeOut = function (t) { return 1 - Math.pow(1 - t, 3); };
+      function step(now) {
+        var t = Math.min(1, (now - start) / duration), e = easeOut(t);
+        numbers.forEach(function (el) { el.textContent = String(Math.round(Number(el.getAttribute("data-stat-value")) * e)); });
+        if (t < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting && !played) { played = true; io.disconnect(); animate(); }
+      });
+    }, { threshold: 0.35 });
+    // Only zero the numbers if the band is not already on screen.
+    var r = bar.getBoundingClientRect();
+    if (r.top > window.innerHeight || r.bottom < 0) numbers.forEach(function (el) { el.textContent = "0"; });
+    io.observe(bar);
+  })();
+</script>
