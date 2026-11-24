@@ -44,7 +44,7 @@ export interface HighImpactUse {
 }
 
 /** Clinical area, used to sub-group each section on the page. */
-export type Area = "cv" | "metab" | "renal" | "resp" | "neuro" | "cancer" | "gi" | "msk" | "inf" | "safety" | "preg" | "death" | "other"
+export type Area = "cv" | "metab" | "renal" | "resp" | "neuro" | "cancer" | "gi" | "msk" | "eye" | "inf" | "injury" | "safety" | "preg" | "death" | "other"
   | "glu" | "cvdrug" | "anticoag" | "psydrug" | "pain" | "general";
 
 export interface Phenotype {
@@ -67,7 +67,9 @@ export const AREAS: Record<Area, { en: string; zh: string }> = {
   cancer: { en: "Cancer", zh: "癌症" },
   gi: { en: "Digestive and liver", zh: "消化與肝臟" },
   msk: { en: "Bone, joint, skin and immune", zh: "骨骼、關節、皮膚與免疫" },
+  eye: { en: "Eye", zh: "眼科" },
   inf: { en: "Infection", zh: "感染" },
+  injury: { en: "Injury and poisoning", zh: "傷害與中毒" },
   safety: { en: "Drug safety", zh: "藥物安全" },
   preg: { en: "Pregnancy and birth", zh: "懷孕與出生" },
   death: { en: "Death", zh: "死亡" },
@@ -128,6 +130,11 @@ export const PHENOTYPES: Record<"indications" | "exposures" | "outcomes", Phenot
     { name: "Gestational diabetes", area: "preg" },
     { name: "Mother-infant linkage", area: "preg" },
     { name: "Smoking", area: "other" },
+    { name: "Atrial flutter", area: "cv" },
+    { name: "Insomnia / sleep disorders", area: "neuro" },
+    { name: "Glaucoma", area: "eye" },
+    { name: "Diabetic macular oedema", area: "eye" },
+    { name: "Age-related macular degeneration", area: "eye" },
   ],
   exposures: [
     { name: "Metformin", area: "glu", atc: ["A10BA02"], codes: "ATC A10BA02", notes: "" },
@@ -315,6 +322,11 @@ export const PHENOTYPES: Record<"indications" | "exposures" | "outcomes", Phenot
     { name: "Major bleeding", area: "safety" },
     { name: "Preterm birth / gestational age", area: "preg" },
     { name: "Cause of death (death certificates)", area: "death" },
+    { name: "Systemic embolism", area: "cv" },
+    { name: "Infective endocarditis", area: "inf" },
+    { name: "Surgical site infection", area: "inf" },
+    { name: "Burn injury", area: "injury" },
+    { name: "Carbon monoxide poisoning", area: "injury" },
   ],
 };
 
