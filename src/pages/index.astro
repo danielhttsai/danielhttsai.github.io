@@ -3,7 +3,6 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import ResearchMap from "../components/ResearchMap.astro";
 import type { Pub } from "../components/PublicationItem.astro";
 import pubs from "../data/publications.json";
-import metrics from "../data/metrics.json";
 import social from "../data/social-posts.json";
 import { MAP_STATS } from "../data/research";
 import { toolsList } from "../data/tools";
@@ -116,21 +115,26 @@ const tools = [
 ];
 
 // Sublabels for the numbers band, from the same data as the numbers.
-// Publications: the span of years; "peer-reviewed" only if nothing in the list
-// is a letter or reply. Citations and h-index: where the numbers come from and
-// when the weekly sync last changed them (metrics.json).
-const pubYears = (pubs as Pub[]).map((p) => +p.year).filter(Boolean);
-const span = `${Math.min(...pubYears)}–${Math.max(...pubYears)}`;
-const allReviewed = (pubs as Pub[]).every((p) => !tagsOf(p.doi).design.includes("commentary"));
-const pubsSub = allReviewed
-  ? { en: `peer-reviewed, ${span}`, zh: `同儕審查，${span}` }
-  : { en: `in journals, ${span}`, zh: `期刊發表，${span}` };
-const [mY, mM] = String((metrics as any).updated || "").split("-").map(Number);
-const mWhen = mY && mM
-  ? { en: new Date(Date.UTC(mY, mM - 1, 1)).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }), zh: `${mY}/${mM}` }
-  : null;
-const mSource = (metrics as any).source || "Google Scholar";
-const metricsSub = mWhen ? { en: `${mSource}, ${mWhen.en}`, zh: `${mSource}，${mWhen.zh}` } : { en: mSource, zh: mSource };
+// Publications: papers whose publication date (publications.json, YYYYMMDD)
+// falls in the 12 months before the build, and the flagship journals present
+// in the list (each named only while a paper in it is there).
+const dateOf = (n: number) => {
+  const t = String(n || "");
+  return new Date(Date.UTC(+t.slice(0, 4), (+t.slice(4, 6) || 1) - 1, +t.slice(6, 8) || 1));
+};
+const builtAt = new Date();
+const yearAgo = new Date(Date.UTC(builtAt.getUTCFullYear() - 1, builtAt.getUTCMonth(), builtAt.getUTCDate()));
+const nRecent = (pubs as (Pub & { date?: number })[]).filter((p) => p.date && dateOf(p.date) >= yearAgo && dateOf(p.date) <= builtAt).length;
+const journalOf = (p: Pub) => ((p.ris || "").match(/^(?:JO|T2)  - (.+?)\r?$/m) || [])[1]?.trim() ?? "";
+const FLAGSHIP = [
+  { short: "BMJ", test: (j: string) => /^(the )?bmj$/i.test(j) },
+  { short: "BJP", test: (j: string) => /^(the )?british journal of psychiatry$/i.test(j) },
+].filter((f) => (pubs as Pub[]).some((p) => f.test(journalOf(p))));
+const flagEn = FLAGSHIP.length ? ` · incl. ${FLAGSHIP.map((f) => f.short).join(", ")}` : "";
+const flagZh = FLAGSHIP.length ? `・含 ${FLAGSHIP.map((f) => f.short).join("、")}` : "";
+const pubsSub = { en: `${nRecent} in the past year${flagEn}`, zh: `近一年 ${nRecent} 篇${flagZh}` };
+// Target trial emulations: papers tagged "tte" in publication-tags.json.
+const nTTE = (pubs as Pub[]).filter((p) => tagsOf(p.doi).design.includes("tte")).length;
 ---
 
 <BaseLayout
@@ -223,8 +227,8 @@ const metricsSub = mWhen ? { en: `${mSource}, ${mWhen.en}`, zh: `${mSource}，${
   <!-- Numbers: all computed from the site's own data at build time -->
   <StatsBar stats={[
     { value: pubs.length, label: { en: "Publications", zh: "論文" }, sublabel: pubsSub },
-    { value: Number(metrics.citations), label: { en: "Citations", zh: "被引用次數" }, sublabel: metricsSub },
-    { value: Number(metrics.hIndex), label: { en: "h-index", zh: "h-index" }, sublabel: metricsSub },
+    { value: nTTE, label: { en: "Target trial emulations", zh: "Target trial emulation" }, sublabel: { en: "emulated trials, published", zh: "已發表的 target trial emulation" } },
+    { value: MAP_STATS.databases, label: { en: "Data sources", zh: "資料來源" }, sublabel: { en: "databases and registries", zh: "資料庫與登記檔" } },
     { value: MAP_STATS.countries, label: { en: "Countries and regions", zh: "國家與地區" }, sublabel: { en: "in multi-country studies", zh: "跨國研究涵蓋" } },
     { value: toolsList(base).length, label: { en: "Open tools", zh: "開放工具" }, sublabel: { en: "for real-world evidence studies", zh: "real-world evidence 研究用" } },
   ]} />

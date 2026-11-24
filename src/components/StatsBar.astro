@@ -22,7 +22,7 @@ const { stats } = Astro.props;
         <p class="text-4xl sm:text-5xl font-bold text-brand-700 leading-none tabular-nums">
           <span data-stat-value={s.value}>{s.value}</span>
         </p>
-        <p class:list={["mt-3 text-sm font-semibold text-slate-800 tracking-wide", s.label.en !== "h-index" && "uppercase"]}><span class="l-en">{s.label.en}</span><span class="l-zh">{s.label.zh}</span></p>
+        <p class:list={["mt-3 text-sm font-semibold text-slate-800 tracking-wide", s.label.en !== "h-index" && "uppercase"]}><span class="l-en">{s.label.en}</span><span class="l-zh normal-case">{s.label.zh}</span></p>
         {s.sublabel && <p class="mt-1 text-xs text-slate-500" style="text-wrap: balance"><span class="l-en">{s.sublabel.en}</span><span class="l-zh">{s.sublabel.zh}</span></p>}
       </div>
     ))}
