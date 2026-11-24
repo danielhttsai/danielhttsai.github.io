@@ -200,12 +200,16 @@ const nTTE = (pubs as Pub[]).filter((p) => tagsOf(p.doi).design.includes("tte"))
           <a href={`${base}/publications`} class="text-sm font-semibold text-brand-700 hover:underline"><span class="l-en">All publications</span><span class="l-zh">所有論文</span> →</a>
         </div>
         <div class="flex flex-col sm:flex-row gap-6 items-start">
-          <a href={`https://doi.org/${featured.doi}`} target="_blank" rel="noopener" class="shrink-0 self-center sm:self-start">
+          <a href={`https://doi.org/${featured.doi}`} target="_blank" rel="noopener" class="block w-full sm:w-96 shrink-0 self-start">
+            <!-- The title and abstract of the first page, cropped from the published PDF so the
+                 title can be read; the bottom fades out where the abstract continues. -->
             <img
-              src={`${base}/images/papers/trd-ap.jpg`}
-              alt="First page of the British Journal of Psychiatry article"
-              width="144" height="204"
-              class="w-32 sm:w-36 rounded-lg shadow-md ring-1 ring-slate-200 hover:shadow-lg transition"
+              src={`${base}/images/papers/trd-ap-abstract.jpg`}
+              alt="Title and abstract of the British Journal of Psychiatry article: Antipsychotic therapy and suicide risk in patients with treatment-resistant depression: target trial emulation framework study"
+              width="960" height="534"
+              loading="lazy"
+              class="w-full h-auto rounded-lg ring-1 ring-slate-200 bg-white hover:ring-brand-400 transition"
+              style="-webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent); mask-image: linear-gradient(to bottom, #000 72%, transparent);"
             />
           </a>
           <div class="flex-1 min-w-0">
